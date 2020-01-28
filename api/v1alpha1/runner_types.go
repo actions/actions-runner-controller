@@ -20,25 +20,30 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // RunnerSpec defines the desired state of Runner
 type RunnerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Repository string `json:"repository"`
 
-	// Foo is an example field of Runner. Edit Runner_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +optional
+	Image string `json:"image"`
 }
 
 // RunnerStatus defines the observed state of Runner
 type RunnerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Registration RunnerStatusRegistration `json:"registration"`
+	Phase        string                   `json:"Phase"`
+	Reason       string                   `json:"Reason"`
+	Message      string                   `json:"Message"`
+}
+
+type RunnerStatusRegistration struct {
+	Repository string      `json:"repository"`
+	Token      string      `json:"token"`
+	ExpiresAt  metav1.Time `json:"expiresAt"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // Runner is the Schema for the runners API
 type Runner struct {
@@ -47,6 +52,23 @@ type Runner struct {
 
 	Spec   RunnerSpec   `json:"spec,omitempty"`
 	Status RunnerStatus `json:"status,omitempty"`
+}
+
+func (r Runner) IsRegisterable() bool {
+	if r.Status.Registration.Repository != r.Spec.Repository {
+		return false
+	}
+
+	if r.Status.Registration.Token == "" {
+		return false
+	}
+
+	now := metav1.Now()
+	if r.Status.Registration.ExpiresAt.Before(&now) {
+		return false
+	}
+
+	return true
 }
 
 // +kubebuilder:object:root=true
