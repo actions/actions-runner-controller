@@ -1,0 +1,7 @@
+domain: summerwind.dev
+repo: github.com/summerwind/actions-runner-controller
+resources:
+- group: actions
+  kind: Runner
+  version: v1alpha1
+version: "2"
