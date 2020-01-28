@@ -1,7 +1,6 @@
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: Runner
 metadata:
-  name: runner-sample
+  name: summerwind-actions-runner-controller
 spec:
-  # Add fields here
-  foo: bar
+  repository: summerwind/actions-runner-controller
