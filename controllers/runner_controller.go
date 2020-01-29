@@ -61,8 +61,27 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	var runner v1alpha1.Runner
 	if err := r.Get(ctx, req.NamespacedName, &runner); err != nil {
-		log.Error(err, "unable to fetch Runner")
+		log.Error(err, "Unable to fetch Runner")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !runner.IsRegisterable() {
+		reg, err := r.newRegistration(ctx, runner.Spec.Repository)
+		if err != nil {
+			log.Error(err, "Failed to get new registration")
+			return ctrl.Result{}, err
+		}
+
+		updated := runner.DeepCopy()
+		updated.Status.Registration = reg
+
+		if err := r.Status().Update(ctx, updated); err != nil {
+			log.Error(err, "Unable to update Runner status")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Updated registration token", "repository", runner.Spec.Repository)
+		return ctrl.Result{}, nil
 	}
 
 	var pod corev1.Pod
@@ -71,62 +90,42 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if !runner.IsRegisterable() {
-			reg, err := r.newRegistration(ctx, runner.Spec.Repository)
-			if err != nil {
-				log.Error(err, "failed to get new registration")
-				return ctrl.Result{}, err
-			}
-
-			updated := runner.DeepCopy()
-			updated.Status.Registration = reg
-
-			if err := r.Status().Update(ctx, updated); err != nil {
-				log.Error(err, "unable to update Runner status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, nil
-		}
-
-		pod := r.newPod(runner)
-		err = r.Create(ctx, &pod)
+		newPod, err := r.newPod(runner)
 		if err != nil {
-			log.Error(err, "failed to create a new pod")
+			log.Error(err, "could not create pod")
 			return ctrl.Result{}, err
 		}
+
+		if err := r.Create(ctx, &newPod); err != nil {
+			log.Error(err, "failed to create pod resource")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Created a runner pod", "repository", runner.Spec.Repository)
 	} else {
-		newPod := r.newPod(runner)
-		if reflect.DeepEqual(pod.Spec, newPod.Spec) {
-			return ctrl.Result{}, nil
-		}
-
-		if !runner.IsRegisterable() {
-			reg, err := r.newRegistration(ctx, runner.Spec.Repository)
-			if err != nil {
-				log.Error(err, "failed to get new registration")
-				return ctrl.Result{}, err
-			}
-
-			updated := runner.DeepCopy()
-			updated.Status.Registration = reg
-
-			if err := r.Status().Update(ctx, updated); err != nil {
-				log.Error(err, "unable to update Runner status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, nil
-		}
-
-		// TODO: Do not update.
-		updatedPod := pod.DeepCopy()
-		updatedPod.Spec = newPod.Spec
-
-		if err := r.Update(ctx, updatedPod); err != nil {
-			log.Error(err, "unable to update pod")
+		newPod, err := r.newPod(runner)
+		if err != nil {
+			log.Error(err, "could not create pod")
 			return ctrl.Result{}, err
 		}
+
+		update := false
+		if pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image {
+			update = true
+		}
+		if !reflect.DeepEqual(pod.Spec.Containers[0].Env, newPod.Spec.Containers[0].Env) {
+			update = true
+		}
+		if !update {
+			return ctrl.Result{}, err
+		}
+
+		if err := r.Delete(ctx, &pod, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			log.Error(err, "failed to delete pod resource")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Deleted a runner pod for updating", "repository", runner.Spec.Repository)
 	}
 
 	return ctrl.Result{}, nil
@@ -172,19 +171,19 @@ func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, repo string
 	return regToken, nil
 }
 
-func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) corev1.Pod {
+func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	image := runner.Spec.Image
 	if image == "" {
 		image = defaultImage
 	}
 
-	return corev1.Pod{
+	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      runner.Name,
 			Namespace: runner.Namespace,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: "Never",
+			RestartPolicy: "OnFailure",
 			Containers: []corev1.Container{
 				{
 					Name:            "runner",
@@ -208,10 +207,17 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) corev1.Pod {
 			},
 		},
 	}
+
+	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
+		return pod, err
+	}
+
+	return pod, nil
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Runner{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
