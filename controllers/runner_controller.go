@@ -172,6 +172,11 @@ func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, repo string
 }
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
+	var (
+		privileged bool  = true
+		group      int64 = 0
+	)
+
 	image := runner.Spec.Image
 	if image == "" {
 		image = defaultImage
@@ -190,18 +195,48 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					Image:           image,
 					ImagePullPolicy: "Always",
 					Env: []corev1.EnvVar{
-						corev1.EnvVar{
+						{
 							Name:  "RUNNER_NAME",
 							Value: runner.Name,
 						},
-						corev1.EnvVar{
+						{
 							Name:  "RUNNER_REPO",
 							Value: runner.Spec.Repository,
 						},
-						corev1.EnvVar{
+						{
 							Name:  "RUNNER_TOKEN",
 							Value: runner.Status.Registration.Token,
 						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "docker",
+							MountPath: "/var/run",
+						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						RunAsGroup: &group,
+					},
+				},
+				{
+					Name:  "docker",
+					Image: "docker:19.03.5-dind",
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "docker",
+							MountPath: "/var/run",
+						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: &privileged,
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				corev1.Volume{
+					Name: "docker",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
 				},
 			},
