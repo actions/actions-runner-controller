@@ -36,7 +36,8 @@ import (
 )
 
 const (
-	defaultImage = "summerwind/actions-runner:latest"
+	defaultImage  = "summerwind/actions-runner:latest"
+	containerName = "runner"
 )
 
 type RegistrationToken struct {
@@ -107,20 +108,33 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
+		restart := false
+
+		if pod.Status.Phase == corev1.PodRunning {
+			for _, status := range pod.Status.ContainerStatuses {
+				if status.Name != containerName {
+					continue
+				}
+
+				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+					restart = true
+				}
+			}
+		}
+
 		newPod, err := r.newPod(runner)
 		if err != nil {
 			log.Error(err, "could not create pod")
 			return ctrl.Result{}, err
 		}
 
-		update := false
 		if pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image {
-			update = true
+			restart = true
 		}
 		if !reflect.DeepEqual(pod.Spec.Containers[0].Env, newPod.Spec.Containers[0].Env) {
-			update = true
+			restart = true
 		}
-		if !update {
+		if !restart {
 			return ctrl.Result{}, err
 		}
 
@@ -129,7 +143,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Deleted a runner pod for updating", "repository", runner.Spec.Repository)
+		log.Info("Restarted a runner pod", "repository", runner.Spec.Repository)
 	}
 
 	return ctrl.Result{}, nil
@@ -192,10 +206,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Namespace: runner.Namespace,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: "Always",
+			RestartPolicy: "OnFailure",
 			Containers: []corev1.Container{
 				{
-					Name:            "runner",
+					Name:            containerName,
 					Image:           image,
 					ImagePullPolicy: "Always",
 					Env: []corev1.EnvVar{
