@@ -5,7 +5,7 @@ RUN apt update \
   && curl -L -o docker.tgz https://download.docker.com/linux/static/stable/x86_64/docker-19.03.5.tgz \
   && tar zxvf docker.tgz \
   && install -o root -g root -m 755 docker/docker /usr/local/bin/docker \
-  && rm -rf docker \
+  && rm -rf docker docker.tgz \
   && adduser --disabled-password --gecos "" --uid 1000 runner
 
 RUN mkdir -p /runner \
