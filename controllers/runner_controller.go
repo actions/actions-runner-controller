@@ -103,6 +103,10 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		log.Info("Created a runner pod", "repository", runner.Spec.Repository)
 	} else {
+		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{}, err
+		}
+
 		newPod, err := r.newPod(runner)
 		if err != nil {
 			log.Error(err, "could not create pod")
@@ -120,7 +124,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if err := r.Delete(ctx, &pod, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+		if err := r.Delete(ctx, &pod); err != nil {
 			log.Error(err, "failed to delete pod resource")
 			return ctrl.Result{}, err
 		}
