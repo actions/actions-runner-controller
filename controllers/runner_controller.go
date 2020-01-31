@@ -192,7 +192,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Namespace: runner.Namespace,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: "OnFailure",
+			RestartPolicy: "Always",
 			Containers: []corev1.Container{
 				{
 					Name:            "runner",
