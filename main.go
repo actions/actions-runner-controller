@@ -18,8 +18,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/google/go-github/v29/github"
@@ -56,8 +56,7 @@ func main() {
 
 	ghToken := os.Getenv("GITHUB_TOKEN")
 	if ghToken == "" {
-		err := errors.New("github token is not specified")
-		setupLog.Error(err, "environment variable 'GITHUB_TOKEN' must be set")
+		fmt.Fprintln(os.Stderr, "Error: access token is not specified in the environment variable 'GITHUB_TOKEN'")
 		os.Exit(1)
 	}
 
