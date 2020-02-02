@@ -1,0 +1,11 @@
+NAME ?= summerwind/actions-runner
+
+RUNNER_VERSION ?= 2.165.1
+DOCKER_VERSION ?= 19.03.5
+
+docker-build:
+	docker build --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:latest -t ${NAME}:${RUNNER_VERSION} .
+
+docker-push:
+	docker push ${NAME}:latest
+	docker push ${NAME}:${RUNNER_VERSION}
