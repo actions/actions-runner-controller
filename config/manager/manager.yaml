@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
-  name: system
+  name: actions-runner-system
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,12 +23,12 @@ spec:
         control-plane: controller-manager
     spec:
       containers:
-      - command:
+      - name: manager
+        image: controller:latest
+        command:
         - /manager
         args:
         - --enable-leader-election
-        image: controller:latest
-        name: manager
         resources:
           limits:
             cpu: 100m
