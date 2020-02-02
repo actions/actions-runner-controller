@@ -29,6 +29,12 @@ spec:
         - /manager
         args:
         - --enable-leader-election
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: controller-manager
+              key: github_token
         resources:
           limits:
             cpu: 100m
