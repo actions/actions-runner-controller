@@ -1,0 +1,25 @@
+on:
+  push:
+    branches:
+    - master
+    paths-ignore:
+    - 'runner/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install kubebuilder
+      run: |
+        curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
+        tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+        sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+    - name: Build container image
+      run: make docker-build
+    - name: Docker Login
+      run: docker login -u summerwind -p ${{ secrets.DOCKER_ACCESS_TOKEN }}
+    - name: Push container image
+      run: make docker-push
