@@ -39,6 +39,8 @@ spec:
             image:
               type: string
             repository:
+              minLength: 3
+              pattern: ^[^/]+/[^/]+$
               type: string
           required:
           - repository

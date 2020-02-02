@@ -26,3 +26,12 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ""
+  resources:
+  - pod
+  verbs:
+  - delete
+  - get
+  - patch
+  - update
