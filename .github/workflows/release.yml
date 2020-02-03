@@ -1,0 +1,30 @@
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Release
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install tools
+      run: |
+        curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
+        tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+        sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+        tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
+        sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
+    - name: Set version
+      run: echo "::set-env name=VERSION::$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name' | sed -e 's/v//g')"
+    - name: Upload artifacts
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: make github-release
+    - name: Build container image
+      run: make docker-build
+    - name: Docker Login
+      run: docker login -u summerwind -p ${{ secrets.DOCKER_ACCESS_TOKEN }}
+    - name: Push container image
+      run: make docker-push
