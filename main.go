@@ -58,6 +58,7 @@ func main() {
 
 		runnerImage string
 		dockerImage string
+		ghToken     string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -65,11 +66,14 @@ func main() {
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
 	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
+	flag.StringVar(&ghToken, "github-token", "", "The access token of GitHub.")
 	flag.Parse()
 
-	ghToken := os.Getenv("GITHUB_TOKEN")
 	if ghToken == "" {
-		fmt.Fprintln(os.Stderr, "Error: access token is not specified in the environment variable 'GITHUB_TOKEN'")
+		ghToken = os.Getenv("GITHUB_TOKEN")
+	}
+	if ghToken == "" {
+		fmt.Fprintln(os.Stderr, "Error: GitHub access token must be specified.")
 		os.Exit(1)
 	}
 
