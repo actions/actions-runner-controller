@@ -62,6 +62,15 @@ docker-build: test
 docker-push:
 	docker push ${NAME}:${VERSION}
 
+# Generate the release manifest file
+release:
+	mkdir -p release
+	kustomize build config/default > release/actions-runner-controller.yaml
+
+# Upload release file to GitHub.
+github-release: release
+	ghr ${VERSION} release/
+
 # find or download controller-gen
 # download controller-gen if necessary
 controller-gen:
