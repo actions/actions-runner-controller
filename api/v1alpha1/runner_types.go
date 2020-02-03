@@ -33,9 +33,9 @@ type RunnerSpec struct {
 // RunnerStatus defines the observed state of Runner
 type RunnerStatus struct {
 	Registration RunnerStatusRegistration `json:"registration"`
-	Phase        string                   `json:"Phase"`
-	Reason       string                   `json:"Reason"`
-	Message      string                   `json:"Message"`
+	Phase        string                   `json:"phase"`
+	Reason       string                   `json:"reason"`
+	Message      string                   `json:"message"`
 }
 
 type RunnerStatusRegistration struct {
@@ -46,6 +46,8 @@ type RunnerStatusRegistration struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
 
 // Runner is the Schema for the runners API
 type Runner struct {

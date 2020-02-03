@@ -8,6 +8,13 @@ metadata:
   creationTimestamp: null
   name: runners.actions.summerwind.dev
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.repository
+    name: Repository
+    type: string
+  - JSONPath: .status.phase
+    name: Status
+    type: string
   group: actions.summerwind.dev
   names:
     kind: Runner
@@ -48,11 +55,11 @@ spec:
         status:
           description: RunnerStatus defines the observed state of Runner
           properties:
-            Message:
+            message:
               type: string
-            Phase:
+            phase:
               type: string
-            Reason:
+            reason:
               type: string
             registration:
               properties:
@@ -69,9 +76,9 @@ spec:
               - token
               type: object
           required:
-          - Message
-          - Phase
-          - Reason
+          - message
+          - phase
+          - reason
           - registration
           type: object
       type: object
