@@ -38,9 +38,17 @@ import (
 
 const (
 	containerName = "runner"
+	finalizerName = "runner.actions.summerwind.dev"
 )
 
-type RegistrationToken struct {
+type GitHubRunner struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	OS     string `json:"os"`
+	Status string `json:"status"`
+}
+
+type GitHubRegistrationToken struct {
 	Token     string `json:"token"`
 	ExpiresAt string `json:"expires_at"`
 }
@@ -67,6 +75,48 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	var runner v1alpha1.Runner
 	if err := r.Get(ctx, req.NamespacedName, &runner); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if runner.ObjectMeta.DeletionTimestamp.IsZero() {
+		finalizers, added := addFinalizer(runner.ObjectMeta.Finalizers)
+
+		if added {
+			newRunner := runner.DeepCopy()
+			newRunner.ObjectMeta.Finalizers = finalizers
+
+			if err := r.Update(ctx, newRunner); err != nil {
+				log.Error(err, "Failed to update runner")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{}, nil
+		}
+	} else {
+		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers)
+
+		if removed {
+			ok, err := r.unregisterRunner(ctx, runner.Spec.Repository, runner.Name)
+			if err != nil {
+				log.Error(err, "Failed to unregister runner")
+				return ctrl.Result{}, err
+			}
+
+			if !ok {
+				log.V(1).Info("Runner no longer exists on GitHub")
+			}
+
+			newRunner := runner.DeepCopy()
+			newRunner.ObjectMeta.Finalizers = finalizers
+
+			if err := r.Update(ctx, newRunner); err != nil {
+				log.Error(err, "Failed to update runner")
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository)
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	if !runner.IsRegisterable() {
@@ -190,8 +240,8 @@ func (r *RunnerReconciler) newRegistration(ctx context.Context, repo string) (v1
 	return reg, err
 }
 
-func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, repo string) (RegistrationToken, error) {
-	var regToken RegistrationToken
+func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, repo string) (GitHubRegistrationToken, error) {
+	var regToken GitHubRegistrationToken
 
 	req, err := r.GitHubClient.NewRequest("POST", fmt.Sprintf("/repos/%s/actions/runners/registration-token", repo), nil)
 	if err != nil {
@@ -208,6 +258,69 @@ func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, repo string
 	}
 
 	return regToken, nil
+}
+
+func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name string) (bool, error) {
+	runners, err := r.listRunners(ctx, repo)
+	if err != nil {
+		return false, err
+	}
+
+	id := 0
+	for _, runner := range runners {
+		if runner.Name == name {
+			id = runner.ID
+			break
+		}
+	}
+
+	if id == 0 {
+		return false, nil
+	}
+
+	if err := r.removeRunner(ctx, repo, id); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *RunnerReconciler) listRunners(ctx context.Context, repo string) ([]GitHubRunner, error) {
+	runners := []GitHubRunner{}
+
+	req, err := r.GitHubClient.NewRequest("GET", fmt.Sprintf("/repos/%s/actions/runners", repo), nil)
+	if err != nil {
+		return runners, err
+	}
+
+	res, err := r.GitHubClient.Do(ctx, req, &runners)
+	if err != nil {
+		return runners, err
+	}
+
+	if res.StatusCode != 200 {
+		return runners, fmt.Errorf("unexpected status: %d", res.StatusCode)
+	}
+
+	return runners, nil
+}
+
+func (r *RunnerReconciler) removeRunner(ctx context.Context, repo string, id int) error {
+	req, err := r.GitHubClient.NewRequest("DELETE", fmt.Sprintf("/repos/%s/actions/runners/%d", repo, id), nil)
+	if err != nil {
+		return err
+	}
+
+	res, err := r.GitHubClient.Do(ctx, req, nil)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 204 {
+		return fmt.Errorf("unexpected status: %d", res.StatusCode)
+	}
+
+	return nil
 }
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
@@ -296,4 +409,34 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.Runner{}).
 		Owns(&corev1.Pod{}).
 		Complete(r)
+}
+
+func addFinalizer(finalizers []string) ([]string, bool) {
+	exists := false
+	for _, name := range finalizers {
+		if name == finalizerName {
+			exists = true
+		}
+	}
+
+	if exists {
+		return finalizers, false
+	}
+
+	return append(finalizers, finalizerName), true
+}
+
+func removeFinalizer(finalizers []string) ([]string, bool) {
+	removed := false
+	result := []string{}
+
+	for _, name := range finalizers {
+		if name == finalizerName {
+			removed = true
+			continue
+		}
+		result = append(result, name)
+	}
+
+	return result, removed
 }
