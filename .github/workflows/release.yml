@@ -20,7 +20,7 @@ jobs:
         tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
         sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
     - name: Set version
-      run: echo "::set-env name=VERSION::$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name' | sed -e 's/v//g')"
+      run: echo "::set-env name=VERSION::$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')"
     - name: Upload artifacts
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
