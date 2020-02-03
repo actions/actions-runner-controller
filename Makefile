@@ -63,7 +63,7 @@ docker-push:
 	docker push ${NAME}:${VERSION}
 
 # Generate the release manifest file
-release:
+release: test
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
