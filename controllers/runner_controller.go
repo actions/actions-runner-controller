@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-github/v29/github"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -48,6 +49,7 @@ type RegistrationToken struct {
 type RunnerReconciler struct {
 	client.Client
 	Log          logr.Logger
+	Recorder     record.EventRecorder
 	Scheme       *runtime.Scheme
 	GitHubClient *github.Client
 	RunnerImage  string
@@ -64,14 +66,14 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	var runner v1alpha1.Runner
 	if err := r.Get(ctx, req.NamespacedName, &runner); err != nil {
-		log.Error(err, "Unable to fetch Runner")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if !runner.IsRegisterable() {
 		reg, err := r.newRegistration(ctx, runner.Spec.Repository)
 		if err != nil {
-			log.Error(err, "Failed to get new registration")
+			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
+			log.Error(err, "Failed to get new registration token")
 			return ctrl.Result{}, err
 		}
 
@@ -79,10 +81,11 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		updated.Status.Registration = reg
 
 		if err := r.Status().Update(ctx, updated); err != nil {
-			log.Error(err, "Unable to update Runner status")
+			log.Error(err, "Failed to update runner status")
 			return ctrl.Result{}, err
 		}
 
+		r.Recorder.Event(&runner, corev1.EventTypeNormal, "RegistrationTokenUpdated", "Successfully update registration token")
 		log.Info("Updated registration token", "repository", runner.Spec.Repository)
 		return ctrl.Result{}, nil
 	}
@@ -95,16 +98,17 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		newPod, err := r.newPod(runner)
 		if err != nil {
-			log.Error(err, "could not create pod")
+			log.Error(err, "Could not create pod")
 			return ctrl.Result{}, err
 		}
 
 		if err := r.Create(ctx, &newPod); err != nil {
-			log.Error(err, "failed to create pod resource")
+			log.Error(err, "Failed to create pod resource")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Created a runner pod", "repository", runner.Spec.Repository)
+		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
+		log.Info("Created runner pod", "repository", runner.Spec.Repository)
 	} else {
 		if runner.Status.Phase != string(pod.Status.Phase) {
 			updated := runner.DeepCopy()
@@ -113,7 +117,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			updated.Status.Message = pod.Status.Message
 
 			if err := r.Status().Update(ctx, updated); err != nil {
-				log.Error(err, "Unable to update Runner status")
+				log.Error(err, "Failed to update runner status")
 				return ctrl.Result{}, err
 			}
 
@@ -140,7 +144,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		newPod, err := r.newPod(runner)
 		if err != nil {
-			log.Error(err, "could not create pod")
+			log.Error(err, "Could not create pod")
 			return ctrl.Result{}, err
 		}
 
@@ -155,11 +159,12 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		if err := r.Delete(ctx, &pod); err != nil {
-			log.Error(err, "failed to delete pod resource")
+			log.Error(err, "Failed to delete pod resource")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Restarted a runner pod", "repository", runner.Spec.Repository)
+		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
+		log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
 	}
 
 	return ctrl.Result{}, nil
@@ -285,6 +290,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("runner-controller")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Runner{}).
 		Owns(&corev1.Pod{}).
