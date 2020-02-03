@@ -34,6 +34,11 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	defaultRunnerImage = "summerwind/actions-runner:v2.165.1"
+	defaultDockerImage = "docker:19.03.5-dind"
+)
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -47,11 +52,19 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
+	var (
+		metricsAddr          string
+		enableLeaderElection bool
+
+		runnerImage string
+		dockerImage string
+	)
+
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
+	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
 	flag.Parse()
 
 	ghToken := os.Getenv("GITHUB_TOKEN")
@@ -85,6 +98,8 @@ func main() {
 		Log:          ctrl.Log.WithName("controllers").WithName("Runner"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: ghClient,
+		RunnerImage:  runnerImage,
+		DockerImage:  dockerImage,
 	}
 
 	if err = runnerReconciler.SetupWithManager(mgr); err != nil {

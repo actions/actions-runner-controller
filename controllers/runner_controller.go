@@ -36,7 +36,6 @@ import (
 )
 
 const (
-	defaultImage  = "summerwind/actions-runner:latest"
 	containerName = "runner"
 )
 
@@ -51,6 +50,8 @@ type RunnerReconciler struct {
 	Log          logr.Logger
 	Scheme       *runtime.Scheme
 	GitHubClient *github.Client
+	RunnerImage  string
+	DockerImage  string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -196,9 +197,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		group      int64 = 0
 	)
 
-	image := runner.Spec.Image
-	if image == "" {
-		image = defaultImage
+	runnerImage := runner.Spec.Image
+	if runnerImage == "" {
+		runnerImage = r.RunnerImage
 	}
 
 	pod := corev1.Pod{
@@ -211,7 +212,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Containers: []corev1.Container{
 				{
 					Name:            containerName,
-					Image:           image,
+					Image:           runnerImage,
 					ImagePullPolicy: "Always",
 					Env: []corev1.EnvVar{
 						{
@@ -239,7 +240,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 				{
 					Name:  "docker",
-					Image: "docker:19.03.5-dind",
+					Image: r.DockerImage,
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "docker",
