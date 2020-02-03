@@ -4,6 +4,7 @@ on:
     - master
     paths-ignore:
     - 'runner/**'
+    - '.github/**'
 
 jobs:
   build:
