@@ -13,7 +13,7 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 First, install *actions-runner-controller* with a manifest file. This will create a *actions-runner-system* namespace in your Kubernetes and deploy the required resources.
 
 ```
-$ kubectl -f https://github.com/summerwind/actions-runner-controller/releases/download/latest/actions-runner-controller.yaml
+$ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
 ```
 
 Set your access token of GitHub to the secret. `${GITHUB_TOKEN}` is the value you must replace with your access token. This token is used to register Self-hosted runner by *actions-runner-controller*.
@@ -27,9 +27,7 @@ $ kubectl create secret generic controller-manager --from-literal=github_token=$
 To launch Self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
 ```
-$ vim runner.yaml
-```
-```
+# runner.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: Runner
 metadata:
@@ -42,14 +40,15 @@ Apply the created manifest file to your Kubernetes.
 
 ```
 $ kubectl apply -f runner.yaml
+runner.actions.summerwind.dev/example-runner created
 ```
 
 You can see that the Runner resource has been created.
 
 ```
 $ kubectl get runners
-NAME             AGE
-example-runner   1m
+NAME             REPOSITORY                             STATUS
+example-runner   summerwind/actions-runner-controller   Running
 ```
 
 You can also see that the runner pod has been running.
@@ -64,4 +63,4 @@ The runner you created has been registerd to your repository.
 
 <img width="756" alt="Actions tab in your repository settings" src="https://user-images.githubusercontent.com/230145/73618667-8cbf9700-466c-11ea-80b6-c67e6d3f70e7.png">
 
-Now your can use your self-hosted runner. See the [documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
+Now your can use your self-hosted runner. See the [official documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
