@@ -106,6 +106,20 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		log.Info("Created a runner pod", "repository", runner.Spec.Repository)
 	} else {
+		if runner.Status.Phase != string(pod.Status.Phase) {
+			updated := runner.DeepCopy()
+			updated.Status.Phase = string(pod.Status.Phase)
+			updated.Status.Reason = pod.Status.Reason
+			updated.Status.Message = pod.Status.Message
+
+			if err := r.Status().Update(ctx, updated); err != nil {
+				log.Error(err, "Unable to update Runner status")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{}, nil
+		}
+
 		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
 			return ctrl.Result{}, err
 		}
