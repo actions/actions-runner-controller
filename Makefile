@@ -64,6 +64,7 @@ docker-push:
 
 # Generate the release manifest file
 release: manifests
+	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
