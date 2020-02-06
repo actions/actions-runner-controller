@@ -334,6 +334,22 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		runnerImage = r.RunnerImage
 	}
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "RUNNER_NAME",
+			Value: runner.Name,
+		},
+		{
+			Name:  "RUNNER_REPO",
+			Value: runner.Spec.Repository,
+		},
+		{
+			Name:  "RUNNER_TOKEN",
+			Value: runner.Status.Registration.Token,
+		},
+	}
+	env = append(env, runner.Spec.Env...)
+
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      runner.Name,
@@ -346,20 +362,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					Name:            containerName,
 					Image:           runnerImage,
 					ImagePullPolicy: "Always",
-					Env: []corev1.EnvVar{
-						{
-							Name:  "RUNNER_NAME",
-							Value: runner.Name,
-						},
-						{
-							Name:  "RUNNER_REPO",
-							Value: runner.Spec.Repository,
-						},
-						{
-							Name:  "RUNNER_TOKEN",
-							Value: runner.Status.Registration.Token,
-						},
-					},
+					Env:             env,
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "docker",
