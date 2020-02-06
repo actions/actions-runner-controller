@@ -9,6 +9,8 @@ RUN apt update \
   && tar zxvf docker.tgz \
   && install -o root -g root -m 755 docker/docker /usr/local/bin/docker \
   && rm -rf docker docker.tgz \
+  && curl -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64 \
+  && chmod +x /usr/local/bin/dumb-init \
   && adduser --disabled-password --gecos "" --uid 1000 runner
 
 RUN mkdir -p /runner \
@@ -21,4 +23,5 @@ RUN mkdir -p /runner \
 COPY entrypoint.sh /runner
 
 USER runner:runner
-ENTRYPOINT ["/runner/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
+CMD ["/runner/entrypoint.sh"]
