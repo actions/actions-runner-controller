@@ -9,6 +9,26 @@ rules:
 - apiGroups:
   - actions.summerwind.dev
   resources:
+  - runnerdeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
   - runners
   verbs:
   - create
