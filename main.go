@@ -110,6 +110,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Runner")
 		os.Exit(1)
 	}
+
+	runnerSetReconciler := &controllers.RunnerSetReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RunnerSet"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RunnerSet")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
