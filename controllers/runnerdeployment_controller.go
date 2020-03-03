@@ -38,6 +38,8 @@ import (
 
 const (
 	LabelKeyRunnerTemplateHash = "runner-template-hash"
+
+	runnerSetOwnerKey = ".metadata.controller"
 )
 
 // RunnerDeploymentReconciler reconciles a Runner object
@@ -66,22 +68,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	var allRunnerSets v1alpha1.RunnerSetList
-	if err := r.List(ctx, &allRunnerSets, client.InNamespace(req.Namespace)); err != nil {
+	var myRunnerSetList v1alpha1.RunnerSetList
+	if err := r.List(ctx, &myRunnerSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
 		if !errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 	}
 
-	var myRunnerSets []*v1alpha1.RunnerSet
-
-	for i := range allRunnerSets.Items {
-		rs := allRunnerSets.Items[i]
-
-		if metav1.IsControlledBy(&rs, &rd) {
-			myRunnerSets = append(myRunnerSets, &rs)
-		}
-	}
+	myRunnerSets := myRunnerSetList.Items
 
 	sort.Slice(myRunnerSets, func(i, j int) bool {
 		return myRunnerSets[i].GetCreationTimestamp().After(myRunnerSets[j].GetCreationTimestamp().Time)
@@ -89,10 +83,10 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	var newestSet *v1alpha1.RunnerSet
 
-	var oldSets []*v1alpha1.RunnerSet
+	var oldSets []v1alpha1.RunnerSet
 
 	if len(myRunnerSets) > 0 {
-		newestSet = myRunnerSets[0]
+		newestSet = &myRunnerSets[0]
 	}
 
 	if len(myRunnerSets) > 1 {
@@ -156,7 +150,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	for i := range oldSets {
 		rs := oldSets[i]
 
-		if err := r.Client.Delete(ctx, rs); err != nil {
+		if err := r.Client.Delete(ctx, &rs); err != nil {
 			log.Error(err, "Failed to delete runner resource")
 
 			return ctrl.Result{}, err
@@ -245,6 +239,22 @@ func (r *RunnerDeploymentReconciler) newRunnerSet(rd v1alpha1.RunnerDeployment) 
 
 func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("runnerdeployment-controller")
+
+	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
+		runnerSet := rawObj.(*v1alpha1.RunnerSet)
+		owner := metav1.GetControllerOf(runnerSet)
+		if owner == nil {
+			return nil
+		}
+
+		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != "RunnerSet" {
+			return nil
+		}
+
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerDeployment{}).
