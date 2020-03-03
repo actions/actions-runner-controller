@@ -22,7 +22,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
 	"hash/fnv"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/record"
@@ -70,9 +69,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	var myRunnerSetList v1alpha1.RunnerSetList
 	if err := r.List(ctx, &myRunnerSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
-		if !errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, err
 	}
 
 	myRunnerSets := myRunnerSetList.Items
