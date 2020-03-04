@@ -121,6 +121,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RunnerSet")
 		os.Exit(1)
 	}
+
+	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RunnerDeployment")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

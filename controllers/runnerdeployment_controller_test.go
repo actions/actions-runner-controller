@@ -5,7 +5,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"math/rand"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"time"
@@ -18,13 +17,13 @@ import (
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
-// SetupTest will set up a testing environment.
+// SetupDeploymentTest will set up a testing environment.
 // This includes:
 // * creating a Namespace to be used during the test
-// * starting the 'RunnerReconciler'
-// * stopping the 'RunnerSetReconciler" after the test ends
+// * starting the 'RunnerDeploymentReconciler'
+// * stopping the 'RunnerDeploymentReconciler" after the test ends
 // Call this function at the start of each of your tests.
-func SetupTest(ctx context.Context) *corev1.Namespace {
+func SetupDeploymentTest(ctx context.Context) *corev1.Namespace {
 	var stopCh chan struct{}
 	ns := &corev1.Namespace{}
 
@@ -40,7 +39,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
-		controller := &RunnerSetReconciler{
+		controller := &RunnerDeploymentReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
@@ -67,36 +66,22 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 	return ns
 }
 
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
-
-func randStringRunes(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
-
-func intPtr(v int) *int {
-	return &v
-}
-
 var _ = Context("Inside of a new namespace", func() {
 	ctx := context.TODO()
-	ns := SetupTest(ctx)
+	ns := SetupDeploymentTest(ctx)
 
 	Describe("when no existing resources exist", func() {
 
-		It("should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0", func() {
-			name := "example-runnerset"
+		It("should create a new RunnerSet resource from the specified template, add a another RunnerSet on template modification, and eventually removes old runnersets", func() {
+			name := "example-runnerdeploy"
 
 			{
-				rs := &actionsv1alpha1.RunnerSet{
+				rs := &actionsv1alpha1.RunnerDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      name,
 						Namespace: ns.Name,
 					},
-					Spec: actionsv1alpha1.RunnerSetSpec{
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
 						Replicas: intPtr(1),
 						Template: actionsv1alpha1.RunnerTemplate{
 							Spec: actionsv1alpha1.RunnerSpec{
@@ -114,16 +99,32 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerSet resource")
 
-				runners := actionsv1alpha1.RunnerList{Items: []actionsv1alpha1.Runner{}}
+				runnerSets := actionsv1alpha1.RunnerSetList{Items: []actionsv1alpha1.RunnerSet{}}
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
 						if err != nil {
-							logf.Log.Error(err, "list runners")
+							logf.Log.Error(err, "list runner sets")
 						}
 
-						return len(runners.Items)
+						return len(runnerSets.Items)
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+
+				Eventually(
+					func() int {
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						if err != nil {
+							logf.Log.Error(err, "list runner sets")
+						}
+
+						if len(runnerSets.Items) == 0 {
+							logf.Log.Info("No runnersets exist yet")
+							return -1
+						}
+
+						return *runnerSets.Items[0].Spec.Replicas
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
 			}
@@ -133,61 +134,41 @@ var _ = Context("Inside of a new namespace", func() {
 				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
 				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
 				Eventually(func() error {
-					var rs actionsv1alpha1.RunnerSet
+					var rd actionsv1alpha1.RunnerDeployment
 
-					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rs)
+					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rd)
 
 					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerSet resource")
 
-					rs.Spec.Replicas = intPtr(2)
+					rd.Spec.Replicas = intPtr(2)
 
-					return k8sClient.Update(ctx, &rs)
+					return k8sClient.Update(ctx, &rd)
 				},
 					time.Second*1, time.Millisecond*500).Should(BeNil())
 
-				runners := actionsv1alpha1.RunnerList{Items: []actionsv1alpha1.Runner{}}
+				runnerSets := actionsv1alpha1.RunnerSetList{Items: []actionsv1alpha1.RunnerSet{}}
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
 						if err != nil {
-							logf.Log.Error(err, "list runners")
+							logf.Log.Error(err, "list runner sets")
 						}
 
-						return len(runners.Items)
+						return len(runnerSets.Items)
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+
+				Eventually(
+					func() int {
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						if err != nil {
+							logf.Log.Error(err, "list runner sets")
+						}
+
+						return *runnerSets.Items[0].Spec.Replicas
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
-			}
-
-			{
-				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
-				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
-				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
-				Eventually(func() error {
-					var rs actionsv1alpha1.RunnerSet
-
-					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rs)
-
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerSet resource")
-
-					rs.Spec.Replicas = intPtr(0)
-
-					return k8sClient.Update(ctx, &rs)
-				},
-					time.Second*1, time.Millisecond*500).Should(BeNil())
-
-				runners := actionsv1alpha1.RunnerList{Items: []actionsv1alpha1.Runner{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runners")
-						}
-
-						return len(runners.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(0))
 			}
 		})
 	})

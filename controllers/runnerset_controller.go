@@ -138,13 +138,15 @@ func (r *RunnerSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 func (r *RunnerSetReconciler) newRunner(rs v1alpha1.RunnerSet) (v1alpha1.Runner, error) {
+	objectMeta := rs.Spec.Template.ObjectMeta.DeepCopy()
+
+	objectMeta.GenerateName = rs.ObjectMeta.Name
+	objectMeta.Namespace = rs.ObjectMeta.Namespace
+
 	runner := v1alpha1.Runner{
-		TypeMeta: metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: rs.ObjectMeta.Name,
-			Namespace:    rs.ObjectMeta.Namespace,
-		},
-		Spec: rs.Spec.Template,
+		TypeMeta:   metav1.TypeMeta{},
+		ObjectMeta: *objectMeta,
+		Spec:       rs.Spec.Template.Spec,
 	}
 
 	if err := ctrl.SetControllerReference(&rs, &runner, r.Scheme); err != nil {

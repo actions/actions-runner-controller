@@ -6,7 +6,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
-  name: runnersets.actions.summerwind.dev
+  name: runnerdeployments.actions.summerwind.dev
 spec:
   additionalPrinterColumns:
   - JSONPath: .spec.replicas
@@ -20,10 +20,10 @@ spec:
     type: number
   group: actions.summerwind.dev
   names:
-    kind: RunnerSet
-    listKind: RunnerSetList
-    plural: runnersets
-    singular: runnerset
+    kind: RunnerDeployment
+    listKind: RunnerDeploymentList
+    plural: runnerdeployments
+    singular: runnerdeployment
   scope: Namespaced
   subresources:
     status: {}
@@ -44,7 +44,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: RunnerSetSpec defines the desired state of RunnerSet
+          description: RunnerSetSpec defines the desired state of RunnerDeployment
           properties:
             replicas:
               type: integer
