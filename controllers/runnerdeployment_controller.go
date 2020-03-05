@@ -244,7 +244,7 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 
-		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != "RunnerSet" {
+		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != "RunnerDeployment" {
 			return nil
 		}
 
