@@ -1,8 +1,7 @@
 #!/bin/bash
 
 if [ -z "${RUNNER_NAME}" ]; then
-  echo "RUNNER_NAME must be set" 1>&2
-  exit 1
+  RUNNER_NAME=$(hostname)
 fi
 
 if [ -z "${RUNNER_REPO}" ]; then
