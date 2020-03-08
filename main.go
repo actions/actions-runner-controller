@@ -17,20 +17,22 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
 
-	"github.com/google/go-github/v29/github"
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
-	"golang.org/x/oauth2"
+	"github.com/summerwind/actions-runner-controller/github"
+	"github.com/summerwind/actions-runner-controller/webhook"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -46,6 +48,8 @@ var (
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 
 	_ = actionsv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -77,10 +81,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: ghToken},
-	))
-	ghClient := github.NewClient(tc)
+	ghClient := github.NewClient(ghToken)
 
 	ctrl.SetLogger(zap.New(func(o *zap.Options) {
 		o.Development = true
@@ -133,6 +134,12 @@ func main() {
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
+
+	injector := &webhook.RegistrationTokenInjector{
+		GitHubClient: ghClient,
+		Log:          ctrl.Log.WithName("webhook").WithName("RegistrationTokenInjector"),
+	}
+	mgr.GetWebhookServer().Register("/mutate-v1-pod", &admission.Webhook{Handler: injector})
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
