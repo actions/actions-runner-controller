@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -44,6 +45,11 @@ func NewClient(token string) *Client {
 		tokens: map[string]*RegistrationToken{},
 		mu:     sync.Mutex{},
 	}
+}
+
+// SetBaseURL sets the base URL for the GitHub API.
+func (c *Client) SetBaseURL(baseURL *url.URL) {
+	c.github.BaseURL = baseURL
 }
 
 // GetRegistrationToken returns a registration token tied with the name of repository and runner.

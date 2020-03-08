@@ -23,7 +23,7 @@ func newTestClient() *Client {
 	}
 
 	client := NewClient("token")
-	client.github.BaseURL = baseURL
+	client.SetBaseURL(baseURL)
 
 	return client
 }
