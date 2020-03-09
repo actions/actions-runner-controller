@@ -6,7 +6,12 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
+	"gomodules.xyz/jsonpatch/v2"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
@@ -16,14 +21,15 @@ import (
 // +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,groups="",resources=pods,verbs=create,versions=v1,name=runner-pod.webhook.actions.summerwind.dev
 
 type RegistrationTokenInjector struct {
-	GitHubClient *github.Client
+	client.Client
 	Log          logr.Logger
+	GitHubClient *github.Client
 	decoder      *admission.Decoder
 }
 
 func (t *RegistrationTokenInjector) Handle(ctx context.Context, req admission.Request) admission.Response {
-	pod := &corev1.Pod{}
-	err := t.decoder.Decode(req, pod)
+	var pod corev1.Pod
+	err := t.decoder.Decode(req, &pod)
 	if err != nil {
 		t.Log.Error(err, "Failed to decode request object")
 		return admission.Errored(http.StatusBadRequest, err)
@@ -33,33 +39,55 @@ func (t *RegistrationTokenInjector) Handle(ctx context.Context, req admission.Re
 		pod.Annotations = map[string]string{}
 	}
 
-	repo, ok := pod.Annotations[v1alpha1.KeyRunnerRepository]
-	if ok {
-		rt, err := t.GitHubClient.GetRegistrationToken(context.Background(), repo, pod.Name)
-		if err != nil {
-			t.Log.Error(err, "Failed to get new registration token")
-			return admission.Errored(http.StatusInternalServerError, err)
+	runnerName, okName := pod.Labels[v1alpha1.KeyRunnerName]
+	repo, okRepo := pod.Annotations[v1alpha1.KeyRunnerRepository]
+	if !okName || !okRepo {
+		return newEmptyResponse()
+	}
+
+	nn := types.NamespacedName{
+		Namespace: pod.Namespace,
+		Name:      runnerName,
+	}
+
+	var runner v1alpha1.Runner
+	if err := t.Get(ctx, nn, &runner); err != nil {
+		if errors.IsNotFound(err) {
+			return newEmptyResponse()
 		}
 
-		for i, c := range pod.Spec.Containers {
-			if c.Name == v1alpha1.ContainerName {
-				env := []corev1.EnvVar{
-					{
-						Name:  v1alpha1.EnvRunnerRepository,
-						Value: repo,
-					},
-					{
-						Name:  v1alpha1.EnvRunnerToken,
-						Value: rt,
-					},
-				}
-				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, env...)
+		t.Log.Error(err, "Failed to get Runner")
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	if runner.Spec.Repository != repo {
+		return newEmptyResponse()
+	}
+
+	rt, err := t.GitHubClient.GetRegistrationToken(context.Background(), repo, pod.Name)
+	if err != nil {
+		t.Log.Error(err, "Failed to get new registration token")
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	for i, c := range pod.Spec.Containers {
+		if c.Name == v1alpha1.ContainerName {
+			env := []corev1.EnvVar{
+				{
+					Name:  v1alpha1.EnvRunnerRepository,
+					Value: repo,
+				},
+				{
+					Name:  v1alpha1.EnvRunnerToken,
+					Value: rt,
+				},
 			}
+			pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, env...)
 		}
+	}
 
-		if pod.Spec.RestartPolicy != corev1.RestartPolicyOnFailure {
-			pod.Spec.RestartPolicy = corev1.RestartPolicyOnFailure
-		}
+	if pod.Spec.RestartPolicy != corev1.RestartPolicyOnFailure {
+		pod.Spec.RestartPolicy = corev1.RestartPolicyOnFailure
 	}
 
 	buf, err := json.Marshal(pod)
@@ -75,4 +103,15 @@ func (t *RegistrationTokenInjector) Handle(ctx context.Context, req admission.Re
 func (t *RegistrationTokenInjector) InjectDecoder(d *admission.Decoder) error {
 	t.decoder = d
 	return nil
+}
+
+func newEmptyResponse() admission.Response {
+	pt := admissionv1beta1.PatchTypeJSONPatch
+	return admission.Response{
+		Patches: []jsonpatch.Operation{},
+		AdmissionResponse: admissionv1beta1.AdmissionResponse{
+			Allowed:   true,
+			PatchType: &pt,
+		},
+	}
 }
