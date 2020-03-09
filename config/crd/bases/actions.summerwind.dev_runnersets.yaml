@@ -163,6 +163,9 @@ spec:
                       type: array
                     image:
                       type: string
+                    replicas:
+                      format: int32
+                      type: integer
                     repository:
                       minLength: 3
                       pattern: ^[^/]+/[^/]+$

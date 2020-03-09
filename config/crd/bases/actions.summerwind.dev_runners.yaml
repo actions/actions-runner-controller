@@ -9,12 +9,18 @@ metadata:
   name: runners.actions.summerwind.dev
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.repository
-    name: Repository
-    type: string
-  - JSONPath: .status.phase
-    name: Status
-    type: string
+  - JSONPath: .spec.replicas
+    description: Desired Replicas
+    name: Desired
+    type: integer
+  - JSONPath: .status.replicas
+    description: Current Replicas
+    name: Current
+    type: integer
+  - JSONPath: .status.readyReplicas
+    description: Ready Replicas
+    name: Ready
+    type: integer
   group: actions.summerwind.dev
   names:
     kind: Runner
@@ -142,6 +148,9 @@ spec:
               type: array
             image:
               type: string
+            replicas:
+              format: int32
+              type: integer
             repository:
               minLength: 3
               pattern: ^[^/]+/[^/]+$
@@ -152,10 +161,16 @@ spec:
         status:
           description: RunnerStatus defines the observed state of Runner
           properties:
+            currentReplicas:
+              format: int32
+              type: integer
             message:
               type: string
             phase:
               type: string
+            readyReplicas:
+              format: int32
+              type: integer
             reason:
               type: string
             registration:
@@ -172,11 +187,16 @@ spec:
               - repository
               - token
               type: object
+            replicas:
+              format: int32
+              type: integer
+            updatedReplicas:
+              format: int32
+              type: integer
           required:
           - message
           - phase
           - reason
-          - registration
           type: object
       type: object
   version: v1alpha1
