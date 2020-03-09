@@ -24,7 +24,14 @@ $ kubectl create secret generic controller-manager --from-literal=github_token=$
 
 ## Usage
 
-To launch Self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
+There's generally two ways to use this controller:
+
+- Manage runners one by one with `Runner`
+- Manage a set of runners with `RunnerDeployment`
+
+### Runners
+
+To launch a single Self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
 ```
 # runner.yaml
@@ -64,3 +71,39 @@ The runner you created has been registerd to your repository.
 <img width="756" alt="Actions tab in your repository settings" src="https://user-images.githubusercontent.com/230145/73618667-8cbf9700-466c-11ea-80b6-c67e6d3f70e7.png">
 
 Now your can use your self-hosted runner. See the [official documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
+
+### RunnerDeployments
+
+There's also `RunnerSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
+
+You usually need only `RunnerDeployment` rather than `RunnerSet` as the former is for managing the latter.
+
+```yaml
+# runnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  replicas: 2
+  template:
+    spec:
+      repository: mumoshu/actions-runner-controller-ci
+```
+
+Apply the manifest file to your cluster:
+
+```
+$ kubectl apply -f runner.yaml
+runnerdeployment.actions.summerwind.dev/example-runnerdeploy created
+```
+
+You can see that 2 runners has been created as specified by `replicas: 2`:
+
+```
+$ kubectl get runners
+NAME             REPOSITORY                             STATUS
+NAME                             REPOSITORY                             STATUS
+example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
+example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
+```

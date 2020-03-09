@@ -31,7 +31,7 @@ type RunnerSpec struct {
 	Image string `json:"image"`
 
 	// +optional
-	Env []corev1.EnvVar `json:"env"`
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // RunnerStatus defines the observed state of Runner
