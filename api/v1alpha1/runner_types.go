@@ -21,6 +21,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	KeyRunnerName       = "actions.summerwind.dev/runner-name"
+	KeyRunnerRepository = "actions.summerwind.dev/runner-repository"
+
+	EnvRunnerName       = "RUNNER_NAME"
+	EnvRunnerRepository = "RUNNER_REPO"
+	EnvRunnerToken      = "RUNNER_TOKEN"
+
+	ContainerName = "runner"
+)
+
 // RunnerSpec defines the desired state of Runner
 type RunnerSpec struct {
 	// +kubebuilder:validation:MinLength=3
@@ -28,18 +39,34 @@ type RunnerSpec struct {
 	Repository string `json:"repository"`
 
 	// +optional
-	Image string `json:"image"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// +optional
-	Env []corev1.EnvVar `json:"env"`
+	Image string `json:"image,omitempty"`
+
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // RunnerStatus defines the observed state of Runner
 type RunnerStatus struct {
-	Registration RunnerStatusRegistration `json:"registration"`
-	Phase        string                   `json:"phase"`
-	Reason       string                   `json:"reason"`
-	Message      string                   `json:"message"`
+	// +optional
+	Registration *RunnerStatusRegistration `json:"registration,omitempty"`
+	Phase        string                    `json:"phase"`
+	Reason       string                    `json:"reason"`
+	Message      string                    `json:"message"`
+
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// +optional
+	CurrentReplicas int32 `json:"currentReplicas,omitempty"`
+
+	// +optional
+	UpdatedReplicas int32 `json:"updatedReplicas,omitempty"`
 }
 
 type RunnerStatusRegistration struct {
@@ -50,8 +77,9 @@ type RunnerStatusRegistration struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
-// +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.replicas",name="Desired",type="integer",description="Desired Replicas"
+// +kubebuilder:printcolumn:JSONPath=".status.replicas",name="Current",type="integer",description="Current Replicas"
+// +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name="Ready",type="integer",description="Ready Replicas"
 
 // Runner is the Schema for the runners API
 type Runner struct {
@@ -60,23 +88,6 @@ type Runner struct {
 
 	Spec   RunnerSpec   `json:"spec,omitempty"`
 	Status RunnerStatus `json:"status,omitempty"`
-}
-
-func (r Runner) IsRegisterable() bool {
-	if r.Status.Registration.Repository != r.Spec.Repository {
-		return false
-	}
-
-	if r.Status.Registration.Token == "" {
-		return false
-	}
-
-	now := metav1.Now()
-	if r.Status.Registration.ExpiresAt.Before(&now) {
-		return false
-	}
-
-	return true
 }
 
 // +kubebuilder:object:root=true
