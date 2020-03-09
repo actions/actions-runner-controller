@@ -88,39 +88,22 @@ func (c *Client) GetRegistrationToken(ctx context.Context, repo, name string) (s
 }
 
 // RemoveRunner removes a runner with specified name from repocitory.
-func (c *Client) RemoveRunner(ctx context.Context, repo, name string) (bool, error) {
-	runners, err := c.ListRunners(ctx, repo)
+func (c *Client) RemoveRunner(ctx context.Context, repo string, runnerID int) error {
+	req, err := c.github.NewRequest("DELETE", fmt.Sprintf("/repos/%s/actions/runners/%d", repo, runnerID), nil)
 	if err != nil {
-		return false, err
-	}
-
-	id := 0
-	for _, runner := range runners {
-		if runner.Name == name {
-			id = runner.ID
-			break
-		}
-	}
-
-	if id == 0 {
-		return false, nil
-	}
-
-	req, err := c.github.NewRequest("DELETE", fmt.Sprintf("/repos/%s/actions/runners/%d", repo, id), nil)
-	if err != nil {
-		return false, err
+		return err
 	}
 
 	res, err := c.github.Do(ctx, req, nil)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if res.StatusCode != 204 {
-		return false, fmt.Errorf("unexpected status: %d", res.StatusCode)
+		return fmt.Errorf("unexpected status: %d", res.StatusCode)
 	}
 
-	return true, nil
+	return nil
 }
 
 // ListRunners returns a list of runners of specified repository name.

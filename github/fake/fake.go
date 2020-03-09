@@ -21,7 +21,7 @@ const (
 func NewServer() *httptest.Server {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/repos/test/ok/actions/runners/registration-token", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/repos/test/valid/actions/runners/registration-token", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		expiresAt := time.Now().Add(time.Hour * 1)
 		fmt.Fprintf(w, fmt.Sprintf("{\"token\": \"%s\", \"expires_at\": \"%s\"}", RegistrationToken, expiresAt.Format(time.RFC3339)))
@@ -34,7 +34,7 @@ func NewServer() *httptest.Server {
 		http.Error(w, "", http.StatusBadRequest)
 	})
 
-	mux.HandleFunc("/repos/test/ok/actions/runners", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/repos/test/valid/actions/runners", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, RunnersListBody)
 	})
 	mux.HandleFunc("/repos/test/invalid/actions/runners", func(w http.ResponseWriter, req *http.Request) {
@@ -43,20 +43,14 @@ func NewServer() *httptest.Server {
 	mux.HandleFunc("/repos/test/error/actions/runners", func(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "", http.StatusBadRequest)
 	})
-	mux.HandleFunc("/repos/test/remove-invalid/actions/runners", func(w http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(w, RunnersListBody)
-	})
-	mux.HandleFunc("/repos/test/remove-error/actions/runners", func(w http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(w, RunnersListBody)
-	})
 
-	mux.HandleFunc("/repos/test/ok/actions/runners/1", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/repos/test/valid/actions/runners/1", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("/repos/test/remove-invalid/actions/runners/1", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/repos/test/invalid/actions/runners/1", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/repos/test/remove-error/actions/runners/1", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/repos/test/error/actions/runners/1", func(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "", http.StatusBadRequest)
 	})
 

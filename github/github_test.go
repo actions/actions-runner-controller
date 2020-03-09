@@ -43,19 +43,18 @@ func TestGetRegistrationToken(t *testing.T) {
 		token string
 		err   bool
 	}{
-		{repo: "test/ok", token: fake.RegistrationToken, err: false},
-		{repo: "test/ok", token: fake.RegistrationToken, err: false},
+		{repo: "test/valid", token: fake.RegistrationToken, err: false},
 		{repo: "test/invalid", token: "", err: true},
 		{repo: "test/error", token: "", err: true},
 	}
 
-	for _, tt := range tests {
+	for i, tt := range tests {
 		token, err := client.GetRegistrationToken(context.Background(), tt.repo, "test")
 		if !tt.err && err != nil {
-			t.Errorf("unexpected error: %v", err)
+			t.Errorf("[%d] unexpected error: %v", i, err)
 		}
 		if tt.token != token {
-			t.Errorf("unexpected token: %v", token)
+			t.Errorf("[%d] unexpected token: %v", i, token)
 		}
 	}
 }
@@ -66,18 +65,18 @@ func TestListRunners(t *testing.T) {
 		length int
 		err    bool
 	}{
-		{repo: "test/ok", length: 2, err: false},
+		{repo: "test/valid", length: 2, err: false},
 		{repo: "test/invalid", length: 0, err: true},
 		{repo: "test/error", length: 0, err: true},
 	}
 
-	for _, tt := range tests {
+	for i, tt := range tests {
 		runners, err := client.ListRunners(context.Background(), tt.repo)
 		if !tt.err && err != nil {
-			t.Errorf("unexpected error: %v", err)
+			t.Errorf("[%d] unexpected error: %v", i, err)
 		}
 		if tt.length != len(runners) {
-			t.Errorf("unexpected runners list: %v", runners)
+			t.Errorf("[%d] unexpected runners list: %v", i, runners)
 		}
 	}
 }
@@ -85,24 +84,17 @@ func TestListRunners(t *testing.T) {
 func TestRemoveRunner(t *testing.T) {
 	tests := []struct {
 		repo string
-		name string
-		ok   bool
 		err  bool
 	}{
-		{repo: "test/ok", name: "test1", ok: true, err: false},
-		{repo: "test/ok", name: "test3", ok: false, err: false},
-		{repo: "test/invalid", name: "test1", ok: false, err: true},
-		{repo: "test/remove-invalid", name: "test1", ok: false, err: true},
-		{repo: "test/remove-error", name: "test1", ok: false, err: true},
+		{repo: "test/valid", err: false},
+		{repo: "test/invalid", err: true},
+		{repo: "test/error", err: true},
 	}
 
-	for _, tt := range tests {
-		ok, err := client.RemoveRunner(context.Background(), tt.repo, tt.name)
+	for i, tt := range tests {
+		err := client.RemoveRunner(context.Background(), tt.repo, 1)
 		if !tt.err && err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if !tt.ok && ok {
-			t.Errorf("unexpected result: %v", ok)
+			t.Errorf("[%d] unexpected error: %v", i, err)
 		}
 	}
 }
