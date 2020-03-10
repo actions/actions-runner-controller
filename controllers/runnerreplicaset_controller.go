@@ -32,8 +32,8 @@ import (
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
-// RunnerSetReconciler reconciles a Runner object
-type RunnerSetReconciler struct {
+// RunnerReplicaSetReconciler reconciles a Runner object
+type RunnerReplicaSetReconciler struct {
 	client.Client
 	Log      logr.Logger
 	Recorder record.EventRecorder
@@ -45,11 +45,11 @@ type RunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/status,verbs=get;update;patch
 
-func (r *RunnerSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("runner", req.NamespacedName)
 
-	var rs v1alpha1.RunnerSet
+	var rs v1alpha1.RunnerReplicaSet
 	if err := r.Get(ctx, req.NamespacedName, &rs); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -137,7 +137,7 @@ func (r *RunnerSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerSetReconciler) newRunner(rs v1alpha1.RunnerSet) (v1alpha1.Runner, error) {
+func (r *RunnerReplicaSetReconciler) newRunner(rs v1alpha1.RunnerReplicaSet) (v1alpha1.Runner, error) {
 	objectMeta := rs.Spec.Template.ObjectMeta.DeepCopy()
 
 	objectMeta.GenerateName = rs.ObjectMeta.Name
@@ -156,11 +156,11 @@ func (r *RunnerSetReconciler) newRunner(rs v1alpha1.RunnerSet) (v1alpha1.Runner,
 	return runner, nil
 }
 
-func (r *RunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("runnerset-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.RunnerSet{}).
+		For(&v1alpha1.RunnerReplicaSet{}).
 		Owns(&v1alpha1.Runner{}).
 		Complete(r)
 }

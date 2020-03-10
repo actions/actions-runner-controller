@@ -6,7 +6,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
-  name: runnersets.actions.summerwind.dev
+  name: runnerreplicasets.actions.summerwind.dev
 spec:
   additionalPrinterColumns:
   - JSONPath: .spec.replicas
@@ -20,16 +20,16 @@ spec:
     type: number
   group: actions.summerwind.dev
   names:
-    kind: RunnerSet
-    listKind: RunnerSetList
-    plural: runnersets
-    singular: runnerset
+    kind: RunnerReplicaSet
+    listKind: RunnerReplicaSetList
+    plural: runnerreplicasets
+    singular: runnerreplicaset
   scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
-      description: RunnerSet is the Schema for the runnersets API
+      description: RunnerReplicaSet is the Schema for the runnersets API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -44,7 +44,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: RunnerSetSpec defines the desired state of RunnerSet
+          description: RunnerReplicaSetSpec defines the desired state of RunnerReplicaSet
           properties:
             replicas:
               type: integer
