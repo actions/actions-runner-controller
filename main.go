@@ -136,6 +136,7 @@ func main() {
 	// +kubebuilder:scaffold:builder
 
 	injector := &webhook.RegistrationTokenInjector{
+		Client:       mgr.GetClient(),
 		GitHubClient: ghClient,
 		Log:          ctrl.Log.WithName("webhook").WithName("RegistrationTokenInjector"),
 	}
