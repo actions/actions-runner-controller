@@ -22,7 +22,7 @@ import (
 // This includes:
 // * creating a Namespace to be used during the test
 // * starting the 'RunnerReconciler'
-// * stopping the 'RunnerSetReconciler" after the test ends
+// * stopping the 'RunnerReplicaSetReconciler" after the test ends
 // Call this function at the start of each of your tests.
 func SetupTest(ctx context.Context) *corev1.Namespace {
 	var stopCh chan struct{}
@@ -40,7 +40,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
-		controller := &RunnerSetReconciler{
+		controller := &RunnerReplicaSetReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
@@ -91,12 +91,12 @@ var _ = Context("Inside of a new namespace", func() {
 			name := "example-runnerset"
 
 			{
-				rs := &actionsv1alpha1.RunnerSet{
+				rs := &actionsv1alpha1.RunnerReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      name,
 						Namespace: ns.Name,
 					},
-					Spec: actionsv1alpha1.RunnerSetSpec{
+					Spec: actionsv1alpha1.RunnerReplicaSetSpec{
 						Replicas: intPtr(1),
 						Template: actionsv1alpha1.RunnerTemplate{
 							Spec: actionsv1alpha1.RunnerSpec{
@@ -112,7 +112,7 @@ var _ = Context("Inside of a new namespace", func() {
 
 				err := k8sClient.Create(ctx, rs)
 
-				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerSet resource")
+				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerReplicaSet resource")
 
 				runners := actionsv1alpha1.RunnerList{Items: []actionsv1alpha1.Runner{}}
 
@@ -133,11 +133,11 @@ var _ = Context("Inside of a new namespace", func() {
 				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
 				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
 				Eventually(func() error {
-					var rs actionsv1alpha1.RunnerSet
+					var rs actionsv1alpha1.RunnerReplicaSet
 
 					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rs)
 
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerSet resource")
+					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerReplicaSet resource")
 
 					rs.Spec.Replicas = intPtr(2)
 
@@ -164,11 +164,11 @@ var _ = Context("Inside of a new namespace", func() {
 				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
 				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
 				Eventually(func() error {
-					var rs actionsv1alpha1.RunnerSet
+					var rs actionsv1alpha1.RunnerReplicaSet
 
 					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rs)
 
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerSet resource")
+					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerReplicaSet resource")
 
 					rs.Spec.Replicas = intPtr(0)
 

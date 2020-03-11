@@ -72,7 +72,7 @@ var _ = Context("Inside of a new namespace", func() {
 
 	Describe("when no existing resources exist", func() {
 
-		It("should create a new RunnerSet resource from the specified template, add a another RunnerSet on template modification, and eventually removes old runnersets", func() {
+		It("should create a new RunnerReplicaSet resource from the specified template, add a another RunnerReplicaSet on template modification, and eventually removes old runnersets", func() {
 			name := "example-runnerdeploy"
 
 			{
@@ -97,9 +97,9 @@ var _ = Context("Inside of a new namespace", func() {
 
 				err := k8sClient.Create(ctx, rs)
 
-				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerSet resource")
+				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerReplicaSet resource")
 
-				runnerSets := actionsv1alpha1.RunnerSetList{Items: []actionsv1alpha1.RunnerSet{}}
+				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
 
 				Eventually(
 					func() int {
@@ -138,7 +138,7 @@ var _ = Context("Inside of a new namespace", func() {
 
 					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rd)
 
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerSet resource")
+					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerReplicaSet resource")
 
 					rd.Spec.Replicas = intPtr(2)
 
@@ -146,7 +146,7 @@ var _ = Context("Inside of a new namespace", func() {
 				},
 					time.Second*1, time.Millisecond*500).Should(BeNil())
 
-				runnerSets := actionsv1alpha1.RunnerSetList{Items: []actionsv1alpha1.RunnerSet{}}
+				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
 
 				Eventually(
 					func() int {

@@ -111,14 +111,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerSetReconciler := &controllers.RunnerSetReconciler{
+	runnerSetReconciler := &controllers.RunnerReplicaSetReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("RunnerSet"),
+		Log:    ctrl.Log.WithName("controllers").WithName("RunnerReplicaSet"),
 		Scheme: mgr.GetScheme(),
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RunnerSet")
+		setupLog.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
 		os.Exit(1)
 	}
 

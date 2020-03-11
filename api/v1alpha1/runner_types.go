@@ -94,23 +94,23 @@ type RunnerList struct {
 // +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name=Ready,type=number
 
-// RunnerSet is the Schema for the runnersets API
-type RunnerSet struct {
+// RunnerReplicaSet is the Schema for the runnersets API
+type RunnerReplicaSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RunnerSetSpec   `json:"spec,omitempty"`
-	Status RunnerSetStatus `json:"status,omitempty"`
+	Spec   RunnerReplicaSetSpec   `json:"spec,omitempty"`
+	Status RunnerReplicaSetStatus `json:"status,omitempty"`
 }
 
-// RunnerSetSpec defines the desired state of RunnerSet
-type RunnerSetSpec struct {
+// RunnerReplicaSetSpec defines the desired state of RunnerReplicaSet
+type RunnerReplicaSetSpec struct {
 	Replicas *int `json:"replicas"`
 
 	Template RunnerTemplate `json:"template"`
 }
 
-type RunnerSetStatus struct {
+type RunnerReplicaSetStatus struct {
 	AvailableReplicas int `json:"availableReplicas"`
 	ReadyReplicas     int `json:"readyReplicas"`
 }
@@ -124,10 +124,10 @@ type RunnerTemplate struct {
 // +kubebuilder:object:root=true
 
 // RunnerList contains a list of Runner
-type RunnerSetList struct {
+type RunnerReplicaSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []RunnerSet `json:"items"`
+	Items           []RunnerReplicaSet `json:"items"`
 }
 
 // +kubebuilder:object:root=true
@@ -136,7 +136,7 @@ type RunnerSetList struct {
 // +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name=Ready,type=number
 
-// RunnerSet is the Schema for the runnersets API
+// RunnerReplicaSet is the Schema for the runnersets API
 type RunnerDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -145,7 +145,7 @@ type RunnerDeployment struct {
 	Status RunnerDeploymentStatus `json:"status,omitempty"`
 }
 
-// RunnerSetSpec defines the desired state of RunnerDeployment
+// RunnerReplicaSetSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
 	Replicas *int `json:"replicas"`
 
@@ -167,5 +167,5 @@ type RunnerDeploymentList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Runner{}, &RunnerList{}, &RunnerSet{}, &RunnerSetList{}, &RunnerDeployment{}, &RunnerDeploymentList{})
+	SchemeBuilder.Register(&Runner{}, &RunnerList{}, &RunnerReplicaSet{}, &RunnerReplicaSetList{}, &RunnerDeployment{}, &RunnerDeploymentList{})
 }

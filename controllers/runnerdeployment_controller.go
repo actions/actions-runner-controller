@@ -67,30 +67,30 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	var myRunnerSetList v1alpha1.RunnerSetList
-	if err := r.List(ctx, &myRunnerSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
+	var myRunnerReplicaSetList v1alpha1.RunnerReplicaSetList
+	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	myRunnerSets := myRunnerSetList.Items
+	myRunnerReplicaSets := myRunnerReplicaSetList.Items
 
-	sort.Slice(myRunnerSets, func(i, j int) bool {
-		return myRunnerSets[i].GetCreationTimestamp().After(myRunnerSets[j].GetCreationTimestamp().Time)
+	sort.Slice(myRunnerReplicaSets, func(i, j int) bool {
+		return myRunnerReplicaSets[i].GetCreationTimestamp().After(myRunnerReplicaSets[j].GetCreationTimestamp().Time)
 	})
 
-	var newestSet *v1alpha1.RunnerSet
+	var newestSet *v1alpha1.RunnerReplicaSet
 
-	var oldSets []v1alpha1.RunnerSet
+	var oldSets []v1alpha1.RunnerReplicaSet
 
-	if len(myRunnerSets) > 0 {
-		newestSet = &myRunnerSets[0]
+	if len(myRunnerReplicaSets) > 0 {
+		newestSet = &myRunnerReplicaSets[0]
 	}
 
-	if len(myRunnerSets) > 1 {
-		oldSets = myRunnerSets[1:]
+	if len(myRunnerReplicaSets) > 1 {
+		oldSets = myRunnerReplicaSets[1:]
 	}
 
-	desiredRS, err := r.newRunnerSet(rd)
+	desiredRS, err := r.newRunnerReplicaSet(rd)
 	if err != nil {
 		log.Error(err, "Could not create runnerset")
 
@@ -153,14 +153,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			return ctrl.Result{}, err
 		}
 
-		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerSetDeleted", fmt.Sprintf("Deleted runnerset '%s'", rs.Name))
+		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerset '%s'", rs.Name))
 		log.Info("Deleted runnerset", "runnerdeployment", rd.ObjectMeta.Name, "runnerset", rs.Name)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func getTemplateHash(rs *v1alpha1.RunnerSet) (string, bool) {
+func getTemplateHash(rs *v1alpha1.RunnerReplicaSet) (string, bool) {
 	hash, ok := rs.Labels[LabelKeyRunnerTemplateHash]
 
 	return hash, ok
@@ -206,7 +206,7 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
-func (r *RunnerDeploymentReconciler) newRunnerSet(rd v1alpha1.RunnerDeployment) (v1alpha1.RunnerSet, error) {
+func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment) (v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
@@ -214,14 +214,14 @@ func (r *RunnerDeploymentReconciler) newRunnerSet(rd v1alpha1.RunnerDeployment) 
 
 	newRSTemplate.Labels = labels
 
-	rs := v1alpha1.RunnerSet{
+	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: rd.ObjectMeta.Name,
 			Namespace:    rd.ObjectMeta.Namespace,
 			Labels:       labels,
 		},
-		Spec: v1alpha1.RunnerSetSpec{
+		Spec: v1alpha1.RunnerReplicaSetSpec{
 			Replicas: rd.Spec.Replicas,
 			Template: newRSTemplate,
 		},
@@ -237,8 +237,8 @@ func (r *RunnerDeploymentReconciler) newRunnerSet(rd v1alpha1.RunnerDeployment) 
 func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("runnerdeployment-controller")
 
-	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
-		runnerSet := rawObj.(*v1alpha1.RunnerSet)
+	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
+		runnerSet := rawObj.(*v1alpha1.RunnerReplicaSet)
 		owner := metav1.GetControllerOf(runnerSet)
 		if owner == nil {
 			return nil
@@ -255,6 +255,6 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerDeployment{}).
-		Owns(&v1alpha1.RunnerSet{}).
+		Owns(&v1alpha1.RunnerReplicaSet{}).
 		Complete(r)
 }

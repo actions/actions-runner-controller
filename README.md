@@ -74,9 +74,9 @@ Now your can use your self-hosted runner. See the [official documentation](https
 
 ### RunnerDeployments
 
-There's also `RunnerSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
+There's also `RunnerReplicaSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
 
-You usually need only `RunnerDeployment` rather than `RunnerSet` as the former is for managing the latter.
+You usually need only `RunnerDeployment` rather than `RunnerReplicaSet` as the former is for managing the latter.
 
 ```yaml
 # runnerdeployment.yaml
