@@ -348,7 +348,6 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Value: runner.Status.Registration.Token,
 		},
 	}
-	env = append(env, runner.Spec.Env...)
 
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -398,10 +397,16 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
+	if runner.Spec.PodTemplate.ObjectMeta.Size() > 0 {
+		runner.Spec.PodTemplate.ObjectMeta.DeepCopyInto(&pod.ObjectMeta)
+	}
+
+	if runner.Spec.PodTemplate.Template.Spec.Size() > 0 {
+		runner.Spec.PodTemplate.Template.Spec.DeepCopyInto(&pod.Spec)
+	}
 	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
 		return pod, err
 	}
-
 	return pod, nil
 }
 
