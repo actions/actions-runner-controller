@@ -3,6 +3,8 @@
 # It should be run by config/default
 resources:
 - bases/actions.summerwind.dev_runners.yaml
+- bases/actions.summerwind.dev_runnerreplicasets.yaml
+- bases/actions.summerwind.dev_runnerdeployments.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
