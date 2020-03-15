@@ -131,12 +131,9 @@ var _ = Context("Inside of a new namespace", func() {
 			}
 
 			{
-				// We wrap the update in the Eventually block to avoid the below error
-				// that occurs due to concurrent modification made by the controller
-				// to update .Status.AvailableReplicas and .Status.ReadyReplicas
-				// Operation cannot be fulfilled on runnerreplicasets.actions.summerwind.dev
-				// "example-runnerreplciaset": the object has been modified; please
-				// apply your changes to the latest version and try again.
+				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
+				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
+				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
 				Eventually(func() error {
 					var rd actionsv1alpha1.RunnerDeployment
 
