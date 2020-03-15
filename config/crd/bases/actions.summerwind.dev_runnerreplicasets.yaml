@@ -29,7 +29,7 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: RunnerReplicaSet is the Schema for the runnersets API
+      description: RunnerReplicaSet is the Schema for the runnerreplicasets API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation

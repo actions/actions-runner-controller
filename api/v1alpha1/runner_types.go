@@ -94,7 +94,7 @@ type RunnerList struct {
 // +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name=Ready,type=number
 
-// RunnerReplicaSet is the Schema for the runnersets API
+// RunnerReplicaSet is the Schema for the runnerreplicasets API
 type RunnerReplicaSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -136,7 +136,7 @@ type RunnerReplicaSetList struct {
 // +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name=Ready,type=number
 
-// RunnerReplicaSet is the Schema for the runnersets API
+// RunnerDeployment is the Schema for the runnerdeployments API
 type RunnerDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

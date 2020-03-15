@@ -2,12 +2,13 @@ package controllers
 
 import (
 	"context"
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -43,7 +44,7 @@ func SetupDeploymentTest(ctx context.Context) *corev1.Namespace {
 			Client:   mgr.GetClient(),
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
-			Recorder: mgr.GetEventRecorderFor("runnerset-controller"),
+			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -72,7 +73,7 @@ var _ = Context("Inside of a new namespace", func() {
 
 	Describe("when no existing resources exist", func() {
 
-		It("should create a new RunnerReplicaSet resource from the specified template, add a another RunnerReplicaSet on template modification, and eventually removes old runnersets", func() {
+		It("should create a new RunnerReplicaSet resource from the specified template, add a another RunnerReplicaSet on template modification, and eventually removes old runnerreplicasets", func() {
 			name := "example-runnerdeploy"
 
 			{
@@ -120,7 +121,7 @@ var _ = Context("Inside of a new namespace", func() {
 						}
 
 						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnersets exist yet")
+							logf.Log.Info("No runnerreplicasets exist yet")
 							return -1
 						}
 
@@ -130,9 +131,12 @@ var _ = Context("Inside of a new namespace", func() {
 			}
 
 			{
-				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
-				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
-				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
+				// We wrap the update in the Eventually block to avoid the below error
+				// that occurs due to concurrent modification made by the controller
+				// to update .Status.AvailableReplicas and .Status.ReadyReplicas
+				// Operation cannot be fulfilled on runnerreplicasets.actions.summerwind.dev
+				// "example-runnerreplciaset": the object has been modified; please
+				// apply your changes to the latest version and try again.
 				Eventually(func() error {
 					var rd actionsv1alpha1.RunnerDeployment
 

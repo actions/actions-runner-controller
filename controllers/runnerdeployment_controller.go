@@ -19,15 +19,16 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"sort"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
-	"hash/fnv"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,12 +52,12 @@ type RunnerDeploymentReconciler struct {
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets/status,verbs=get;update;patch
 
 func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("runnerset", req.NamespacedName)
+	log := r.Log.WithValues("runnerreplicaset", req.NamespacedName)
 
 	var rd v1alpha1.RunnerDeployment
 	if err := r.Get(ctx, req.NamespacedName, &rd); err != nil {
@@ -92,14 +93,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	desiredRS, err := r.newRunnerReplicaSet(rd)
 	if err != nil {
-		log.Error(err, "Could not create runnerset")
+		log.Error(err, "Could not create runnerreplicaset")
 
 		return ctrl.Result{}, err
 	}
 
 	if newestSet == nil {
 		if err := r.Client.Create(ctx, &desiredRS); err != nil {
-			log.Error(err, "Failed to create runnerset resource")
+			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
 		}
@@ -109,21 +110,21 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	newestTemplateHash, ok := getTemplateHash(newestSet)
 	if !ok {
-		log.Info("Failed to get template hash of newest runnerset resource. It must be in an invalid state. Please manually delete the runnerset so that it is recreated")
+		log.Info("Failed to get template hash of newest runnerreplicaset resource. It must be in an invalid state. Please manually delete the runnerreplicaset so that it is recreated")
 
 		return ctrl.Result{}, nil
 	}
 
 	desiredTemplateHash, ok := getTemplateHash(&desiredRS)
 	if !ok {
-		log.Info("Failed to get template hash of desired runnerset resource. It must be in an invalid state. Please manually delete the runnerset so that it is recreated")
+		log.Info("Failed to get template hash of desired runnerreplicaset resource. It must be in an invalid state. Please manually delete the runnerreplicaset so that it is recreated")
 
 		return ctrl.Result{}, nil
 	}
 
 	if newestTemplateHash != desiredTemplateHash {
 		if err := r.Client.Create(ctx, &desiredRS); err != nil {
-			log.Error(err, "Failed to create runnerset resource")
+			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
 		}
@@ -131,12 +132,12 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	// Please add more conditions that we can in-place update the newest runnerset without disruption
+	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 	if newestSet.Spec.Replicas != desiredRS.Spec.Replicas {
 		newestSet.Spec.Replicas = desiredRS.Spec.Replicas
 
 		if err := r.Client.Update(ctx, newestSet); err != nil {
-			log.Error(err, "Failed to update runnerset resource")
+			log.Error(err, "Failed to update runnerreplicaset resource")
 
 			return ctrl.Result{}, err
 		}
@@ -153,8 +154,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			return ctrl.Result{}, err
 		}
 
-		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerset '%s'", rs.Name))
-		log.Info("Deleted runnerset", "runnerdeployment", rd.ObjectMeta.Name, "runnerset", rs.Name)
+		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
+		log.Info("Deleted runnerreplicaset", "runnerdeployment", rd.ObjectMeta.Name, "runnerreplicaset", rs.Name)
 	}
 
 	return ctrl.Result{}, nil
