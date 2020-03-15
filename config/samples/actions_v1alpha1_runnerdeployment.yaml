@@ -1,0 +1,9 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: summerwind-actions-runner-controller
+spec:
+  replicas: 2
+  template:
+    spec:
+      repository: summerwind/actions-runner-controller
