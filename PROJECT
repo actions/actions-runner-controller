@@ -4,4 +4,10 @@ resources:
 - group: actions
   kind: Runner
   version: v1alpha1
+- group: actions
+  kind: RunnerReplicaSet
+  version: v1alpha1
+- group: actions
+  kind: RunnerDeployment
+  version: v1alpha1
 version: "2"
