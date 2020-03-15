@@ -218,7 +218,7 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: rd.ObjectMeta.Name,
+			GenerateName: rd.ObjectMeta.Name + "-",
 			Namespace:    rd.ObjectMeta.Namespace,
 			Labels:       labels,
 		},

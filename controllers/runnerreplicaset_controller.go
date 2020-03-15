@@ -141,7 +141,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 func (r *RunnerReplicaSetReconciler) newRunner(rs v1alpha1.RunnerReplicaSet) (v1alpha1.Runner, error) {
 	objectMeta := rs.Spec.Template.ObjectMeta.DeepCopy()
 
-	objectMeta.GenerateName = rs.ObjectMeta.Name
+	objectMeta.GenerateName = rs.ObjectMeta.Name + "-"
 	objectMeta.Namespace = rs.ObjectMeta.Namespace
 
 	runner := v1alpha1.Runner{
