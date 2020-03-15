@@ -27,6 +27,26 @@ rules:
   - patch
   - update
 - apiGroups:
+    - actions.summerwind.dev
+  resources:
+    - runnerreplicasets
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - actions.summerwind.dev
+  resources:
+    - runnerreplicasets/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
   - actions.summerwind.dev
   resources:
   - runners
