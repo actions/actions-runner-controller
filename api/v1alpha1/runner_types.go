@@ -31,6 +31,9 @@ type RunnerSpec struct {
 	Image string `json:"image"`
 
 	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// +optional
 	PodTemplate corev1.PodTemplate `json:"podTemplate,omitempty"`
 }
 

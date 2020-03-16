@@ -349,61 +349,68 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
-	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      runner.Name,
-			Namespace: runner.Namespace,
-		},
-		Spec: corev1.PodSpec{
-			RestartPolicy: "OnFailure",
-			Containers: []corev1.Container{
-				{
-					Name:            containerName,
-					Image:           runnerImage,
-					ImagePullPolicy: "Always",
-					Env:             env,
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "docker",
-							MountPath: "/var/run",
-						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						RunAsGroup: &group,
-					},
-				},
-				{
-					Name:  "docker",
-					Image: r.DockerImage,
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "docker",
-							MountPath: "/var/run",
-						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: &privileged,
-					},
-				},
-			},
-			Volumes: []corev1.Volume{
-				corev1.Volume{
-					Name: "docker",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-			},
-		},
-	}
+	env = append(env, runner.Spec.Env...)
 
+	var pod corev1.Pod
 	if runner.Spec.PodTemplate.ObjectMeta.Size() > 0 {
-		runner.Spec.PodTemplate.ObjectMeta.DeepCopyInto(&pod.ObjectMeta)
+		pod = corev1.Pod{
+			ObjectMeta: *runner.Spec.PodTemplate.ObjectMeta.DeepCopy(),
+		}
 	}
 
 	if runner.Spec.PodTemplate.Template.Spec.Size() > 0 {
-		runner.Spec.PodTemplate.Template.Spec.DeepCopyInto(&pod.Spec)
+		pod = corev1.Pod{
+			Spec: *runner.Spec.PodTemplate.Template.Spec.DeepCopy(),
+		}
 	}
+
+	pod.ObjectMeta = metav1.ObjectMeta{
+		Name:      runner.Name,
+		Namespace: runner.Namespace,
+	}
+
+	pod.Spec.RestartPolicy = "OnFailure"
+	runnerContainers := []corev1.Container{
+		{
+			Name:            containerName,
+			Image:           runnerImage,
+			ImagePullPolicy: "Always",
+			Env:             env,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "docker",
+					MountPath: "/var/run",
+				},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				RunAsGroup: &group,
+			},
+		},
+		{
+			Name:  "docker",
+			Image: r.DockerImage,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "docker",
+					MountPath: "/var/run",
+				},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: &privileged,
+			},
+		},
+	}
+	runnerVolumes := []corev1.Volume{
+		corev1.Volume{
+			Name: "docker",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	}
+	pod.Spec.Containers = append(pod.Spec.Containers, runnerContainers...)
+	pod.Spec.Volumes = append(pod.Spec.Volumes, runnerVolumes...)
+
 	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
 		return pod, err
 	}
