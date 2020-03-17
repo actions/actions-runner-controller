@@ -41,6 +41,7 @@ metadata:
   name: example-runner
 spec:
   repository: summerwind/actions-runner-controller
+  env: []
 ```
 
 Apply the created manifest file to your Kubernetes.
@@ -89,6 +90,7 @@ spec:
   template:
     spec:
       repository: mumoshu/actions-runner-controller-ci
+      env: []
 ```
 
 Apply the manifest file to your cluster:
