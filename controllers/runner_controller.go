@@ -425,7 +425,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	if runner.Spec.AutomountServiceAccountToken != nil {
 		pod.Spec.AutomountServiceAccountToken = runner.Spec.AutomountServiceAccountToken
 	}
-	// Containers []corev1.Container `json:"containers,omitempty"`
+
+	if len(runner.Spec.Containers) != 0 {
+		pod.Spec.Containers = append(pod.Spec.InitContainers, runner.Spec.Containers...)
+	}
 
 	if runner.Spec.SecurityContext != nil {
 		pod.Spec.SecurityContext = runner.Spec.SecurityContext
