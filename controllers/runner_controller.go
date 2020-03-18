@@ -405,6 +405,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
+	if len(runner.Spec.RunnerContainers) != 0 {
+		pod.Spec.Containers = runner.Spec.RunnerContainers
+	}
+
 	if runner.Spec.RestartPolicy == "" {
 		pod.Spec.RestartPolicy = "OnFailure"
 	}

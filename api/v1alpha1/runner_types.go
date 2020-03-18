@@ -28,6 +28,8 @@ type RunnerSpec struct {
 	Repository string `json:"repository"`
 
 	// +optional
+	RunnerContainers []corev1.Container `json:"containers,omitempty"`
+	// +optional
 	Image string `json:"image"`
 
 	// +optional
