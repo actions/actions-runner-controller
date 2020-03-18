@@ -34,7 +34,32 @@ type RunnerSpec struct {
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// +optional
-	PodTemplate corev1.PodTemplate `json:"podTemplate,omitempty"`
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// +optional
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+	// +optional
+	Containers []corev1.Container `json:"containers,omitempty"`
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// +optional
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
+	// +optional
+	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +optional
+	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
+	// +optional
+	RestartPolicy corev1.RestartPolicy `json:"restartPolicy,omitempty"`
+	// +optional
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // RunnerStatus defines the observed state of Runner
