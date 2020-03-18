@@ -9,7 +9,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v0.1.0
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/go-github/v29 v29.0.2
+	github.com/google/go-github/v29 v29.0.3
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
 	github.com/prometheus/common v0.0.0-20181126121408-4724e9255275

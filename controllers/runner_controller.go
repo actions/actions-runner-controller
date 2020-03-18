@@ -41,6 +41,11 @@ const (
 	finalizerName = "runner.actions.summerwind.dev"
 )
 
+type GitHubRunnerList struct {
+	TotalCount int            `json:"total_count"`
+	Runners    []GitHubRunner `json:"runners,omitempty"`
+}
+
 type GitHubRunner struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
@@ -267,7 +272,7 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 	}
 
 	id := 0
-	for _, runner := range runners {
+	for _, runner := range runners.Runners {
 		if runner.Name == name {
 			id = runner.ID
 			break
@@ -285,8 +290,8 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 	return true, nil
 }
 
-func (r *RunnerReconciler) listRunners(ctx context.Context, repo string) ([]GitHubRunner, error) {
-	runners := []GitHubRunner{}
+func (r *RunnerReconciler) listRunners(ctx context.Context, repo string) (GitHubRunnerList, error) {
+	runners := GitHubRunnerList{}
 
 	req, err := r.GitHubClient.NewRequest("GET", fmt.Sprintf("/repos/%s/actions/runners", repo), nil)
 	if err != nil {
@@ -417,8 +422,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	if runner.Spec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runner.Spec.ServiceAccountName
 	}
-	if *runner.Spec.AutomountServiceAccountToken == false {
-		*pod.Spec.AutomountServiceAccountToken = false
+	if runner.Spec.AutomountServiceAccountToken != nil {
+		pod.Spec.AutomountServiceAccountToken = runner.Spec.AutomountServiceAccountToken
 	}
 	// Containers []corev1.Container `json:"containers,omitempty"`
 
@@ -442,7 +447,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.EphemeralContainers = runner.Spec.EphemeralContainers
 	}
 
-	if *runner.Spec.TerminationGracePeriodSeconds != 0 {
+	if runner.Spec.TerminationGracePeriodSeconds != nil {
 		pod.Spec.TerminationGracePeriodSeconds = runner.Spec.TerminationGracePeriodSeconds
 	}
 
@@ -450,7 +455,6 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		return pod, err
 	}
 
-	fmt.Println(pod)
 	return pod, nil
 }
 
