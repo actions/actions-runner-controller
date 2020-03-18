@@ -351,69 +351,106 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	env = append(env, runner.Spec.Env...)
 
-	var pod corev1.Pod
-	if runner.Spec.PodTemplate.ObjectMeta.Size() > 0 {
-		pod = corev1.Pod{
-			ObjectMeta: *runner.Spec.PodTemplate.ObjectMeta.DeepCopy(),
-		}
-	}
-
-	if runner.Spec.PodTemplate.Template.Spec.Size() > 0 {
-		pod = corev1.Pod{
-			Spec: *runner.Spec.PodTemplate.Template.Spec.DeepCopy(),
-		}
-	}
-
-	pod.ObjectMeta = metav1.ObjectMeta{
-		Name:      runner.Name,
-		Namespace: runner.Namespace,
-	}
-
-	pod.Spec.RestartPolicy = "OnFailure"
-	runnerContainers := []corev1.Container{
-		{
-			Name:            containerName,
-			Image:           runnerImage,
-			ImagePullPolicy: "Always",
-			Env:             env,
-			VolumeMounts: []corev1.VolumeMount{
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        runner.Name,
+			Namespace:   runner.Namespace,
+			Labels:      runner.Labels,
+			Annotations: runner.Annotations,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
 				{
-					Name:      "docker",
-					MountPath: "/var/run",
+					Name:            containerName,
+					Image:           runnerImage,
+					ImagePullPolicy: "Always",
+					Env:             env,
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "docker",
+							MountPath: "/var/run",
+						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						RunAsGroup: &group,
+					},
+				},
+				{
+					Name:  "docker",
+					Image: r.DockerImage,
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "docker",
+							MountPath: "/var/run",
+						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: &privileged,
+					},
 				},
 			},
-			SecurityContext: &corev1.SecurityContext{
-				RunAsGroup: &group,
-			},
-		},
-		{
-			Name:  "docker",
-			Image: r.DockerImage,
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "docker",
-					MountPath: "/var/run",
+			Volumes: []corev1.Volume{
+				corev1.Volume{
+					Name: "docker",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
 			},
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: &privileged,
-			},
 		},
 	}
-	runnerVolumes := []corev1.Volume{
-		corev1.Volume{
-			Name: "docker",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
+
+	if runner.Spec.RestartPolicy == "" {
+		pod.Spec.RestartPolicy = "OnFailure"
 	}
-	pod.Spec.Containers = append(pod.Spec.Containers, runnerContainers...)
-	pod.Spec.Volumes = append(pod.Spec.Volumes, runnerVolumes...)
+
+	if len(runner.Spec.Volumes) != 0 {
+		pod.Spec.Volumes = append(runner.Spec.Volumes, runner.Spec.Volumes...)
+	}
+	if len(runner.Spec.InitContainers) != 0 {
+		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runner.Spec.InitContainers...)
+	}
+
+	if runner.Spec.NodeSelector != nil {
+		pod.Spec.NodeSelector = runner.Spec.NodeSelector
+	}
+	if runner.Spec.ServiceAccountName != "" {
+		pod.Spec.ServiceAccountName = runner.Spec.ServiceAccountName
+	}
+	if *runner.Spec.AutomountServiceAccountToken == false {
+		*pod.Spec.AutomountServiceAccountToken = false
+	}
+	// Containers []corev1.Container `json:"containers,omitempty"`
+
+	if runner.Spec.SecurityContext != nil {
+		pod.Spec.SecurityContext = runner.Spec.SecurityContext
+	}
+
+	if len(runner.Spec.ImagePullSecrets) != 0 {
+		pod.Spec.ImagePullSecrets = runner.Spec.ImagePullSecrets
+	}
+
+	if runner.Spec.Affinity != nil {
+		pod.Spec.Affinity = runner.Spec.Affinity
+	}
+
+	if len(runner.Spec.Tolerations) != 0 {
+		pod.Spec.Tolerations = runner.Spec.Tolerations
+	}
+
+	if len(runner.Spec.EphemeralContainers) != 0 {
+		pod.Spec.EphemeralContainers = runner.Spec.EphemeralContainers
+	}
+
+	if *runner.Spec.TerminationGracePeriodSeconds != 0 {
+		pod.Spec.TerminationGracePeriodSeconds = runner.Spec.TerminationGracePeriodSeconds
+	}
 
 	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
 		return pod, err
 	}
+
+	fmt.Println(pod)
 	return pod, nil
 }
 
