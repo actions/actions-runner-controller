@@ -355,10 +355,6 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	env = append(env, runner.Spec.Env...)
-	// Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-	// // +optional
-	// VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
-	// // +optional
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        runner.Name,
