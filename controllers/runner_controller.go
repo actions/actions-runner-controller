@@ -355,7 +355,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	env = append(env, runner.Spec.Env...)
-
+	// Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// // +optional
+	// VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// // +optional
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        runner.Name,
@@ -370,6 +373,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					Image:           runnerImage,
 					ImagePullPolicy: "Always",
 					Env:             env,
+					EnvFrom:         runner.Spec.EnvFrom,
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "docker",
@@ -379,6 +383,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					SecurityContext: &corev1.SecurityContext{
 						RunAsGroup: &group,
 					},
+					Resources: runner.Spec.Resources,
 				},
 				{
 					Name:  "docker",
@@ -407,6 +412,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runner.Spec.RunnerContainers) != 0 {
 		pod.Spec.Containers = runner.Spec.RunnerContainers
+	}
+
+	if len(runner.Spec.VolumeMounts) != 0 {
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runner.Spec.VolumeMounts...)
 	}
 
 	if runner.Spec.RestartPolicy == "" {

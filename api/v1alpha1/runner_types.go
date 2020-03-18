@@ -28,10 +28,16 @@ type RunnerSpec struct {
 	Repository string `json:"repository"`
 
 	// +optional
-	RunnerContainers []corev1.Container `json:"containers,omitempty"`
+	RunnerContainers []corev1.Container `json:"runnerContainers,omitempty"`
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+
 	// +optional
 	Image string `json:"image"`
-
 	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
