@@ -436,7 +436,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	if len(runner.Spec.Containers) != 0 {
-		pod.Spec.Containers = append(pod.Spec.InitContainers, runner.Spec.Containers...)
+		pod.Spec.Containers = append(pod.Spec.Containers, runner.Spec.Containers...)
 	}
 
 	if runner.Spec.SecurityContext != nil {
