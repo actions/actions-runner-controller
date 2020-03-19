@@ -363,6 +363,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Annotations: runner.Annotations,
 		},
 		Spec: corev1.PodSpec{
+			RestartPolicy: "OnFailure",
 			Containers: []corev1.Container{
 				{
 					Name:            containerName,
@@ -412,10 +413,6 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runner.Spec.VolumeMounts) != 0 {
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runner.Spec.VolumeMounts...)
-	}
-
-	if runner.Spec.RestartPolicy == "" {
-		pod.Spec.RestartPolicy = "OnFailure"
 	}
 
 	if len(runner.Spec.Volumes) != 0 {

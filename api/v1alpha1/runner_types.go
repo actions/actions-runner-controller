@@ -65,8 +65,6 @@ type RunnerSpec struct {
 	// +optional
 	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
 	// +optional
-	RestartPolicy corev1.RestartPolicy `json:"restartPolicy,omitempty"`
-	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 

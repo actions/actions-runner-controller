@@ -3880,11 +3880,6 @@ spec:
                     value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                   type: object
               type: object
-            restartPolicy:
-              description: RestartPolicy describes how the container should be restarted.
-                Only one of the following restart policies may be specified. If none
-                of the following policies is specified, the default one is RestartPolicyAlways.
-              type: string
             runnerContainers:
               items:
                 description: A single application container that you want to run within
