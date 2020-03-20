@@ -409,6 +409,13 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runner.Spec.Containers) != 0 {
 		pod.Spec.Containers = runner.Spec.Containers
+		for i := 0; i < len(runner.Spec.Containers); i++ {
+			// merge runner spec required Env to custom Pod spec
+			if runner.Spec.Containers[i].Name == containerName {
+				runner.Spec.Containers[i].Env = append(runner.Spec.Containers[i].Env, env...)
+				break
+			}
+		}
 	}
 
 	if len(runner.Spec.VolumeMounts) != 0 {
