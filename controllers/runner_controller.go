@@ -407,8 +407,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
-	if len(runner.Spec.RunnerContainers) != 0 {
-		pod.Spec.Containers = runner.Spec.RunnerContainers
+	if len(runner.Spec.Containers) != 0 {
+		pod.Spec.Containers = runner.Spec.Containers
 	}
 
 	if len(runner.Spec.VolumeMounts) != 0 {
@@ -432,8 +432,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.AutomountServiceAccountToken = runner.Spec.AutomountServiceAccountToken
 	}
 
-	if len(runner.Spec.Containers) != 0 {
-		pod.Spec.Containers = append(pod.Spec.Containers, runner.Spec.Containers...)
+	if len(runner.Spec.SidecarContainers) != 0 {
+		pod.Spec.Containers = append(pod.Spec.Containers, runner.Spec.SidecarContainers...)
 	}
 
 	if runner.Spec.SecurityContext != nil {

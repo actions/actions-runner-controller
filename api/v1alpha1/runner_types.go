@@ -28,7 +28,7 @@ type RunnerSpec struct {
 	Repository string `json:"repository"`
 
 	// +optional
-	RunnerContainers []corev1.Container `json:"runnerContainers,omitempty"`
+	Containers []corev1.Container `json:"containers,omitempty"`
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	// +optional
@@ -47,7 +47,7 @@ type RunnerSpec struct {
 	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
 	// +optional
-	Containers []corev1.Container `json:"containers,omitempty"`
+	SidecarContainers []corev1.Container `json:"sidecarContainers,omitempty"`
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 	// +optional
