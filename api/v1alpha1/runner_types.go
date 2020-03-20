@@ -28,10 +28,44 @@ type RunnerSpec struct {
 	Repository string `json:"repository"`
 
 	// +optional
-	Image string `json:"image"`
+	Containers []corev1.Container `json:"containers,omitempty"`
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
 
 	// +optional
+	Image string `json:"image"`
+	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// +optional
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+	// +optional
+	SidecarContainers []corev1.Container `json:"sidecarContainers,omitempty"`
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// +optional
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
+	// +optional
+	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +optional
+	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
+	// +optional
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // RunnerStatus defines the observed state of Runner

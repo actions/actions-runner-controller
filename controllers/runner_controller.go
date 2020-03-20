@@ -41,6 +41,11 @@ const (
 	finalizerName = "runner.actions.summerwind.dev"
 )
 
+type GitHubRunnerList struct {
+	TotalCount int            `json:"total_count"`
+	Runners    []GitHubRunner `json:"runners,omitempty"`
+}
+
 type GitHubRunner struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
@@ -267,7 +272,7 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 	}
 
 	id := 0
-	for _, runner := range runners {
+	for _, runner := range runners.Runners {
 		if runner.Name == name {
 			id = runner.ID
 			break
@@ -285,8 +290,8 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 	return true, nil
 }
 
-func (r *RunnerReconciler) listRunners(ctx context.Context, repo string) ([]GitHubRunner, error) {
-	runners := []GitHubRunner{}
+func (r *RunnerReconciler) listRunners(ctx context.Context, repo string) (GitHubRunnerList, error) {
+	runners := GitHubRunnerList{}
 
 	req, err := r.GitHubClient.NewRequest("GET", fmt.Sprintf("/repos/%s/actions/runners", repo), nil)
 	if err != nil {
@@ -348,12 +353,14 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Value: runner.Status.Registration.Token,
 		},
 	}
-	env = append(env, runner.Spec.Env...)
 
+	env = append(env, runner.Spec.Env...)
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      runner.Name,
-			Namespace: runner.Namespace,
+			Name:        runner.Name,
+			Namespace:   runner.Namespace,
+			Labels:      runner.Labels,
+			Annotations: runner.Annotations,
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy: "OnFailure",
@@ -363,6 +370,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					Image:           runnerImage,
 					ImagePullPolicy: "Always",
 					Env:             env,
+					EnvFrom:         runner.Spec.EnvFrom,
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "docker",
@@ -372,6 +380,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					SecurityContext: &corev1.SecurityContext{
 						RunAsGroup: &group,
 					},
+					Resources: runner.Spec.Resources,
 				},
 				{
 					Name:  "docker",
@@ -396,6 +405,59 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 			},
 		},
+	}
+
+	if len(runner.Spec.Containers) != 0 {
+		pod.Spec.Containers = runner.Spec.Containers
+	}
+
+	if len(runner.Spec.VolumeMounts) != 0 {
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runner.Spec.VolumeMounts...)
+	}
+
+	if len(runner.Spec.Volumes) != 0 {
+		pod.Spec.Volumes = append(runner.Spec.Volumes, runner.Spec.Volumes...)
+	}
+	if len(runner.Spec.InitContainers) != 0 {
+		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runner.Spec.InitContainers...)
+	}
+
+	if runner.Spec.NodeSelector != nil {
+		pod.Spec.NodeSelector = runner.Spec.NodeSelector
+	}
+	if runner.Spec.ServiceAccountName != "" {
+		pod.Spec.ServiceAccountName = runner.Spec.ServiceAccountName
+	}
+	if runner.Spec.AutomountServiceAccountToken != nil {
+		pod.Spec.AutomountServiceAccountToken = runner.Spec.AutomountServiceAccountToken
+	}
+
+	if len(runner.Spec.SidecarContainers) != 0 {
+		pod.Spec.Containers = append(pod.Spec.Containers, runner.Spec.SidecarContainers...)
+	}
+
+	if runner.Spec.SecurityContext != nil {
+		pod.Spec.SecurityContext = runner.Spec.SecurityContext
+	}
+
+	if len(runner.Spec.ImagePullSecrets) != 0 {
+		pod.Spec.ImagePullSecrets = runner.Spec.ImagePullSecrets
+	}
+
+	if runner.Spec.Affinity != nil {
+		pod.Spec.Affinity = runner.Spec.Affinity
+	}
+
+	if len(runner.Spec.Tolerations) != 0 {
+		pod.Spec.Tolerations = runner.Spec.Tolerations
+	}
+
+	if len(runner.Spec.EphemeralContainers) != 0 {
+		pod.Spec.EphemeralContainers = runner.Spec.EphemeralContainers
+	}
+
+	if runner.Spec.TerminationGracePeriodSeconds != nil {
+		pod.Spec.TerminationGracePeriodSeconds = runner.Spec.TerminationGracePeriodSeconds
 	}
 
 	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
