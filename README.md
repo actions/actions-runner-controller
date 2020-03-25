@@ -69,7 +69,7 @@ NAME           READY   STATUS    RESTARTS   AGE
 example-runner 2/2     Running   0          1m
 ```
 
-The runner you created has been registerd to your repository.
+The runner you created has been registered to your repository.
 
 <img width="756" alt="Actions tab in your repository settings" src="https://user-images.githubusercontent.com/230145/73618667-8cbf9700-466c-11ea-80b6-c67e6d3f70e7.png">
 
