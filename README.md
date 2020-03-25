@@ -16,7 +16,9 @@ First, install *actions-runner-controller* with a manifest file. This will creat
 $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
 ```
 
-Set your access token of GitHub to the secret. `${GITHUB_TOKEN}` is the value you must replace with your access token. This token is used to register Self-hosted runner by *actions-runner-controller*.
+Next, from an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
+
+Then, create a Kubernetes secret, replacing `${GITHUB_TOKEN}` with your token.
 
 ```
 $ kubectl create secret generic controller-manager --from-literal=github_token=${GITHUB_TOKEN} -n actions-runner-system
