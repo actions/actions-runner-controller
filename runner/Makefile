@@ -1,6 +1,6 @@
 NAME ?= summerwind/actions-runner
 
-RUNNER_VERSION ?= 2.165.2
+RUNNER_VERSION ?= 2.168.0
 DOCKER_VERSION ?= 19.03.6
 
 docker-build:
