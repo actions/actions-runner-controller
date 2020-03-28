@@ -35,6 +35,25 @@ spec:
             secretKeyRef:
               name: controller-manager
               key: github_token
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: controller-manager
+              key: github_app_id
+              optional: true
+        - name: GITHUB_APP_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              name: controller-manager
+              key: github_app_installation_id
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          value: /etc/actions-runner-controller/github_app_private_key
+        volumeMounts:
+        - name: controller-manager
+          mountPath: "/etc/actions-runner-controller"
+          readOnly: true
         resources:
           limits:
             cpu: 100m
@@ -42,4 +61,8 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
+      volumes:
+      - name: controller-manager
+        secret:
+          secretName: controller-manager
       terminationGracePeriodSeconds: 10

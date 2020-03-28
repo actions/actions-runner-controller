@@ -20,8 +20,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 
+	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v29/github"
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
@@ -58,7 +61,13 @@ func main() {
 
 		runnerImage string
 		dockerImage string
-		ghToken     string
+
+		ghToken             string
+		ghAppID             int64
+		ghAppInstallationID int64
+		ghAppPrivateKey     string
+
+		ghClient *github.Client
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -66,21 +75,57 @@ func main() {
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
 	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
-	flag.StringVar(&ghToken, "github-token", "", "The access token of GitHub.")
+	flag.StringVar(&ghToken, "github-token", "", "The personal access token of GitHub.")
+	flag.Int64Var(&ghAppID, "github-app-id", 0, "The application ID of GitHub App.")
+	flag.Int64Var(&ghAppInstallationID, "github-app-installation-id", 0, "The installation ID of GitHub App.")
+	flag.StringVar(&ghAppPrivateKey, "github-app-private-key", "", "The path of a private key file to authenticate as a GitHub App")
 	flag.Parse()
 
 	if ghToken == "" {
 		ghToken = os.Getenv("GITHUB_TOKEN")
 	}
-	if ghToken == "" {
-		fmt.Fprintln(os.Stderr, "Error: GitHub access token must be specified.")
-		os.Exit(1)
+	if ghAppID == 0 {
+		appID, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
+		if err == nil {
+			ghAppID = appID
+		}
+	}
+	if ghAppInstallationID == 0 {
+		appInstallationID, err := strconv.ParseInt(os.Getenv("GITHUB_APP_INSTALLATION_ID"), 10, 64)
+		if err == nil {
+			ghAppInstallationID = appInstallationID
+		}
+	}
+	if ghAppPrivateKey == "" {
+		ghAppPrivateKey = os.Getenv("GITHUB_APP_PRIVATE_KEY")
 	}
 
-	tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: ghToken},
-	))
-	ghClient := github.NewClient(tc)
+	if ghAppID != 0 {
+		if ghAppInstallationID == 0 {
+			fmt.Fprintln(os.Stderr, "Error: The installation ID must be specified.")
+			os.Exit(1)
+		}
+
+		if ghAppPrivateKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: The path of a private key file must be specified.")
+			os.Exit(1)
+		}
+
+		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, ghAppID, ghAppInstallationID, ghAppPrivateKey)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Invalid GitHub App credentials: %v\n", err)
+			os.Exit(1)
+		}
+		ghClient = github.NewClient(&http.Client{Transport: tr})
+	} else if ghToken != "" {
+		tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: ghToken},
+		))
+		ghClient = github.NewClient(tc)
+	} else {
+		fmt.Fprintln(os.Stderr, "Error: GitHub App credentials or personal access token must be specified.")
+		os.Exit(1)
+	}
 
 	ctrl.SetLogger(zap.New(func(o *zap.Options) {
 		o.Development = true
