@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"k8s.io/apimachinery/pkg/types"
 	"sort"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
@@ -58,7 +60,7 @@ type RunnerDeploymentReconciler struct {
 
 func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("runnerreplicaset", req.NamespacedName)
+	log := r.Log.WithValues("runnerdeployment", req.NamespacedName)
 
 	var rd v1alpha1.RunnerDeployment
 	if err := r.Get(ctx, req.NamespacedName, &rd); err != nil {
@@ -130,12 +132,19 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, nil
+		// We requeue in order to clean up old runner replica sets later.
+		// Otherwise, they aren't cleaned up until the next re-sync interval.
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	const defaultReplicas = 1
+
+	currentDesiredReplicas := getIntOrDefault(newestSet.Spec.Replicas, defaultReplicas)
+	newDesiredReplicas := getIntOrDefault(desiredRS.Spec.Replicas, defaultReplicas)
+
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
-	if newestSet.Spec.Replicas != desiredRS.Spec.Replicas {
-		newestSet.Spec.Replicas = desiredRS.Spec.Replicas
+	if currentDesiredReplicas != newDesiredReplicas {
+		newestSet.Spec.Replicas = &newDesiredReplicas
 
 		if err := r.Client.Update(ctx, newestSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
@@ -143,23 +152,47 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
 	}
 
-	for i := range oldSets {
-		rs := oldSets[i]
+	// Do we old runner replica sets that should eventually deleted?
+	if len(oldSets) > 0 {
+		readyReplicas := newestSet.Status.ReadyReplicas
 
-		if err := r.Client.Delete(ctx, &rs); err != nil {
-			log.Error(err, "Failed to delete runner resource")
+		if readyReplicas < currentDesiredReplicas {
+			log.WithValues("runnerreplicaset", types.NamespacedName{
+				Namespace: newestSet.Namespace,
+				Name:      newestSet.Name,
+			}).
+				Info("Waiting until the newest runner replica set to be 100% available")
 
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 
-		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
-		log.Info("Deleted runnerreplicaset", "runnerdeployment", rd.ObjectMeta.Name, "runnerreplicaset", rs.Name)
+		for i := range oldSets {
+			rs := oldSets[i]
+
+			if err := r.Client.Delete(ctx, &rs); err != nil {
+				log.Error(err, "Failed to delete runner resource")
+
+				return ctrl.Result{}, err
+			}
+
+			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
+
+			log.Info("Deleted runnerreplicaset", "runnerdeployment", rd.ObjectMeta.Name, "runnerreplicaset", rs.Name)
+		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func getIntOrDefault(p *int, d int) int {
+	if p == nil {
+		return d
+	}
+
+	return *p
 }
 
 func getTemplateHash(rs *v1alpha1.RunnerReplicaSet) (string, bool) {
