@@ -16,12 +16,61 @@ First, install *actions-runner-controller* with a manifest file. This will creat
 $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
 ```
 
-Next, from an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
+Next, set up a GitHub App or personal access token for *actions-runner-controller* to access the GitHub API.
 
-Then, create a Kubernetes secret, replacing `${GITHUB_TOKEN}` with your token.
+### Using GitHub App
+
+You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
+
+- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write)
+
+If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
+
+- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write)
+
+You will see an *App ID* on the page of the GitHub App you created as follows, the value of this App ID will be used later.
+
+<img width="750" alt="App ID" src="https://user-images.githubusercontent.com/230145/78968802-6e7c8880-7b40-11ea-8b08-0c1b8e6a15f0.png">
+
+Download the private key file by pushing the "Generate a private key" button at the bottom of the GitHub App page. This file will also be used later.
+
+<img width="750" alt="Generate a private key" src="https://user-images.githubusercontent.com/230145/78968805-71777900-7b40-11ea-97e6-55c48dfc44ac.png">
+
+Go to the "Install App" tab on the left side of the page and install the GitHub App that you created for your account or organization.
+
+<img width="750" alt="Install App" src="https://user-images.githubusercontent.com/230145/78968806-72100f80-7b40-11ea-810d-2bd3261e9d40.png">
+
+When the installation is complete, you will be taken to a URL in one of the following formats, the last number of the URL will be used as the Installation ID later (For example, if the URL ends in `settings/installations/12345`, then the Installation ID is `12345`).
+
+- `https://github.com/settings/installations/${INSTALLATION_ID}`
+- `https://github.com/organizations/eventreactor/settings/installations/${INSTALLATION_ID}`
+
+Finally, register the App ID (`APP_ID`), Installation ID (`INSTALLATION_ID`), and downloaded private key file (`PRIVATE_KEY_FILE_PATH`) to Kubernetes as Secret.
 
 ```
-$ kubectl create secret generic controller-manager --from-literal=github_token=${GITHUB_TOKEN} -n actions-runner-system
+$ kubectl create secret generic controller-manager \
+    -n actions-runner-system \
+    --from-literal=github_app_id=${APP_ID} \
+    --from-literal=github_app_installation_id=${INSTALLATION_ID} \
+    --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
+```
+
+### Using personal access token
+
+Next, from an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
+
+To use a Personal Access Token, you must issue the token with an account that has `admin` privileges.
+
+Open the Create Token page from the following link, grant the `repo` scope, and press the "Generate Token" button at the bottom of the page to create the token.
+
+- [Create personal access token](https://github.com/settings/tokens/new)
+
+Register the created token (`GITHUB_TOKEN`) as a Kubernetes secret.
+
+```
+$ kubectl create secret generic controller-manager \
+    -n actions-runner-system \
+    --from-literal=github_token=${GITHUB_TOKEN}
 ```
 
 ## Usage
