@@ -1,0 +1,124 @@
+package github
+
+import (
+	"context"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/google/go-github/v31/github"
+	"github.com/summerwind/actions-runner-controller/github/fake"
+)
+
+var server *httptest.Server
+
+func newTestClient() *Client {
+	client, err := NewClientWithAccessToken("token")
+	if err != nil {
+		panic(err)
+	}
+
+	baseURL, err := url.Parse(server.URL + "/")
+	if err != nil {
+		panic(err)
+	}
+	client.Client.BaseURL = baseURL
+
+	return client
+}
+
+func TestMain(m *testing.M) {
+	server = fake.NewServer()
+	defer server.Close()
+	m.Run()
+}
+
+func TestGetRegistrationToken(t *testing.T) {
+	tests := []struct {
+		repo  string
+		token string
+		err   bool
+	}{
+		{repo: "test/valid", token: fake.RegistrationToken, err: false},
+		{repo: "test/invalid", token: "", err: true},
+		{repo: "test/error", token: "", err: true},
+	}
+
+	client := newTestClient()
+	for i, tt := range tests {
+		rt, err := client.GetRegistrationToken(context.Background(), tt.repo, "test")
+		if !tt.err && err != nil {
+			t.Errorf("[%d] unexpected error: %v", i, err)
+		}
+		if tt.token != rt.GetToken() {
+			t.Errorf("[%d] unexpected token: %v", i, rt.GetToken())
+		}
+	}
+}
+
+func TestListRunners(t *testing.T) {
+	tests := []struct {
+		repo   string
+		length int
+		err    bool
+	}{
+		{repo: "test/valid", length: 2, err: false},
+		{repo: "test/invalid", length: 0, err: true},
+		{repo: "test/error", length: 0, err: true},
+	}
+
+	client := newTestClient()
+	for i, tt := range tests {
+		runners, err := client.ListRunners(context.Background(), tt.repo)
+		if !tt.err && err != nil {
+			t.Errorf("[%d] unexpected error: %v", i, err)
+		}
+		if tt.length != len(runners) {
+			t.Errorf("[%d] unexpected runners list: %v", i, runners)
+		}
+	}
+}
+
+func TestRemoveRunner(t *testing.T) {
+	tests := []struct {
+		repo string
+		err  bool
+	}{
+		{repo: "test/valid", err: false},
+		{repo: "test/invalid", err: true},
+		{repo: "test/error", err: true},
+	}
+
+	client := newTestClient()
+	for i, tt := range tests {
+		err := client.RemoveRunner(context.Background(), tt.repo, int64(1))
+		if !tt.err && err != nil {
+			t.Errorf("[%d] unexpected error: %v", i, err)
+		}
+	}
+}
+
+func TestCleanup(t *testing.T) {
+	token := "token"
+
+	client := newTestClient()
+	client.regTokens = map[string]*github.RegistrationToken{
+		"active": &github.RegistrationToken{
+			Token:     &token,
+			ExpiresAt: &github.Timestamp{Time: time.Now().Add(time.Hour * 1)},
+		},
+		"expired": &github.RegistrationToken{
+			Token:     &token,
+			ExpiresAt: &github.Timestamp{Time: time.Now().Add(-time.Hour * 1)},
+		},
+	}
+
+	client.cleanup()
+	if _, ok := client.regTokens["active"]; !ok {
+		t.Errorf("active token was accidentally removed")
+	}
+	if _, ok := client.regTokens["expired"]; ok {
+		t.Errorf("expired token still exists")
+	}
+}
