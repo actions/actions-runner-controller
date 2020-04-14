@@ -17,18 +17,14 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 
-	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/google/go-github/v29/github"
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
-	"golang.org/x/oauth2"
+	"github.com/summerwind/actions-runner-controller/github"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -56,6 +52,9 @@ func init() {
 
 func main() {
 	var (
+		err      error
+		ghClient *github.Client
+
 		metricsAddr          string
 		enableLeaderElection bool
 
@@ -66,8 +65,6 @@ func main() {
 		ghAppID             int64
 		ghAppInstallationID int64
 		ghAppPrivateKey     string
-
-		ghClient *github.Client
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -111,17 +108,17 @@ func main() {
 			os.Exit(1)
 		}
 
-		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, ghAppID, ghAppInstallationID, ghAppPrivateKey)
+		ghClient, err = github.NewClient(ghAppID, ghAppInstallationID, ghAppPrivateKey)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Invalid GitHub App credentials: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error: Failed to create GitHub client: %v\n", err)
 			os.Exit(1)
 		}
-		ghClient = github.NewClient(&http.Client{Transport: tr})
 	} else if ghToken != "" {
-		tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: ghToken},
-		))
-		ghClient = github.NewClient(tc)
+		ghClient, err = github.NewClientWithAccessToken(ghToken)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Failed to create GitHub client: %v\n", err)
+			os.Exit(1)
+		}
 	} else {
 		fmt.Fprintln(os.Stderr, "Error: GitHub App credentials or personal access token must be specified.")
 		os.Exit(1)

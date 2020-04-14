@@ -20,10 +20,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v29/github"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -34,29 +32,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/summerwind/actions-runner-controller/github"
 )
 
 const (
 	containerName = "runner"
 	finalizerName = "runner.actions.summerwind.dev"
 )
-
-type GitHubRunnerList struct {
-	TotalCount int            `json:"total_count"`
-	Runners    []GitHubRunner `json:"runners,omitempty"`
-}
-
-type GitHubRunner struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	OS     string `json:"os"`
-	Status string `json:"status"`
-}
-
-type GitHubRegistrationToken struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at"`
-}
 
 // RunnerReconciler reconciles a Runner object
 type RunnerReconciler struct {
@@ -126,7 +108,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	if !runner.IsRegisterable() {
-		reg, err := r.newRegistration(ctx, runner.Spec.Repository)
+		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Repository, runner.Name)
 		if err != nil {
 			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
 			log.Error(err, "Failed to get new registration token")
@@ -134,7 +116,11 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		updated := runner.DeepCopy()
-		updated.Status.Registration = reg
+		updated.Status.Registration = v1alpha1.RunnerStatusRegistration{
+			Repository: runner.Spec.Repository,
+			Token:      rt.GetToken(),
+			ExpiresAt:  metav1.NewTime(rt.GetExpiresAt().Time),
+		}
 
 		if err := r.Status().Update(ctx, updated); err != nil {
 			log.Error(err, "Failed to update runner status")
@@ -226,107 +212,29 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) newRegistration(ctx context.Context, repo string) (v1alpha1.RunnerStatusRegistration, error) {
-	var reg v1alpha1.RunnerStatusRegistration
-
-	rt, err := r.getRegistrationToken(ctx, repo)
-	if err != nil {
-		return reg, err
-	}
-
-	expiresAt, err := time.Parse(time.RFC3339, rt.ExpiresAt)
-	if err != nil {
-		return reg, err
-	}
-
-	reg.Repository = repo
-	reg.Token = rt.Token
-	reg.ExpiresAt = metav1.NewTime(expiresAt)
-
-	return reg, err
-}
-
-func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, repo string) (GitHubRegistrationToken, error) {
-	var regToken GitHubRegistrationToken
-
-	req, err := r.GitHubClient.NewRequest("POST", fmt.Sprintf("/repos/%s/actions/runners/registration-token", repo), nil)
-	if err != nil {
-		return regToken, err
-	}
-
-	res, err := r.GitHubClient.Do(ctx, req, &regToken)
-	if err != nil {
-		return regToken, err
-	}
-
-	if res.StatusCode != 201 {
-		return regToken, fmt.Errorf("unexpected status: %d", res.StatusCode)
-	}
-
-	return regToken, nil
-}
-
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name string) (bool, error) {
-	runners, err := r.listRunners(ctx, repo)
+	runners, err := r.GitHubClient.ListRunners(ctx, repo)
 	if err != nil {
 		return false, err
 	}
 
-	id := 0
-	for _, runner := range runners.Runners {
-		if runner.Name == name {
-			id = runner.ID
+	id := int64(0)
+	for _, runner := range runners {
+		if runner.GetName() == name {
+			id = runner.GetID()
 			break
 		}
 	}
 
-	if id == 0 {
+	if id == int64(0) {
 		return false, nil
 	}
 
-	if err := r.removeRunner(ctx, repo, id); err != nil {
+	if err := r.GitHubClient.RemoveRunner(ctx, repo, id); err != nil {
 		return false, err
 	}
 
 	return true, nil
-}
-
-func (r *RunnerReconciler) listRunners(ctx context.Context, repo string) (GitHubRunnerList, error) {
-	runners := GitHubRunnerList{}
-
-	req, err := r.GitHubClient.NewRequest("GET", fmt.Sprintf("/repos/%s/actions/runners", repo), nil)
-	if err != nil {
-		return runners, err
-	}
-
-	res, err := r.GitHubClient.Do(ctx, req, &runners)
-	if err != nil {
-		return runners, err
-	}
-
-	if res.StatusCode != 200 {
-		return runners, fmt.Errorf("unexpected status: %d", res.StatusCode)
-	}
-
-	return runners, nil
-}
-
-func (r *RunnerReconciler) removeRunner(ctx context.Context, repo string, id int) error {
-	req, err := r.GitHubClient.NewRequest("DELETE", fmt.Sprintf("/repos/%s/actions/runners/%d", repo, id), nil)
-	if err != nil {
-		return err
-	}
-
-	res, err := r.GitHubClient.Do(ctx, req, nil)
-	if err != nil {
-		return err
-	}
-
-	if res.StatusCode != 204 {
-		return fmt.Errorf("unexpected status: %d", res.StatusCode)
-	}
-
-	return nil
 }
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
