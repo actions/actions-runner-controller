@@ -34,8 +34,8 @@ import (
 )
 
 const (
-	defaultRunnerImage = "summerwind/actions-runner:v2.168.0"
-	defaultDockerImage = "docker:19.03.8-dind"
+	defaultRunnerImage = "summerwind/actions-runner:latest"
+	defaultDockerImage = "docker:dind"
 )
 
 var (
