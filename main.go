@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	defaultRunnerImage = "summerwind/actions-runner:latest"
+	defaultRunnerImage = "summerwind/actions-runner:latest-systemd"
 	defaultDockerImage = "docker:dind"
 )
 

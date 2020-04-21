@@ -171,15 +171,15 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		restart := false
-
-		if pod.Status.Phase == corev1.PodRunning {
+		if pod.Status.Phase == corev1.PodFailed {
 			for _, status := range pod.Status.ContainerStatuses {
 				if status.Name != containerName {
 					continue
 				}
 
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 130 {
 					restart = true
+					break
 				}
 			}
 		}
@@ -239,8 +239,8 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
-		privileged bool  = true
-		group      int64 = 0
+		privileged   = true
+		hostPathType = corev1.HostPathDirectory
 	)
 
 	runnerImage := runner.Spec.Image
@@ -272,7 +272,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Annotations: runner.Annotations,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: "OnFailure",
+			RestartPolicy: "Never",
 			Containers: []corev1.Container{
 				{
 					Name:            containerName,
@@ -280,24 +280,24 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					ImagePullPolicy: "Always",
 					Env:             env,
 					EnvFrom:         runner.Spec.EnvFrom,
+					Resources:       runner.Spec.Resources,
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:      "docker",
-							MountPath: "/var/run",
+							Name:      "tmp",
+							MountPath: "/tmp",
 						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						RunAsGroup: &group,
-					},
-					Resources: runner.Spec.Resources,
-				},
-				{
-					Name:  "docker",
-					Image: r.DockerImage,
-					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:      "docker",
-							MountPath: "/var/run",
+							Name:      "run",
+							MountPath: "/run",
+						},
+						{
+							Name:      "run-lock",
+							MountPath: "/run/lock",
+						},
+						{
+							Name:      "sys-fs-cgroup",
+							MountPath: "/sys/fs/cgroup",
+							ReadOnly:  true,
 						},
 					},
 					SecurityContext: &corev1.SecurityContext{
@@ -306,10 +306,31 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 			},
 			Volumes: []corev1.Volume{
-				corev1.Volume{
-					Name: "docker",
+				{
+					Name: "tmp",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "run",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "run-lock",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "sys-fs-cgroup",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/sys/fs/cgroup",
+							Type: &hostPathType,
+						},
 					},
 				},
 			},
