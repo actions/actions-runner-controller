@@ -1,0 +1,17 @@
+[Unit]
+Description=The Runner for GitHub Actions
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/default/actions-runner
+ExecStart=/usr/local/bin/actions-runner
+ExecStopPost=+/usr/local/bin/actions-runner-halt
+User=runner
+WorkingDirectory=/runner
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
