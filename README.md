@@ -4,19 +4,26 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 
 ## Motivation
 
-[GitHub Actions](https://github.com/features/actions) is very useful as a tool for automating development. GitHub Actions job is run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provision of a virtual machine instance and configuration. If you already have a Kubernetes cluster, you'll want to run the self-hosted runner on top of it.
+[GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
 
-*actions-runner-controller* makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner of the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
+*actions-runner-controller* makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
 
 ## Installation
 
-First, install *actions-runner-controller* with a manifest file. This will create a *actions-runner-system* namespace in your Kubernetes and deploy the required resources.
+First, install *actions-runner-controller* with a manifest file. This will create *actions-runner-system* namespace in your Kubernetes and deploy the required resources.
 
 ```
 $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
 ```
 
-Next, set up a GitHub App or personal access token for *actions-runner-controller* to access the GitHub API.
+## Setting up authentication with GitHub API
+
+There are two ways for _actions-runner-controller_ to authenticate with the the GitHub API:
+
+1. Using GitHub App.
+2. Using Personal Access Token.
+
+**NOTE: It is extremely important to only follow one of the sections below and not both.**
 
 ### Using GitHub App
 
@@ -55,9 +62,9 @@ $ kubectl create secret generic controller-manager \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
 
-### Using personal access token
+### Using Personal Access Token
 
-Next, from an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
+From an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
 
 To use a Personal Access Token, you must issue the token with an account that has `admin` privileges.
 
@@ -75,14 +82,14 @@ $ kubectl create secret generic controller-manager \
 
 ## Usage
 
-There's generally two ways to use this controller:
+There are two ways to use this controller:
 
-- Manage runners one by one with `Runner`
-- Manage a set of runners with `RunnerDeployment`
+- Manage runners one by one with `Runner`.
+- Manage a set of runners with `RunnerDeployment`.
 
 ### Runners
 
-To launch a single Self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
+To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
 ```
 # runner.yaml
@@ -126,7 +133,7 @@ Now your can use your self-hosted runner. See the [official documentation](https
 
 ### RunnerDeployments
 
-There's also `RunnerReplicaSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
+There are `RunnerReplicaSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
 
 You usually need only `RunnerDeployment` rather than `RunnerReplicaSet` as the former is for managing the latter.
 
@@ -151,7 +158,7 @@ $ kubectl apply -f runner.yaml
 runnerdeployment.actions.summerwind.dev/example-runnerdeploy created
 ```
 
-You can see that 2 runners has been created as specified by `replicas: 2`:
+You can see that 2 runners have been created as specified by `replicas: 2`:
 
 ```
 $ kubectl get runners
@@ -159,4 +166,46 @@ NAME             REPOSITORY                             STATUS
 NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
+```
+
+## Additional tweaks
+
+You can pass details through the spec selector. Here's an eg. of what you may like to do:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: actions-runner
+  namespace: default
+spec:
+  replicas: 2
+  template:
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/test: ""
+
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/test
+        operator: Exists
+
+      repository: mumoshu/actions-runner-controller-ci
+      ImagePullPolicy: Always
+      image: custom-image/actions-runner:latest
+      resources:
+        limits:
+          cpu: "4.0"
+          memory: "8Gi"
+        requests:
+          cpu: "2.0"
+          memory: "4Gi"
+      sidecarContainers:
+        - name: mysql
+          image: mysql:5.7
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: abcd1234
+          securityContext:
+            runAsUser: 0
 ```
