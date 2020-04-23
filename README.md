@@ -173,6 +173,15 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 You can pass details through the spec selector. Here's an eg. of what you may like to do:
 
 ```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: actions-runner
+  namespace: default
+spec:
+  replicas: 2
+  template:
+    spec:
       nodeSelector:
         node-role.kubernetes.io/test: ""
 
