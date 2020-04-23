@@ -4115,9 +4115,12 @@ spec:
                       additionalProperties:
                         type: string
                       type: object
-                    repository:
+                    organization:
                       minLength: 3
-                      pattern: ^[^/]+/[^/]+$
+                      pattern: ^[^/]+$
+                      type: string
+                    repository:
+                      pattern: ^[^/]*$
                       type: string
                     resources:
                       description: ResourceRequirements describes the compute resource
@@ -6709,7 +6712,7 @@ spec:
                         type: object
                       type: array
                   required:
-                  - repository
+                  - organization
                   type: object
               type: object
           required:

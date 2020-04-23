@@ -83,7 +83,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers)
 
 		if removed {
-			ok, err := r.unregisterRunner(ctx, runner.Spec.Repository, runner.Name)
+			ok, err := r.unregisterRunner(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
 				log.Error(err, "Failed to unregister runner")
 				return ctrl.Result{}, err
@@ -108,7 +108,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	if !runner.IsRegisterable() {
-		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Repository, runner.Name)
+		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 		if err != nil {
 			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
 			log.Error(err, "Failed to get new registration token")
@@ -212,8 +212,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, repo)
+func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
 	if err != nil {
 		return false, err
 	}
@@ -230,7 +230,7 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 		return false, nil
 	}
 
-	if err := r.GitHubClient.RemoveRunner(ctx, repo, id); err != nil {
+	if err := r.GitHubClient.RemoveRunner(ctx, org, repo, id); err != nil {
 		return false, err
 	}
 
@@ -252,6 +252,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		{
 			Name:  "RUNNER_NAME",
 			Value: runner.Name,
+		},
+		{
+			Name:  "RUNNER_ORG",
+			Value: runner.Spec.Organization,
 		},
 		{
 			Name:  "RUNNER_REPO",

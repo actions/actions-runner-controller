@@ -2,10 +2,8 @@ package github
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +12,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Client wraps GitHub client with some additional
 type Client struct {
 	*github.Client
 	regTokens map[string]*github.RegistrationToken
@@ -34,7 +33,7 @@ func NewClient(appID, installationID int64, privateKeyPath string) (*Client, err
 	}, nil
 }
 
-// NewClient returns a client authenticated with personal access token.
+// NewClientWithAccessToken returns a client authenticated with personal access token.
 func NewClientWithAccessToken(token string) (*Client, error) {
 	tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
@@ -48,22 +47,31 @@ func NewClientWithAccessToken(token string) (*Client, error) {
 }
 
 // GetRegistrationToken returns a registration token tied with the name of repository and runner.
-func (c *Client) GetRegistrationToken(ctx context.Context, repository, name string) (*github.RegistrationToken, error) {
+func (c *Client) GetRegistrationToken(ctx context.Context, owner, repo, name string) (*github.RegistrationToken, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	owner, repo, err := splitOwnerAndRepo(repository)
-	if err != nil {
-		return nil, err
+	key := owner
+	if len(repo) > 0 {
+		key = fmt.Sprintf("%s/%s", repo, name)
 	}
 
-	key := fmt.Sprintf("%s/%s", repo, name)
+	var rt *github.RegistrationToken
+
 	rt, ok := c.regTokens[key]
 	if ok && rt.GetExpiresAt().After(time.Now().Add(-10*time.Minute)) {
 		return rt, nil
 	}
 
-	rt, res, err := c.Client.Actions.CreateRegistrationToken(ctx, owner, repo)
+	var res *github.Response
+	var err error
+
+	if len(repo) > 0 {
+		rt, res, err = c.Client.Actions.CreateRegistrationToken(ctx, owner, repo)
+	} else {
+		rt, res, err = CreateOrganizationRegistrationToken(ctx, c, owner)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration token: %v", err)
 	}
@@ -81,13 +89,16 @@ func (c *Client) GetRegistrationToken(ctx context.Context, repository, name stri
 }
 
 // RemoveRunner removes a runner with specified runner ID from repocitory.
-func (c *Client) RemoveRunner(ctx context.Context, repository string, runnerID int64) error {
-	owner, repo, err := splitOwnerAndRepo(repository)
-	if err != nil {
-		return err
+func (c *Client) RemoveRunner(ctx context.Context, owner, repo string, runnerID int64) error {
+	var res *github.Response
+	var err error
+
+	if len(repo) > 0 {
+		res, err = c.Client.Actions.RemoveRunner(ctx, owner, repo, runnerID)
+	} else {
+		res, err = RemoveOrganizationRunner(ctx, c, owner, runnerID)
 	}
 
-	res, err := c.Client.Actions.RemoveRunner(ctx, owner, repo, runnerID)
 	if err != nil {
 		return fmt.Errorf("failed to remove runner: %v", err)
 	}
@@ -99,18 +110,22 @@ func (c *Client) RemoveRunner(ctx context.Context, repository string, runnerID i
 	return nil
 }
 
-// ListRunners returns a list of runners of specified repository name.
-func (c *Client) ListRunners(ctx context.Context, repository string) ([]*github.Runner, error) {
+// ListRunners returns a list of runners of specified owner/repository name.
+func (c *Client) ListRunners(ctx context.Context, owner, repo string) ([]*github.Runner, error) {
 	var runners []*github.Runner
-
-	owner, repo, err := splitOwnerAndRepo(repository)
-	if err != nil {
-		return runners, err
-	}
 
 	opts := github.ListOptions{PerPage: 10}
 	for {
-		list, res, err := c.Client.Actions.ListRunners(ctx, owner, repo, &opts)
+		list := &github.Runners{}
+		var res *github.Response
+		var err error
+
+		if len(repo) > 0 {
+			list, res, err = c.Client.Actions.ListRunners(ctx, owner, repo, &opts)
+		} else {
+			list, res, err = ListOrganizationRunners(ctx, c, owner, &opts)
+		}
+
 		if err != nil {
 			return runners, fmt.Errorf("failed to remove runner: %v", err)
 		}
@@ -135,13 +150,4 @@ func (c *Client) cleanup() {
 			delete(c.regTokens, key)
 		}
 	}
-}
-
-// splitOwnerAndRepo splits specified repository name to the owner and repo name.
-func splitOwnerAndRepo(repo string) (string, string, error) {
-	chunk := strings.Split(repo, "/")
-	if len(chunk) != 2 {
-		return "", "", errors.New("invalid repository name")
-	}
-	return chunk[0], chunk[1], nil
 }

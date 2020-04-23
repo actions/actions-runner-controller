@@ -24,7 +24,11 @@ import (
 // RunnerSpec defines the desired state of Runner
 type RunnerSpec struct {
 	// +kubebuilder:validation:MinLength=3
-	// +kubebuilder:validation:Pattern=`^[^/]+/[^/]+$`
+	// +kubebuilder:validation:Pattern=`^[^/]+$`
+	Organization string `json:"organization"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[^/]*$`
 	Repository string `json:"repository"`
 
 	// +optional

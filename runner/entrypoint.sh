@@ -5,9 +5,15 @@ if [ -z "${RUNNER_NAME}" ]; then
   exit 1
 fi
 
-if [ -z "${RUNNER_REPO}" ]; then
-  echo "RUNNER_REPO must be set" 1>&2
+if [ -z "${RUNNER_ORG}" ]; then
+  echo "RUNNER_ORG must be set" 1>&2
   exit 1
+fi
+
+ATTACH="${RUNNER_ORG}"
+
+if [ ! -z "${RUNNER_REPO}" ]; then
+  ATTACH="${RUNNER_ORG}/${RUNNER_REPO}"
 fi
 
 if [ -z "${RUNNER_TOKEN}" ]; then
@@ -16,7 +22,7 @@ if [ -z "${RUNNER_TOKEN}" ]; then
 fi
 
 cd /runner
-./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "https://github.com/${RUNNER_REPO}" --token "${RUNNER_TOKEN}"
+./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "https://github.com/${ATTACH}" --token "${RUNNER_TOKEN}"
 
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
 exec ./run.sh --once
