@@ -29,7 +29,7 @@ type RunnerSpec struct {
 
 	// +optional
 	// +kubebuilder:validation:Pattern=`^[^/]*$`
-	Repository string `json:"repository"`
+	Repository string `json:"repository,omitempty"`
 
 	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
