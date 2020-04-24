@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -119,6 +120,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		updated.Status.Registration = v1alpha1.RunnerStatusRegistration{
 			Organization: runner.Spec.Organization,
 			Repository:   runner.Spec.Repository,
+			Labels:       runner.Spec.Labels,
 			Token:        rt.GetToken(),
 			ExpiresAt:    metav1.NewTime(rt.GetExpiresAt().Time),
 		}
@@ -261,6 +263,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		{
 			Name:  "RUNNER_REPO",
 			Value: runner.Spec.Repository,
+		},
+		{
+			Name:  "RUNNER_LABELS",
+			Value: strings.Join(runner.Spec.Labels, ","),
 		},
 		{
 			Name:  "RUNNER_TOKEN",

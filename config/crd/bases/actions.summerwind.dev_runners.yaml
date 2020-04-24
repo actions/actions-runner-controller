@@ -15,6 +15,9 @@ spec:
   - JSONPath: .spec.repository
     name: Repository
     type: string
+  - JSONPath: .spec.labels
+    name: Labels
+    type: string
   - JSONPath: .status.phase
     name: Status
     type: string
@@ -3857,6 +3860,10 @@ spec:
                 - name
                 type: object
               type: array
+            labels:
+              items:
+                type: string
+              type: array
             nodeSelector:
               additionalProperties:
                 type: string
@@ -6316,6 +6323,10 @@ spec:
                 expiresAt:
                   format: date-time
                   type: string
+                labels:
+                  items:
+                    type: string
+                  type: array
                 organization:
                   type: string
                 repository:

@@ -32,6 +32,9 @@ type RunnerSpec struct {
 	Repository string `json:"repository,omitempty"`
 
 	// +optional
+	Labels []string `json:"labels,omitempty"`
+
+	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -84,6 +87,7 @@ type RunnerStatus struct {
 type RunnerStatusRegistration struct {
 	Organization string      `json:"organization"`
 	Repository   string      `json:"repository,omitempty"`
+	Labels       []string    `json:"labels,omitempty"`
 	Token        string      `json:"token"`
 	ExpiresAt    metav1.Time `json:"expiresAt"`
 }
@@ -92,6 +96,7 @@ type RunnerStatusRegistration struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
 
 // Runner is the Schema for the runners API
