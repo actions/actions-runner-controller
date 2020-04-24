@@ -282,6 +282,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					EnvFrom:         runner.Spec.EnvFrom,
 					VolumeMounts: []corev1.VolumeMount{
 						{
+							Name:      "work",
+							MountPath: "/runner/_work",
+						},
+						{
 							Name:      "docker",
 							MountPath: "/var/run",
 						},
@@ -296,6 +300,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					Image: r.DockerImage,
 					VolumeMounts: []corev1.VolumeMount{
 						{
+							Name:      "work",
+							MountPath: "/runner/_work",
+						},
+						{
 							Name:      "docker",
 							MountPath: "/var/run",
 						},
@@ -306,7 +314,13 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 			},
 			Volumes: []corev1.Volume{
-				corev1.Volume{
+				{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
 					Name: "docker",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
