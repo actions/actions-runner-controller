@@ -9,6 +9,9 @@ metadata:
   name: runners.actions.summerwind.dev
 spec:
   additionalPrinterColumns:
+  - JSONPath: .spec.organization
+    name: Organization
+    type: string
   - JSONPath: .spec.repository
     name: Repository
     type: string
@@ -6308,9 +6311,12 @@ spec:
             reason:
               type: string
             registration:
+              description: RunnerStatusRegistration contains runner registration status
               properties:
                 expiresAt:
                   format: date-time
+                  type: string
+                organization:
                   type: string
                 repository:
                   type: string
@@ -6318,7 +6324,7 @@ spec:
                   type: string
               required:
               - expiresAt
-              - repository
+              - organization
               - token
               type: object
           required:

@@ -80,14 +80,17 @@ type RunnerStatus struct {
 	Message      string                   `json:"message"`
 }
 
+// RunnerStatusRegistration contains runner registration status
 type RunnerStatusRegistration struct {
-	Repository string      `json:"repository"`
-	Token      string      `json:"token"`
-	ExpiresAt  metav1.Time `json:"expiresAt"`
+	Organization string      `json:"organization"`
+	Repository   string      `json:"repository,omitempty"`
+	Token        string      `json:"token"`
+	ExpiresAt    metav1.Time `json:"expiresAt"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
 

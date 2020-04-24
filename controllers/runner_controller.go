@@ -117,9 +117,10 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		updated := runner.DeepCopy()
 		updated.Status.Registration = v1alpha1.RunnerStatusRegistration{
-			Repository: runner.Spec.Repository,
-			Token:      rt.GetToken(),
-			ExpiresAt:  metav1.NewTime(rt.GetExpiresAt().Time),
+			Organization: runner.Spec.Organization,
+			Repository:   runner.Spec.Repository,
+			Token:        rt.GetToken(),
+			ExpiresAt:    metav1.NewTime(rt.GetExpiresAt().Time),
 		}
 
 		if err := r.Status().Update(ctx, updated); err != nil {
