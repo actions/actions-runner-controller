@@ -5,15 +5,15 @@ if [ -z "${RUNNER_NAME}" ]; then
   exit 1
 fi
 
-if [ -z "${RUNNER_ORG}" ]; then
-  echo "RUNNER_ORG must be set" 1>&2
-  exit 1
-fi
-
-ATTACH="${RUNNER_ORG}"
-
-if [ ! -z "${RUNNER_REPO}" ]; then
+if [ -n "${RUNNER_ORG}" -a -n "${RUNNER_REPO}" ]; then
   ATTACH="${RUNNER_ORG}/${RUNNER_REPO}"
+elif [ -n "${RUNNER_ORG}" ]; then
+  ATTACH="${RUNNER_ORG}"
+elif [ -n "${RUNNER_REPO}" ]; then
+  ATTACH="${RUNNER_REPO}"
+else
+  echo "At least one of RUNNER_ORG or RUNNER_REPO must be set" 1>&2
+  exit 1
 fi
 
 if [ -z "${RUNNER_TOKEN}" ]; then
