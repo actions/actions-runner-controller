@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,30 +48,24 @@ func NewClientWithAccessToken(token string) (*Client, error) {
 }
 
 // GetRegistrationToken returns a registration token tied with the name of repository and runner.
-func (c *Client) GetRegistrationToken(ctx context.Context, owner, repo, name string) (*github.RegistrationToken, error) {
+func (c *Client) GetRegistrationToken(ctx context.Context, org, repo, name string) (*github.RegistrationToken, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := owner
-	if len(repo) > 0 {
-		key = fmt.Sprintf("%s/%s", repo, name)
-	}
-
-	var rt *github.RegistrationToken
-
+	key := getRegistrationKey(org, repo)
 	rt, ok := c.regTokens[key]
+
 	if ok && rt.GetExpiresAt().After(time.Now().Add(-10*time.Minute)) {
 		return rt, nil
 	}
 
-	var res *github.Response
-	var err error
+	owner, repo, err := getOwnerAndRepo(org, repo)
 
-	if len(repo) > 0 {
-		rt, res, err = c.Client.Actions.CreateRegistrationToken(ctx, owner, repo)
-	} else {
-		rt, res, err = CreateOrganizationRegistrationToken(ctx, c, owner)
+	if err != nil {
+		return rt, err
 	}
+
+	rt, res, err := c.createRegistrationToken(ctx, owner, repo)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration token: %v", err)
@@ -89,15 +84,14 @@ func (c *Client) GetRegistrationToken(ctx context.Context, owner, repo, name str
 }
 
 // RemoveRunner removes a runner with specified runner ID from repocitory.
-func (c *Client) RemoveRunner(ctx context.Context, owner, repo string, runnerID int64) error {
-	var res *github.Response
-	var err error
+func (c *Client) RemoveRunner(ctx context.Context, org, repo string, runnerID int64) error {
+	owner, repo, err := getOwnerAndRepo(org, repo)
 
-	if len(repo) > 0 {
-		res, err = c.Client.Actions.RemoveRunner(ctx, owner, repo, runnerID)
-	} else {
-		res, err = RemoveOrganizationRunner(ctx, c, owner, runnerID)
+	if err != nil {
+		return err
 	}
+
+	res, err := c.removeRunner(ctx, owner, repo, runnerID)
 
 	if err != nil {
 		return fmt.Errorf("failed to remove runner: %v", err)
@@ -111,20 +105,18 @@ func (c *Client) RemoveRunner(ctx context.Context, owner, repo string, runnerID 
 }
 
 // ListRunners returns a list of runners of specified owner/repository name.
-func (c *Client) ListRunners(ctx context.Context, owner, repo string) ([]*github.Runner, error) {
+func (c *Client) ListRunners(ctx context.Context, org, repo string) ([]*github.Runner, error) {
+	owner, repo, err := getOwnerAndRepo(org, repo)
+
+	if err != nil {
+		return nil, err
+	}
+
 	var runners []*github.Runner
 
 	opts := github.ListOptions{PerPage: 10}
 	for {
-		list := &github.Runners{}
-		var res *github.Response
-		var err error
-
-		if len(repo) > 0 {
-			list, res, err = c.Client.Actions.ListRunners(ctx, owner, repo, &opts)
-		} else {
-			list, res, err = ListOrganizationRunners(ctx, c, owner, &opts)
-		}
+		list, res, err := c.listRunners(ctx, owner, repo, &opts)
 
 		if err != nil {
 			return runners, fmt.Errorf("failed to remove runner: %v", err)
@@ -150,4 +142,58 @@ func (c *Client) cleanup() {
 			delete(c.regTokens, key)
 		}
 	}
+}
+
+// wrappers for github functions (switch between organization/repository mode)
+// so the calling functions don't need to switch and their code is a bit cleaner
+
+func (c *Client) createRegistrationToken(ctx context.Context, owner, repo string) (*github.RegistrationToken, *github.Response, error) {
+	if len(repo) > 0 {
+		return c.Client.Actions.CreateRegistrationToken(ctx, owner, repo)
+	} else {
+		return CreateOrganizationRegistrationToken(ctx, c, owner)
+	}
+}
+
+func (c *Client) removeRunner(ctx context.Context, owner, repo string, runnerID int64) (*github.Response, error) {
+	if len(repo) > 0 {
+		return c.Client.Actions.RemoveRunner(ctx, owner, repo, runnerID)
+	} else {
+		return RemoveOrganizationRunner(ctx, c, owner, runnerID)
+	}
+}
+
+func (c *Client) listRunners(ctx context.Context, owner, repo string, opts *github.ListOptions) (*github.Runners, *github.Response, error) {
+	if len(repo) > 0 {
+		return c.Client.Actions.ListRunners(ctx, owner, repo, opts)
+	} else {
+		return ListOrganizationRunners(ctx, c, owner, opts)
+	}
+}
+
+// Validates owner and repo arguments. Both are optional, but at least one should be specified
+func getOwnerAndRepo(org, repo string) (string, string, error) {
+	if len(repo) > 0 {
+		return splitOwnerAndRepo(repo)
+	}
+	if len(org) > 0 {
+		return org, "", nil
+	}
+	return "", "", fmt.Errorf("organization and repository are both empty")
+}
+
+func getRegistrationKey(org, repo string) string {
+	if len(org) > 0 {
+		return org
+	} else {
+		return repo
+	}
+}
+
+func splitOwnerAndRepo(repo string) (string, string, error) {
+	chunk := strings.Split(repo, "/")
+	if len(chunk) != 2 {
+		return "", "", fmt.Errorf("invalid repository name: '%s'", repo)
+	}
+	return chunk[0], chunk[1], nil
 }

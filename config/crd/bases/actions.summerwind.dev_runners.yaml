@@ -3869,11 +3869,10 @@ spec:
                 type: string
               type: object
             organization:
-              minLength: 3
               pattern: ^[^/]+$
               type: string
             repository:
-              pattern: ^[^/]*$
+              pattern: ^[^/]+/[^/]+$
               type: string
             resources:
               description: ResourceRequirements describes the compute resource requirements.
@@ -6305,8 +6304,6 @@ spec:
                 - name
                 type: object
               type: array
-          required:
-          - organization
           type: object
         status:
           description: RunnerStatus defines the observed state of Runner
@@ -6335,7 +6332,6 @@ spec:
                   type: string
               required:
               - expiresAt
-              - organization
               - token
               type: object
           required:

@@ -4120,11 +4120,10 @@ spec:
                         type: string
                       type: object
                     organization:
-                      minLength: 3
                       pattern: ^[^/]+$
                       type: string
                     repository:
-                      pattern: ^[^/]*$
+                      pattern: ^[^/]+/[^/]+$
                       type: string
                     resources:
                       description: ResourceRequirements describes the compute resource
@@ -6715,8 +6714,6 @@ spec:
                         - name
                         type: object
                       type: array
-                  required:
-                  - organization
                   type: object
               type: object
           required:

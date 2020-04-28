@@ -23,12 +23,12 @@ import (
 
 // RunnerSpec defines the desired state of Runner
 type RunnerSpec struct {
-	// +kubebuilder:validation:MinLength=3
+	// +optional
 	// +kubebuilder:validation:Pattern=`^[^/]+$`
-	Organization string `json:"organization"`
+	Organization string `json:"organization,omitempty"`
 
 	// +optional
-	// +kubebuilder:validation:Pattern=`^[^/]*$`
+	// +kubebuilder:validation:Pattern=`^[^/]+/[^/]+$`
 	Repository string `json:"repository,omitempty"`
 
 	// +optional
@@ -85,7 +85,7 @@ type RunnerStatus struct {
 
 // RunnerStatusRegistration contains runner registration status
 type RunnerStatusRegistration struct {
-	Organization string      `json:"organization"`
+	Organization string      `json:"organization,omitempty"`
 	Repository   string      `json:"repository,omitempty"`
 	Labels       []string    `json:"labels,omitempty"`
 	Token        string      `json:"token"`
