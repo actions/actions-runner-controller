@@ -64,11 +64,7 @@ $ kubectl create secret generic controller-manager \
 
 ### Using Personal Access Token
 
-<<<<<<< HEAD
 From an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
-=======
-Next, from an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens).
->>>>>>> updated documentation
 
 Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). This token is used to register a self-hosted runner by *actions-runner-controller*.
 
