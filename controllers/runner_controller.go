@@ -88,16 +88,20 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	} else {
 		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers)
-
+		
 		if removed {
-			ok, err := r.unregisterRunner(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-			if err != nil {
-				log.Error(err, "Failed to unregister runner")
-				return ctrl.Result{}, err
-			}
+			if len(runner.Status.Registration.Token) > 0 {
+				ok, err := r.unregisterRunner(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+				if err != nil {
+					log.Error(err, "Failed to unregister runner")
+					return ctrl.Result{}, err
+				}
 
-			if !ok {
-				log.V(1).Info("Runner no longer exists on GitHub")
+				if !ok {
+					log.V(1).Info("Runner no longer exists on GitHub")
+				}
+			} else {
+				log.V(1).Info("Runner was never registered on GitHub")
 			}
 
 			newRunner := runner.DeepCopy()
@@ -108,7 +112,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				return ctrl.Result{}, err
 			}
 
-			log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository)
+			log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository, "organization", runner.Spec.Organization)
 		}
 
 		return ctrl.Result{}, nil
