@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -65,6 +66,12 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	err := validateRunnerSpec(&runner.Spec)
+	if err != nil {
+		log.Info("Failed to validate runner spec", "error", err.Error())
+		return ctrl.Result{}, nil
+	}
+
 	if runner.ObjectMeta.DeletionTimestamp.IsZero() {
 		finalizers, added := addFinalizer(runner.ObjectMeta.Finalizers)
 
@@ -83,7 +90,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers)
 
 		if removed {
-			ok, err := r.unregisterRunner(ctx, runner.Spec.Repository, runner.Name)
+			ok, err := r.unregisterRunner(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
 				log.Error(err, "Failed to unregister runner")
 				return ctrl.Result{}, err
@@ -108,7 +115,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	if !runner.IsRegisterable() {
-		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Repository, runner.Name)
+		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 		if err != nil {
 			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
 			log.Error(err, "Failed to get new registration token")
@@ -117,9 +124,11 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		updated := runner.DeepCopy()
 		updated.Status.Registration = v1alpha1.RunnerStatusRegistration{
-			Repository: runner.Spec.Repository,
-			Token:      rt.GetToken(),
-			ExpiresAt:  metav1.NewTime(rt.GetExpiresAt().Time),
+			Organization: runner.Spec.Organization,
+			Repository:   runner.Spec.Repository,
+			Labels:       runner.Spec.Labels,
+			Token:        rt.GetToken(),
+			ExpiresAt:    metav1.NewTime(rt.GetExpiresAt().Time),
 		}
 
 		if err := r.Status().Update(ctx, updated); err != nil {
@@ -212,8 +221,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, repo)
+func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
 	if err != nil {
 		return false, err
 	}
@@ -230,7 +239,7 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, repo, name stri
 		return false, nil
 	}
 
-	if err := r.GitHubClient.RemoveRunner(ctx, repo, id); err != nil {
+	if err := r.GitHubClient.RemoveRunner(ctx, org, repo, id); err != nil {
 		return false, err
 	}
 
@@ -254,8 +263,16 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Value: runner.Name,
 		},
 		{
+			Name:  "RUNNER_ORG",
+			Value: runner.Spec.Organization,
+		},
+		{
 			Name:  "RUNNER_REPO",
 			Value: runner.Spec.Repository,
+		},
+		{
+			Name:  "RUNNER_LABELS",
+			Value: strings.Join(runner.Spec.Labels, ","),
 		},
 		{
 			Name:  "RUNNER_TOKEN",
@@ -427,4 +444,16 @@ func removeFinalizer(finalizers []string) ([]string, bool) {
 	}
 
 	return result, removed
+}
+
+// organization & repository are both exclusive - however this cannot be checked with kubebuilder
+// therefore have an additional check here to log an error in case spec is invalid
+func validateRunnerSpec(spec *v1alpha1.RunnerSpec) error {
+	if len(spec.Organization) == 0 && len(spec.Repository) == 0 {
+		return fmt.Errorf("RunnerSpec needs organization or repository")
+	}
+	if len(spec.Organization) > 0 && len(spec.Repository) > 0 {
+		return fmt.Errorf("RunnerSpec cannot have both organization and repository")
+	}
+	return nil
 }

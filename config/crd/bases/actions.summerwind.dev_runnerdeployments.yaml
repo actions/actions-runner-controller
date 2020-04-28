@@ -4111,12 +4111,18 @@ spec:
                         - name
                         type: object
                       type: array
+                    labels:
+                      items:
+                        type: string
+                      type: array
                     nodeSelector:
                       additionalProperties:
                         type: string
                       type: object
+                    organization:
+                      pattern: ^[^/]+$
+                      type: string
                     repository:
-                      minLength: 3
                       pattern: ^[^/]+/[^/]+$
                       type: string
                     resources:
@@ -6708,8 +6714,6 @@ spec:
                         - name
                         type: object
                       type: array
-                  required:
-                  - repository
                   type: object
               type: object
           required:

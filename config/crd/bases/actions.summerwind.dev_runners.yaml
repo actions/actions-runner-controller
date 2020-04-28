@@ -9,8 +9,14 @@ metadata:
   name: runners.actions.summerwind.dev
 spec:
   additionalPrinterColumns:
+  - JSONPath: .spec.organization
+    name: Organization
+    type: string
   - JSONPath: .spec.repository
     name: Repository
+    type: string
+  - JSONPath: .spec.labels
+    name: Labels
     type: string
   - JSONPath: .status.phase
     name: Status
@@ -3854,12 +3860,18 @@ spec:
                 - name
                 type: object
               type: array
+            labels:
+              items:
+                type: string
+              type: array
             nodeSelector:
               additionalProperties:
                 type: string
               type: object
+            organization:
+              pattern: ^[^/]+$
+              type: string
             repository:
-              minLength: 3
               pattern: ^[^/]+/[^/]+$
               type: string
             resources:
@@ -6292,8 +6304,6 @@ spec:
                 - name
                 type: object
               type: array
-          required:
-          - repository
           type: object
         status:
           description: RunnerStatus defines the observed state of Runner
@@ -6305,9 +6315,16 @@ spec:
             reason:
               type: string
             registration:
+              description: RunnerStatusRegistration contains runner registration status
               properties:
                 expiresAt:
                   format: date-time
+                  type: string
+                labels:
+                  items:
+                    type: string
+                  type: array
+                organization:
                   type: string
                 repository:
                   type: string
@@ -6315,7 +6332,6 @@ spec:
                   type: string
               required:
               - expiresAt
-              - repository
               - token
               type: object
           required:

@@ -23,9 +23,16 @@ import (
 
 // RunnerSpec defines the desired state of Runner
 type RunnerSpec struct {
-	// +kubebuilder:validation:MinLength=3
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[^/]+$`
+	Organization string `json:"organization,omitempty"`
+
+	// +optional
 	// +kubebuilder:validation:Pattern=`^[^/]+/[^/]+$`
-	Repository string `json:"repository"`
+	Repository string `json:"repository,omitempty"`
+
+	// +optional
+	Labels []string `json:"labels,omitempty"`
 
 	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
@@ -76,15 +83,20 @@ type RunnerStatus struct {
 	Message      string                   `json:"message"`
 }
 
+// RunnerStatusRegistration contains runner registration status
 type RunnerStatusRegistration struct {
-	Repository string      `json:"repository"`
-	Token      string      `json:"token"`
-	ExpiresAt  metav1.Time `json:"expiresAt"`
+	Organization string      `json:"organization,omitempty"`
+	Repository   string      `json:"repository,omitempty"`
+	Labels       []string    `json:"labels,omitempty"`
+	Token        string      `json:"token"`
+	ExpiresAt    metav1.Time `json:"expiresAt"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
 
 // Runner is the Schema for the runners API
