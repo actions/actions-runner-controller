@@ -64,11 +64,17 @@ $ kubectl create secret generic controller-manager \
 
 ### Using Personal Access Token
 
+<<<<<<< HEAD
 From an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
+=======
+Next, from an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens).
+>>>>>>> updated documentation
 
-To use a Personal Access Token, you must issue the token with an account that has `admin` privileges.
+Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). This token is used to register a self-hosted runner by *actions-runner-controller*.
 
-Open the Create Token page from the following link, grant the `repo` scope, and press the "Generate Token" button at the bottom of the page to create the token.
+For adding a runner to a repository, the token should have `repo` scope. If the runner should be added to an organization, the token should have `admin:org` scope. Note that to use a Personal Access Token, you must issue the token with an account that has `admin` privileges (on the repository and/or the organization).
+
+Open the Create Token page from the following link, grant the `repo` and/or `admin:org` scope, and press the "Generate Token" button at the bottom of the page to create the token.
 
 - [Create personal access token](https://github.com/settings/tokens/new)
 
@@ -87,7 +93,7 @@ There are two ways to use this controller:
 - Manage runners one by one with `Runner`.
 - Manage a set of runners with `RunnerDeployment`.
 
-### Runners
+### Repository runners
 
 To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
@@ -130,6 +136,22 @@ The runner you created has been registered to your repository.
 <img width="756" alt="Actions tab in your repository settings" src="https://user-images.githubusercontent.com/230145/73618667-8cbf9700-466c-11ea-80b6-c67e6d3f70e7.png">
 
 Now your can use your self-hosted runner. See the [official documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
+
+### Organization Runners
+
+To add the runner to an organization, you only need to replace the `repository` field with `organization`, so the runner will register itself to the organization.
+
+```
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: example-org-runner
+spec:
+  organization: your-organization-name
+```
+
+Now you can see the runner on the organization level (if you have organization owner permissions).
 
 ### RunnerDeployments
 
@@ -209,3 +231,40 @@ spec:
           securityContext:
             runAsUser: 0
 ```
+
+## Runner labels
+
+To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:
+
+```yaml
+jobs:
+  release:
+    runs-on: self-hosted
+```
+
+When you have multiple kinds of self-hosted runners, you can distinguish between them using labels. In order to do so, you can specify one or more labels in your `Runner` or `RunnerDeployment` spec.
+
+```yaml
+# runnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: custom-runner
+spec:
+  replicas: 1
+  template:
+    spec:
+      repository: summerwind/actions-runner-controller
+      labels:
+        - custom-runner
+```
+
+Once this spec is applied, you can observe the labels for your runner from the repository or organization in the GitHub settings page for the repository or organization. You can now select a specific runner from your workflow by using the label in `runs-on`:
+
+```yaml
+jobs:
+  release:
+    runs-on: custom-runner
+```
+
+Note that if you specify `self-hosted` in your worlflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
