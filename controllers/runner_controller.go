@@ -88,7 +88,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	} else {
 		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers)
-		
+
 		if removed {
 			if len(runner.Status.Registration.Token) > 0 {
 				ok, err := r.unregisterRunner(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
@@ -360,7 +360,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	if len(runner.Spec.Volumes) != 0 {
-		pod.Spec.Volumes = append(runner.Spec.Volumes, runner.Spec.Volumes...)
+		pod.Spec.Volumes = append(pod.Spec.Volumes, runner.Spec.Volumes...)
 	}
 	if len(runner.Spec.InitContainers) != 0 {
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runner.Spec.InitContainers...)
