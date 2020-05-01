@@ -264,3 +264,38 @@ jobs:
 ```
 
 Note that if you specify `self-hosted` in your worlflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
+
+## Softeware installed in the runner image
+
+The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md
+
+The container image is based on Ubuntu 18.04, but it does not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
+
+* Basic CLI packages
+* git (2.26)
+* docker
+* build-essentials
+
+The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node` 
+
+If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and installing the extra dependencies directly in the docker image:
+
+```yaml
+FROM summerwind/actions-runner:v2.169.1
+
+RUN sudo apt update -y \
+  && apt install YOUR_PACKAGE
+  && rm -rf /var/lib/apt/lists/*
+```
+
+You can then configure the runner to use a custom docker image by configuring the `image` field of a `Runner` or `RunnerDeployment`:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: custom-runner
+spec:
+  repository: summerwind/actions-runner-controller
+  image: YOUR_CUSTOM_DOCKER_IMAGE
+```
