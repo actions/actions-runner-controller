@@ -6,11 +6,15 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 
 [GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
 
-*actions-runner-controller* makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
+**actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
 
 ## Installation
 
-First, install *actions-runner-controller* with a manifest file. This will create *actions-runner-system* namespace in your Kubernetes and deploy the required resources.
+actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
+
+- [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
+
+Install the custom resource and actions-runner-controller itself. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 ```
 $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
@@ -18,7 +22,7 @@ $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/relea
 
 ## Setting up authentication with GitHub API
 
-There are two ways for _actions-runner-controller_ to authenticate with the the GitHub API:
+There are two ways for actions-runner-controller to authenticate with the the GitHub API:
 
 1. Using GitHub App.
 2. Using Personal Access Token.
