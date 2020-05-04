@@ -3,9 +3,40 @@ FROM ubuntu:18.04
 ARG RUNNER_VERSION
 ARG DOCKER_VERSION
 
-RUN apt update \
-  && apt install sudo curl ca-certificates -y --no-install-recommends \
-  && curl -L -o docker.tgz https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz \
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update -y \
+  && apt install -y software-properties-common \
+  && add-apt-repository -y ppa:git-core/ppa \
+  && apt update -y \
+  && apt install -y --no-install-recommends \
+     build-essential \
+     curl \
+     ca-certificates \
+     dnsutils \
+     ftp \
+     git \
+     iproute2 \
+     iputils-ping \
+     jq \
+     libunwind8 \
+     locales \
+     netcat \
+     openssh-client \
+     parallel \
+     rsync \
+     shellcheck \
+     sudo \
+     telnet \
+     time \
+     tzdata \
+     unzip \
+     upx \
+     wget \
+     zip \
+     zstd \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -L -o docker.tgz https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz \
   && tar zxvf docker.tgz \
   && install -o root -g root -m 755 docker/docker /usr/local/bin/docker \
   && rm -rf docker docker.tgz \
@@ -20,7 +51,8 @@ RUN mkdir -p /runner \
   && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
   && tar xzf ./runner.tar.gz \
   && rm runner.tar.gz \
-  && ./bin/installdependencies.sh
+  && ./bin/installdependencies.sh \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint.sh /runner
 
