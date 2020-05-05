@@ -180,7 +180,6 @@ You can see that 2 runners have been created as specified by `replicas: 2`:
 
 ```
 $ kubectl get runners
-NAME             REPOSITORY                             STATUS
 NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
