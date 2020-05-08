@@ -66,7 +66,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	err := validateRunnerSpec(&runner.Spec)
+	err := runner.Validate()
 	if err != nil {
 		log.Info("Failed to validate runner spec", "error", err.Error())
 		return ctrl.Result{}, nil
@@ -448,16 +448,4 @@ func removeFinalizer(finalizers []string) ([]string, bool) {
 	}
 
 	return result, removed
-}
-
-// organization & repository are both exclusive - however this cannot be checked with kubebuilder
-// therefore have an additional check here to log an error in case spec is invalid
-func validateRunnerSpec(spec *v1alpha1.RunnerSpec) error {
-	if len(spec.Organization) == 0 && len(spec.Repository) == 0 {
-		return fmt.Errorf("RunnerSpec needs organization or repository")
-	}
-	if len(spec.Organization) > 0 && len(spec.Repository) > 0 {
-		return fmt.Errorf("RunnerSpec cannot have both organization and repository")
-	}
-	return nil
 }

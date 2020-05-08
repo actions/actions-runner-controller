@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"errors"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -73,6 +75,19 @@ type RunnerSpec struct {
 	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
 	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+// ValidateRepository validates repository field.
+func (rs *RunnerSpec) ValidateRepository() error {
+	// Organization and repository are both exclusive.
+	if len(rs.Organization) == 0 && len(rs.Repository) == 0 {
+		return errors.New("Spec needs organization or repository")
+	}
+	if len(rs.Organization) > 0 && len(rs.Repository) > 0 {
+		return errors.New("Spec cannot have both organization and repository")
+	}
+
+	return nil
 }
 
 // RunnerStatus defines the observed state of Runner

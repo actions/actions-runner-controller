@@ -174,6 +174,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RunnerDeployment")
 		os.Exit(1)
 	}
+
+	if err = (&actionsv1alpha1.Runner{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Runner")
+		os.Exit(1)
+	}
+	if err = (&actionsv1alpha1.RunnerDeployment{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "RunnerDeployment")
+		os.Exit(1)
+	}
+	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
