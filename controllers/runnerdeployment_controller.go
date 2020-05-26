@@ -20,9 +20,11 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"k8s.io/apimachinery/pkg/types"
 	"sort"
 	"time"
+
+	"github.com/summerwind/actions-runner-controller/github"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
@@ -47,9 +49,10 @@ const (
 // RunnerDeploymentReconciler reconciles a Runner object
 type RunnerDeploymentReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Recorder record.EventRecorder
-	Scheme   *runtime.Scheme
+	GitHubClient *github.Client
+	Log          logr.Logger
+	Recorder     record.EventRecorder
+	Scheme       *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -94,7 +97,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		oldSets = myRunnerReplicaSets[1:]
 	}
 
-	desiredRS, err := r.newRunnerReplicaSet(rd)
+	desiredReplicas, err := r.determineDesiredReplicas(rd)
+	if err != nil {
+		log.Error(err, "Could not determine desired replicas")
+
+		return ctrl.Result{}, err
+	}
+
+	desiredRS, err := r.newRunnerReplicaSet(rd, *desiredReplicas)
 	if err != nil {
 		log.Error(err, "Could not create runnerreplicaset")
 
@@ -184,6 +194,17 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 	}
 
+	if rd.Status.DesiredReplicas == nil || *rd.Status.DesiredReplicas < *desiredReplicas {
+		updated := rd.DeepCopy()
+		updated.Status.DesiredReplicas = desiredReplicas
+
+		if err := r.Status().Update(ctx, updated); err != nil {
+			log.Error(err, "Failed to update runnerdeployment status")
+
+			return ctrl.Result{}, err
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -241,7 +262,7 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
-func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment) (v1alpha1.RunnerReplicaSet, error) {
+func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment, desiredReplicas int) (v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
@@ -257,7 +278,7 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 			Labels:       labels,
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
-			Replicas: rd.Spec.Replicas,
+			Replicas: &desiredReplicas,
 			Template: newRSTemplate,
 		},
 	}

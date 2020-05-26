@@ -165,9 +165,10 @@ func main() {
 	}
 
 	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Log:          ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
 	}
 
 	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {

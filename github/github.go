@@ -18,6 +18,8 @@ type Client struct {
 	*github.Client
 	regTokens map[string]*github.RegistrationToken
 	mu        sync.Mutex
+
+	ListRepositoryWorkflowRuns func(ctx context.Context, owner, repo string, opts *github.ListOptions) (*github.WorkflowRuns, *github.Response, error)
 }
 
 // NewClient returns a client authenticated as a GitHub App.
@@ -27,10 +29,13 @@ func NewClient(appID, installationID int64, privateKeyPath string) (*Client, err
 		return nil, fmt.Errorf("authentication failed: %v", err)
 	}
 
+	gh := github.NewClient(&http.Client{Transport: tr})
+
 	return &Client{
-		Client:    github.NewClient(&http.Client{Transport: tr}),
-		regTokens: map[string]*github.RegistrationToken{},
-		mu:        sync.Mutex{},
+		Client:                     gh,
+		regTokens:                  map[string]*github.RegistrationToken{},
+		mu:                         sync.Mutex{},
+		ListRepositoryWorkflowRuns: gh.Actions.ListRepositoryWorkflowRuns,
 	}, nil
 }
 

@@ -22,14 +22,17 @@ import (
 
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
-	Replicas *int `json:"replicas"`
+	Replicas    *int `json:"replicas"`
+	MinReplicas *int `json:"minReplicas"`
+	MaxReplicas *int `json:"maxReplicas"`
 
 	Template RunnerTemplate `json:"template"`
 }
 
 type RunnerDeploymentStatus struct {
-	AvailableReplicas int `json:"availableReplicas"`
-	ReadyReplicas     int `json:"readyReplicas"`
+	AvailableReplicas int  `json:"availableReplicas"`
+	ReadyReplicas     int  `json:"readyReplicas"`
+	DesiredReplicas   *int `json:"desiredReplicas"`
 }
 
 // +kubebuilder:object:root=true
