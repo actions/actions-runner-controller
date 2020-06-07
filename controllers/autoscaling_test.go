@@ -6,7 +6,7 @@ import (
 	github2 "github.com/google/go-github/v31/github"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/github"
-	"k8s.io/klog/klogr"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"testing"
 )
 
@@ -81,7 +81,9 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 	for i := range testcases {
 		tc := testcases[i]
 
-		log := klogr.New()
+		log := zap.New(func(o *zap.Options) {
+			o.Development = true
+		})
 		r := &RunnerDeploymentReconciler{
 			Log: log,
 			GitHubClient: &github.Client{

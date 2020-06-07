@@ -22,17 +22,35 @@ import (
 
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
-	Replicas    *int `json:"replicas"`
-	MinReplicas *int `json:"minReplicas"`
-	MaxReplicas *int `json:"maxReplicas"`
+	Replicas *int `json:"replicas"`
+
+	// MinReplicas is the minimum number of replicas the deployment is allowed to scale
+	// +optional
+	MinReplicas *int `json:"minReplicas,omitempty"`
+
+	// MinReplicas is the maximum number of replicas the deployment is allowed to scale
+	// +optional
+	MaxReplicas *int `json:"maxReplicas,omitempty"`
+
+	// ScaleDownDelaySecondsAfterScaleUp is the approximate delay for a scale down followed by a scale up
+	// Used to prevent flapping (down->up->down->... loop)
+	// +optional
+	ScaleDownDelaySecondsAfterScaleUp *int `json:"scaleDownDelaySecondsAfterScaleOut,omitempty"`
 
 	Template RunnerTemplate `json:"template"`
 }
 
 type RunnerDeploymentStatus struct {
-	AvailableReplicas int  `json:"availableReplicas"`
-	ReadyReplicas     int  `json:"readyReplicas"`
-	DesiredReplicas   *int `json:"desiredReplicas"`
+	AvailableReplicas int `json:"availableReplicas"`
+	ReadyReplicas     int `json:"readyReplicas"`
+
+	// DesiredReplicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet
+	// This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
+	// +optional
+	DesiredReplicas *int `json:"desiredReplicas,omitempty"`
+
+	// +optional
+	LastSuccessfulScaleOutTime *metav1.Time `json:"lastSuccessfulScaleOutTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
