@@ -97,22 +97,19 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		oldSets = myRunnerReplicaSets[1:]
 	}
 
-	desiredReplicas, err := r.determineDesiredReplicas(rd)
+	desiredRS, err := r.newRunnerReplicaSetWithAutoscaling(rd)
 	if err != nil {
-		log.Error(err, "Could not determine desired replicas")
+		if _, ok := err.(NotSupported); ok {
+			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetAutoScaleNotSupported", err.Error())
+		}
 
-		return ctrl.Result{}, err
-	}
-
-	desiredRS, err := r.newRunnerReplicaSet(rd, *desiredReplicas)
-	if err != nil {
 		log.Error(err, "Could not create runnerreplicaset")
 
 		return ctrl.Result{}, err
 	}
 
 	if newestSet == nil {
-		if err := r.Client.Create(ctx, &desiredRS); err != nil {
+		if err := r.Client.Create(ctx, desiredRS); err != nil {
 			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -128,7 +125,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	desiredTemplateHash, ok := getTemplateHash(&desiredRS)
+	desiredTemplateHash, ok := getTemplateHash(desiredRS)
 	if !ok {
 		log.Info("Failed to get template hash of desired runnerreplicaset resource. It must be in an invalid state. Please manually delete the runnerreplicaset so that it is recreated")
 
@@ -136,7 +133,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	}
 
 	if newestTemplateHash != desiredTemplateHash {
-		if err := r.Client.Create(ctx, &desiredRS); err != nil {
+		if err := r.Client.Create(ctx, desiredRS); err != nil {
 			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -194,9 +191,9 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 	}
 
-	if rd.Status.DesiredReplicas == nil || *rd.Status.DesiredReplicas < *desiredReplicas {
+	if rd.Status.DesiredReplicas == nil && rd.Spec.Replicas == nil && desiredRS.Spec.Replicas != nil {
 		updated := rd.DeepCopy()
-		updated.Status.DesiredReplicas = desiredReplicas
+		updated.Status.DesiredReplicas = desiredRS.Spec.Replicas
 
 		if err := r.Status().Update(ctx, updated); err != nil {
 			log.Error(err, "Failed to update runnerdeployment status")
@@ -262,7 +259,7 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
-func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment, desiredReplicas int) (v1alpha1.RunnerReplicaSet, error) {
+func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment, computedReplicas *int) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
@@ -278,16 +275,20 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 			Labels:       labels,
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
-			Replicas: &desiredReplicas,
+			Replicas: rd.Spec.Replicas,
 			Template: newRSTemplate,
 		},
 	}
 
-	if err := ctrl.SetControllerReference(&rd, &rs, r.Scheme); err != nil {
-		return rs, err
+	if computedReplicas != nil {
+		rs.Spec.Replicas = computedReplicas
 	}
 
-	return rs, nil
+	if err := ctrl.SetControllerReference(&rd, &rs, r.Scheme); err != nil {
+		return &rs, err
+	}
+
+	return &rs, nil
 }
 
 func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -313,4 +314,19 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.RunnerDeployment{}).
 		Owns(&v1alpha1.RunnerReplicaSet{}).
 		Complete(r)
+}
+
+func (r *RunnerDeploymentReconciler) newRunnerReplicaSetWithAutoscaling(rd v1alpha1.RunnerDeployment) (*v1alpha1.RunnerReplicaSet, error) {
+	var computedReplicas *int
+
+	if rd.Spec.Replicas == nil {
+		replicas, err := r.determineDesiredReplicas(rd)
+		if err != nil {
+			return nil, err
+		}
+
+		computedReplicas = replicas
+	}
+
+	return r.newRunnerReplicaSet(rd, computedReplicas)
 }

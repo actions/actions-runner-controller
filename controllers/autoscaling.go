@@ -4,13 +4,21 @@ import (
 	"context"
 	"fmt"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	"strings"
 )
 
+type NotSupported struct {
+}
+
+var _ error = NotSupported{}
+
+func (e NotSupported) Error() string {
+	return "Autoscaling is currently supported only when spec.repository is set"
+}
+
 func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment) (*int, error) {
 	if rd.Spec.Replicas != nil {
-		return rd.Spec.Replicas, nil
+		return nil, fmt.Errorf("bug: determineDesiredReplicas should not be called for deplomeny with specific replicas")
 	} else if rd.Spec.MinReplicas == nil {
 		return nil, fmt.Errorf("runnerdeployment %s/%s is missing minReplicas", rd.Namespace, rd.Name)
 	} else if rd.Spec.MaxReplicas == nil {
@@ -21,11 +29,7 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 
 	repoID := rd.Spec.Template.Spec.Repository
 	if repoID == "" {
-		msg := "Autoscaling is currently supported only when spec.repository is set"
-
-		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetAutoScaleUnsupported", msg)
-
-		return nil, fmt.Errorf(msg)
+		return nil, NotSupported{}
 	}
 
 	repo := strings.Split(repoID, "/")
