@@ -191,9 +191,15 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 	}
 
-	if rd.Status.DesiredReplicas == nil && rd.Spec.Replicas == nil && desiredRS.Spec.Replicas != nil {
+	if rd.Spec.Replicas == nil && desiredRS.Spec.Replicas != nil {
 		updated := rd.DeepCopy()
 		updated.Status.DesiredReplicas = desiredRS.Spec.Replicas
+
+		if (rd.Status.DesiredReplicas == nil && *desiredRS.Spec.Replicas > 1) ||
+			(rd.Status.DesiredReplicas != nil && *desiredRS.Spec.Replicas > *rd.Status.DesiredReplicas) {
+
+			updated.Status.LastSuccessfulScaleOutTime = &metav1.Time{Time: time.Now()}
+		}
 
 		if err := r.Status().Update(ctx, updated); err != nil {
 			log.Error(err, "Failed to update runnerdeployment status")
@@ -325,7 +331,23 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSetWithAutoscaling(rd v1alp
 			return nil, err
 		}
 
-		computedReplicas = replicas
+		var scaleDownDelay time.Duration
+
+		if rd.Spec.ScaleDownDelaySecondsAfterScaleUp != nil {
+			scaleDownDelay = time.Duration(*rd.Spec.ScaleDownDelaySecondsAfterScaleUp) * time.Second
+		} else {
+			scaleDownDelay = 10 * time.Minute
+		}
+
+		now := time.Now()
+
+		if rd.Status.DesiredReplicas == nil ||
+			*rd.Status.DesiredReplicas < *replicas ||
+			rd.Status.LastSuccessfulScaleOutTime == nil ||
+			rd.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay).Before(now) {
+
+			computedReplicas = replicas
+		}
 	}
 
 	return r.newRunnerReplicaSet(rd, computedReplicas)
