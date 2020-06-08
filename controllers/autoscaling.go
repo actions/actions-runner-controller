@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"strings"
 )
 
@@ -20,7 +21,11 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 
 	repoID := rd.Spec.Template.Spec.Repository
 	if repoID == "" {
-		return nil, fmt.Errorf("runnerdeployment autoscaling is currently supported only when spec.repository is set")
+		msg := "Autoscaling is currently supported only when spec.repository is set"
+
+		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetAutoScaleUnsupported", msg)
+
+		return nil, fmt.Errorf(msg)
 	}
 
 	repo := strings.Split(repoID, "/")
