@@ -30,7 +30,7 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 
 	repo := strings.Split(repoID, "/")
 	user, repoName := repo[0], repo[1]
-	list, _, err := r.GitHubClient.ListRepositoryWorkflowRuns(context.TODO(), user, repoName, nil)
+	list, _, err := r.GitHubClient.Actions.ListRepositoryWorkflowRuns(context.TODO(), user, repoName, nil)
 	if err != nil {
 		return nil, err
 	}

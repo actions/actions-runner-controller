@@ -32,7 +32,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 // NewServer creates a fake server for running unit tests
-func NewServer() *httptest.Server {
+func NewServer(opts ...Option) *httptest.Server {
+	var responses FixedResponses
+
+	for _, o := range opts {
+		o(&responses)
+	}
+
 	routes := map[string]handler{
 		// For CreateRegistrationToken
 		"/repos/test/valid/actions/runners/registration-token": handler{
@@ -111,6 +117,9 @@ func NewServer() *httptest.Server {
 			Status: http.StatusBadRequest,
 			Body:   "",
 		},
+
+		// For auto-scaling based on the number of queued(pending) workflow runs
+		"/repos/test/valid/actions/runs": responses.listRepositoryWorkflowRuns.handler(),
 	}
 
 	mux := http.NewServeMux()
