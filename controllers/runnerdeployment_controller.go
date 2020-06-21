@@ -347,6 +347,8 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSetWithAutoscaling(rd v1alp
 			rd.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay).Before(now) {
 
 			computedReplicas = replicas
+		} else {
+			computedReplicas = rd.Status.DesiredReplicas
 		}
 	}
 

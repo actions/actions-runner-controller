@@ -6730,7 +6730,6 @@ spec:
                   type: object
               type: object
           required:
-          - replicas
           - template
           type: object
         status:

@@ -22,7 +22,8 @@ import (
 
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
-	Replicas *int `json:"replicas"`
+	// +optional
+	Replicas *int `json:"replicas,omitempty"`
 
 	// MinReplicas is the minimum number of replicas the deployment is allowed to scale
 	// +optional
