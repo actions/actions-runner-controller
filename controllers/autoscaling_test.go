@@ -34,12 +34,15 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		return &v
 	}
 
+	metav1Now := metav1.Now()
 	testcases := []struct {
 		repo         string
 		org          string
 		fixed        *int
 		max          *int
 		min          *int
+		sReplicas    *int
+		sTime        *metav1.Time
 		workflowRuns string
 		want         int
 		err          string
@@ -50,6 +53,16 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			min:          intPtr(2),
 			max:          intPtr(3),
 			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
+		},
+		// 2 demanded, max at 3, currently 3, delay scaling down due to grace period
+		{
+			repo:         "test/valid",
+			min:          intPtr(2),
+			max:          intPtr(3),
+			sReplicas:    intPtr(3),
+			sTime:        &metav1Now,
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			want:         3,
 		},
 		// 3 demanded, max at 2
@@ -155,6 +168,10 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 					Replicas:    tc.fixed,
 					MaxReplicas: tc.max,
 					MinReplicas: tc.min,
+				},
+				Status: v1alpha1.RunnerDeploymentStatus{
+					Replicas:                   tc.sReplicas,
+					LastSuccessfulScaleOutTime: tc.sTime,
 				},
 			}
 
