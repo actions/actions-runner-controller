@@ -45,10 +45,10 @@ type RunnerDeploymentStatus struct {
 	AvailableReplicas int `json:"availableReplicas"`
 	ReadyReplicas     int `json:"readyReplicas"`
 
-	// DesiredReplicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet
+	// Replicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet
 	// This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
 	// +optional
-	DesiredReplicas *int `json:"desiredReplicas,omitempty"`
+	Replicas *int `json:"desiredReplicas,omitempty"`
 
 	// +optional
 	LastSuccessfulScaleOutTime *metav1.Time `json:"lastSuccessfulScaleOutTime,omitempty"`

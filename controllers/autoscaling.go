@@ -74,7 +74,7 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 		desiredReplicas = necessaryReplicas
 	}
 
-	rd.Status.DesiredReplicas = &desiredReplicas
+	rd.Status.Replicas = &desiredReplicas
 	replicas = desiredReplicas
 
 	r.Log.V(1).Info(

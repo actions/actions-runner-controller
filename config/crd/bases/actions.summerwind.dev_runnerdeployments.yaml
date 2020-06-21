@@ -6737,7 +6737,7 @@ spec:
             availableReplicas:
               type: integer
             desiredReplicas:
-              description: DesiredReplicas is the total number of desired, non-terminated
+              description: Replicas is the total number of desired, non-terminated
                 and latest pods to be set for the primary RunnerSet This doesn't include
                 outdated pods while upgrading the deployment and replacing the runnerset.
               type: integer
