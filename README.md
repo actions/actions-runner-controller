@@ -189,6 +189,44 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
+#### Autoscaling
+
+`RunnerDeployment` can scale number of runners between `minReplicas` and `maxReplicas` fields, depending on pending workflow runs.
+
+In the below example, `actions-runner` checks for pending workflow runs for each sync period, and scale to e.g. 3 if there're 3 pending jobs at sync time.
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: summerwind-actions-runner-controller
+spec:
+  minReplicas: 1
+  maxReplicas: 3
+  template:
+    spec:
+      repository: summerwind/actions-runner-controller
+```
+
+Please also note that the sync period is set to 10 minutes by default and it's configurable via `--sync-period` flag.
+
+Additionally, the autoscaling feature has an anti-flapping option that prevents periodic loop of scaling up and down.
+By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured by setting `scaleDownDelaySecondsAfterScaleUp`:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: summerwind-actions-runner-controller
+spec:
+  minReplicas: 1
+  maxReplicas: 3
+  scaleDownDelaySecondsAfterScaleUp: 1m
+  template:
+    spec:
+      repository: summerwind/actions-runner-controller
+```
+
 ## Additional tweaks
 
 You can pass details through the spec selector. Here's an eg. of what you may like to do:

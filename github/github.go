@@ -27,8 +27,10 @@ func NewClient(appID, installationID int64, privateKeyPath string) (*Client, err
 		return nil, fmt.Errorf("authentication failed: %v", err)
 	}
 
+	gh := github.NewClient(&http.Client{Transport: tr})
+
 	return &Client{
-		Client:    github.NewClient(&http.Client{Transport: tr}),
+		Client:    gh,
 		regTokens: map[string]*github.RegistrationToken{},
 		mu:        sync.Mutex{},
 	}, nil

@@ -20,9 +20,11 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"k8s.io/apimachinery/pkg/types"
 	"sort"
 	"time"
+
+	"github.com/summerwind/actions-runner-controller/github"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
@@ -47,9 +49,10 @@ const (
 // RunnerDeploymentReconciler reconciles a Runner object
 type RunnerDeploymentReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Recorder record.EventRecorder
-	Scheme   *runtime.Scheme
+	GitHubClient *github.Client
+	Log          logr.Logger
+	Recorder     record.EventRecorder
+	Scheme       *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -94,15 +97,19 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		oldSets = myRunnerReplicaSets[1:]
 	}
 
-	desiredRS, err := r.newRunnerReplicaSet(rd)
+	desiredRS, err := r.newRunnerReplicaSetWithAutoscaling(rd)
 	if err != nil {
+		if _, ok := err.(NotSupported); ok {
+			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetAutoScaleNotSupported", err.Error())
+		}
+
 		log.Error(err, "Could not create runnerreplicaset")
 
 		return ctrl.Result{}, err
 	}
 
 	if newestSet == nil {
-		if err := r.Client.Create(ctx, &desiredRS); err != nil {
+		if err := r.Client.Create(ctx, desiredRS); err != nil {
 			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -118,7 +125,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	desiredTemplateHash, ok := getTemplateHash(&desiredRS)
+	desiredTemplateHash, ok := getTemplateHash(desiredRS)
 	if !ok {
 		log.Info("Failed to get template hash of desired runnerreplicaset resource. It must be in an invalid state. Please manually delete the runnerreplicaset so that it is recreated")
 
@@ -126,7 +133,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	}
 
 	if newestTemplateHash != desiredTemplateHash {
-		if err := r.Client.Create(ctx, &desiredRS); err != nil {
+		if err := r.Client.Create(ctx, desiredRS); err != nil {
 			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -181,6 +188,23 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
 
 			log.Info("Deleted runnerreplicaset", "runnerdeployment", rd.ObjectMeta.Name, "runnerreplicaset", rs.Name)
+		}
+	}
+
+	if rd.Spec.Replicas == nil && desiredRS.Spec.Replicas != nil {
+		updated := rd.DeepCopy()
+		updated.Status.Replicas = desiredRS.Spec.Replicas
+
+		if (rd.Status.Replicas == nil && *desiredRS.Spec.Replicas > 1) ||
+			(rd.Status.Replicas != nil && *desiredRS.Spec.Replicas > *rd.Status.Replicas) {
+
+			updated.Status.LastSuccessfulScaleOutTime = &metav1.Time{Time: time.Now()}
+		}
+
+		if err := r.Status().Update(ctx, updated); err != nil {
+			log.Error(err, "Failed to update runnerdeployment status")
+
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -241,7 +265,7 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
-func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment) (v1alpha1.RunnerReplicaSet, error) {
+func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment, computedReplicas *int) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
@@ -262,11 +286,15 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 		},
 	}
 
-	if err := ctrl.SetControllerReference(&rd, &rs, r.Scheme); err != nil {
-		return rs, err
+	if computedReplicas != nil {
+		rs.Spec.Replicas = computedReplicas
 	}
 
-	return rs, nil
+	if err := ctrl.SetControllerReference(&rd, &rs, r.Scheme); err != nil {
+		return &rs, err
+	}
+
+	return &rs, nil
 }
 
 func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -292,4 +320,37 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.RunnerDeployment{}).
 		Owns(&v1alpha1.RunnerReplicaSet{}).
 		Complete(r)
+}
+
+func (r *RunnerDeploymentReconciler) newRunnerReplicaSetWithAutoscaling(rd v1alpha1.RunnerDeployment) (*v1alpha1.RunnerReplicaSet, error) {
+	var computedReplicas *int
+
+	if rd.Spec.Replicas == nil {
+		replicas, err := r.determineDesiredReplicas(rd)
+		if err != nil {
+			return nil, err
+		}
+
+		var scaleDownDelay time.Duration
+
+		if rd.Spec.ScaleDownDelaySecondsAfterScaleUp != nil {
+			scaleDownDelay = time.Duration(*rd.Spec.ScaleDownDelaySecondsAfterScaleUp) * time.Second
+		} else {
+			scaleDownDelay = 10 * time.Minute
+		}
+
+		now := time.Now()
+
+		if rd.Status.Replicas == nil ||
+			*rd.Status.Replicas < *replicas ||
+			rd.Status.LastSuccessfulScaleOutTime == nil ||
+			rd.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay).Before(now) {
+
+			computedReplicas = replicas
+		} else {
+			computedReplicas = rd.Status.Replicas
+		}
+	}
+
+	return r.newRunnerReplicaSet(rd, computedReplicas)
 }
