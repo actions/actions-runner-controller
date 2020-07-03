@@ -2,19 +2,11 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"strings"
 )
-
-type NotSupported struct {
-}
-
-var _ error = NotSupported{}
-
-func (e NotSupported) Error() string {
-	return "Autoscaling is currently supported only when spec.repository is set"
-}
 
 func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment) (*int, error) {
 	if rd.Spec.Replicas != nil {
@@ -25,38 +17,60 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 		return nil, fmt.Errorf("runnerdeployment %s/%s is missing maxReplicas", rd.Namespace, rd.Name)
 	}
 
-	var replicas int
+	var repos [][]string
 
 	repoID := rd.Spec.Template.Spec.Repository
 	if repoID == "" {
-		return nil, NotSupported{}
-	}
+		orgName := rd.Spec.Template.Spec.Organization
+		if orgName == "" {
+			return nil, fmt.Errorf("asserting runner deployment spec to detect bug: spec.template.organization should not be empty on this code path")
+		}
 
-	repo := strings.Split(repoID, "/")
-	user, repoName := repo[0], repo[1]
-	list, _, err := r.GitHubClient.Actions.ListRepositoryWorkflowRuns(context.TODO(), user, repoName, nil)
-	if err != nil {
-		return nil, err
+		metrics := rd.Spec.Autoscaling.Metrics
+
+		if len(metrics) == 0 {
+			return nil, fmt.Errorf("validating autoscaling metrics: one or more metrics is required")
+		} else if tpe := metrics[0].Type; tpe != v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns {
+			return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q: only supported value is %s", tpe, v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns)
+		} else if len(metrics[0].RepositoryNames) == 0 {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment")
+		}
+
+		for _, repoName := range metrics[0].RepositoryNames {
+			repos = append(repos, []string{orgName, repoName})
+		}
+	} else {
+		repo := strings.Split(repoID, "/")
+
+		repos = append(repos, repo)
 	}
 
 	var total, inProgress, queued, completed, unknown int
 
-	for _, r := range list.WorkflowRuns {
-		total++
+	for _, repo := range repos {
+		user, repoName := repo[0], repo[1]
+		list, _, err := r.GitHubClient.Actions.ListRepositoryWorkflowRuns(context.TODO(), user, repoName, nil)
+		if err != nil {
+			return nil, err
+		}
 
-		// In May 2020, there are only 3 statuses.
-		// Follow the below links for more details:
-		// - https://developer.github.com/v3/actions/workflow-runs/#list-repository-workflow-runs
-		// - https://developer.github.com/v3/checks/runs/#create-a-check-run
-		switch r.GetStatus() {
-		case "completed":
-			completed++
-		case "in_progress":
-			inProgress++
-		case "queued":
-			queued++
-		default:
-			unknown++
+		for _, r := range list.WorkflowRuns {
+			total++
+
+			// In May 2020, there are only 3 statuses.
+			// Follow the below links for more details:
+			// - https://developer.github.com/v3/actions/workflow-runs/#list-repository-workflow-runs
+			// - https://developer.github.com/v3/checks/runs/#create-a-check-run
+			switch r.GetStatus() {
+			case "completed":
+				completed++
+			case "in_progress":
+				inProgress++
+			case "queued":
+				queued++
+			default:
+				unknown++
+			}
 		}
 	}
 
@@ -75,7 +89,7 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 	}
 
 	rd.Status.Replicas = &desiredReplicas
-	replicas = desiredReplicas
+	replicas := desiredReplicas
 
 	r.Log.V(1).Info(
 		"Calculated desired replicas",

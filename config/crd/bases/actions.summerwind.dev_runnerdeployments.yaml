@@ -46,6 +46,27 @@ spec:
         spec:
           description: RunnerReplicaSetSpec defines the desired state of RunnerDeployment
           properties:
+            autoscaling:
+              description: Autoscaling is set various configuration options for autoscaling
+                this runner deployment.
+              properties:
+                metrics:
+                  items:
+                    properties:
+                      repositoryNames:
+                        description: RepositoryNames is the list of repository names
+                          to be used for calculating the metric. For example, a repository
+                          name is the REPO part of `github.com/USER/REPO`.
+                        items:
+                          type: string
+                        type: array
+                      type:
+                        description: Type is the type of metric to be used for autoscaling.
+                          The only supported Type is TotalNumberOfQueuedAndProgressingWorkflowRuns
+                        type: string
+                    type: object
+                  type: array
+              type: object
             maxReplicas:
               description: MinReplicas is the maximum number of replicas the deployment
                 is allowed to scale

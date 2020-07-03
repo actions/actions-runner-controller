@@ -20,6 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns = "TotalNumberOfQueuedAndProgressingWorkflowRuns"
+)
+
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
 	// +optional
@@ -38,7 +42,26 @@ type RunnerDeploymentSpec struct {
 	// +optional
 	ScaleDownDelaySecondsAfterScaleUp *int `json:"scaleDownDelaySecondsAfterScaleOut,omitempty"`
 
+	// Autoscaling is set various configuration options for autoscaling this runner deployment.
+	// +optional
+	Autoscaling AutoscalingSpec `json:"autoscaling,omitempty"`
+
 	Template RunnerTemplate `json:"template"`
+}
+
+type AutoscalingSpec struct {
+	Metrics []MetricSpec `json:"metrics,omitempty"`
+}
+
+type MetricSpec struct {
+	// Type is the type of metric to be used for autoscaling.
+	// The only supported Type is TotalNumberOfQueuedAndProgressingWorkflowRuns
+	Type string `json:"type,omitempty"`
+
+	// RepositoryNames is the list of repository names to be used for calculating the metric.
+	// For example, a repository name is the REPO part of `github.com/USER/REPO`.
+	// +optional
+	RepositoryNames []string `json:"repositoryNames,omitempty"`
 }
 
 type RunnerDeploymentStatus struct {

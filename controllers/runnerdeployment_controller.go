@@ -99,9 +99,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	desiredRS, err := r.newRunnerReplicaSetWithAutoscaling(rd)
 	if err != nil {
-		if _, ok := err.(NotSupported); ok {
-			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetAutoScaleNotSupported", err.Error())
-		}
+		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
 		log.Error(err, "Could not create runnerreplicaset")
 
