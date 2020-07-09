@@ -261,6 +261,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		runnerImage = r.RunnerImage
 	}
 
+	runnerImagePullPolicy := runner.Spec.ImagePullPolicy
+	if runnerImagePullPolicy == "" {
+		runnerImagePullPolicy = corev1.PullAlways
+	}
+
 	env := []corev1.EnvVar{
 		{
 			Name:  "RUNNER_NAME",
@@ -298,7 +303,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				{
 					Name:            containerName,
 					Image:           runnerImage,
-					ImagePullPolicy: "Always",
+					ImagePullPolicy: runnerImagePullPolicy,
 					Env:             env,
 					EnvFrom:         runner.Spec.EnvFrom,
 					VolumeMounts: []corev1.VolumeMount{
