@@ -250,8 +250,8 @@ spec:
         operator: Exists
 
       repository: mumoshu/actions-runner-controller-ci
-      ImagePullPolicy: Always
       image: custom-image/actions-runner:latest
+      imagePullPolicy: Always
       resources:
         limits:
           cpu: "4.0"
@@ -317,7 +317,7 @@ The container image is based on Ubuntu 18.04, but it does not contain all of the
 * docker
 * build-essentials
 
-The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node` 
+The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
 
 If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and installing the extra dependencies directly in the docker image:
 

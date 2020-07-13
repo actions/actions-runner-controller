@@ -48,6 +48,8 @@ type RunnerSpec struct {
 	// +optional
 	Image string `json:"image"`
 	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// +optional
