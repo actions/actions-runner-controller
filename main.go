@@ -169,14 +169,25 @@ func main() {
 	}
 
 	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
-		Scheme:       mgr.GetScheme(),
-		GitHubClient: ghClient,
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
+		Scheme: mgr.GetScheme(),
 	}
 
 	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RunnerDeployment")
+		os.Exit(1)
+	}
+
+	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
+		Client:       mgr.GetClient(),
+		Log:          ctrl.Log.WithName("controllers").WithName("HorizontalRunnerAutoscaler"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
+	}
+
+	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
 		os.Exit(1)
 	}
 

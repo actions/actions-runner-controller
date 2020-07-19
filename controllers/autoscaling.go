@@ -8,13 +8,11 @@ import (
 	"strings"
 )
 
-func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment) (*int, error) {
-	if rd.Spec.Replicas != nil {
-		return nil, fmt.Errorf("bug: determineDesiredReplicas should not be called for deplomeny with specific replicas")
-	} else if rd.Spec.MinReplicas == nil {
-		return nil, fmt.Errorf("runnerdeployment %s/%s is missing minReplicas", rd.Namespace, rd.Name)
-	} else if rd.Spec.MaxReplicas == nil {
-		return nil, fmt.Errorf("runnerdeployment %s/%s is missing maxReplicas", rd.Namespace, rd.Name)
+func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+	if hra.Spec.MinReplicas == nil {
+		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing minReplicas", hra.Namespace, hra.Name)
+	} else if hra.Spec.MaxReplicas == nil {
+		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing maxReplicas", hra.Namespace, hra.Name)
 	}
 
 	var repos [][]string
@@ -26,12 +24,12 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 			return nil, fmt.Errorf("asserting runner deployment spec to detect bug: spec.template.organization should not be empty on this code path")
 		}
 
-		metrics := rd.Spec.Autoscaling.Metrics
+		metrics := hra.Spec.Metrics
 
 		if len(metrics) == 0 {
 			return nil, fmt.Errorf("validating autoscaling metrics: one or more metrics is required")
-		} else if tpe := metrics[0].Type; tpe != v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns {
-			return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q: only supported value is %s", tpe, v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns)
+		} else if tpe := metrics[0].Type; tpe != v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
+			return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q: only supported value is %s", tpe, v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns)
 		} else if len(metrics[0].RepositoryNames) == 0 {
 			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment")
 		}
@@ -74,8 +72,8 @@ func (r *RunnerDeploymentReconciler) determineDesiredReplicas(rd v1alpha1.Runner
 		}
 	}
 
-	minReplicas := *rd.Spec.MinReplicas
-	maxReplicas := *rd.Spec.MaxReplicas
+	minReplicas := *hra.Spec.MinReplicas
+	maxReplicas := *hra.Spec.MaxReplicas
 	necessaryReplicas := queued + inProgress
 
 	var desiredReplicas int

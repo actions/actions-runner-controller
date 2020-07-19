@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns = "TotalNumberOfQueuedAndProgressingWorkflowRuns"
+	AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns = "TotalNumberOfQueuedAndInProgressWorkflowRuns"
 )
 
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
@@ -29,39 +29,7 @@ type RunnerDeploymentSpec struct {
 	// +optional
 	Replicas *int `json:"replicas,omitempty"`
 
-	// MinReplicas is the minimum number of replicas the deployment is allowed to scale
-	// +optional
-	MinReplicas *int `json:"minReplicas,omitempty"`
-
-	// MinReplicas is the maximum number of replicas the deployment is allowed to scale
-	// +optional
-	MaxReplicas *int `json:"maxReplicas,omitempty"`
-
-	// ScaleDownDelaySecondsAfterScaleUp is the approximate delay for a scale down followed by a scale up
-	// Used to prevent flapping (down->up->down->... loop)
-	// +optional
-	ScaleDownDelaySecondsAfterScaleUp *int `json:"scaleDownDelaySecondsAfterScaleOut,omitempty"`
-
-	// Autoscaling is set various configuration options for autoscaling this runner deployment.
-	// +optional
-	Autoscaling AutoscalingSpec `json:"autoscaling,omitempty"`
-
 	Template RunnerTemplate `json:"template"`
-}
-
-type AutoscalingSpec struct {
-	Metrics []MetricSpec `json:"metrics,omitempty"`
-}
-
-type MetricSpec struct {
-	// Type is the type of metric to be used for autoscaling.
-	// The only supported Type is TotalNumberOfQueuedAndProgressingWorkflowRuns
-	Type string `json:"type,omitempty"`
-
-	// RepositoryNames is the list of repository names to be used for calculating the metric.
-	// For example, a repository name is the REPO part of `github.com/USER/REPO`.
-	// +optional
-	RepositoryNames []string `json:"repositoryNames,omitempty"`
 }
 
 type RunnerDeploymentStatus struct {
@@ -72,9 +40,6 @@ type RunnerDeploymentStatus struct {
 	// This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
 	// +optional
 	Replicas *int `json:"desiredReplicas,omitempty"`
-
-	// +optional
-	LastSuccessfulScaleOutTime *metav1.Time `json:"lastSuccessfulScaleOutTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

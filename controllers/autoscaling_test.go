@@ -115,9 +115,12 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 		// fixed at 3
 		{
-			repo:  "test/valid",
-			fixed: intPtr(3),
-			want:  3,
+			repo:         "test/valid",
+			min:          intPtr(1),
+			max:          intPtr(3),
+			fixed:        intPtr(3),
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
 		},
 	}
 
@@ -137,7 +140,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			defer server.Close()
 			client := newGithubClient(server)
 
-			r := &RunnerDeploymentReconciler{
+			h := &HorizontalRunnerAutoscalerReconciler{
 				Log:          log,
 				GitHubClient: client,
 				Scheme:       scheme,
@@ -145,23 +148,34 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 			rd := v1alpha1.RunnerDeployment{
 				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "testrd",
+				},
 				Spec: v1alpha1.RunnerDeploymentSpec{
 					Template: v1alpha1.RunnerTemplate{
 						Spec: v1alpha1.RunnerSpec{
 							Repository: tc.repo,
 						},
 					},
-					Replicas:    tc.fixed,
+					Replicas: tc.fixed,
+				},
+				Status: v1alpha1.RunnerDeploymentStatus{
+					Replicas: tc.sReplicas,
+				},
+			}
+
+			hra := v1alpha1.HorizontalRunnerAutoscaler{
+				Spec: v1alpha1.HorizontalRunnerAutoscalerSpec{
 					MaxReplicas: tc.max,
 					MinReplicas: tc.min,
 				},
-				Status: v1alpha1.RunnerDeploymentStatus{
-					Replicas:                   tc.sReplicas,
+				Status: v1alpha1.HorizontalRunnerAutoscalerStatus{
+					DesiredReplicas:            tc.sReplicas,
 					LastSuccessfulScaleOutTime: tc.sTime,
 				},
 			}
 
-			rs, err := r.newRunnerReplicaSetWithAutoscaling(rd)
+			got, err := h.computeReplicas(rd, hra)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -170,8 +184,6 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				}
 				return
 			}
-
-			got := rs.Spec.Replicas
 
 			if got == nil {
 				t.Fatalf("unexpected value of rs.Spec.Replicas: nil")
@@ -278,16 +290,23 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		},
 		// fixed at 3
 		{
-			org:   "test",
-			repos: []string{"valid"},
-			fixed: intPtr(3),
-			want:  3,
+			org:          "test",
+			repos:        []string{"valid"},
+			fixed:        intPtr(1),
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
 		},
 		// org runner, fixed at 3
 		{
-			org:   "test",
-			fixed: intPtr(3),
-			want:  3,
+			org:          "test",
+			repos:        []string{"valid"},
+			fixed:        intPtr(1),
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
 		},
 		// org runner, 1 demanded, min at 1, no repos
 		{
@@ -315,39 +334,50 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			defer server.Close()
 			client := newGithubClient(server)
 
-			r := &RunnerDeploymentReconciler{
+			h := &HorizontalRunnerAutoscalerReconciler{
 				Log:          log,
-				GitHubClient: client,
 				Scheme:       scheme,
+				GitHubClient: client,
 			}
 
 			rd := v1alpha1.RunnerDeployment{
-				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "testrd",
+				},
 				Spec: v1alpha1.RunnerDeploymentSpec{
 					Template: v1alpha1.RunnerTemplate{
 						Spec: v1alpha1.RunnerSpec{
 							Organization: tc.org,
 						},
 					},
-					Autoscaling: v1alpha1.AutoscalingSpec{
-						Metrics: []v1alpha1.MetricSpec{
-							{
-								Type:            v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndProgressingWorkflowRuns,
-								RepositoryNames: tc.repos,
-							},
-						},
-					},
-					Replicas:    tc.fixed,
-					MaxReplicas: tc.max,
-					MinReplicas: tc.min,
+					Replicas: tc.fixed,
 				},
 				Status: v1alpha1.RunnerDeploymentStatus{
-					Replicas:                   tc.sReplicas,
+					Replicas: tc.sReplicas,
+				},
+			}
+
+			hra := v1alpha1.HorizontalRunnerAutoscaler{
+				Spec: v1alpha1.HorizontalRunnerAutoscalerSpec{
+					ScaleTargetRef: v1alpha1.ScaleTargetRef{
+						Name: "testrd",
+					},
+					MaxReplicas: tc.max,
+					MinReplicas: tc.min,
+					Metrics: []v1alpha1.MetricSpec{
+						{
+							Type:            v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns,
+							RepositoryNames: tc.repos,
+						},
+					},
+				},
+				Status: v1alpha1.HorizontalRunnerAutoscalerStatus{
+					DesiredReplicas:            tc.sReplicas,
 					LastSuccessfulScaleOutTime: tc.sTime,
 				},
 			}
 
-			rs, err := r.newRunnerReplicaSetWithAutoscaling(rd)
+			got, err := h.computeReplicas(rd, hra)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -357,10 +387,8 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				return
 			}
 
-			got := rs.Spec.Replicas
-
 			if got == nil {
-				t.Fatalf("unexpected value of rs.Spec.Replicas: nil")
+				t.Fatalf("unexpected value of rs.Spec.Replicas: nil, wanted %v", tc.want)
 			}
 
 			if *got != tc.want {

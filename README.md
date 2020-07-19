@@ -199,13 +199,25 @@ In the below example, `actions-runner` checks for pending workflow runs for each
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
-  name: summerwind-actions-runner-controller
+  name: example-runner-deployment
 spec:
-  minReplicas: 1
-  maxReplicas: 3
   template:
     spec:
       repository: summerwind/actions-runner-controller
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+    repositoryNames:
+    - summerwind/actions-runner-controller
 ```
 
 Please also note that the sync period is set to 10 minutes by default and it's configurable via `--sync-period` flag.
@@ -217,14 +229,26 @@ By default, it doesn't scale down until the grace period of 10 minutes passes af
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
-  name: summerwind-actions-runner-controller
+  name: example-runner-deployment
 spec:
-  minReplicas: 1
-  maxReplicas: 3
-  scaleDownDelaySecondsAfterScaleUp: 1m
   template:
     spec:
       repository: summerwind/actions-runner-controller
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  scaleDownDelaySecondsAfterScaleOut: 60
+  metrics:
+  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+    repositoryNames:
+    - summerwind/actions-runner-controller
 ```
 
 ## Additional tweaks
