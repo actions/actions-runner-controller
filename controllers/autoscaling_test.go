@@ -115,23 +115,12 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 		// fixed at 3
 		{
-			repo:  "test/valid",
-			fixed: intPtr(3),
-			want:  3,
-		},
-		// org runner, fixed at 3
-		{
-			org:   "test",
-			fixed: intPtr(3),
-			want:  3,
-		},
-		// org runner, 1 demanded, min at 1
-		{
-			org:          "test",
+			repo:         "test/valid",
 			min:          intPtr(1),
 			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
-			err:          "Autoscaling is currently supported only when spec.repository is set",
+			fixed:        intPtr(3),
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
 		},
 	}
 
@@ -151,7 +140,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			defer server.Close()
 			client := newGithubClient(server)
 
-			r := &RunnerDeploymentReconciler{
+			h := &HorizontalRunnerAutoscalerReconciler{
 				Log:          log,
 				GitHubClient: client,
 				Scheme:       scheme,
@@ -159,23 +148,34 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 			rd := v1alpha1.RunnerDeployment{
 				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "testrd",
+				},
 				Spec: v1alpha1.RunnerDeploymentSpec{
 					Template: v1alpha1.RunnerTemplate{
 						Spec: v1alpha1.RunnerSpec{
 							Repository: tc.repo,
 						},
 					},
-					Replicas:    tc.fixed,
+					Replicas: tc.fixed,
+				},
+				Status: v1alpha1.RunnerDeploymentStatus{
+					Replicas: tc.sReplicas,
+				},
+			}
+
+			hra := v1alpha1.HorizontalRunnerAutoscaler{
+				Spec: v1alpha1.HorizontalRunnerAutoscalerSpec{
 					MaxReplicas: tc.max,
 					MinReplicas: tc.min,
 				},
-				Status: v1alpha1.RunnerDeploymentStatus{
-					Replicas:                   tc.sReplicas,
+				Status: v1alpha1.HorizontalRunnerAutoscalerStatus{
+					DesiredReplicas:            tc.sReplicas,
 					LastSuccessfulScaleOutTime: tc.sTime,
 				},
 			}
 
-			rs, err := r.newRunnerReplicaSetWithAutoscaling(rd)
+			got, err := h.computeReplicas(rd, hra)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -185,10 +185,210 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				return
 			}
 
-			got := rs.Spec.Replicas
-
 			if got == nil {
 				t.Fatalf("unexpected value of rs.Spec.Replicas: nil")
+			}
+
+			if *got != tc.want {
+				t.Errorf("%d: incorrect desired replicas: want %d, got %d", i, tc.want, *got)
+			}
+		})
+	}
+}
+
+func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
+	intPtr := func(v int) *int {
+		return &v
+	}
+
+	metav1Now := metav1.Now()
+	testcases := []struct {
+		repos        []string
+		org          string
+		fixed        *int
+		max          *int
+		min          *int
+		sReplicas    *int
+		sTime        *metav1.Time
+		workflowRuns string
+		want         int
+		err          string
+	}{
+		// 3 demanded, max at 3
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
+		},
+		// 2 demanded, max at 3, currently 3, delay scaling down due to grace period
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(3),
+			sReplicas:    intPtr(3),
+			sTime:        &metav1Now,
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
+		},
+		// 3 demanded, max at 2
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(2),
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         2,
+		},
+		// 2 demanded, min at 2
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 3, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         2,
+		},
+		// 1 demanded, min at 2
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			want:         2,
+		},
+		// 1 demanded, min at 2
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         2,
+		},
+		// 1 demanded, min at 1
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			want:         1,
+		},
+		// 1 demanded, min at 1
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         1,
+		},
+		// fixed at 3
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			fixed:        intPtr(1),
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
+		},
+		// org runner, fixed at 3
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			fixed:        intPtr(1),
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			want:         3,
+		},
+		// org runner, 1 demanded, min at 1, no repos
+		{
+			org:          "test",
+			min:          intPtr(1),
+			max:          intPtr(3),
+			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			err:          "validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment",
+		},
+	}
+
+	for i := range testcases {
+		tc := testcases[i]
+
+		log := zap.New(func(o *zap.Options) {
+			o.Development = true
+		})
+
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		_ = v1alpha1.AddToScheme(scheme)
+
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns))
+			defer server.Close()
+			client := newGithubClient(server)
+
+			h := &HorizontalRunnerAutoscalerReconciler{
+				Log:          log,
+				Scheme:       scheme,
+				GitHubClient: client,
+			}
+
+			rd := v1alpha1.RunnerDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "testrd",
+				},
+				Spec: v1alpha1.RunnerDeploymentSpec{
+					Template: v1alpha1.RunnerTemplate{
+						Spec: v1alpha1.RunnerSpec{
+							Organization: tc.org,
+						},
+					},
+					Replicas: tc.fixed,
+				},
+				Status: v1alpha1.RunnerDeploymentStatus{
+					Replicas: tc.sReplicas,
+				},
+			}
+
+			hra := v1alpha1.HorizontalRunnerAutoscaler{
+				Spec: v1alpha1.HorizontalRunnerAutoscalerSpec{
+					ScaleTargetRef: v1alpha1.ScaleTargetRef{
+						Name: "testrd",
+					},
+					MaxReplicas: tc.max,
+					MinReplicas: tc.min,
+					Metrics: []v1alpha1.MetricSpec{
+						{
+							Type:            v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns,
+							RepositoryNames: tc.repos,
+						},
+					},
+				},
+				Status: v1alpha1.HorizontalRunnerAutoscalerStatus{
+					DesiredReplicas:            tc.sReplicas,
+					LastSuccessfulScaleOutTime: tc.sTime,
+				},
+			}
+
+			got, err := h.computeReplicas(rd, hra)
+			if err != nil {
+				if tc.err == "" {
+					t.Fatalf("unexpected error: expected none, got %v", err)
+				} else if err.Error() != tc.err {
+					t.Fatalf("unexpected error: expected %v, got %v", tc.err, err)
+				}
+				return
+			}
+
+			if got == nil {
+				t.Fatalf("unexpected value of rs.Spec.Replicas: nil, wanted %v", tc.want)
 			}
 
 			if *got != tc.want {

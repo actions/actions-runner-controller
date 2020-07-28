@@ -1,0 +1,118 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.4
+  creationTimestamp: null
+  name: horizontalrunnerautoscalers.actions.summerwind.dev
+spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.minReplicas
+    name: Min
+    type: number
+  - JSONPath: .spec.maxReplicas
+    name: Max
+    type: number
+  - JSONPath: .status.desiredReplicas
+    name: Desired
+    type: number
+  group: actions.summerwind.dev
+  names:
+    kind: HorizontalRunnerAutoscaler
+    listKind: HorizontalRunnerAutoscalerList
+    plural: horizontalrunnerautoscalers
+    singular: horizontalrunnerautoscaler
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: HorizontalRunnerAutoscaler is the Schema for the horizontalrunnerautoscaler
+        API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: HorizontalRunnerAutoscalerSpec defines the desired state of
+            HorizontalRunnerAutoscaler
+          properties:
+            maxReplicas:
+              description: MinReplicas is the maximum number of replicas the deployment
+                is allowed to scale
+              type: integer
+            metrics:
+              description: Metrics is the collection of various metric targets to
+                calculate desired number of runners
+              items:
+                properties:
+                  repositoryNames:
+                    description: RepositoryNames is the list of repository names to
+                      be used for calculating the metric. For example, a repository
+                      name is the REPO part of `github.com/USER/REPO`.
+                    items:
+                      type: string
+                    type: array
+                  type:
+                    description: Type is the type of metric to be used for autoscaling.
+                      The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns
+                    type: string
+                type: object
+              type: array
+            minReplicas:
+              description: MinReplicas is the minimum number of replicas the deployment
+                is allowed to scale
+              type: integer
+            scaleDownDelaySecondsAfterScaleOut:
+              description: ScaleDownDelaySecondsAfterScaleUp is the approximate delay
+                for a scale down followed by a scale up Used to prevent flapping (down->up->down->...
+                loop)
+              type: integer
+            scaleTargetRef:
+              description: ScaleTargetRef sis the reference to scaled resource like
+                RunnerDeployment
+              properties:
+                name:
+                  type: string
+              type: object
+          type: object
+        status:
+          properties:
+            desiredReplicas:
+              description: DesiredReplicas is the total number of desired, non-terminated
+                and latest pods to be set for the primary RunnerSet This doesn't include
+                outdated pods while upgrading the deployment and replacing the runnerset.
+              type: integer
+            lastSuccessfulScaleOutTime:
+              format: date-time
+              type: string
+            observedGeneration:
+              description: ObservedGeneration is the most recent generation observed
+                for the target. It corresponds to e.g. RunnerDeployment's generation,
+                which is updated on mutation by the API Server.
+              format: int64
+              type: integer
+          type: object
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
