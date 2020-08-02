@@ -29,6 +29,9 @@ func SetupIntegrationTest(ctx context.Context) *corev1.Namespace {
 	var stopCh chan struct{}
 	ns := &corev1.Namespace{}
 
+	workflowRuns := `{"total_count": 5, "workflow_runs":[{"status":"queued"}, {"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
+	server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, workflowRuns))
+
 	BeforeEach(func() {
 		stopCh = make(chan struct{})
 		*ns = corev1.Namespace{
@@ -59,10 +62,6 @@ func SetupIntegrationTest(ctx context.Context) *corev1.Namespace {
 		err = deploymentsController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
-		workflowRuns := `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
-
-		server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, workflowRuns))
-		defer server.Close()
 		client := newGithubClient(server)
 
 		autoscalerController := &HorizontalRunnerAutoscalerReconciler{
@@ -85,6 +84,8 @@ func SetupIntegrationTest(ctx context.Context) *corev1.Namespace {
 
 	AfterEach(func() {
 		close(stopCh)
+
+		server.Close()
 
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
@@ -112,7 +113,7 @@ var _ = Context("Inside of a new namespace", func() {
 						Replicas: intPtr(1),
 						Template: actionsv1alpha1.RunnerTemplate{
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "foo/bar",
+								Repository: "test/valid",
 								Image:      "bar",
 								Env: []corev1.EnvVar{
 									{Name: "FOO", Value: "FOOVALUE"},
@@ -209,7 +210,7 @@ var _ = Context("Inside of a new namespace", func() {
 							Name: name,
 						},
 						MinReplicas:                       intPtr(1),
-						MaxReplicas:                       intPtr(2),
+						MaxReplicas:                       intPtr(3),
 						ScaleDownDelaySecondsAfterScaleUp: nil,
 						Metrics:                           nil,
 					},
@@ -246,7 +247,7 @@ var _ = Context("Inside of a new namespace", func() {
 
 						return *runnerSets.Items[0].Spec.Replicas
 					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(3))
 			}
 		})
 	})
