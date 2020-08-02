@@ -128,27 +128,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 }
 
 func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("runnerdeployment-controller")
-
-	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
-		runnerSet := rawObj.(*v1alpha1.RunnerReplicaSet)
-		owner := metav1.GetControllerOf(runnerSet)
-		if owner == nil {
-			return nil
-		}
-
-		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != "RunnerDeployment" {
-			return nil
-		}
-
-		return []string{owner.Name}
-	}); err != nil {
-		return err
-	}
+	r.Recorder = mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.RunnerDeployment{}).
-		Owns(&v1alpha1.RunnerReplicaSet{}).
+		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
 		Complete(r)
 }
 
