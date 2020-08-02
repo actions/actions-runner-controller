@@ -1,28 +1,22 @@
 package fake
 
 type FixedResponses struct {
-	listRepositoryWorkflowRuns FixedResponse
+	ListRepositoryWorkflowRuns *Handler
 }
 
-type FixedResponse struct {
-	Status int
-	Body   string
-}
-
-func (r FixedResponse) handler() handler {
-	return handler{
-		Status: r.Status,
-		Body:   r.Body,
-	}
-}
-
-type Option func(responses *FixedResponses)
+type Option func(*ServerConfig)
 
 func WithListRepositoryWorkflowRunsResponse(status int, body string) Option {
-	return func(r *FixedResponses) {
-		r.listRepositoryWorkflowRuns = FixedResponse{
+	return func(c *ServerConfig) {
+		c.FixedResponses.ListRepositoryWorkflowRuns = &Handler{
 			Status: status,
 			Body:   body,
 		}
+	}
+}
+
+func WithFixedResponses(responses *FixedResponses) Option {
+	return func(c *ServerConfig) {
+		c.FixedResponses = responses
 	}
 }
