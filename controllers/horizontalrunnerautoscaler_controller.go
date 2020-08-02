@@ -128,7 +128,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 }
 
 func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("runnerdeployment-controller")
+	r.Recorder = mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller")
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
