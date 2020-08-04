@@ -19,18 +19,32 @@ import (
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
+type testEnvironment struct {
+	Namespace *corev1.Namespace
+	Responses *fake.FixedResponses
+}
+
+var (
+	workflowRunsFor3Replicas = `{"total_count": 5, "workflow_runs":[{"status":"queued"}, {"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
+	workflowRunsFor1Replicas = `{"total_count": 6, "workflow_runs":[{"status":"queued"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}]}"`
+)
+
 // SetupIntegrationTest will set up a testing environment.
 // This includes:
 // * creating a Namespace to be used during the test
 // * starting all the reconcilers
 // * stopping all the reconcilers after the test ends
 // Call this function at the start of each of your tests.
-func SetupIntegrationTest(ctx context.Context) *corev1.Namespace {
+func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 	var stopCh chan struct{}
 	ns := &corev1.Namespace{}
 
-	workflowRuns := `{"total_count": 5, "workflow_runs":[{"status":"queued"}, {"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
-	server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, workflowRuns))
+	responses := &fake.FixedResponses{}
+	responses.ListRepositoryWorkflowRuns = &fake.Handler{
+		Status: 200,
+		Body:   workflowRunsFor3Replicas,
+	}
+	server := fake.NewServer(fake.WithFixedResponses(responses))
 
 	BeforeEach(func() {
 		stopCh = make(chan struct{})
@@ -91,12 +105,14 @@ func SetupIntegrationTest(ctx context.Context) *corev1.Namespace {
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
 	})
 
-	return ns
+	return &testEnvironment{Namespace: ns, Responses: responses}
 }
 
 var _ = Context("Inside of a new namespace", func() {
 	ctx := context.TODO()
-	ns := SetupIntegrationTest(ctx)
+	env := SetupIntegrationTest(ctx)
+	ns := env.Namespace
+	responses := env.Responses
 
 	Describe("when no existing resources exist", func() {
 
@@ -199,8 +215,9 @@ var _ = Context("Inside of a new namespace", func() {
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
 			}
 
+			// Scale-up to 3 replicas
 			{
-				rs := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      name,
 						Namespace: ns.Name,
@@ -216,9 +233,9 @@ var _ = Context("Inside of a new namespace", func() {
 					},
 				}
 
-				err := k8sClient.Create(ctx, rs)
+				err := k8sClient.Create(ctx, hra)
 
-				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerDeployment resource")
+				Expect(err).NotTo(HaveOccurred(), "failed to create test HorizontalRunnerAutoscaler resource")
 
 				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
 
@@ -248,6 +265,43 @@ var _ = Context("Inside of a new namespace", func() {
 						return *runnerSets.Items[0].Spec.Replicas
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(3))
+			}
+
+			// Scale-down to 1 replica
+			{
+				responses.ListRepositoryWorkflowRuns.Body = workflowRunsFor1Replicas
+
+				var hra actionsv1alpha1.HorizontalRunnerAutoscaler
+
+				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &hra)
+
+				Expect(err).NotTo(HaveOccurred(), "failed to get test HorizontalRunnerAutoscaler resource")
+
+				hra.Annotations = map[string]string{
+					"force-update": "1",
+				}
+
+				err = k8sClient.Update(ctx, &hra)
+
+				Expect(err).NotTo(HaveOccurred(), "failed to get test HorizontalRunnerAutoscaler resource")
+
+				Eventually(
+					func() int {
+						var runnerSets actionsv1alpha1.RunnerReplicaSetList
+
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						if err != nil {
+							logf.Log.Error(err, "list runner sets")
+						}
+
+						if len(runnerSets.Items) == 0 {
+							logf.Log.Info("No runnerreplicasets exist yet")
+							return -1
+						}
+
+						return *runnerSets.Items[0].Spec.Replicas
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
 			}
 		})
 	})
