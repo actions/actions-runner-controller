@@ -5,6 +5,7 @@ resources:
 - bases/actions.summerwind.dev_runners.yaml
 - bases/actions.summerwind.dev_runnerreplicasets.yaml
 - bases/actions.summerwind.dev_runnerdeployments.yaml
+- bases/actions.summerwind.dev_horizontalrunnerautoscalers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
