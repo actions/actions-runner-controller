@@ -7,27 +7,43 @@ jobs:
     runs-on: ubuntu-latest
     name: Release
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Install tools
-      run: |
-        curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
-        tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
-        sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
-        curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
-        sudo mv kustomize /usr/local/bin
-        curl -L -O https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
-        tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
-        sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
-    - name: Set version
-      run: echo "::set-env name=VERSION::$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')"
-    - name: Upload artifacts
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: make github-release
-    - name: Build container image
-      run: make docker-build
-    - name: Docker Login
-      run: docker login -u summerwind -p ${{ secrets.DOCKER_ACCESS_TOKEN }}
-    - name: Push container image
-      run: make docker-push
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install tools
+        run: |
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
+          tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+          sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          sudo mv kustomize /usr/local/bin
+          curl -L -O https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
+          tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
+          sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
+
+      - name: Set version
+        run: echo "::set-env name=VERSION::$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')"
+
+      - name: Upload artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make github-release
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          buildx-version: latest
+
+      - name: Login to GitHub Docker Registry
+        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: summerwind
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build Container Image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag summerwind/actions-runner-controller:${{ env.VERSION }} \
+            -f Dockerfile . --push
