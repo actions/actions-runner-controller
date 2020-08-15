@@ -20,6 +20,9 @@ jobs:
           tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
           sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
 
+      - name: Run tests
+        run: make test
+
       - name: Set up Docker Buildx
         id: buildx
         uses: crazy-max/ghaction-docker-buildx@v1
