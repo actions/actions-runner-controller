@@ -68,6 +68,23 @@ release: manifests
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
+	# build helm charts	
+	# copy controller manifest to helm templates
+	cp -v release/actions-runner-controller.yaml charts/actions-runner-controller/templates
+
+	ls release
+	ls charts
+	ls charts/actions-runner-controller
+	ls charts/actions-runner-controller/templates
+
+	# remove first 7 lines that create namespace
+	sed -i '1,7d' charts/actions-runner-controller/templates/actions-runner-controller.yaml 
+	# package helm .tgz and put it into the release dir
+	helm package charts/actions-runner-controller --app-version ${VERSION} -d release
+
+	# package actions-runner-deployment and put it into the release dir
+	helm package charts/actions-runner-deployment --app-version ${VERSION} -d release
+
 # Upload release file to GitHub.
 github-release: release
 	ghr ${VERSION} release/

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: actions-runner-controller
+description: A Helm chart for summerwind/actions-runner-controller
+type: application
+
+# chart version
+version: 0.1.0
+
+# app (controller) version
+appVersion: 0.7.2

@@ -23,3 +23,8 @@ bin
 *.swp
 *.swo
 *~
+
+# actions-runner-controller charts are generated automatically during `make release`
+charts/actions-runner-controller/templates/actions-runner-controller.yaml
+# macOS fs attributes
+.DS_Store

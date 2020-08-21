@@ -1,0 +1,30 @@
+# RunnerDeployment
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: {{ include "actions-runner-deployment.fullname" . }}
+spec:
+  # include space from values.yaml
+  {{- toYaml .Values.spec | nindent 2 }}
+  # set replicas only if autoscaling is not enabled
+  {{- if eq .Values.autoscaling.enabled false }}
+  replicas: {{ .Values.spec.replicas }}
+  {{- end }}
+
+# HorizontalRunnerAutoscaler
+{{ if .Values.autoscaling.enabled }}
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: {{ include "actions-runner-deployment.fullname" . }}-autoscaler
+spec:
+  # include autoscaling.spec from values.yaml
+  {{- if .Values.autoscaling.spec }}
+  {{- toYaml .Values.autoscaling.spec | nindent 2 }}
+  {{- end }}
+  # assign autoscaler to RunnerDeployment above
+  scaleTargetRef:
+    name: {{ include "actions-runner-deployment.fullname" . }}
+{{ end }}

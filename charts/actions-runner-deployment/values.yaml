@@ -1,0 +1,29 @@
+# runner configuration as described in
+# https://github.com/stackdumper/actions-runner-controller#additional-tweaks
+spec:
+  replicas: 2
+  template:
+    spec:
+      nodeSelector: {}
+      tolerations: []
+      repository: ""
+      image: ""
+      imagePullPolicy: Always
+      resources: {}
+      sidecarContainers: []
+      labels: []
+
+# runner autoscaling configuration as described in
+# https://github.com/summerwind/actions-runner-controller#autoscaling
+autoscaling:
+  enabled: false
+  spec:
+    scaleTargetRef:
+    # name: example-runner-deployment
+    minReplicas: 1
+    maxReplicas: 3
+    scaleDownDelaySecondsAfterScaleOut: 60
+    metrics:
+      - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+        repositoryNames:
+          - summerwind/actions-runner-controller
