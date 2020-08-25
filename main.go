@@ -158,9 +158,10 @@ func main() {
 	}
 
 	runnerSetReconciler := &controllers.RunnerReplicaSetReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("RunnerReplicaSet"),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Log:          ctrl.Log.WithName("controllers").WithName("RunnerReplicaSet"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {

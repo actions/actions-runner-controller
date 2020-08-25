@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/google/go-github/v31/github"
+	"github.com/google/go-github/v32/github"
 	"golang.org/x/oauth2"
 )
 
@@ -85,7 +85,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, org, repo, name strin
 	return rt, nil
 }
 
-// RemoveRunner removes a runner with specified runner ID from repocitory.
+// RemoveRunner removes a runner with specified runner ID from repository.
 func (c *Client) RemoveRunner(ctx context.Context, org, repo string, runnerID int64) error {
 	owner, repo, err := getOwnerAndRepo(org, repo)
 
