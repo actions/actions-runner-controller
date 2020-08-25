@@ -213,6 +213,16 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
+		runnerBusy, err := r.isRunnerBusy(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+		if err != nil {
+			log.Error(err, "Failed to check if runner is busy")
+			return ctrl.Result{}, nil
+		}
+
+		if runnerBusy {
+			return ctrl.Result{}, nil
+		}
+
 		if err := r.Delete(ctx, &pod); err != nil {
 			log.Error(err, "Failed to delete pod resource")
 			return ctrl.Result{}, err
@@ -223,6 +233,21 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RunnerReconciler) isRunnerBusy(ctx context.Context, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+	if err != nil {
+		return false, err
+	}
+
+	for _, runner := range runners {
+		if runner.GetName() == name {
+			return runner.GetBusy(), nil
+		}
+	}
+
+	return false, fmt.Errorf("runner not found")
 }
 
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name string) (bool, error) {
