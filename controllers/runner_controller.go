@@ -259,6 +259,9 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name
 	id := int64(0)
 	for _, runner := range runners {
 		if runner.GetName() == name {
+			if runner.GetBusy() {
+				return false, fmt.Errorf("runner is busy")
+			}
 			id = runner.GetID()
 			break
 		}
