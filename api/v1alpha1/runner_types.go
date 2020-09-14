@@ -77,6 +77,9 @@ type RunnerSpec struct {
 	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
 	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// +optional
+	DockerEnabled *bool `json:"dockerEnabled,omitempty"`
 }
 
 // ValidateRepository validates repository field.
