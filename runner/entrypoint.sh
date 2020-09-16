@@ -29,4 +29,4 @@ cd /runner
 ./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "https://github.com/${ATTACH}" --token "${RUNNER_TOKEN}" ${LABEL_ARG}
 
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./run.sh --once
+exec ./bin/runsvc.sh
