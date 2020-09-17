@@ -72,10 +72,10 @@ release: manifests
 	# copy controller manifest to helm templates
 	cp -v release/actions-runner-controller.yaml charts/actions-runner-controller/templates
 
-	ls release
-	ls charts
-	ls charts/actions-runner-controller
-	ls charts/actions-runner-controller/templates
+	# update version in Chart.yaml of controller
+	sed -i "s/appVersion: .*/appVersion: ${VERSION}/" charts/actions-runner-controller/Chart.yaml
+	# update version in Chart.yaml of deployment
+	sed -i "s/appVersion: .*/appVersion: ${VERSION}/" charts/actions-runner-deployment/Chart.yaml
 
 	# remove first 7 lines that create namespace
 	sed -i '1,7d' charts/actions-runner-controller/templates/actions-runner-controller.yaml 
