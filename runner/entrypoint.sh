@@ -28,5 +28,11 @@ fi
 cd /runner
 ./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "https://github.com/${ATTACH}" --token "${RUNNER_TOKEN}" ${LABEL_ARG}
 
+for f in runsvc.sh RunnerService.js; do
+  diff {bin,patched}/${f} || :
+  sudo mv bin/${f}{,.bak}
+  sudo mv {patched,bin}/${f}
+done
+
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh
+exec ./bin/runsvc.sh --once
