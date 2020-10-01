@@ -52,18 +52,37 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 			return nil, err
 		}
 
-		for _, r := range list.WorkflowRuns {
+		for _, run := range list.WorkflowRuns {
 			total++
 
 			// In May 2020, there are only 3 statuses.
 			// Follow the below links for more details:
 			// - https://developer.github.com/v3/actions/workflow-runs/#list-repository-workflow-runs
 			// - https://developer.github.com/v3/checks/runs/#create-a-check-run
-			switch r.GetStatus() {
+			switch run.GetStatus() {
 			case "completed":
 				completed++
 			case "in_progress":
-				inProgress++
+				jobs, _, err := r.GitHubClient.Actions.ListWorkflowJobs(context.TODO(), user, repoName, run.GetID(), nil)
+				if err != nil {
+					r.Log.Error(err, "Error listing workflow jobs")
+					inProgress++
+				} else if jobs.GetTotalCount() == 0 {
+					inProgress++
+				} else {
+					for _, job := range jobs.Jobs {
+						switch job.GetStatus() {
+						case "completed":
+							// completed++
+						case "in_progress":
+							inProgress++
+						case "queued":
+							queued++
+						default:
+							unknown++
+						}
+					}
+				}
 			case "queued":
 				queued++
 			default:
