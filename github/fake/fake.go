@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -31,6 +34,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, h.Body)
 }
 
+type MapHandler struct {
+	Status int
+	Bodies map[int]string
+}
+
+func (h *MapHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Parse out int key from URL path
+	key, err := strconv.Atoi(strings.TrimFunc(req.URL.Path, func(r rune) bool { return !unicode.IsNumber(r) }))
+	if err != nil {
+		w.WriteHeader(400)
+	} else if body := h.Bodies[key]; len(body) == 0 {
+		w.WriteHeader(404)
+	} else {
+		w.WriteHeader(h.Status)
+		fmt.Fprintf(w, body)
+	}
+}
+
 type ServerConfig struct {
 	*FixedResponses
 }
@@ -45,7 +66,7 @@ func NewServer(opts ...Option) *httptest.Server {
 		o(&config)
 	}
 
-	routes := map[string]*Handler{
+	routes := map[string]http.Handler{
 		// For CreateRegistrationToken
 		"/repos/test/valid/actions/runners/registration-token": &Handler{
 			Status: http.StatusCreated,
@@ -126,6 +147,9 @@ func NewServer(opts ...Option) *httptest.Server {
 
 		// For auto-scaling based on the number of queued(pending) workflow runs
 		"/repos/test/valid/actions/runs": config.FixedResponses.ListRepositoryWorkflowRuns,
+
+		// For auto-scaling based on the number of queued(pending) workflow jobs
+		"/repos/test/valid/actions/runs/": config.FixedResponses.ListWorkflowJobs,
 	}
 
 	mux := http.NewServeMux()

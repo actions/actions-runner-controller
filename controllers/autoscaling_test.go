@@ -2,16 +2,17 @@ package controllers
 
 import (
 	"fmt"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/github"
 	"github.com/summerwind/actions-runner-controller/github/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"net/http/httptest"
-	"net/url"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"testing"
 )
 
 func newGithubClient(server *httptest.Server) *github.Client {
@@ -44,9 +45,11 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		sReplicas    *int
 		sTime        *metav1.Time
 		workflowRuns string
+		workflowJobs map[int]string
 		want         int
 		err          string
 	}{
+		// Legacy functionality
 		// 3 demanded, max at 3
 		{
 			repo:         "test/valid",
@@ -122,6 +125,21 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			want:         3,
 		},
+
+		// Job-level autoscaling
+		// 5 requested from 3 workflows
+		{
+			repo:         "test/valid",
+			min:          intPtr(2),
+			max:          intPtr(10),
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued"}, {"status":"queued"}]}`,
+				2: `{"jobs": [{"status": "in_progress"}, {"status":"completed"}]}`,
+				3: `{"jobs": [{"status": "in_progress"}, {"status":"queued"}]}`,
+			},
+			want: 5,
+		},
 	}
 
 	for i := range testcases {
@@ -136,7 +154,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		_ = v1alpha1.AddToScheme(scheme)
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
-			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns))
+			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns), fake.WithListWorkflowJobsResponse(200, tc.workflowJobs))
 			defer server.Close()
 			client := newGithubClient(server)
 
@@ -211,6 +229,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		sReplicas    *int
 		sTime        *metav1.Time
 		workflowRuns string
+		workflowJobs map[int]string
 		want         int
 		err          string
 	}{
@@ -316,6 +335,22 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
 			err:          "validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment",
 		},
+
+		// Job-level autoscaling
+		// 5 requested from 3 workflows
+		{
+			org:          "test",
+			repos:        []string{"valid"},
+			min:          intPtr(2),
+			max:          intPtr(10),
+			workflowRuns: `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued"}, {"status":"queued"}]}`,
+				2: `{"jobs": [{"status": "in_progress"}, {"status":"completed"}]}`,
+				3: `{"jobs": [{"status": "in_progress"}, {"status":"queued"}]}`,
+			},
+			want: 5,
+		},
 	}
 
 	for i := range testcases {
@@ -330,7 +365,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		_ = v1alpha1.AddToScheme(scheme)
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
-			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns))
+			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns), fake.WithListWorkflowJobsResponse(200, tc.workflowJobs))
 			defer server.Close()
 			client := newGithubClient(server)
 
