@@ -188,6 +188,7 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *RunnerReplicaSetReconciler) isRunnerBusy(ctx context.Context, org, repo, name string) (bool, error) {
 	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+	r.Log.Info("runners", "github", runners)
 	if err != nil {
 		return false, err
 	}

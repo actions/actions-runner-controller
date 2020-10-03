@@ -121,7 +121,7 @@ func (c *Client) ListRunners(ctx context.Context, org, repo string) ([]*github.R
 		list, res, err := c.listRunners(ctx, owner, repo, &opts)
 
 		if err != nil {
-			return runners, fmt.Errorf("failed to remove runner: %v", err)
+			return runners, fmt.Errorf("failed to list runners: %v", err)
 		}
 
 		runners = append(runners, list.Runners...)
