@@ -55,6 +55,7 @@ RUN mkdir -p /runner \
   && rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint.sh /runner
+COPY patched /runner/patched
 
 USER runner:runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
