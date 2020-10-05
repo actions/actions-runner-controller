@@ -31,14 +31,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/summerwind/actions-runner-controller/github"
 )
 
 // RunnerReplicaSetReconciler reconciles a Runner object
 type RunnerReplicaSetReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Recorder record.EventRecorder
-	Scheme   *runtime.Scheme
+	Log          logr.Logger
+	Recorder     record.EventRecorder
+	Scheme       *runtime.Scheme
+	GitHubClient *github.Client
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets,verbs=get;list;watch;create;update;patch;delete
@@ -96,8 +98,25 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	if available > desired {
 		n := available - desired
 
+		// get runners that are currently not busy
+		var notBusy []v1alpha1.Runner
+		for _, runner := range myRunners {
+			busy, err := r.isRunnerBusy(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+			if err != nil {
+				log.Error(err, "Failed to check if runner is busy")
+				return ctrl.Result{}, err
+			}
+			if !busy {
+				notBusy = append(notBusy, runner)
+			}
+		}
+
+		if len(notBusy) < n {
+			n = len(notBusy)
+		}
+
 		for i := 0; i < n; i++ {
-			if err := r.Client.Delete(ctx, &myRunners[i]); err != nil {
+			if err := r.Client.Delete(ctx, &notBusy[i]); err != nil {
 				log.Error(err, "Failed to delete runner resource")
 
 				return ctrl.Result{}, err
@@ -165,4 +184,20 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.RunnerReplicaSet{}).
 		Owns(&v1alpha1.Runner{}).
 		Complete(r)
+}
+
+func (r *RunnerReplicaSetReconciler) isRunnerBusy(ctx context.Context, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+	r.Log.Info("runners", "github", runners)
+	if err != nil {
+		return false, err
+	}
+
+	for _, runner := range runners {
+		if runner.GetName() == name {
+			return runner.GetBusy(), nil
+		}
+	}
+
+	return false, fmt.Errorf("runner not found")
 }
