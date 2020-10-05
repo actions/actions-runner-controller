@@ -203,12 +203,16 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image {
+		runnerBusy, err := r.isRunnerBusy(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+		if err != nil {
+			log.Error(err, "Failed to check if runner is busy")
+			return ctrl.Result{}, nil
+		}
+
+		if !runnerBusy && (!reflect.DeepEqual(pod.Spec.Containers[0].Env, newPod.Spec.Containers[0].Env) || pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image) {
 			restart = true
 		}
-		if !reflect.DeepEqual(pod.Spec.Containers[0].Env, newPod.Spec.Containers[0].Env) {
-			restart = true
-		}
+
 		if !restart {
 			return ctrl.Result{}, err
 		}
@@ -225,6 +229,21 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+func (r *RunnerReconciler) isRunnerBusy(ctx context.Context, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+	if err != nil {
+		return false, err
+	}
+
+	for _, runner := range runners {
+		if runner.GetName() == name {
+			return runner.GetBusy(), nil
+		}
+	}
+
+	return false, fmt.Errorf("runner not found")
+}
+
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name string) (bool, error) {
 	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
 	if err != nil {
@@ -234,6 +253,9 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name
 	id := int64(0)
 	for _, runner := range runners {
 		if runner.GetName() == name {
+			if runner.GetBusy() {
+				return false, fmt.Errorf("runner is busy")
+			}
 			id = runner.GetID()
 			break
 		}

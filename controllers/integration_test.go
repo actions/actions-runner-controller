@@ -2,8 +2,9 @@ package controllers
 
 import (
 	"context"
-	"github.com/summerwind/actions-runner-controller/github/fake"
 	"time"
+
+	"github.com/summerwind/actions-runner-controller/github/fake"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,7 +45,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		Status: 200,
 		Body:   workflowRunsFor3Replicas,
 	}
-	server := fake.NewServer(fake.WithFixedResponses(responses))
+	fakeGithubServer := fake.NewServer(fake.WithFixedResponses(responses))
 
 	BeforeEach(func() {
 		stopCh = make(chan struct{})
@@ -58,11 +59,16 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
+		runnersList = fake.NewRunnersList()
+		server = runnersList.GetServer()
+		ghClient := newGithubClient(server)
+
 		replicasetController := &RunnerReplicaSetReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   scheme.Scheme,
-			Log:      logf.Log,
-			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Client:       mgr.GetClient(),
+			Scheme:       scheme.Scheme,
+			Log:          logf.Log,
+			Recorder:     mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			GitHubClient: ghClient,
 		}
 		err = replicasetController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -76,7 +82,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		err = deploymentsController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
-		client := newGithubClient(server)
+		client := newGithubClient(fakeGithubServer)
 
 		autoscalerController := &HorizontalRunnerAutoscalerReconciler{
 			Client:       mgr.GetClient(),
@@ -99,7 +105,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 	AfterEach(func() {
 		close(stopCh)
 
-		server.Close()
+		fakeGithubServer.Close()
 
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
