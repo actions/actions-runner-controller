@@ -3,28 +3,43 @@ name: Build
 on:
   push:
     branches:
-    - master
+      - master
     paths-ignore:
-    - 'runner/**'
-    - '.github/**'
+      - 'runner/**'
+      - '.github/**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     name: Build
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Install kubebuilder
-      run: |
-        curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
-        tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
-        sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
-    - name: Run tests
-      run: make test
-    - name: Build container image
-      run: make docker-build
-    - name: Docker Login
-      run: docker login -u summerwind -p ${{ secrets.DOCKER_ACCESS_TOKEN }}
-    - name: Push container image
-      run: make docker-push
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install kubebuilder
+        run: |
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
+          tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+          sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+
+      - name: Run tests
+        run: make test
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          buildx-version: latest
+
+      - name: Login to GitHub Docker Registry
+        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: summerwind
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build Container Image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag summerwind/actions-runner-controller:latest \
+            -f Dockerfile . --push
