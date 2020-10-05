@@ -10,6 +10,7 @@ rules:
   - actions.summerwind.dev
   resources:
   - horizontalrunnerautoscalers
+  - horizontalrunnerautoscalers/finalizers
   verbs:
   - create
   - delete
@@ -30,6 +31,7 @@ rules:
   - actions.summerwind.dev
   resources:
   - runnerdeployments
+  - runnerdeployments/finalizers
   verbs:
   - create
   - delete
@@ -50,6 +52,7 @@ rules:
   - actions.summerwind.dev
   resources:
   - runnerreplicasets
+  - runnerreplicasets/finalizers
   verbs:
   - create
   - delete
@@ -70,6 +73,7 @@ rules:
   - actions.summerwind.dev
   resources:
   - runners
+  - runners/finalizers
   verbs:
   - create
   - delete
@@ -97,6 +101,7 @@ rules:
   - ""
   resources:
   - pods
+  - pods/finalizers
   verbs:
   - create
   - delete
