@@ -1,17 +1,16 @@
-name: Build
+name: CI
 
 on:
-  push:
+  pull_request:
     branches:
-    - master
+      - master
     paths-ignore:
     - 'runner/**'
-    - '.github/**'
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
-    name: Build
+    name: Test
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -22,9 +21,3 @@ jobs:
         sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
     - name: Run tests
       run: make test
-    - name: Build container image
-      run: make docker-build
-    - name: Docker Login
-      run: docker login -u summerwind -p ${{ secrets.DOCKER_ACCESS_TOKEN }}
-    - name: Push container image
-      run: make docker-push
