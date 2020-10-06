@@ -1,7 +1,7 @@
 NAME ?= summerwind/actions-runner
 TAG ?= latest
 
-RUNNER_VERSION ?= 2.273.4
+RUNNER_VERSION ?= 2.273.5
 DOCKER_VERSION ?= 19.03.12
 
 # default list of platforms for which multiarch image is built
