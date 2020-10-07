@@ -1,22 +1,34 @@
 on:
   push:
     branches:
-    - master
+      - master
     paths:
-    - 'runner/**'
+      - 'runner/**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     name: Build runner
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Build container image
-      run: make docker-build
-      working-directory: runner
-    - name: Docker Login
-      run: docker login -u summerwind -p ${{ secrets.DOCKER_ACCESS_TOKEN }}
-    - name: Push container image
-      run: make docker-push
-      working-directory: runner
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          buildx-version: latest
+
+      - name: Login to GitHub Docker Registry
+        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: summerwind
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build Container Image
+        working-directory: runner
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag summerwind/actions-runner:latest \
+            -f Dockerfile . --push

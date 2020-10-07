@@ -3,11 +3,14 @@ package controllers
 import (
 	"context"
 	"math/rand"
+	"net/http/httptest"
 	"time"
 
+	"github.com/google/go-github/v32/github"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -17,6 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/summerwind/actions-runner-controller/github/fake"
+)
+
+var (
+	runnersList *fake.RunnersList
+	server      *httptest.Server
 )
 
 // SetupTest will set up a testing environment.
@@ -41,11 +50,16 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
+		runnersList = fake.NewRunnersList()
+		server = runnersList.GetServer()
+		ghClient := newGithubClient(server)
+
 		controller := &RunnerReplicaSetReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   scheme.Scheme,
-			Log:      logf.Log,
-			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Client:       mgr.GetClient(),
+			Scheme:       scheme.Scheme,
+			Log:          logf.Log,
+			Recorder:     mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			GitHubClient: ghClient,
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -61,6 +75,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 	AfterEach(func() {
 		close(stopCh)
 
+		server.Close()
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
 	})
@@ -124,6 +139,16 @@ var _ = Context("Inside of a new namespace", func() {
 							logf.Log.Error(err, "list runners")
 						}
 
+						for i, runner := range runners.Items {
+							runnersList.Add(&github.Runner{
+								ID:     pointer.Int64Ptr(int64(i) + 1),
+								Name:   pointer.StringPtr(runner.Name),
+								OS:     pointer.StringPtr("linux"),
+								Status: pointer.StringPtr("online"),
+								Busy:   pointer.BoolPtr(false),
+							})
+						}
+
 						return len(runners.Items)
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
@@ -155,6 +180,16 @@ var _ = Context("Inside of a new namespace", func() {
 							logf.Log.Error(err, "list runners")
 						}
 
+						for i, runner := range runners.Items {
+							runnersList.Add(&github.Runner{
+								ID:     pointer.Int64Ptr(int64(i) + 1),
+								Name:   pointer.StringPtr(runner.Name),
+								OS:     pointer.StringPtr("linux"),
+								Status: pointer.StringPtr("online"),
+								Busy:   pointer.BoolPtr(false),
+							})
+						}
+
 						return len(runners.Items)
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
@@ -184,6 +219,16 @@ var _ = Context("Inside of a new namespace", func() {
 						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
 						if err != nil {
 							logf.Log.Error(err, "list runners")
+						}
+
+						for i, runner := range runners.Items {
+							runnersList.Add(&github.Runner{
+								ID:     pointer.Int64Ptr(int64(i) + 1),
+								Name:   pointer.StringPtr(runner.Name),
+								OS:     pointer.StringPtr("linux"),
+								Status: pointer.StringPtr("online"),
+								Busy:   pointer.BoolPtr(false),
+							})
 						}
 
 						return len(runners.Items)

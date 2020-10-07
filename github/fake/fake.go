@@ -17,8 +17,8 @@ const (
 {
   "total_count": 2,
   "runners": [
-    {"id": 1, "name": "test1", "os": "linux", "status": "online"},
-    {"id": 2, "name": "test2", "os": "linux", "status": "offline"}
+    {"id": 1, "name": "test1", "os": "linux", "status": "online", "busy": false},
+    {"id": 2, "name": "test2", "os": "linux", "status": "offline", "busy": false}
   ]
 }
 `

@@ -11,6 +11,23 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# default list of platforms for which multiarch image is built
+ifeq (${PLATFORMS}, )
+	export PLATFORMS="linux/amd64,linux/arm64"
+endif
+
+# if IMG_RESULT is unspecified, by default the image will be pushed to registry
+ifeq (${IMG_RESULT}, load)
+	export PUSH_ARG="--load"
+    # if load is specified, image will be built only for the build machine architecture.
+    export PLATFORMS="local"
+else ifeq (${IMG_RESULT}, cache)
+	# if cache is specified, image will only be available in the build cache, it won't be pushed or loaded
+	# therefore no PUSH_ARG will be specified
+else
+	export PUSH_ARG="--push"
+endif
+
 all: manager
 
 # Run tests
@@ -62,6 +79,18 @@ docker-build: test
 docker-push:
 	docker push ${NAME}:${VERSION}
 
+docker-buildx:
+	export DOCKER_CLI_EXPERIMENTAL=enabled
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
+	fi
+	docker buildx build --platform ${PLATFORMS} \
+		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+		-t "${NAME}:${VERSION}" \
+		-f Dockerfile \
+		. ${PUSH_ARG}
+
 # Generate the release manifest file
 release: manifests
 	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
@@ -81,7 +110,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.4 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen

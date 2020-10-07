@@ -21,3 +21,7 @@ jobs:
         sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
     - name: Run tests
       run: make test
+    - name: Verify manifests are up-to-date
+      run: |
+        make manifests
+        git diff --exit-code

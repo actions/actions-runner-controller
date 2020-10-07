@@ -22,7 +22,7 @@ $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/relea
 
 ## Setting up authentication with GitHub API
 
-There are two ways for actions-runner-controller to authenticate with the the GitHub API:
+There are two ways for actions-runner-controller to authenticate with the GitHub API:
 
 1. Using GitHub App.
 2. Using Personal Access Token.
@@ -135,7 +135,7 @@ The runner you created has been registered to your repository.
 
 <img width="756" alt="Actions tab in your repository settings" src="https://user-images.githubusercontent.com/230145/73618667-8cbf9700-466c-11ea-80b6-c67e6d3f70e7.png">
 
-Now your can use your self-hosted runner. See the [official documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
+Now you can use your self-hosted runner. See the [official documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
 
 ### Organization Runners
 
@@ -191,7 +191,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 #### Autoscaling
 
-`RunnerDeployment` can scale number of runners between `minReplicas` and `maxReplicas` fields, depending on pending workflow runs.
+`RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields, depending on pending workflow runs.
 
 In the below example, `actions-runner` checks for pending workflow runs for each sync period, and scale to e.g. 3 if there're 3 pending jobs at sync time.
 
@@ -328,9 +328,9 @@ jobs:
     runs-on: custom-runner
 ```
 
-Note that if you specify `self-hosted` in your worlflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
+Note that if you specify `self-hosted` in your workflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
 
-## Softeware installed in the runner image
+## Software installed in the runner image
 
 The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md
 
