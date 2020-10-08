@@ -17,7 +17,7 @@ name: Runner
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: CI
+    name: Build
     env:
       RUNNER_VERSION: 2.273.5
       DOCKER_VERSION: 19.03.12
