@@ -13,10 +13,11 @@ on:
       - runner/Dockerfile
       - runner/entrypoint.sh
       - .github/workflows/build-runner.yml
+name: Runner
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build runner
+    name: CI
     env:
       RUNNER_VERSION: 2.273.5
       DOCKER_VERSION: 19.03.12
@@ -31,10 +32,8 @@ jobs:
           buildx-version: latest
 
       - name: Login to DockerHub Registry
-        run: docker login -u "${DOCKERHUB_USERNAME}" --password-stdin <<<"${DOCKERHUB_PASSWORD}"
-        env:
-          DOCKERHUB_USERNAME: summerwind
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+        run: |
+          docker login -u summerwind --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build Container Image
         working-directory: runner
