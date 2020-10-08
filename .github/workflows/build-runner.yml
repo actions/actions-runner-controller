@@ -30,8 +30,8 @@ jobs:
         with:
           buildx-version: latest
 
-      - name: Login to GitHub Docker Registry
-        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+      - name: Login to DockerHub Registry
+        run: docker login -u "${DOCKERHUB_USERNAME}" --password-stdin <<<"${DOCKERHUB_PASSWORD}"
         env:
           DOCKERHUB_USERNAME: summerwind
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
