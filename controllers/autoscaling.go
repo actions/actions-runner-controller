@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"strings"
+
+	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
 func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
@@ -44,6 +45,38 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 	}
 
 	var total, inProgress, queued, completed, unknown int
+	type callback func()
+	listWorkflowJobs := func(user string, repoName string, runID int64, fallback_cb callback) {
+		if runID == 0 {
+			fallback_cb()
+			return
+		}
+		jobs, _, err := r.GitHubClient.Actions.ListWorkflowJobs(context.TODO(), user, repoName, runID, nil)
+		if err != nil {
+			r.Log.Error(err, "Error listing workflow jobs")
+			fallback_cb()
+		} else if len(jobs.Jobs) == 0 {
+			fallback_cb()
+		} else {
+			for _, job := range jobs.Jobs {
+				switch job.GetStatus() {
+				case "completed":
+					// We add a case for `completed` so it is not counted in `unknown`.
+					// And we do not increment the counter for completed because
+					// that counter only refers to workflows. The reason for
+					// this is because we do not get a list of jobs for
+					// completed workflows in order to keep the number of API
+					// calls to a minimum.
+				case "in_progress":
+					inProgress++
+				case "queued":
+					queued++
+				default:
+					unknown++
+				}
+			}
+		}
+	}
 
 	for _, repo := range repos {
 		user, repoName := repo[0], repo[1]
@@ -52,20 +85,20 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 			return nil, err
 		}
 
-		for _, r := range list.WorkflowRuns {
+		for _, run := range list.WorkflowRuns {
 			total++
 
 			// In May 2020, there are only 3 statuses.
 			// Follow the below links for more details:
 			// - https://developer.github.com/v3/actions/workflow-runs/#list-repository-workflow-runs
 			// - https://developer.github.com/v3/checks/runs/#create-a-check-run
-			switch r.GetStatus() {
+			switch run.GetStatus() {
 			case "completed":
 				completed++
 			case "in_progress":
-				inProgress++
+				listWorkflowJobs(user, repoName, run.GetID(), func() { inProgress++ })
 			case "queued":
-				queued++
+				listWorkflowJobs(user, repoName, run.GetID(), func() { queued++ })
 			default:
 				unknown++
 			}
