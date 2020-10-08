@@ -31,10 +31,6 @@ jobs:
         with:
           buildx-version: latest
 
-      - name: Login to DockerHub Registry
-        run: |
-          docker login -u summerwind --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
-
       - name: Build Container Image
         working-directory: runner
         run: |
@@ -48,6 +44,7 @@ jobs:
       - name: Push Container Image
         working-directory: runner
         run: |
+          docker login -u summerwind --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
           docker push summerwind/actions-runner:v${RUNNER_VERSION}
           docker tag summerwind/actions-runner:v${RUNNER_VERSION} summerwind/actions-runner:latest
           docker push summerwind/actions-runner:latest
