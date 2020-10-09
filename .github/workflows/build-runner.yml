@@ -1,14 +1,26 @@
 on:
+  pull_request:
+    branches:
+      - '**'
+    paths:
+      - 'runner/**'
+      - .github/workflows/build-runner.yml
   push:
     branches:
       - master
     paths:
-      - 'runner/**'
-
+      - runner/patched/*
+      - runner/Dockerfile
+      - runner/entrypoint.sh
+      - .github/workflows/build-runner.yml
+name: Runner
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build runner
+    name: Build
+    env:
+      RUNNER_VERSION: 2.273.5
+      DOCKER_VERSION: 19.03.12
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -19,16 +31,21 @@ jobs:
         with:
           buildx-version: latest
 
-      - name: Login to GitHub Docker Registry
-        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: summerwind
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-
       - name: Build Container Image
         working-directory: runner
         run: |
           docker buildx build \
+            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
-            --tag summerwind/actions-runner:latest \
-            -f Dockerfile . --push
+            --tag summerwind/actions-runner:v${RUNNER_VERSION} \
+            -f Dockerfile .
+
+      - name: Push Container Image
+        working-directory: runner
+        run: |
+          docker login -u summerwind --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
+          docker push summerwind/actions-runner:v${RUNNER_VERSION}
+          docker tag summerwind/actions-runner:v${RUNNER_VERSION} summerwind/actions-runner:latest
+          docker push summerwind/actions-runner:latest
+        if: ${{ github.event_name == 'push' }}
