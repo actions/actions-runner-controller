@@ -38,6 +38,18 @@ jobs:
           DOCKERHUB_USERNAME: ${{ github.repository_owner }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
+      - name: Build Container Image
+        working-directory: runner
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          docker buildx build \
+            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+            --platform linux/amd64,linux/arm64 \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
+            -f Dockerfile .
+
       - name: Build and Push Container Image
         working-directory: runner
         if: ${{ github.event_name == 'push' }}
@@ -49,14 +61,3 @@ jobs:
             --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
             --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
             -f Dockerfile . --push
-
-      - name: Build Container Image
-        working-directory: runner
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          docker buildx build \
-            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
-            -f Dockerfile .
