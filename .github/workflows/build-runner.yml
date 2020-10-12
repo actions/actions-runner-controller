@@ -32,12 +32,6 @@ jobs:
         with:
           buildx-version: latest
 
-      - name: Login to GitHub Docker Registry
-        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-
       - name: Build Container Image
         working-directory: runner
         if: ${{ github.event_name == 'pull_request' }}
@@ -49,6 +43,13 @@ jobs:
             --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
             --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
             -f Dockerfile .
+
+      - name: Login to GitHub Docker Registry
+        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        if: ${{ github.event_name == 'push' }}
+        env:
+          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build and Push Container Image
         working-directory: runner
