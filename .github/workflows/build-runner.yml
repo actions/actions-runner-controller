@@ -47,6 +47,7 @@ jobs:
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
             --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
             -f Dockerfile . --push
 
       - name: Build Container Image
