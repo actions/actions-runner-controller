@@ -21,6 +21,7 @@ jobs:
     env:
       RUNNER_VERSION: 2.273.5
       DOCKER_VERSION: 19.03.12
+      DOCKERHUB_USERNAME: ${{ github.repository_owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -38,14 +39,14 @@ jobs:
             --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
-            --tag summerwind/actions-runner:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
             -f Dockerfile .
 
       - name: Push Container Image
         working-directory: runner
         run: |
-          docker login -u summerwind --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
-          docker push summerwind/actions-runner:v${RUNNER_VERSION}
-          docker tag summerwind/actions-runner:v${RUNNER_VERSION} summerwind/actions-runner:latest
-          docker push summerwind/actions-runner:latest
+          docker login -u $DOCKERHUB_USERNAME --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
+          docker push $REPO_PREFIX/actions-runner:v${RUNNER_VERSION}
+          docker tag $REPO_PREFIX/actions-runner:v${RUNNER_VERSION} $REPO_PREFIX/actions-runner:latest
+          docker push $REPO_PREFIX/actions-runner:latest
         if: ${{ github.event_name == 'push' }}
