@@ -70,6 +70,10 @@ vet:
 # Generate code
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
+	# workaround for CRD issue with k8s 1.18 & controller-gen
+	# ref: https://github.com/kubernetes/kubernetes/issues/91395
+	sed -r -i 's/^( +)  or SCTP\. Defaults to "TCP"\./\0\n\1default: TCP/' \
+		config/crd/bases/*
 
 # Build the docker image
 docker-build: test
@@ -110,7 +114,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
