@@ -21,6 +21,7 @@ jobs:
     env:
       RUNNER_VERSION: 2.273.5
       DOCKER_VERSION: 19.03.12
+      DOCKERHUB_USERNAME: ${{ github.repository_owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -33,19 +34,31 @@ jobs:
 
       - name: Build Container Image
         working-directory: runner
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
           docker buildx build \
             --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
-            --tag summerwind/actions-runner:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
             -f Dockerfile .
 
-      - name: Push Container Image
-        working-directory: runner
-        run: |
-          docker login -u summerwind --password-stdin <<<${{ secrets.DOCKER_ACCESS_TOKEN }}
-          docker push summerwind/actions-runner:v${RUNNER_VERSION}
-          docker tag summerwind/actions-runner:v${RUNNER_VERSION} summerwind/actions-runner:latest
-          docker push summerwind/actions-runner:latest
+      - name: Login to GitHub Docker Registry
+        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
         if: ${{ github.event_name == 'push' }}
+        env:
+          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build and Push Container Image
+        working-directory: runner
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          docker buildx build \
+            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+            --platform linux/amd64,linux/arm64 \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
+            -f Dockerfile . --push

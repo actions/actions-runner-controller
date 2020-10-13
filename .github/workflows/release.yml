@@ -38,12 +38,12 @@ jobs:
       - name: Login to GitHub Docker Registry
         run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
         env:
-          DOCKERHUB_USERNAME: summerwind
+          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build Container Image
         run: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --tag summerwind/actions-runner-controller:${{ env.VERSION }} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner-controller:${{ env.VERSION }} \
             -f Dockerfile . --push
