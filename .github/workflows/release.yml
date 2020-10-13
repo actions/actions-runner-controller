@@ -42,6 +42,8 @@ jobs:
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build Container Image
+        env:
+          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
         run: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
