@@ -1,5 +1,8 @@
 NAME ?= summerwind/actions-runner-controller
 VERSION ?= latest
+# From https://github.com/VictoriaMetrics/operator/pull/44
+YAML_DROP=$(YQ) delete --inplace
+YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
@@ -56,7 +59,9 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
+manifests: manifests-118 fix118
+
+manifests-118: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 # Run go fmt against code
@@ -67,8 +72,22 @@ fmt:
 vet:
 	go vet ./...
 
+# workaround for CRD issue with k8s 1.18 & controller-gen
+# ref: https://github.com/kubernetes/kubernetes/issues/91395
+fix118: yq
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).ephemeralContainers.items.properties
+
 # Generate code
-generate: controller-gen
+generate: generate-118 fix118
+
+generate-118: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 # Build the docker image
@@ -116,4 +135,22 @@ ifeq (, $(shell which controller-gen))
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+# find or download yq
+# download yq if necessary
+yq:
+ifeq (, $(shell which yq))
+	echo "Downloading yq"
+	@{ \
+	set -e ;\
+	YQ_TMP_DIR=$$(mktemp -d) ;\
+	cd $$YQ_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/mikefarah/yq/v3 ;\
+	rm -rf $$YQ_TMP_DIR ;\
+	}
+YQ=$(GOBIN)/yq
+else
+YQ=$(shell which yq)
 endif
