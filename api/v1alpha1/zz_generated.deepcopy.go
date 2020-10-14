@@ -435,6 +435,7 @@ func (in *RunnerSpec) DeepCopyInto(out *RunnerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	in.DockerdContainerResources.DeepCopyInto(&out.DockerdContainerResources)
 	in.Resources.DeepCopyInto(&out.Resources)
 	if in.VolumeMounts != nil {
 		in, out := &in.VolumeMounts, &out.VolumeMounts

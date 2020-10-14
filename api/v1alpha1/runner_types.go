@@ -39,6 +39,8 @@ type RunnerSpec struct {
 	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
 	// +optional
+	DockerdContainerResources corev1.ResourceRequirements `json:"dockerdContainerResources,omitempty"`
+	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
