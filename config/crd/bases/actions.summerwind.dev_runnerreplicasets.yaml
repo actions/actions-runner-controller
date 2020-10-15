@@ -399,6 +399,8 @@ spec:
                           - name
                         type: object
                       type: array
+                    dockerWithinRunnerContainer:
+                      type: boolean
                     env:
                       items:
                         description: EnvVar represents an environment variable present in a Container.

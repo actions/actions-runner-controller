@@ -1,4 +1,5 @@
 NAME ?= summerwind/actions-runner
+DIND_RUNNER_NAME ?= ${NAME}-dind
 TAG ?= latest
 
 RUNNER_VERSION ?= 2.273.5
@@ -23,10 +24,14 @@ endif
 
 docker-build:
 	docker build --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} -t ${NAME}:v${RUNNER_VERSION} .
+	docker build --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -t ${DIND_RUNNER_NAME}:v${RUNNER_VERSION} -f Dockerfile.dindrunner .
+
 
 docker-push:
 	docker push ${NAME}:${TAG}
 	docker push ${NAME}:v${RUNNER_VERSION}
+	docker push ${DIND_RUNNER_NAME}:${TAG}
+	docker push ${DIND_RUNNER_NAME}:v${RUNNER_VERSION}
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -38,4 +43,10 @@ docker-buildx:
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		-t "${NAME}:latest" \
 		-f Dockerfile \
+		. ${PUSH_ARG}
+	docker buildx build --platform ${PLATFORMS} \
+		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+		-t "${DIND_RUNNER_NAME}:latest" \
+		-f Dockerfile.dindrunner \
 		. ${PUSH_ARG}

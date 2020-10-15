@@ -43,6 +43,13 @@ jobs:
             --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
             --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
             -f Dockerfile .
+          docker buildx build \
+            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+            --platform linux/amd64,linux/arm64 \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:latest \
+            -f Dockerfile.dindrunner .
 
       - name: Login to GitHub Docker Registry
         run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
@@ -62,3 +69,10 @@ jobs:
             --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
             --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
             -f Dockerfile . --push
+          docker buildx build \
+            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+            --platform linux/amd64,linux/arm64 \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:latest \
+            -f Dockerfile.dindrunner . --push

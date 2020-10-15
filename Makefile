@@ -2,8 +2,7 @@ NAME ?= summerwind/actions-runner-controller
 VERSION ?= latest
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
-TEMPLATE_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties
-CONTAINER_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
+YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
@@ -76,34 +75,21 @@ vet:
 # workaround for CRD issue with k8s 1.18 & controller-gen
 # ref: https://github.com/kubernetes/kubernetes/issues/91395
 fix118: yq
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(CONTAINER_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(CONTAINER_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(CONTAINER_DROP_PREFIX).ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).ephemeralContainers.items.properties
 
 # Generate code
-generate: generate-118 fix118
-
-generate-118: controller-gen
+generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 # Build the docker image
@@ -140,6 +126,7 @@ github-release: release
 # download controller-gen if necessary
 controller-gen:
 ifeq (, $(shell which controller-gen))
+ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	@{ \
 	set -e ;\
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
@@ -148,6 +135,7 @@ ifeq (, $(shell which controller-gen))
 	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
+endif
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
@@ -155,18 +143,17 @@ endif
 
 # find or download yq
 # download yq if necessary
+# Use always go-version to get consistent line wraps etc.
 yq:
-ifeq (, $(shell which yq))
+ifeq (, $(wildcard $(GOBIN)/yq))
 	echo "Downloading yq"
 	@{ \
 	set -e ;\
 	YQ_TMP_DIR=$$(mktemp -d) ;\
 	cd $$YQ_TMP_DIR ;\
 	go mod init tmp ;\
-	go get github.com/mikefarah/yq/v3 ;\
+	go get github.com/mikefarah/yq/v3@3.4.0 ;\
 	rm -rf $$YQ_TMP_DIR ;\
 	}
-YQ=$(GOBIN)/yq
-else
-YQ=$(shell which yq)
 endif
+YQ=$(GOBIN)/yq
