@@ -2,7 +2,8 @@ NAME ?= summerwind/actions-runner-controller
 VERSION ?= latest
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
-YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties
+TEMPLATE_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties
+CONTAINER_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
@@ -75,14 +76,29 @@ vet:
 # workaround for CRD issue with k8s 1.18 & controller-gen
 # ref: https://github.com/kubernetes/kubernetes/issues/91395
 fix118: yq
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(TEMPLATE_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(TEMPLATE_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(TEMPLATE_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(CONTAINER_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(CONTAINER_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(CONTAINER_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(CONTAINER_DROP_PREFIX).ephemeralContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).containers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).initContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).sidecarContainers.items.properties
+	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(CONTAINER_DROP_PREFIX).ephemeralContainers.items.properties
 
 # Generate code
 generate: generate-118 fix118
