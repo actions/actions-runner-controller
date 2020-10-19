@@ -250,6 +250,27 @@ spec:
     repositoryNames:
     - summerwind/actions-runner-controller
 ```
+## Runner with DinD
+
+When using default runner, runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). This might create issues if there's `LimitRange` set to namespace.
+
+```yaml
+# dindrunnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-dindrunnerdeploy
+spec:
+  replicas: 2
+  template:
+    spec:
+      image: summerwind/actions-runner-dind
+      dockerWithinRunnerContainer: true
+      repository: mumoshu/actions-runner-controller-ci
+      env: []
+```
+
+This also helps with resources, as you don't need to give resources separately to docker and runner.
 
 ## Additional tweaks
 
@@ -277,6 +298,17 @@ spec:
       image: custom-image/actions-runner:latest
       imagePullPolicy: Always
       resources:
+        limits:
+          cpu: "4.0"
+          memory: "8Gi"
+        requests:
+          cpu: "2.0"
+          memory: "4Gi"
+      # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
+      # image summerwind/actions-runner-dind or custom one should be used with true -value
+      dockerWithinRunnerContainer: false
+      # Valid if dockerWithinRunnerContainer is not true
+      dockerdContainerResources:
         limits:
           cpu: "4.0"
           memory: "8Gi"

@@ -276,8 +276,8 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
-		privileged bool  = true
-		group      int64 = 0
+		privileged      bool = true
+		dockerdInRunner bool = runner.Spec.DockerWithinRunnerContainer != nil && *runner.Spec.DockerWithinRunnerContainer
 	)
 
 	runnerImage := runner.Spec.Image
@@ -311,6 +311,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Name:  "RUNNER_TOKEN",
 			Value: runner.Status.Registration.Token,
 		},
+		{
+			Name:  "DOCKERD_IN_RUNNER",
+			Value: fmt.Sprintf("%v", dockerdInRunner),
+		},
 	}
 
 	env = append(env, runner.Spec.Env...)
@@ -330,54 +334,59 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					ImagePullPolicy: runnerImagePullPolicy,
 					Env:             env,
 					EnvFrom:         runner.Spec.EnvFrom,
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "work",
-							MountPath: "/runner/_work",
-						},
-						{
-							Name:      "docker",
-							MountPath: "/var/run",
-						},
-					},
 					SecurityContext: &corev1.SecurityContext{
-						RunAsGroup: &group,
+						// Runner need to run privileged if it contains DinD
+						Privileged: runner.Spec.DockerWithinRunnerContainer,
 					},
 					Resources: runner.Spec.Resources,
 				},
-				{
-					Name:  "docker",
-					Image: r.DockerImage,
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "work",
-							MountPath: "/runner/_work",
-						},
-						{
-							Name:      "docker",
-							MountPath: "/var/run",
-						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: &privileged,
-					},
-				},
-			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "work",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "docker",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
 			},
 		},
+	}
+
+	if !dockerdInRunner {
+		pod.Spec.Volumes = []corev1.Volume{
+			{
+				Name: "work",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: "docker",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}
+		pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "work",
+				MountPath: "/runner/_work",
+			},
+			{
+				Name:      "docker",
+				MountPath: "/var/run",
+			},
+		}
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+			Name:  "docker",
+			Image: r.DockerImage,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "work",
+					MountPath: "/runner/_work",
+				},
+				{
+					Name:      "docker",
+					MountPath: "/var/run",
+				},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: &privileged,
+			},
+		})
+
 	}
 
 	if len(runner.Spec.Containers) != 0 {
