@@ -167,7 +167,11 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
 		log.Info("Created runner pod", "repository", runner.Spec.Repository)
 	} else {
-		if runner.Status.Phase != string(pod.Status.Phase) {
+		// If pod has ended up succeeded we need to restart it
+		// Happens e.g. when dind is in runner and run completes
+		restart := pod.Status.Phase == corev1.PodSucceeded
+
+		if !restart && runner.Status.Phase != string(pod.Status.Phase) {
 			updated := runner.DeepCopy()
 			updated.Status.Phase = string(pod.Status.Phase)
 			updated.Status.Reason = pod.Status.Reason
@@ -184,8 +188,6 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
 			return ctrl.Result{}, err
 		}
-
-		restart := false
 
 		if pod.Status.Phase == corev1.PodRunning {
 			for _, status := range pod.Status.ContainerStatuses {
