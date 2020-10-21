@@ -80,7 +80,7 @@ type RunnerSpec struct {
 	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 	// +optional
-	DockerWithinRunnerContainer *bool `json:"dockerWithinRunnerContainer,omitempty"`
+	DockerdWithinRunnerContainer *bool `json:"dockerdWithinRunnerContainer,omitempty"`
 }
 
 // ValidateRepository validates repository field.

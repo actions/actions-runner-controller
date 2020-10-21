@@ -265,7 +265,7 @@ spec:
   template:
     spec:
       image: summerwind/actions-runner-dind
-      dockerWithinRunnerContainer: true
+      dockerdWithinRunnerContainer: true
       repository: mumoshu/actions-runner-controller-ci
       env: []
 ```
@@ -306,8 +306,8 @@ spec:
           memory: "4Gi"
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
       # image summerwind/actions-runner-dind or custom one should be used with true -value
-      dockerWithinRunnerContainer: false
-      # Valid if dockerWithinRunnerContainer is not true
+      dockerdWithinRunnerContainer: false
+      # Valid if dockerdWithinRunnerContainer is not true
       dockerdContainerResources:
         limits:
           cpu: "4.0"

@@ -279,7 +279,7 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
 		privileged      bool = true
-		dockerdInRunner bool = runner.Spec.DockerWithinRunnerContainer != nil && *runner.Spec.DockerWithinRunnerContainer
+		dockerdInRunner bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
 	)
 
 	runnerImage := runner.Spec.Image
@@ -338,7 +338,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					EnvFrom:         runner.Spec.EnvFrom,
 					SecurityContext: &corev1.SecurityContext{
 						// Runner need to run privileged if it contains DinD
-						Privileged: runner.Spec.DockerWithinRunnerContainer,
+						Privileged: runner.Spec.DockerdWithinRunnerContainer,
 					},
 					Resources: runner.Spec.Resources,
 				},
