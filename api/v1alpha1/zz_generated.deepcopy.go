@@ -525,8 +525,8 @@ func (in *RunnerSpec) DeepCopyInto(out *RunnerSpec) {
 		*out = new(int64)
 		**out = **in
 	}
-	if in.DockerWithinRunnerContainer != nil {
-		in, out := &in.DockerWithinRunnerContainer, &out.DockerWithinRunnerContainer
+	if in.DockerdWithinRunnerContainer != nil {
+		in, out := &in.DockerdWithinRunnerContainer, &out.DockerdWithinRunnerContainer
 		*out = new(bool)
 		**out = **in
 	}
