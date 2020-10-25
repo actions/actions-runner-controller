@@ -51,6 +51,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
   && rm -rf docker docker.tgz \
   && adduser --disabled-password --gecos "" --uid 1000 runner \
   && usermod -aG sudo runner \
+  && usermod -aG docker runner \
   && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
 # Runner download supports amd64 as x64
@@ -67,6 +68,6 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 COPY entrypoint.sh /runner
 COPY patched /runner/patched
 
-USER runner:runner
+USER runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["/runner/entrypoint.sh"]
