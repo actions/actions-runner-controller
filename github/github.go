@@ -9,43 +9,66 @@ import (
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation"
+	"github.com/go-logr/logr"
 	"github.com/google/go-github/v32/github"
 	"golang.org/x/oauth2"
 )
+
+// Config contains configuration for Github client
+type Config struct {
+	Log               logr.Logger
+	EnterpriseURL     string `split_words:"true"`
+	AppID             int64  `split_words:"true"`
+	AppInstallationID int64  `split_words:"true"`
+	AppPrivateKey     string `split_words:"true"`
+	Token             string
+}
 
 // Client wraps GitHub client with some additional
 type Client struct {
 	*github.Client
 	regTokens map[string]*github.RegistrationToken
 	mu        sync.Mutex
+	// GithubBaseURL to Github without API suffix.
+	GithubBaseURL string
 }
 
-// NewClient returns a client authenticated as a GitHub App.
-func NewClient(appID, installationID int64, privateKeyPath string) (*Client, error) {
-	tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, appID, installationID, privateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("authentication failed: %v", err)
+func (c *Config) NewClient() (*Client, error) {
+	var (
+		httpClient *http.Client
+		client     *github.Client
+	)
+	githubBaseURL := "https://github.com/"
+	if len(c.Token) > 0 {
+		httpClient = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: c.Token},
+		))
+	} else {
+		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
+		if err != nil {
+			c.Log.Error(err, "Authentication failed")
+			return nil, fmt.Errorf("authentication failed: %v", err)
+		}
+		httpClient = &http.Client{Transport: tr}
 	}
 
-	gh := github.NewClient(&http.Client{Transport: tr})
+	if len(c.EnterpriseURL) > 0 {
+		var err error
+		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
+		if err != nil {
+			c.Log.Error(err, "Enterprise client creation failed")
+			return nil, fmt.Errorf("enterprise client creation failed: %v", err)
+		}
+		githubBaseURL = fmt.Sprintf("%s://%s%s", client.BaseURL.Scheme, client.BaseURL.Host, strings.TrimSuffix(client.BaseURL.Path, "api/v3/"))
+	} else {
+		client = github.NewClient(httpClient)
+	}
 
 	return &Client{
-		Client:    gh,
-		regTokens: map[string]*github.RegistrationToken{},
-		mu:        sync.Mutex{},
-	}, nil
-}
-
-// NewClientWithAccessToken returns a client authenticated with personal access token.
-func NewClientWithAccessToken(token string) (*Client, error) {
-	tc := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	))
-
-	return &Client{
-		Client:    github.NewClient(tc),
-		regTokens: map[string]*github.RegistrationToken{},
-		mu:        sync.Mutex{},
+		Client:        client,
+		regTokens:     map[string]*github.RegistrationToken{},
+		mu:            sync.Mutex{},
+		GithubBaseURL: githubBaseURL,
 	}, nil
 }
 

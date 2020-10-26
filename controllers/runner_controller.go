@@ -317,6 +317,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Name:  "DOCKERD_IN_RUNNER",
 			Value: fmt.Sprintf("%v", dockerdInRunner),
 		},
+		{
+			Name:  "GITHUB_URL",
+			Value: r.GitHubClient.GithubBaseURL,
+		},
 	}
 
 	env = append(env, runner.Spec.Env...)

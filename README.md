@@ -20,6 +20,16 @@ Install the custom resource and actions-runner-controller itself. This will crea
 $ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
 ```
 
+### Github Enterprise support
+
+If you use either Github Enterprise Cloud or Server (and have recent enought version supporting Actions), you can use **actions-runner-controller**  with those, too. Authentication works same way as with public Github (repo and organization level). 
+
+```
+$ kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL>
+```
+
+[Enterprise level](https://docs.github.com/en/enterprise-server@2.22/actions/hosting-your-own-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-an-enterprise) runners are not working yet as there's no API definition for those.
+
 ## Setting up authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API:
