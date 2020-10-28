@@ -20,9 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
 	"github.com/summerwind/actions-runner-controller/github"
@@ -62,68 +62,29 @@ func main() {
 
 		runnerImage string
 		dockerImage string
-
-		ghToken             string
-		ghAppID             int64
-		ghAppInstallationID int64
-		ghAppPrivateKey     string
 	)
+
+	var c github.Config
+	err = envconfig.Process("github", &c)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error: Environment variable read failed.")
+	}
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
 	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
-	flag.StringVar(&ghToken, "github-token", "", "The personal access token of GitHub.")
-	flag.Int64Var(&ghAppID, "github-app-id", 0, "The application ID of GitHub App.")
-	flag.Int64Var(&ghAppInstallationID, "github-app-installation-id", 0, "The installation ID of GitHub App.")
-	flag.StringVar(&ghAppPrivateKey, "github-app-private-key", "", "The path of a private key file to authenticate as a GitHub App")
+	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
+	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
+	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
+	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.Parse()
 
-	if ghToken == "" {
-		ghToken = os.Getenv("GITHUB_TOKEN")
-	}
-	if ghAppID == 0 {
-		appID, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
-		if err == nil {
-			ghAppID = appID
-		}
-	}
-	if ghAppInstallationID == 0 {
-		appInstallationID, err := strconv.ParseInt(os.Getenv("GITHUB_APP_INSTALLATION_ID"), 10, 64)
-		if err == nil {
-			ghAppInstallationID = appInstallationID
-		}
-	}
-	if ghAppPrivateKey == "" {
-		ghAppPrivateKey = os.Getenv("GITHUB_APP_PRIVATE_KEY")
-	}
-
-	if ghAppID != 0 {
-		if ghAppInstallationID == 0 {
-			fmt.Fprintln(os.Stderr, "Error: The installation ID must be specified.")
-			os.Exit(1)
-		}
-
-		if ghAppPrivateKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: The path of a private key file must be specified.")
-			os.Exit(1)
-		}
-
-		ghClient, err = github.NewClient(ghAppID, ghAppInstallationID, ghAppPrivateKey)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Failed to create GitHub client: %v\n", err)
-			os.Exit(1)
-		}
-	} else if ghToken != "" {
-		ghClient, err = github.NewClientWithAccessToken(ghToken)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Failed to create GitHub client: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		fmt.Fprintln(os.Stderr, "Error: GitHub App credentials or personal access token must be specified.")
+	ghClient, err = c.NewClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)
 		os.Exit(1)
 	}
 

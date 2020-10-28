@@ -24,7 +24,7 @@ endif
 
 docker-build:
 	docker build --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} -t ${NAME}:v${RUNNER_VERSION} .
-	docker build --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -t ${DIND_RUNNER_NAME}:v${RUNNER_VERSION} -f Dockerfile.dindrunner .
+	docker build --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -t ${DIND_RUNNER_NAME}:v${RUNNER_VERSION} -f dindrunner.Dockerfile .
 
 
 docker-push:
@@ -48,5 +48,5 @@ docker-buildx:
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		-t "${DIND_RUNNER_NAME}:latest" \
-		-f Dockerfile.dindrunner \
+		-f dindrunner.Dockerfile \
 		. ${PUSH_ARG}

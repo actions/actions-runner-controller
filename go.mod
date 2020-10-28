@@ -9,6 +9,7 @@ require (
 	github.com/google/go-github/v32 v32.1.1-0.20200822031813-d57a3a84ba04
 	github.com/google/go-querystring v1.0.0
 	github.com/gorilla/mux v1.8.0
+	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
 	github.com/stretchr/testify v1.4.0 // indirect

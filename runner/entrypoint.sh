@@ -1,5 +1,16 @@
 #!/bin/bash
 
+if [ -z "${GITHUB_URL}" ]; then
+  echo "Working with public GitHub" 1>&2
+  GITHUB_URL="https://github.com/"
+else
+  length=${#GITHUB_URL}
+  last_char=${GITHUB_URL:length-1:1}
+
+  [[ $last_char != "/" ]] && GITHUB_URL="$GITHUB_URL/"; :
+  echo "Github endpoint URL ${GITHUB_URL}"
+fi
+
 if [ -z "${RUNNER_NAME}" ]; then
   echo "RUNNER_NAME must be set" 1>&2
   exit 1
@@ -26,7 +37,7 @@ if [ -z "${RUNNER_TOKEN}" ]; then
 fi
 
 cd /runner
-./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "https://github.com/${ATTACH}" --token "${RUNNER_TOKEN}" ${LABEL_ARG}
+./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${LABEL_ARG}
 
 for f in runsvc.sh RunnerService.js; do
   diff {bin,patched}/${f} || :

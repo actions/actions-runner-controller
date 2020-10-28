@@ -16,7 +16,10 @@ import (
 )
 
 func newGithubClient(server *httptest.Server) *github.Client {
-	client, err := github.NewClientWithAccessToken("token")
+	c := github.Config{
+		Token: "token",
+	}
+	client, err := c.NewClient()
 	if err != nil {
 		panic(err)
 	}

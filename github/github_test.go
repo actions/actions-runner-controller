@@ -14,7 +14,10 @@ import (
 var server *httptest.Server
 
 func newTestClient() *Client {
-	client, err := NewClientWithAccessToken("token")
+	c := Config{
+		Token: "token",
+	}
+	client, err := c.NewClient()
 	if err != nil {
 		panic(err)
 	}

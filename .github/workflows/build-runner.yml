@@ -50,7 +50,7 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:v${RUNNER_VERSION} \
             --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:latest \
-            -f Dockerfile.dindrunner .
+            -f dindrunner.Dockerfile .
 
       - name: Login to GitHub Docker Registry
         run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
@@ -76,4 +76,4 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:v${RUNNER_VERSION} \
             --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:latest \
-            -f Dockerfile.dindrunner . --push
+            -f dindrunner.Dockerfile . --push
