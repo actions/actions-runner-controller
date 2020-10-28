@@ -11,6 +11,7 @@ on:
     paths:
       - runner/patched/*
       - runner/Dockerfile
+      - runner/dindrunner.Dockerfile
       - runner/entrypoint.sh
       - .github/workflows/build-runner.yml
 name: Runner

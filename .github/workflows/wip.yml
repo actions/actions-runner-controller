@@ -1,0 +1,35 @@
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "runner/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: release-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          buildx-version: latest
+
+      - name: Login to GitHub Docker Registry
+        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build Container Image
+        env:
+          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag ${DOCKERHUB_USERNAME}/actions-runner-controller:latest \
+            -f Dockerfile . --push
