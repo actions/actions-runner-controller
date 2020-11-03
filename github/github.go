@@ -49,6 +49,9 @@ func (c *Config) NewClient() (*Client, error) {
 			c.Log.Error(err, "Authentication failed")
 			return nil, fmt.Errorf("authentication failed: %v", err)
 		}
+		if len(c.EnterpriseURL) > 0 {
+			tr.BaseURL = c.EnterpriseURL
+		}
 		httpClient = &http.Client{Transport: tr}
 	}
 
