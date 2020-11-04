@@ -138,11 +138,6 @@ func (r Runner) IsRegisterable() bool {
 		return false
 	}
 
-	now := metav1.Now()
-	if r.Status.Registration.ExpiresAt.Before(&now) {
-		return false
-	}
-
 	return true
 }
 
