@@ -538,6 +538,8 @@ spec:
                           - name
                         type: object
                       type: array
+                    group:
+                      type: string
                     image:
                       type: string
                     imagePullPolicy:

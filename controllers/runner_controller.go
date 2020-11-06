@@ -310,6 +310,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Value: strings.Join(runner.Spec.Labels, ","),
 		},
 		{
+			Name:  "RUNNER_GROUP",
+			Value: runner.Spec.Group,
+		},
+		{
 			Name:  "RUNNER_TOKEN",
 			Value: runner.Status.Registration.Token,
 		},

@@ -137,6 +137,7 @@ var _ = Context("Inside of a new namespace", func() {
 							Spec: actionsv1alpha1.RunnerSpec{
 								Repository: "test/valid",
 								Image:      "bar",
+								Group:      "baz",
 								Env: []corev1.EnvVar{
 									{Name: "FOO", Value: "FOOVALUE"},
 								},
