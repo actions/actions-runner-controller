@@ -17,15 +17,15 @@ actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/insta
 Install the custom resource and actions-runner-controller itself. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 ```
-$ kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
+kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
 ```
 
 ### Github Enterprise support
 
-If you use either Github Enterprise Cloud or Server (and have recent enought version supporting Actions), you can use **actions-runner-controller**  with those, too. Authentication works same way as with public Github (repo and organization level). 
+If you use either Github Enterprise Cloud or Server (and have recent enought version supporting Actions), you can use **actions-runner-controller**  with those, too. Authentication works same way as with public Github (repo and organization level).
 
-```
-$ kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL>
+```shell
+kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL>
 ```
 
 [Enterprise level](https://docs.github.com/en/enterprise-server@2.22/actions/hosting-your-own-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-an-enterprise) runners are not working yet as there's no API definition for those.
@@ -68,7 +68,7 @@ When the installation is complete, you will be taken to a URL in one of the foll
 
 Finally, register the App ID (`APP_ID`), Installation ID (`INSTALLATION_ID`), and downloaded private key file (`PRIVATE_KEY_FILE_PATH`) to Kubernetes as Secret.
 
-```
+```shell
 $ kubectl create secret generic controller-manager \
     -n actions-runner-system \
     --from-literal=github_app_id=${APP_ID} \
@@ -90,8 +90,8 @@ Open the Create Token page from the following link, grant the `repo` and/or `adm
 
 Register the created token (`GITHUB_TOKEN`) as a Kubernetes secret.
 
-```
-$ kubectl create secret generic controller-manager \
+```shell
+kubectl create secret generic controller-manager \
     -n actions-runner-system \
     --from-literal=github_token=${GITHUB_TOKEN}
 ```
@@ -107,7 +107,7 @@ There are two ways to use this controller:
 
 To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
-```
+```yaml
 # runner.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: Runner
@@ -120,14 +120,14 @@ spec:
 
 Apply the created manifest file to your Kubernetes.
 
-```
+```shell
 $ kubectl apply -f runner.yaml
 runner.actions.summerwind.dev/example-runner created
 ```
 
 You can see that the Runner resource has been created.
 
-```
+```shell
 $ kubectl get runners
 NAME             REPOSITORY                             STATUS
 example-runner   summerwind/actions-runner-controller   Running
@@ -135,7 +135,7 @@ example-runner   summerwind/actions-runner-controller   Running
 
 You can also see that the runner pod has been running.
 
-```
+```shell
 $ kubectl get pods
 NAME           READY   STATUS    RESTARTS   AGE
 example-runner 2/2     Running   0          1m
@@ -151,7 +151,7 @@ Now you can use your self-hosted runner. See the [official documentation](https:
 
 To add the runner to an organization, you only need to replace the `repository` field with `organization`, so the runner will register itself to the organization.
 
-```
+```yaml
 # runner.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: Runner
@@ -185,14 +185,14 @@ spec:
 
 Apply the manifest file to your cluster:
 
-```
+```shell
 $ kubectl apply -f runner.yaml
 runnerdeployment.actions.summerwind.dev/example-runnerdeploy created
 ```
 
 You can see that 2 runners have been created as specified by `replicas: 2`:
 
-```
+```shell
 $ kubectl get runners
 NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
@@ -205,7 +205,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 In the below example, `actions-runner` checks for pending workflow runs for each sync period, and scale to e.g. 3 if there're 3 pending jobs at sync time.
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
@@ -235,7 +235,7 @@ Please also note that the sync period is set to 10 minutes by default and it's c
 Additionally, the autoscaling feature has an anti-flapping option that prevents periodic loop of scaling up and down.
 By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured by setting `scaleDownDelaySecondsAfterScaleUp`:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
@@ -260,6 +260,7 @@ spec:
     repositoryNames:
     - summerwind/actions-runner-controller
 ```
+
 ## Runner with DinD
 
 When using default runner, runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). This might create issues if there's `LimitRange` set to namespace.
@@ -372,22 +373,41 @@ jobs:
 
 Note that if you specify `self-hosted` in your workflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
 
+## Runner Groups
+
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level.
+
+To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
+
+```yaml
+# runnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: custom-runner
+spec:
+  replicas: 1
+  template:
+    spec:
+      group: NewGroup
+```
+
 ## Software installed in the runner image
 
-The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md
+The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
 
 The container image is based on Ubuntu 18.04, but it does not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
 
-* Basic CLI packages
-* git (2.26)
-* docker
-* build-essentials
+- Basic CLI packages
+- git (2.26)
+- docker
+- build-essentials
 
 The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
 
 If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and installing the extra dependencies directly in the docker image:
 
-```yaml
+```shell
 FROM summerwind/actions-runner:v2.169.1
 
 RUN sudo apt update -y \
@@ -411,7 +431,7 @@ spec:
 
 The following is a list of alternative solutions that may better fit you depending on your use-case:
 
-- https://github.com/evryfs/github-actions-runner-operator/
+- <https://github.com/evryfs/github-actions-runner-operator/>
 
 Although the situation can change over time, as of writing this sentence, the benefits of using `actions-runner-controller` over the alternatives are:
 
