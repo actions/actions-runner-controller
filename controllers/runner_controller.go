@@ -120,40 +120,13 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	if !runner.IsRegisterable() {
-		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-		if err != nil {
-			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
-			log.Error(err, "Failed to get new registration token")
-			return ctrl.Result{}, err
-		}
-
-		updated := runner.DeepCopy()
-		updated.Status.Registration = v1alpha1.RunnerStatusRegistration{
-			Organization: runner.Spec.Organization,
-			Repository:   runner.Spec.Repository,
-			Labels:       runner.Spec.Labels,
-			Token:        rt.GetToken(),
-			ExpiresAt:    metav1.NewTime(rt.GetExpiresAt().Time),
-		}
-
-		if err := r.Status().Update(ctx, updated); err != nil {
-			log.Error(err, "Failed to update runner status")
-			return ctrl.Result{}, err
-		}
-
-		r.Recorder.Event(&runner, corev1.EventTypeNormal, "RegistrationTokenUpdated", "Successfully update registration token")
-		log.Info("Updated registration token", "repository", runner.Spec.Repository)
-		return ctrl.Result{}, nil
-	}
-
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if !errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 
-		newPod, err := r.newPod(runner)
+		newPod, err := r.newPod(ctx, runner)
 		if err != nil {
 			log.Error(err, "Could not create pod")
 			return ctrl.Result{}, err
@@ -201,7 +174,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 		}
 
-		newPod, err := r.newPod(runner)
+		newPod, err := r.newPod(ctx, runner)
 		if err != nil {
 			log.Error(err, "Could not create pod")
 			return ctrl.Result{}, err
@@ -276,11 +249,20 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name
 	return true, nil
 }
 
-func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
+func (r *RunnerReconciler) newPod(ctx context.Context, runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
 		privileged      bool = true
 		dockerdInRunner bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
+		err             error
 	)
+
+	token := runner.Status.Registration.Token
+	if !runner.IsRegisterable() {
+		token, err = r.getRegistrationToken(ctx, runner)
+		if err != nil {
+			return corev1.Pod{}, err
+		}
+	}
 
 	runnerImage := runner.Spec.Image
 	if runnerImage == "" {
@@ -311,7 +293,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 		{
 			Name:  "RUNNER_TOKEN",
-			Value: runner.Status.Registration.Token,
+			Value: token,
 		},
 		{
 			Name:  "DOCKERD_IN_RUNNER",
@@ -497,4 +479,21 @@ func removeFinalizer(finalizers []string) ([]string, bool) {
 	}
 
 	return result, removed
+}
+
+func (r *RunnerReconciler) getRegistrationToken(ctx context.Context, runner v1alpha1.Runner) (string, error) {
+	log := r.Log.WithValues("runner", runner.Name)
+	if runner.IsRegisterable() {
+		return runner.Status.Registration.Token, nil
+	} else {
+		rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+		if err != nil {
+			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
+			log.Error(err, "Failed to get new registration token")
+			return "", err
+		}
+
+		log.Info("Updated registration token", "repository", runner.Spec.Repository)
+		return rt.GetToken(), nil
+	}
 }
