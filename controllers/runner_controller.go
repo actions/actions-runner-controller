@@ -292,6 +292,10 @@ func (r *RunnerReconciler) newPod(ctx context.Context, runner v1alpha1.Runner) (
 			Value: strings.Join(runner.Spec.Labels, ","),
 		},
 		{
+			Name:  "RUNNER_GROUP",
+			Value: runner.Spec.Group,
+		},
+		{
 			Name:  "RUNNER_TOKEN",
 			Value: token,
 		},
