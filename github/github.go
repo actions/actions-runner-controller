@@ -50,7 +50,6 @@ func (c *Config) NewClient() (*Client, error) {
 		if len(c.EnterpriseURL) > 0 {
 			githubAPIURL, err := getEnterpriseApiUrl(c.EnterpriseURL)
 			if err != nil {
-				c.Log.Error(err, "Enterprise URL incorrect")
 				return nil, fmt.Errorf("enterprise url incorrect: %v", err)
 			}
 			tr.BaseURL = githubAPIURL
