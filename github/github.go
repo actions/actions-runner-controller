@@ -9,14 +9,12 @@ import (
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/go-logr/logr"
 	"github.com/google/go-github/v32/github"
 	"golang.org/x/oauth2"
 )
 
 // Config contains configuration for Github client
 type Config struct {
-	Log               logr.Logger
 	EnterpriseURL     string `split_words:"true"`
 	AppID             int64  `split_words:"true"`
 	AppInstallationID int64  `split_words:"true"`
@@ -46,7 +44,6 @@ func (c *Config) NewClient() (*Client, error) {
 	} else {
 		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
 		if err != nil {
-			c.Log.Error(err, "Authentication failed")
 			return nil, fmt.Errorf("authentication failed: %v", err)
 		}
 		httpClient = &http.Client{Transport: tr}
@@ -56,7 +53,6 @@ func (c *Config) NewClient() (*Client, error) {
 		var err error
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
 		if err != nil {
-			c.Log.Error(err, "Enterprise client creation failed")
 			return nil, fmt.Errorf("enterprise client creation failed: %v", err)
 		}
 		githubBaseURL = fmt.Sprintf("%s://%s%s", client.BaseURL.Scheme, client.BaseURL.Host, strings.TrimSuffix(client.BaseURL.Path, "api/v3/"))
