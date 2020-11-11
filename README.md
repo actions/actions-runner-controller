@@ -427,6 +427,20 @@ spec:
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
+# Developing
+
+If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running
+the acceptance test:
+
+```shell
+GITHUB_TOKEN=*** NAME=$DOCKER_USER/actions-runner-controller VERSION=dev \
+  make docker-build docker-push acceptance
+```
+
+The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-runner-controller`,
+creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
+controller is able to bring up a runner pod with the actions runner registration token installed.
+
 # Alternatives
 
 The following is a list of alternative solutions that may better fit you depending on your use-case:
