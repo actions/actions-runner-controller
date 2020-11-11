@@ -15,6 +15,8 @@ if (supported.indexOf(process.platform) == -1) {
 
 var stopping = false;
 var listener = null;
+var retryableErrorCount = 0;
+var maxRetryableErrorCount = 5;
 
 var runService = function() {
     var listenerExePath = path.join(__dirname, '../bin/Runner.Listener');
@@ -50,6 +52,11 @@ var runService = function() {
                     console.log('Runner listener exit with terminated error, stop the service, no retry needed.');
                     stopping = true;
                 } else if (code === 2) {
+                    retryableErrorCount++;
+                    if (retryableErrorCount >= maxRetryableErrorCount) {
+                        console.log('Runner listener exit with retryable error reached retryable limit. stopping service.');
+                        stopping = true;
+                    }
                     console.log('Runner listener exit with retryable error, re-launch runner in 5 seconds.');
                 } else if (code === 3) {
                     console.log('Runner listener exit because of updating, re-launch runner in 5 seconds.');
