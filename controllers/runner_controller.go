@@ -381,23 +381,17 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
-			{
-				Name: "docker",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
 		}
 		pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "work",
 				MountPath: "/runner/_work",
 			},
-			{
-				Name:      "docker",
-				MountPath: "/var/run",
-			},
 		}
+		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, corev1.EnvVar{
+			Name:  "DOCKER_HOST",
+			Value: "tcp://localhost:2375",
+		})
 		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
 			Name:  "docker",
 			Image: r.DockerImage,
@@ -406,9 +400,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					Name:      "work",
 					MountPath: "/runner/_work",
 				},
+			},
+			Env: []corev1.EnvVar {
 				{
-					Name:      "docker",
-					MountPath: "/var/run",
+					Name: "DOCKER_TLS_CERTDIR",
+					Value: "",
 				},
 			},
 			SecurityContext: &corev1.SecurityContext{
