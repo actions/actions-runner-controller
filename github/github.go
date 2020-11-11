@@ -4,19 +4,18 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/go-logr/logr"
 	"github.com/google/go-github/v32/github"
 	"golang.org/x/oauth2"
 )
 
 // Config contains configuration for Github client
 type Config struct {
-	Log               logr.Logger
 	EnterpriseURL     string `split_words:"true"`
 	AppID             int64  `split_words:"true"`
 	AppInstallationID int64  `split_words:"true"`
@@ -46,11 +45,14 @@ func (c *Config) NewClient() (*Client, error) {
 	} else {
 		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
 		if err != nil {
-			c.Log.Error(err, "Authentication failed")
 			return nil, fmt.Errorf("authentication failed: %v", err)
 		}
 		if len(c.EnterpriseURL) > 0 {
-			tr.BaseURL = c.EnterpriseURL
+			githubAPIURL, err := getEnterpriseApiUrl(c.EnterpriseURL)
+			if err != nil {
+				return nil, fmt.Errorf("enterprise url incorrect: %v", err)
+			}
+			tr.BaseURL = githubAPIURL
 		}
 		httpClient = &http.Client{Transport: tr}
 	}
@@ -59,7 +61,6 @@ func (c *Config) NewClient() (*Client, error) {
 		var err error
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
 		if err != nil {
-			c.Log.Error(err, "Enterprise client creation failed")
 			return nil, fmt.Errorf("enterprise client creation failed: %v", err)
 		}
 		githubBaseURL = fmt.Sprintf("%s://%s%s", client.BaseURL.Scheme, client.BaseURL.Host, strings.TrimSuffix(client.BaseURL.Path, "api/v3/"))
@@ -224,4 +225,22 @@ func splitOwnerAndRepo(repo string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid repository name: '%s'", repo)
 	}
 	return chunk[0], chunk[1], nil
+}
+
+func getEnterpriseApiUrl(baseURL string) (string, error) {
+	baseEndpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasSuffix(baseEndpoint.Path, "/") {
+		baseEndpoint.Path += "/"
+	}
+	if !strings.HasSuffix(baseEndpoint.Path, "/api/v3/") &&
+		!strings.HasPrefix(baseEndpoint.Host, "api.") &&
+		!strings.Contains(baseEndpoint.Host, ".api.") {
+		baseEndpoint.Path += "api/v3/"
+	}
+
+	// Trim trailing slash, otherwise there's double slash added to token endpoint
+	return fmt.Sprintf("%s://%s%s", baseEndpoint.Scheme, baseEndpoint.Host, strings.TrimSuffix(baseEndpoint.Path, "/")), nil
 }

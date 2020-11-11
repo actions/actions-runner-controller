@@ -82,15 +82,17 @@ func main() {
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.Parse()
 
+	logger := zap.New(func(o *zap.Options) {
+		o.Development = true
+	})
+
 	ghClient, err = c.NewClient()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)
 		os.Exit(1)
 	}
 
-	ctrl.SetLogger(zap.New(func(o *zap.Options) {
-		o.Development = true
-	}))
+	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,

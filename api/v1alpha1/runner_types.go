@@ -37,6 +37,9 @@ type RunnerSpec struct {
 	Labels []string `json:"labels,omitempty"`
 
 	// +optional
+	Group string `json:"group,omitempty"`
+
+	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
 	// +optional
 	DockerdContainerResources corev1.ResourceRequirements `json:"dockerdContainerResources,omitempty"`
