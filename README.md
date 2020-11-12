@@ -216,7 +216,6 @@ kind: RunnerDeployment
 metadata:
   name: example-runner-deployment
 spec:
-  replicas: 1
   template:
     spec:
       repository: summerwind/actions-runner-controller
@@ -235,7 +234,6 @@ spec:
     repositoryNames:
     - summerwind/actions-runner-controller
 ```
-> Note the number of replicas is mandatory in `RunnerDeployment`
 
 Please also note that the sync period is set to 10 minutes by default and it's configurable via `--sync-period` flag.
 
@@ -248,7 +246,6 @@ kind: RunnerDeployment
 metadata:
   name: example-runner-deployment
 spec:
-  replicas: 1
   template:
     spec:
       repository: summerwind/actions-runner-controller
