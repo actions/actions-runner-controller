@@ -401,9 +401,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					MountPath: "/runner/_work",
 				},
 			},
-			Env: []corev1.EnvVar {
+			Env: []corev1.EnvVar{
 				{
-					Name: "DOCKER_TLS_CERTDIR",
+					Name:  "DOCKER_TLS_CERTDIR",
 					Value: "",
 				},
 			},
