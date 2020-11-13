@@ -18,7 +18,14 @@ name: Runner
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build
+    name: Build ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - name: actions-runner
+            dockerfile: Dockerfile
+          - name: actions-runner-dind
+            dockerfile: dindrunner.Dockerfile
     env:
       RUNNER_VERSION: 2.274.1
       DOCKER_VERSION: 19.03.12
@@ -41,16 +48,9 @@ jobs:
             --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
-            -f Dockerfile .
-          docker buildx build \
-            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:v${RUNNER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:latest \
-            -f dindrunner.Dockerfile .
+            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:latest \
+            -f ${{ matrix.dockerfile }} .
 
       - name: Login to GitHub Docker Registry
         run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
@@ -67,13 +67,6 @@ jobs:
             --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner:v${RUNNER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner:latest \
-            -f Dockerfile . --push
-          docker buildx build \
-            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:v${RUNNER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner-dind:latest \
-            -f dindrunner.Dockerfile . --push
+            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:v${RUNNER_VERSION} \
+            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:latest \
+            -f ${{ matrix.dockerfile }} . --push
