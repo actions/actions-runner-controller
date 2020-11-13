@@ -37,6 +37,12 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 1. Using GitHub App.
 2. Using Personal Access Token.
 
+Regardless of which authentication method you use, the same permissions are required, those permissions are:
+- Repository: Administration (read/write)
+- Repository: Actions (read)
+- Organization: Self-hosted runners (read/write)
+
+
 **NOTE: It is extremely important to only follow one of the sections below and not both.**
 
 ### Using GitHub App
@@ -75,11 +81,6 @@ $ kubectl create secret generic controller-manager \
     --from-literal=github_app_installation_id=${INSTALLATION_ID} \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
-
-The permissions required are:
-- Repository: Administration (read/write)
-- Repository: Actions (read)
-- Organization: Self-hosted runners (read/write)
 
 ### Using Personal Access Token
 
