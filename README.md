@@ -433,6 +433,19 @@ spec:
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
+## Common Errors
+
+### invalid header field value
+
+```json
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	{"controller": "runner", "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9", "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"}
+```
+
+**Solutions**<br />
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
+* `echo -n $TOKEN | base64`
+* Create the secret as described in the docs using the shell and documeneted flags
+
 # Alternatives
 
 The following is a list of alternative solutions that may better fit you depending on your use-case:
