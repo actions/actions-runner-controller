@@ -76,6 +76,11 @@ $ kubectl create secret generic controller-manager \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
 
+The permissions required are:
+- Repository: Administration (read/write)
+- Repository: Actions (read)
+- Organization: Self-hosted runners (read/write)
+
 ### Using Personal Access Token
 
 From an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
