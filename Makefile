@@ -125,6 +125,8 @@ release: manifests
 acceptance: release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
 
 acceptance/setup:
 	kind create cluster --name acceptance
