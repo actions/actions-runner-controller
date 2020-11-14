@@ -41,6 +41,7 @@ spec:
           description: RunnerReplicaSetSpec defines the desired state of RunnerReplicaSet
           properties:
             replicas:
+              nullable: true
               type: integer
             template:
               properties:
@@ -1533,7 +1534,6 @@ spec:
                   type: object
               type: object
           required:
-            - replicas
             - template
           type: object
         status:
