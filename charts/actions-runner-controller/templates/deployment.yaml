@@ -5,9 +5,6 @@ metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
