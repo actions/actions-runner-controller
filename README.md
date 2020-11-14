@@ -37,17 +37,23 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 1. Using GitHub App.
 2. Using Personal Access Token.
 
+Regardless of which authentication method you use, the same permissions are required, those permissions are:
+- Repository: Administration (read/write)
+- Repository: Actions (read)
+- Organization: Self-hosted runners (read/write)
+
+
 **NOTE: It is extremely important to only follow one of the sections below and not both.**
 
 ### Using GitHub App
 
 You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
-- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write)
+- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
 
-- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write)
+- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
 
 You will see an *App ID* on the page of the GitHub App you created as follows, the value of this App ID will be used later.
 
@@ -426,6 +432,19 @@ spec:
   repository: summerwind/actions-runner-controller
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
+
+## Common Errors
+
+### invalid header field value
+
+```json
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	{"controller": "runner", "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9", "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"}
+```
+
+**Solutions**<br />
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
+* `echo -n $TOKEN | base64`
+* Create the secret as described in the docs using the shell and documeneted flags
 
 # Developing
 
