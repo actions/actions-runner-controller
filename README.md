@@ -37,6 +37,12 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 1. Using GitHub App.
 2. Using Personal Access Token.
 
+Regardless of which authentication method you use, the same permissions are required, those permissions are:
+- Repository: Administration (read/write)
+- Repository: Actions (read)
+- Organization: Self-hosted runners (read/write)
+
+
 **NOTE: It is extremely important to only follow one of the sections below and not both.**
 
 ### Using GitHub App
@@ -75,11 +81,6 @@ $ kubectl create secret generic controller-manager \
     --from-literal=github_app_installation_id=${INSTALLATION_ID} \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
-
-The permissions required are:
-- Repository: Administration (read/write)
-- Repository: Actions (read)
-- Organization: Self-hosted runners (read/write)
 
 ### Using Personal Access Token
 
@@ -431,6 +432,19 @@ spec:
   repository: summerwind/actions-runner-controller
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
+
+## Common Errors
+
+### invalid header field value
+
+```json
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	{"controller": "runner", "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9", "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"}
+```
+
+**Solutions**<br />
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
+* `echo -n $TOKEN | base64`
+* Create the secret as described in the docs using the shell and documeneted flags
 
 # Alternatives
 
