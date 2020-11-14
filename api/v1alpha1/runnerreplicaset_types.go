@@ -22,7 +22,9 @@ import (
 
 // RunnerReplicaSetSpec defines the desired state of RunnerReplicaSet
 type RunnerReplicaSetSpec struct {
-	Replicas *int `json:"replicas"`
+	// +optional
+	// +nullable
+	Replicas *int `json:"replicas,omitempty"`
 
 	Template RunnerTemplate `json:"template"`
 }

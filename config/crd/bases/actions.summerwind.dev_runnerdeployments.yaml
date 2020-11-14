@@ -41,6 +41,7 @@ spec:
           description: RunnerReplicaSetSpec defines the desired state of RunnerDeployment
           properties:
             replicas:
+              nullable: true
               type: integer
             template:
               properties:
