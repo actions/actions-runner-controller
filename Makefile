@@ -118,6 +118,29 @@ release: manifests
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
+.PHONY: acceptance
+acceptance: release
+	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
+
+acceptance/setup:
+	kind create cluster --name acceptance
+	kubectl cluster-info --context kind-acceptance
+	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
+	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 60s
+	kubectl -n cert-manager wait deploy/cert-manager-webhook --for condition=available --timeout 60s
+	kubectl -n cert-manager wait deploy/cert-manager --for condition=available --timeout 60s
+	kubectl create namespace actions-runner-system
+	# Adhocly wait for some time until cert-manager's admission webhook gets ready
+	sleep 5
+
+acceptance/teardown:
+	kind delete cluster --name acceptance
+
+acceptance/tests:
+	acceptance/deploy.sh
+	acceptance/checks.sh
+
 # Upload release file to GitHub.
 github-release: release
 	ghr ${VERSION} release/

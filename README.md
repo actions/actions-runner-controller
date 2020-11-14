@@ -446,6 +446,28 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documeneted flags
 
+# Developing
+
+If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running
+the acceptance test:
+
+```shell
+NAME=$DOCKER_USER/actions-runner-controller VERSION=dev \
+  GITHUB_TOKEN=*** \
+  APP_ID=*** \
+  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
+  INSTALLATION_ID=*** \
+  make docker-build docker-push acceptance
+```
+
+Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
+`GITHUB_TOKEN`, and those in [Using GitHub App](#using-github-app) to obtain `APP_ID`, `INSTALLATION_ID`, and
+`PRIAVTE_KEY_FILE_PATH`.
+
+The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-runner-controller`,
+creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
+controller is able to bring up a runner pod with the actions runner registration token installed.
+
 # Alternatives
 
 The following is a list of alternative solutions that may better fit you depending on your use-case:
