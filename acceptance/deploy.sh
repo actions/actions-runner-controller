@@ -19,9 +19,18 @@ else
   exit 1
 fi
 
-kubectl apply \
-  -n actions-runner-system \
-  -f release/actions-runner-controller.yaml
+tool=${ACCEPTANCE_TEST_DEPLOYMENT_TOOL}
+
+if [ "${tool}" == "helm" ]; then
+  helm upgrade --install actions-runner-controller \
+    charts/actions-runner-controller \
+    -n actions-runner-system \
+    --set syncPeriod=5m
+else
+  kubectl apply \
+    -n actions-runner-system \
+    -f release/actions-runner-controller.yaml
+fi
 
 kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available
 
