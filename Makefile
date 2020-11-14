@@ -59,10 +59,13 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests: manifests-118 fix118
+manifests: manifests-118 fix118 chart-crds
 
 manifests-118: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+chart-crds:
+	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
 
 # Run go fmt against code
 fmt:
@@ -122,6 +125,8 @@ release: manifests
 acceptance: release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
 
 acceptance/setup:
 	kind create cluster --name acceptance

@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "actions-runner-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "actions-runner-controller.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "actions-runner-controller.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - args:
+        - "--metrics-addr=127.0.0.1:8080"
+        - "--enable-leader-election"
+        - "--sync-period={{ .Values.syncPeriod }}"
+        command:
+        - "/manager"
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: github_token
+              name: controller-manager
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_id
+              name: controller-manager
+              optional: true
+        - name: GITHUB_APP_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_installation_id
+              name: controller-manager
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          value: /etc/actions-runner-controller/github_app_private_key
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (cat "v" .Chart.AppVersion | replace " " "") }}"
+        name: manager
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        - mountPath: "/etc/actions-runner-controller"
+          name: controller-manager
+          readOnly: true
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      - args:
+        - "--secure-listen-address=0.0.0.0:8443"
+        - "--upstream=http://127.0.0.1:8080/"
+        - "--logtostderr=true"
+        - "--v=10"
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.1
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: controller-manager
+        secret:
+          secretName: controller-manager
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

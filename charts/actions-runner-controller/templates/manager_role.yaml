@@ -1,0 +1,165 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: {{ include "actions-runner-controller.managerRoleName" . }}
+rules:
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - horizontalrunnerautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - horizontalrunnerautoscalers/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - horizontalrunnerautoscalers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerreplicasets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerreplicasets/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerreplicasets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
