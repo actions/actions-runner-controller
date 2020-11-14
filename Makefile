@@ -118,7 +118,8 @@ release: manifests
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
-acceptance:
+.PHONY: acceptance
+acceptance: release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
 
