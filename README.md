@@ -236,7 +236,7 @@ spec:
     - summerwind/actions-runner-controller
 ```
 
-Please also note that the sync period is set to 10 minutes by default and it's configurable via `--sync-period` flag.
+The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is 10 minutes to prevent unconfigured deployments rate limiting themselves from the GitHub API. The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch for those that are building the solution via the kustomize setup.
 
 Additionally, the autoscaling feature has an anti-flapping option that prevents periodic loop of scaling up and down.
 By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured by setting `scaleDownDelaySecondsAfterScaleUp`:
