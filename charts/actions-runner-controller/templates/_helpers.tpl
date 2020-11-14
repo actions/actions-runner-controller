@@ -60,3 +60,39 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "actions-runner-controller.leaderElectionRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-leader-election
+{{- end }}
+
+{{- define "actions-runner-controller.authProxyRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-proxy
+{{- end }}
+
+{{- define "actions-runner-controller.managerRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-manager
+{{- end }}
+
+{{- define "actions-runner-controller.runnerEditorRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-runner-editor
+{{- end }}
+
+{{- define "actions-runner-controller.runnerViewerRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-runner-viewer
+{{- end }}
+
+{{- define "actions-runner-controller.webhookServiceName" -}}
+{{- include "actions-runner-controller.fullname" . }}-webhook
+{{- end }}
+
+{{- define "actions-runner-controller.authProxyServiceName" -}}
+{{- include "actions-runner-controller.fullname" . }}-controller-manager-metrics-service
+{{- end }}
+
+{{- define "actions-runner-controller.selfsignedIssuerName" -}}
+{{- include "actions-runner-controller.fullname" . }}-selfsigned-issuer
+{{- end }}
+
+{{- define "actions-runner-controller.servingCertName" -}}
+{{- include "actions-runner-controller.fullname" . }}-serving-cert
+{{- end }}

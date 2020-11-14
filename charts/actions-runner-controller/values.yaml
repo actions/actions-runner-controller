@@ -4,6 +4,8 @@
 
 replicaCount: 1
 
+syncPeriod: 10m
+
 image:
   repository: summerwind/actions-runner-controller
   pullPolicy: IfNotPresent
@@ -38,7 +40,7 @@ securityContext: {}
 
 service:
   type: ClusterIP
-  port: 80
+  port: 443
 
 ingress:
   enabled: false

@@ -25,14 +25,15 @@ if [ "${tool}" == "helm" ]; then
   helm upgrade --install actions-runner-controller \
     charts/actions-runner-controller \
     -n actions-runner-system \
+    --create-namespace \
     --set syncPeriod=5m
+  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available
 else
   kubectl apply \
     -n actions-runner-system \
     -f release/actions-runner-controller.yaml
+  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available
 fi
-
-kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available
 
 # Adhocly wait for some time until actions-runner-controller's admission webhook gets ready
 sleep 20

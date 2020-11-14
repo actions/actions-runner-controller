@@ -1,0 +1,128 @@
+
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: {{ include "actions-runner-controller.fullname" . }}-mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+webhooks:
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-actions-summerwind-dev-v1alpha1-runner
+  failurePolicy: Fail
+  name: mutate.runner.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runners
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-actions-summerwind-dev-v1alpha1-runnerdeployment
+  failurePolicy: Fail
+  name: mutate.runnerdeployment.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerdeployments
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset
+  failurePolicy: Fail
+  name: mutate.runnerreplicaset.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerreplicasets
+
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: {{ include "actions-runner-controller.fullname" . }}-validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+webhooks:
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /validate-actions-summerwind-dev-v1alpha1-runner
+  failurePolicy: Fail
+  name: validate.runner.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runners
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /validate-actions-summerwind-dev-v1alpha1-runnerdeployment
+  failurePolicy: Fail
+  name: validate.runnerdeployment.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerdeployments
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /validate-actions-summerwind-dev-v1alpha1-runnerreplicaset
+  failurePolicy: Fail
+  name: validate.runnerreplicaset.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerreplicasets
