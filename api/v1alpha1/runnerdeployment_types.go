@@ -27,6 +27,7 @@ const (
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
 	// +optional
+	// +nullable
 	Replicas *int `json:"replicas,omitempty"`
 
 	Template RunnerTemplate `json:"template"`
