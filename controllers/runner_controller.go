@@ -299,6 +299,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
 		privileged      bool = true
 		dockerdInRunner bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
+		dockerEnabled   bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
 	)
 
 	runnerImage := runner.Spec.Image
@@ -373,7 +374,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
-	if !dockerdInRunner {
+	if !dockerdInRunner && dockerEnabled {
 		pod.Spec.Volumes = []corev1.Volume{
 			{
 				Name: "work",

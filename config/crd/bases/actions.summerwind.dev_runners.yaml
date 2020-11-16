@@ -393,6 +393,8 @@ spec:
                   - name
                 type: object
               type: array
+            dockerEnabled:
+              type: boolean
             dockerdContainerResources:
               description: ResourceRequirements describes the compute resource requirements.
               properties:
