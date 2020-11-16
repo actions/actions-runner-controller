@@ -39,21 +39,6 @@ jobs:
         with:
           version: latest
 
-      - name: Build (no Push)
-        uses: docker/build-push-action@v2
-        if: ${{ github.event_name == 'pull_request' }}
-        working-directory: runner
-        with:
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: false
-          build-args: |
-            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
-            DOCKER_VERSION=${{ env.DOCKER_VERSION }}
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest      
-
       - name: Login to DockerHub
         uses: docker/login-action@v1
         if: ${{ github.event_name == 'push' }}
@@ -61,14 +46,13 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
-      - name: Build and Push
+      - name: Build [and Push]
         uses: docker/build-push-action@v2
-        if: ${{ github.event_name == 'push' }}
-        working-directory: runner
         with:
-          file: ${{ matrix.dockerfile }}
+          context: ./runner
+          file: ./runner/${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
