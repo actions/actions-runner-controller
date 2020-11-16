@@ -29,7 +29,7 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ github.repository_owner }}
         run: |
-          docker buildx build \
+          docker build \
             --platform linux/amd64,linux/arm64 \
             --tag ${DOCKERHUB_USERNAME}/actions-runner-controller:latest \
             -f Dockerfile . --push

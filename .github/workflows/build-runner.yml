@@ -44,7 +44,7 @@ jobs:
         working-directory: runner
         if: ${{ github.event_name == 'pull_request' }}
         run: |
-          docker buildx build \
+          docker build \
             --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
@@ -63,7 +63,7 @@ jobs:
         working-directory: runner
         if: ${{ github.event_name == 'push' }}
         run: |
-          docker buildx build \
+          docker build \
             --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
             --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
             --platform linux/amd64,linux/arm64 \
