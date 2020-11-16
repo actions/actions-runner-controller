@@ -34,45 +34,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-        with:
-          platforms: linux/amd64,linux/arm64
-
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v1
         with:
           version: latest
 
-      - name: Available platforms
-        run: echo ${{ steps.buildx.outputs.platforms }}
-
-      - name: Build Container Image
-        working-directory: runner
+      - name: Build and Push
+        uses: docker/build-push-action@v2
         if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          docker build \
-            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:v${RUNNER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:latest \
-            -f ${{ matrix.dockerfile }} .
+        with:
+          context: runner
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: |
+            RUNNER_VERSION=${RUNNER_VERSION}
+            DOCKER_VERSION=${DOCKER_VERSION}
+          tags: |
+            ${DOCKERHUB_USERNAME}/${{ matrix.name }}:v${RUNNER_VERSION}
+            ${DOCKERHUB_USERNAME}/${{ matrix.name }}:latest      
 
-      - name: Login to GitHub Docker Registry
-        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
         if: ${{ github.event_name == 'push' }}
-        env:
-          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
-      - name: Build and Push Container Image
-        working-directory: runner
+      - name: Build and Push
+        uses: docker/build-push-action@v2
         if: ${{ github.event_name == 'push' }}
-        run: |
-          docker build \
-            --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-            --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:v${RUNNER_VERSION} \
-            --tag ${DOCKERHUB_USERNAME}/${{ matrix.name }}:latest \
-            -f ${{ matrix.dockerfile }} . --push
+        with:
+          context: runner
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            RUNNER_VERSION=${RUNNER_VERSION}
+            DOCKER_VERSION=${DOCKER_VERSION}
+          tags: |
+            ${DOCKERHUB_USERNAME}/${{ matrix.name }}:v${RUNNER_VERSION}
+            ${DOCKERHUB_USERNAME}/${{ matrix.name }}:latest
