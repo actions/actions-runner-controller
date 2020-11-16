@@ -73,3 +73,4 @@ COPY patched /runner/patched
 USER runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["/runner/entrypoint.sh"]
+
