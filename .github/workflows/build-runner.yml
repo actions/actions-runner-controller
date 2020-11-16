@@ -42,8 +42,8 @@ jobs:
       - name: Build (no Push)
         uses: docker/build-push-action@v2
         if: ${{ github.event_name == 'pull_request' }}
+        working-directory: runner
         with:
-          context: runner
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: false
@@ -64,8 +64,8 @@ jobs:
       - name: Build and Push
         uses: docker/build-push-action@v2
         if: ${{ github.event_name == 'push' }}
+        working-directory: runner
         with:
-          context: runner
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
