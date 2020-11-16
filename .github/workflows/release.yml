@@ -33,7 +33,7 @@ jobs:
         id: buildx
         uses: docker/setup-buildx-action@v1
         with:
-          buildx-version: latest
+          version: latest
 
       - name: Login to GitHub Docker Registry
         run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
