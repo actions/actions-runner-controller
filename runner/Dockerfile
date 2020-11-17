@@ -5,11 +5,11 @@ ARG RUNNER_VERSION=2.274.2
 ARG DOCKER_VERSION=19.03.12
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt -oDebug::pkgAcquire::Worker=1 update -y 
-RUN apt -oDebug::pkgAcquire::Worker=1 install -y software-properties-common 
+RUN apt update -y 
+RUN apt install -y software-properties-common 
 RUN add-apt-repository -y ppa:git-core/ppa 
-RUN apt -oDebug::pkgAcquire::Worker=1 update -y 
-RUN apt -oDebug::pkgAcquire::Worker=1 install -y --no-install-recommends \
+RUN apt update -y 
+RUN apt install -y --no-install-recommends \
   build-essential \
   curl \
   ca-certificates \
