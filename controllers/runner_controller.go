@@ -382,11 +382,21 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
+			{
+				Name: "externals",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
 		}
 		pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "work",
 				MountPath: "/runner/_work",
+			},
+			{
+				Name:      "externals",
+				MountPath: "/runner/externals",
 			},
 		}
 		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, corev1.EnvVar{
@@ -400,6 +410,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				{
 					Name:      "work",
 					MountPath: "/runner/_work",
+				},
+				{
+					Name:      "externals",
+					MountPath: "/runner/externals",
 				},
 			},
 			Env: []corev1.EnvVar{
