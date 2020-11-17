@@ -321,6 +321,8 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
+      # If set to false, there are no privileged container and you cannot use docker. 
+      dockerEnabled: false
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
       # image summerwind/actions-runner-dind or custom one should be used with true -value
       dockerdWithinRunnerContainer: false
