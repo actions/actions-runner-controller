@@ -3,11 +3,10 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 var childProcess = require("child_process");
-var path = require("path")
+var path = require("path");
+var supported = ['linux', 'darwin'];
 
-var supported = ['linux', 'darwin']
-
-if (supported.indexOf(process.platform) == -1) {
+if (supported.indexOf(process.platform) === -1) {
     console.log('Unsupported platform: ' + process.platform);
     console.log('Supported platforms are: ' + supported.toString());
     process.exit(1);
@@ -16,11 +15,11 @@ if (supported.indexOf(process.platform) == -1) {
 var stopping = false;
 var listener = null;
 
-var runService = function() {
+var runService = function () {
     var listenerExePath = path.join(__dirname, '../bin/Runner.Listener');
     var interactive = process.argv[2] === "interactive";
 
-    if(!stopping) {
+    if (!stopping) {
         try {
             if (interactive) {
                 console.log('Starting Runner listener interactively');
@@ -71,7 +70,7 @@ var runService = function() {
 runService();
 console.log('Started running service');
 
-var gracefulShutdown = function(code) {
+var gracefulShutdown = function (code) {
     console.log('Shutting down runner listener');
     stopping = true;
     if (listener) {
