@@ -1,7 +1,7 @@
 FROM ubuntu:18.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.274.1
+ARG RUNNER_VERSION=2.274.2
 ARG DOCKER_VERSION=19.03.12
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -64,6 +64,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
   && tar xzf ./runner.tar.gz \
   && rm runner.tar.gz \
   && ./bin/installdependencies.sh \
+  && mv ./externals ./externalstmp \
   && rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint.sh /runner
