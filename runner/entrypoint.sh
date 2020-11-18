@@ -43,6 +43,9 @@ fi
 cd /runner
 ./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${RUNNER_GROUP_ARG} ${LABEL_ARG}
 
+# Hack due to the DinD volumes
+mv ./externalstmp/* ./externals/
+
 for f in runsvc.sh RunnerService.js; do
   diff {bin,patched}/${f} || :
   sudo mv bin/${f}{,.bak}
