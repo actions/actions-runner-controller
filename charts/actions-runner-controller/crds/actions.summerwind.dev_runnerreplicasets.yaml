@@ -1533,6 +1533,8 @@ spec:
                           - name
                         type: object
                       type: array
+                    workDir:
+                      type: string
                   type: object
               type: object
           required:

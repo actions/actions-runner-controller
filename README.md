@@ -342,6 +342,10 @@ spec:
               value: abcd1234
           securityContext:
             runAsUser: 0
+      # if workDir is not specified, the default working directory is /runner/_work
+      # this setting allows you to customize the working directory location
+      # for example, the below setting is the same as on the ubuntu-18.04 image
+      workDir: /home/runner/work
 ```
 
 ## Runner labels

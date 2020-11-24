@@ -59,6 +59,8 @@ type RunnerSpec struct {
 
 	// +optional
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
+	// +optional
+	WorkDir string `json:"workDir,omitempty"`
 
 	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`

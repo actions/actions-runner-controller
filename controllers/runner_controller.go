@@ -307,6 +307,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		runnerImage = r.RunnerImage
 	}
 
+	workDir := runner.Spec.WorkDir
+	if workDir == "" {
+		workDir = "/runner/_work"
+	}
+
 	runnerImagePullPolicy := runner.Spec.ImagePullPolicy
 	if runnerImagePullPolicy == "" {
 		runnerImagePullPolicy = corev1.PullAlways
@@ -344,6 +349,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		{
 			Name:  "GITHUB_URL",
 			Value: r.GitHubClient.GithubBaseURL,
+		},
+		{
+			Name:  "RUNNER_WORKDIR",
+			Value: workDir,
 		},
 	}
 
@@ -392,7 +401,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "work",
-				MountPath: "/runner/_work",
+				MountPath: workDir,
 			},
 			{
 				Name:      "externals",
@@ -409,7 +418,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "work",
-					MountPath: "/runner/_work",
+					MountPath: workDir,
 				},
 				{
 					Name:      "externals",

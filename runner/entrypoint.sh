@@ -27,6 +27,10 @@ else
   exit 1
 fi
 
+if [ -n "${RUNNER_WORKDIR}" ]; then
+  WORKDIR_ARG="--work ${RUNNER_WORKDIR}"
+fi
+
 if [ -n "${RUNNER_LABELS}" ]; then
   LABEL_ARG="--labels ${RUNNER_LABELS}"
 fi
@@ -41,7 +45,7 @@ if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_GROUP}" ]
 fi
 
 cd /runner
-./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${RUNNER_GROUP_ARG} ${LABEL_ARG}
+./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${RUNNER_GROUP_ARG} ${LABEL_ARG} ${WORKDIR_ARG}
 
 # Hack due to the DinD volumes
 mv ./externalstmp/* ./externals/

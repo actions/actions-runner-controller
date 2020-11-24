@@ -1526,6 +1526,8 @@ spec:
                   - name
                 type: object
               type: array
+            workDir:
+              type: string
           type: object
         status:
           description: RunnerStatus defines the observed state of Runner
