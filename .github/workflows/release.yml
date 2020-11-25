@@ -22,7 +22,7 @@ jobs:
           sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
 
       - name: Set version
-        run: echo "::set-env name=VERSION::$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')"
+        run: echo "VERSION=$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')" >> $GITHUB_ENV
 
       - name: Upload artifacts
         env:
