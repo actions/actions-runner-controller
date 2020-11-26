@@ -84,7 +84,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, org, repo, name strin
 	key := getRegistrationKey(org, repo)
 	rt, ok := c.regTokens[key]
 
-	if ok && rt.GetExpiresAt().After(time.Now().Add(-10*time.Minute)) {
+	if ok && rt.GetExpiresAt().After(time.Now()) {
 		return rt, nil
 	}
 
