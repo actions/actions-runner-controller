@@ -25,6 +25,9 @@ spec:
       serviceAccountName: {{ include "actions-runner-controller.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: "{{ . }}"
+      {{- end }}
       containers:
       - args:
         - "--metrics-addr=127.0.0.1:8080"
