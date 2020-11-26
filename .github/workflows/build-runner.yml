@@ -27,7 +27,7 @@ jobs:
           - name: actions-runner-dind
             dockerfile: dindrunner.Dockerfile
     env:
-      RUNNER_VERSION: 2.274.1
+      RUNNER_VERSION: 2.274.2
       DOCKER_VERSION: 19.03.12
       DOCKERHUB_USERNAME: ${{ github.repository_owner }}
     steps:
