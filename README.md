@@ -440,7 +440,7 @@ spec:
 ```
 
 ## Helm
-The This solution wasis primarily a Kustomize repo, Helm is supported however because this is primarily a Kustomize repo the Helm chart has minimal customisations in it. See the Makefile, specifically the `chart-crds` recipe, for how the helm package is produced.
+This solution is primarily a Kustomize repo, Helm is supported however because this is primarily a Kustomize repo the Helm chart has minimal customisations to it. See the Makefile, specifically the `chart-crds` recipe, for how the helm package is produced.
 
 ## Common Errors
 
