@@ -69,7 +69,7 @@ manifests-118: controller-gen
 
 chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
-	$(eval CHANGED_FILES := $(strip $(shell git diff --find-renames --name-only $$GITHUB_SHA -- charts)))
+	$(eval CHANGED_FILES := $(strip $(shell git diff --find-renames --name-only $$GITHUB_SHA -- charts config/crd/bases)))
 ifeq ($(CHANGED_FILES),)
 	$(info Helm chart files dectected as changed, moving packaged charts to release folder§:)
 	$(info Changed files : $(CHANGED_FILES))
