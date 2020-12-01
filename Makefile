@@ -3,15 +3,17 @@ VERSION ?= latest
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
 YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
-
+ 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
+GITHUB_SHA ?= $(strip $(shell git rev-parse HEAD))
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
+	GOBIN=$(shell go env GOPATH)/bin
 else
-GOBIN=$(shell go env GOBIN)
+	GOBIN=$(shell go env GOBIN)
 endif
 
 # default list of platforms for which multiarch image is built
@@ -65,7 +67,12 @@ manifests-118: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 chart-crds:
+	$(eval CHANGED_FILES := $(strip $(shell git diff --find-renames --name-only $$GITHUB_SHA -- charts)))
+ifeq ($(CHANGED_FILES),)
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
+	helm package charts/*
+	mv *.tgz release/
+endif
 
 # Run go fmt against code
 fmt:
@@ -116,9 +123,11 @@ docker-buildx:
 		. ${PUSH_ARG}
 
 # Generate the release manifest file
+create-release-dir:
+	mkdir -p release
+
 release: manifests
 	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
-	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
 .PHONY: acceptance
@@ -147,7 +156,7 @@ acceptance/tests:
 	acceptance/checks.sh
 
 # Upload release file to GitHub.
-github-release: release
+github-release: create-release-dir release
 	ghr ${VERSION} release/
 
 # find or download controller-gen
