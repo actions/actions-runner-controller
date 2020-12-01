@@ -38,6 +38,7 @@ all: manager
 # Run tests
 test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out
+	helm lint ./charts/actions-runner-controller
 
 # Build manager binary
 manager: generate fmt vet
@@ -67,9 +68,11 @@ manifests-118: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 chart-crds:
+	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
 	$(eval CHANGED_FILES := $(strip $(shell git diff --find-renames --name-only $$GITHUB_SHA -- charts)))
 ifeq ($(CHANGED_FILES),)
-	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
+	$(info Helm chart files dectected as changed, moving packaged charts to release folder§:)
+	$(info Changed files : $(CHANGED_FILES))
 	helm package charts/*
 	mv *.tgz release/
 endif
