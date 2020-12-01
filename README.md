@@ -439,6 +439,9 @@ spec:
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
+## Helm
+The This solution wasis primarily a Kustomize repo, Helm is supported however because this is primarily a Kustomize repo the Helm chart has minimal customisations in it. See the Makefile, specifically the `chart-crds` recipe, for how the helm package is produced.
+
 ## Common Errors
 
 ### invalid header field value
