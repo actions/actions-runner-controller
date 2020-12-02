@@ -7,7 +7,7 @@ YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
-GITHUB_SHA ?= $(strip $(shell git rev-parse HEAD))
+GITHUB_PREVIOUS_TAG := $(strip $(shell git tag --sort=committerdate | tail -1 | head -n 1)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -36,7 +36,7 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests
+test: create-release-dir generate fmt vet manifests
 	go test ./... -coverprofile cover.out
 	helm lint ./charts/actions-runner-controller
 
@@ -69,9 +69,11 @@ manifests-118: controller-gen
 
 chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
-	$(eval CHANGED_FILES := $(strip $(shell git diff --find-renames --name-only $$GITHUB_SHA -- charts config/crd/bases)))
+
+chart-release:
+	$(eval CHANGED_FILES := $(strip $(shell git diff $($$GITHUB_PREVIOUS_TAG)..HEAD --no-merges --oneline --name-only -- charts config/crd/bases)))
 ifeq ($(CHANGED_FILES),)
-	$(info Helm chart files dectected as changed, moving packaged charts to release folder§:)
+	$(info Helm chart files dectected as changed, moving packaged charts to release folder:)
 	$(info Changed files : $(CHANGED_FILES))
 	helm package charts/*
 	mv *.tgz release/
@@ -129,7 +131,7 @@ docker-buildx:
 create-release-dir:
 	mkdir -p release
 
-release: manifests
+release: create-release-dir manifests chart-release
 	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
 	kustomize build config/default > release/actions-runner-controller.yaml
 
