@@ -37,8 +37,10 @@ endif
 all: manager
 
 # Run tests
-test: create-release-dir generate fmt vet manifests
+test: create-release-dir generate fmt vet manifests helm-lint
 	go test ./... -coverprofile cover.out
+
+helm-lint:
 	helm lint ./charts/actions-runner-controller
 
 # Build manager binary
