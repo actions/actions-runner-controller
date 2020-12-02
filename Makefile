@@ -7,7 +7,8 @@ YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
-GITHUB_PREVIOUS_TAG := $(strip $(shell git tag --sort=committerdate | tail -1 | head -n 1)
+# This is ultimately the previous tag however at the time of running the Makefile it would be the latest
+GITHUB_LATEST_TAG := $(strip $(shell git tag --sort=committerdate | tail -1 | head -n 1)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -71,7 +72,7 @@ chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
 
 chart-release:
-	$(eval CHANGED_FILES := $(strip $(shell git diff $($$GITHUB_PREVIOUS_TAG)..HEAD --no-merges --oneline --name-only -- charts config/crd/bases)))
+	$(eval CHANGED_FILES := $(strip $(shell git diff $($$GITHUB_LATEST_TAG)..HEAD --no-merges --oneline --name-only -- charts config/crd/bases)))
 ifeq ($(CHANGED_FILES),)
 	$(info Helm chart files dectected as changed, moving packaged charts to release folder:)
 	$(info Changed files : $(CHANGED_FILES))
