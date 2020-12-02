@@ -8,7 +8,7 @@ YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
 # This is ultimately the previous tag however at the time of running the Makefile it would be the latest
-GITHUB_LATEST_TAG := $(strip $(shell git tag --sort=committerdate | tail -1 | head -n 1)
+GITHUB_LATEST_TAG := $(strip $(shell git tag --sort=committerdate | tail -1))
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
