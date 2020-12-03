@@ -78,7 +78,7 @@ chart-release:
 ifeq ($(CHANGED_FILES),)
 	$(info Helm chart files dectected as changed, moving packaged charts to release folder:)
 	$(info Changed files : $(CHANGED_FILES))
-	helm package charts/*
+	helm package charts/* --version ${VERSION}
 	mv *.tgz release/
 endif
 
