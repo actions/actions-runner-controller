@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/google/go-github/v32/github"
+	"github.com/google/go-github/v33/github"
 	"golang.org/x/oauth2"
 )
 
@@ -32,6 +32,7 @@ type Client struct {
 	GithubBaseURL string
 }
 
+// NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
 	var (
 		httpClient *http.Client
@@ -179,25 +180,25 @@ func (c *Client) cleanup() {
 func (c *Client) createRegistrationToken(ctx context.Context, owner, repo string) (*github.RegistrationToken, *github.Response, error) {
 	if len(repo) > 0 {
 		return c.Client.Actions.CreateRegistrationToken(ctx, owner, repo)
-	} else {
-		return CreateOrganizationRegistrationToken(ctx, c, owner)
 	}
+
+	return CreateOrganizationRegistrationToken(ctx, c, owner)
 }
 
 func (c *Client) removeRunner(ctx context.Context, owner, repo string, runnerID int64) (*github.Response, error) {
 	if len(repo) > 0 {
 		return c.Client.Actions.RemoveRunner(ctx, owner, repo, runnerID)
-	} else {
-		return RemoveOrganizationRunner(ctx, c, owner, runnerID)
 	}
+
+	return RemoveOrganizationRunner(ctx, c, owner, runnerID)
 }
 
 func (c *Client) listRunners(ctx context.Context, owner, repo string, opts *github.ListOptions) (*github.Runners, *github.Response, error) {
 	if len(repo) > 0 {
 		return c.Client.Actions.ListRunners(ctx, owner, repo, opts)
-	} else {
-		return ListOrganizationRunners(ctx, c, owner, opts)
 	}
+
+	return ListOrganizationRunners(ctx, c, owner, opts)
 }
 
 // Validates owner and repo arguments. Both are optional, but at least one should be specified
@@ -214,9 +215,8 @@ func getOwnerAndRepo(org, repo string) (string, string, error) {
 func getRegistrationKey(org, repo string) string {
 	if len(org) > 0 {
 		return org
-	} else {
-		return repo
 	}
+	return repo
 }
 
 func splitOwnerAndRepo(repo string) (string, string, error) {
