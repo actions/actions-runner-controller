@@ -10,6 +10,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	defaultScaleUpThreshold   = 0.8
+	defaultScaleDownThreshold = 0.3
+	defaultScaleUpFactor      = 1.3
+	defaultScaleDownFactor    = 0.7
+)
+
 func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	if hra.Spec.MinReplicas == nil {
 		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing minReplicas", hra.Namespace, hra.Name)
@@ -148,6 +155,24 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	orgName := rd.Spec.Template.Spec.Organization
 	minReplicas := *hra.Spec.MinReplicas
 	maxReplicas := *hra.Spec.MaxReplicas
+	metrics := hra.Spec.Metrics[0]
+	scaleUpThreshold := defaultScaleUpThreshold
+	scaleDownThreshold := defaultScaleDownThreshold
+	scaleUpFactor := defaultScaleUpFactor
+	scaleDownFactor := defaultScaleDownFactor
+
+	if metrics.ScaleUpThreshold != 0 {
+		scaleUpThreshold = metrics.ScaleUpThreshold
+	}
+	if metrics.ScaleDownThreshold != 0 {
+		scaleDownThreshold = metrics.ScaleDownThreshold
+	}
+	if metrics.ScaleUpFactor != 0 {
+		scaleUpFactor = metrics.ScaleUpFactor
+	}
+	if metrics.ScaleDownFactor != 0 {
+		scaleDownFactor = metrics.ScaleDownFactor
+	}
 
 	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 	var runnerList v1alpha1.RunnerList
@@ -174,15 +199,15 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 
 	var desiredReplicas int
 	fractionBusy := float64(numRunnersBusy) / float64(numRunners)
-	if fractionBusy >= 0.8 {
-		scaleUpReplicas := int(float64(numRunners)*1.3 + 0.5)
+	if fractionBusy >= scaleUpThreshold {
+		scaleUpReplicas := int(float64(numRunners)*scaleUpFactor + 0.5)
 		if scaleUpReplicas > maxReplicas {
 			desiredReplicas = maxReplicas
 		} else {
 			desiredReplicas = scaleUpReplicas
 		}
-	} else if fractionBusy < 0.3 {
-		scaleDownReplicas := int(float64(numRunners) * 0.7)
+	} else if fractionBusy < scaleDownThreshold {
+		scaleDownReplicas := int(float64(numRunners) * scaleDownFactor)
 		if scaleDownReplicas < minReplicas {
 			desiredReplicas = minReplicas
 		} else {
