@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
@@ -161,17 +162,34 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	scaleUpFactor := defaultScaleUpFactor
 	scaleDownFactor := defaultScaleDownFactor
 
-	if metrics.ScaleUpThreshold != 0 {
-		scaleUpThreshold = metrics.ScaleUpThreshold
+	if metrics.ScaleUpThreshold != "" {
+		sut, err := strconv.ParseFloat(metrics.ScaleUpThreshold, 64)
+		if err != nil {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleUpThreshold cannot be parsed into a float64")
+		}
+		scaleUpThreshold = sut
 	}
-	if metrics.ScaleDownThreshold != 0 {
-		scaleDownThreshold = metrics.ScaleDownThreshold
+	if metrics.ScaleDownThreshold != "" {
+		sdt, err := strconv.ParseFloat(metrics.ScaleDownThreshold, 64)
+		if err != nil {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleDownThreshold cannot be parsed into a float64")
+		}
+
+		scaleDownThreshold = sdt
 	}
-	if metrics.ScaleUpFactor != 0 {
-		scaleUpFactor = metrics.ScaleUpFactor
+	if metrics.ScaleUpFactor != "" {
+		suf, err := strconv.ParseFloat(metrics.ScaleUpFactor, 64)
+		if err != nil {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleUpFactor cannot be parsed into a float64")
+		}
+		scaleUpFactor = suf
 	}
-	if metrics.ScaleDownFactor != 0 {
-		scaleDownFactor = metrics.ScaleDownFactor
+	if metrics.ScaleDownFactor != "" {
+		sdf, err := strconv.ParseFloat(metrics.ScaleDownFactor, 64)
+		if err != nil {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleDownFactor cannot be parsed into a float64")
+		}
+		scaleDownFactor = sdf
 	}
 
 	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.

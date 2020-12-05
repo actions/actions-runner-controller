@@ -60,22 +60,22 @@ type MetricSpec struct {
 	// ScaleUpThreshold is the percentage of busy runners greater than which will
 	// trigger the hpa to scale runners up.
 	// +optional
-	ScaleUpThreshold float64 `json:"scaleUpThreshold,omitempty"`
+	ScaleUpThreshold string `json:"scaleUpThreshold,omitempty"`
 
 	// ScaleDownThreshold is the percentage of busy runners less than which will
 	// trigger the hpa to scale the runners down.
 	// +optional
-	ScaleDownThreshold float64 `json:"scaleDownThreshold,omitempty"`
+	ScaleDownThreshold string `json:"scaleDownThreshold,omitempty"`
 
 	// ScaleUpFactor is the multiplicative factor applied to the current number of runners used
 	// to determine how many pods should be added.
 	// +optional
-	ScaleUpFactor float64 `json:"scaleUpFactor,omitempty"`
+	ScaleUpFactor string `json:"scaleUpFactor,omitempty"`
 
 	// ScaleDownFactor is the multiplicative factor applied to the current number of runners used
 	// to determine how many pods should be removed.
 	// +optional
-	ScaleDownFactor float64 `json:"scaleDownFactor,omitempty"`
+	ScaleDownFactor string `json:"scaleDownFactor,omitempty"`
 }
 
 type HorizontalRunnerAutoscalerStatus struct {
