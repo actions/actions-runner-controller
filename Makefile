@@ -121,8 +121,12 @@ release: manifests
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
+.PHONY: release/clean
+release/clean:
+	rm -rf release
+
 .PHONY: acceptance
-acceptance: release
+acceptance: release/clean release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
