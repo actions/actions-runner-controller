@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 
-	"github.com/google/go-github/v32/github"
+	"github.com/google/go-github/v33/github"
 	"github.com/gorilla/mux"
 )
 
