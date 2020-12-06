@@ -9,27 +9,32 @@ jobs:
   build:
     runs-on: ubuntu-latest
     name: release-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ github.repository_owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
       - name: Set up Docker Buildx
         id: buildx
-        uses: crazy-max/ghaction-docker-buildx@v1
+        uses: docker/setup-buildx-action@v1
         with:
-          buildx-version: latest
+          version: latest
 
-      - name: Login to GitHub Docker Registry
-        run: echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
-      - name: Build Container Image
-        env:
-          DOCKERHUB_USERNAME: ${{ github.repository_owner }}
-        run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${DOCKERHUB_USERNAME}/actions-runner-controller:latest \
-            -f Dockerfile . --push
+      - name: Build and Push
+        uses: docker/build-push-action@v2
+        with:
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest 
+
