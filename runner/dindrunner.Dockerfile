@@ -67,6 +67,10 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 	docker --version
 
 # Runner download supports amd64 as x64
+#
+# libyaml-dev is required for ruby/setup-ruby action.
+# It is installed after installdependencies.sh and before removing /var/lib/apt/lists
+# to avoid rerunning apt-update on its own.
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
     && mkdir -p /runner \
@@ -75,8 +79,13 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
     && ./bin/installdependencies.sh \
+    && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
+  && mkdir /opt/hostedtoolcache \
+  && chgrp runner /opt/hostedtoolcache \
+  && chmod g+rwx /opt/hostedtoolcache
 
 COPY modprobe startup.sh /usr/local/bin/
 COPY supervisor/ /etc/supervisor/conf.d/

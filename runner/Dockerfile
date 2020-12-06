@@ -56,6 +56,10 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
   && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
 # Runner download supports amd64 as x64. Externalstmp is needed for making mount points work inside DinD.
+#
+# libyaml-dev is required for ruby/setup-ruby action.
+# It is installed after installdependencies.sh and before removing /var/lib/apt/lists
+# to avoid rerunning apt-update on its own.
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
   && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
   && mkdir -p /runner \
@@ -65,7 +69,13 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
   && rm runner.tar.gz \
   && ./bin/installdependencies.sh \
   && mv ./externals ./externalstmp \
+  && apt-get install -y libyaml-dev \
   && rm -rf /var/lib/apt/lists/*
+
+RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
+  && mkdir /opt/hostedtoolcache \
+  && chgrp runner /opt/hostedtoolcache \
+  && chmod g+rwx /opt/hostedtoolcache
 
 COPY entrypoint.sh /runner
 COPY patched /runner/patched
