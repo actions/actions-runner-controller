@@ -2,10 +2,11 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log"
 	"strings"
 
+	"github.com/google/go-github/v32/github"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
@@ -18,30 +19,58 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 
 	var repos [][]string
 
-	repoID := rd.Spec.Template.Spec.Repository
-	if repoID == "" {
-		orgName := rd.Spec.Template.Spec.Organization
-		if orgName == "" {
-			return nil, fmt.Errorf("asserting runner deployment spec to detect bug: spec.template.organization should not be empty on this code path")
+	orgName := rd.Spec.Template.Spec.Organization
+	if orgName == "" {
+		return nil, fmt.Errorf("asserting runner deployment spec to detect bug: spec.template.organization should not be empty on this code path")
+	}
+
+	metrics := hra.Spec.Metrics
+	if len(metrics) == 0 {
+		return nil, fmt.Errorf("validating autoscaling metrics: one or more metrics is required")
+	} else if tpe := metrics[0].Type; tpe != v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
+		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q: only supported value is %s", tpe, v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns)
+	}
+
+	if len(metrics[0].RepositoryNames) == 0 {
+		options := &github.RepositoryListByOrgOptions{
+			Type: "private",
+			Sort: "pushed",
+		}
+		orgRepos, _, err := r.GitHubClient.Repositories.ListByOrg(context.Background(), orgName, options)
+		if err != nil {
+			return nil, fmt.Errorf("[ERROR] error fetching a list of repositories for the %s organization with error message: %s", orgName, err)
 		}
 
-		metrics := hra.Spec.Metrics
-
-		if len(metrics) == 0 {
-			return nil, fmt.Errorf("validating autoscaling metrics: one or more metrics is required")
-		} else if tpe := metrics[0].Type; tpe != v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
-			return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q: only supported value is %s", tpe, v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns)
-		} else if len(metrics[0].RepositoryNames) == 0 {
-			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment")
+		if len(orgRepos) < 1 {
+			return nil, fmt.Errorf("[ERROR] ListByOrg returned empty slice! Does your PAT have enough access and is it authorized to list the organizational repositories?")
 		}
 
-		for _, repoName := range metrics[0].RepositoryNames {
+		for _, v := range orgRepos {
+			repoName := fmt.Sprint(*v.Name)
+
+			// We kind of already make sure that we don't use these repo's by using the `ListByOrgOptions` field, this is just an extra safeguard.
+			if *v.Archived || *v.Disabled {
+				continue
+			}
+
+			// Some organizations have hundreds to thousands of repositories; we only need the X most recent ones.
+			if len(repos) >= 10 {
+				log.Printf("[INFO] Reached the limit of repos, performing check on these repositories: %s", repos)
+				break
+			}
 			repos = append(repos, []string{orgName, repoName})
 		}
+		log.Printf("[INFO] watching the following organizational repositories: %s", repos)
 	} else {
-		repo := strings.Split(repoID, "/")
-
-		repos = append(repos, repo)
+		repoID := rd.Spec.Template.Spec.Repository
+		if repoID == "" {
+			for _, repoName := range metrics[0].RepositoryNames {
+				repos = append(repos, []string{orgName, repoName})
+			}
+		} else {
+			repo := strings.Split(repoID, "/")
+			repos = append(repos, repo)
+		}
 	}
 
 	var total, inProgress, queued, completed, unknown int

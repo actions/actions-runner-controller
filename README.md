@@ -205,7 +205,9 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
-#### Autoscaling
+### Autoscaling
+
+#### Repository runners Autoscaling
 
 `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields, depending on pending workflow runs.
 
@@ -241,6 +243,8 @@ The scale out performance is controlled via the manager containers startup `--sy
 Additionally, the autoscaling feature has an anti-flapping option that prevents periodic loop of scaling up and down.
 By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured by setting `scaleDownDelaySecondsAfterScaleUp`:
 
+Please note that if your `RunnerDeployment` has the `Repository` key set, then do not use the `<owner/repository_name>` notation, only provide the `<repository_name>`.
+
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
@@ -265,6 +269,36 @@ spec:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
     - summerwind/actions-runner-controller
+```
+
+#### Organization runners Autoscaling
+To autoscale on an organizational level, you need to remove the `repositoryNames` mapping and leave it empty. The Github Actions API doesn’t offer an endpoint to check the currently queued workflows on an organizational level. The way how the controller tries to get around this is by - after each `sync-period` - select the repositories with the latest `pushed` time and check the Actions workflow queue of those repositories. At the moment, the controller checks the last 10 repositories.
+
+Please note, in case you want to autoscale your organization runners, that you should modify your Github organization permissions accordingly; for instance, if you are using an organization PAT (Personal Access Token), update the permissions of your PAT to allow the controller to list all the repositories under your organization.
+
+An example of scaling your organization runners is shown below:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  template:
+    spec:
+      organization: "your-organization-name"
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runnerdeploy-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runnerdeploy
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
 ```
 
 ## Runner with DinD
@@ -321,7 +355,7 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
-      # If set to false, there are no privileged container and you cannot use docker. 
+      # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
       # image summerwind/actions-runner-dind or custom one should be used with true -value
