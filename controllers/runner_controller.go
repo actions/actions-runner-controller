@@ -198,14 +198,20 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, nil
 		}
 
-		if !runnerBusy && (!reflect.DeepEqual(pod.Spec.Containers[0].Env, newPod.Spec.Containers[0].Env) || pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image) {
+		// Filter out token that is changed hourly.
+		currentEnvValues := filterEnvVars(pod.Spec.Containers[0].Env, "RUNNER_TOKEN")
+		newEnvValues := filterEnvVars(newPod.Spec.Containers[0].Env, "RUNNER_TOKEN")
+
+		if !runnerBusy && (!reflect.DeepEqual(currentEnvValues, newEnvValues) || pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image) {
 			restart = true
 		}
 
+		// Don't do anything if there's no need to restart the runner
 		if !restart {
 			return ctrl.Result{}, err
 		}
 
+		// Delete current pod if recreation is needed
 		if err := r.Delete(ctx, &pod); err != nil {
 			log.Error(err, "Failed to delete pod resource")
 			return ctrl.Result{}, err
