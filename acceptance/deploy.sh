@@ -32,7 +32,7 @@ else
   kubectl apply \
     -n actions-runner-system \
     -f release/actions-runner-controller.yaml
-  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available
+  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available --timeout 60s
 fi
 
 # Adhocly wait for some time until actions-runner-controller's admission webhook gets ready

@@ -404,6 +404,32 @@ spec:
       group: NewGroup
 ```
 
+## Using EKS IAM role for service accounts
+
+`actions-runner-controller` v0.15.0 or later has support for EKS IAM role for service accounts.
+
+As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
+Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
+
+Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses
+the IAM-role enabled service account.
+
+For `RunnerDeployment`, you can set those two fields under the runner spec at `RunnerDeployment.Spec.Template`:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  template:
+    spec:
+      repository: USER/REO
+      serviceAccountName: my-service-account
+      securityContext:
+        fsGroup: 1447
+```
+
 ## Software installed in the runner image
 
 The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
@@ -458,7 +484,10 @@ If you'd like to modify the controller to fork or contribute, I'd suggest using 
 the acceptance test:
 
 ```shell
-NAME=$DOCKER_USER/actions-runner-controller VERSION=dev \
+# This sets `VERSION` envvar to some appropriate value
+. hack/make-env.sh
+
+NAME=$DOCKER_USER/actions-runner-controller \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
@@ -474,6 +503,19 @@ The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-r
 creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
 controller is able to bring up a runner pod with the actions runner registration token installed.
 
+If you prefer to test in a non-kind cluster, you can instead run:
+
+```shell script
+KUBECONFIG=path/to/kubeconfig \
+NAME=$DOCKER_USER/actions-runner-controller \
+  GITHUB_TOKEN=*** \
+  APP_ID=*** \
+  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
+  INSTALLATION_ID=*** \
+  ACCEPTANCE_TEST_SECRET_TYPE=token \
+  make docker-build docker-push \
+       acceptance/setup acceptance/tests
+```
 # Alternatives
 
 The following is a list of alternative solutions that may better fit you depending on your use-case:
