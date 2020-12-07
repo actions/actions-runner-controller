@@ -29,16 +29,19 @@ type Client struct {
 	regTokens map[string]*github.RegistrationToken
 	mu        sync.Mutex
 	// GithubBaseURL to Github without API suffix.
-	GithubBaseURL string
+	GithubBaseURL    string
+	GithubEnterprise bool
 }
 
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
 	var (
-		httpClient *http.Client
-		client     *github.Client
+		httpClient       *http.Client
+		client           *github.Client
+		githubEnterprise bool
 	)
 	githubBaseURL := "https://github.com/"
+
 	if len(c.Token) > 0 {
 		httpClient = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
 			&oauth2.Token{AccessToken: c.Token},
@@ -60,6 +63,8 @@ func (c *Config) NewClient() (*Client, error) {
 
 	if len(c.EnterpriseURL) > 0 {
 		var err error
+		githubEnterprise = true
+
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
 		if err != nil {
 			return nil, fmt.Errorf("enterprise client creation failed: %v", err)
@@ -67,13 +72,15 @@ func (c *Config) NewClient() (*Client, error) {
 		githubBaseURL = fmt.Sprintf("%s://%s%s", client.BaseURL.Scheme, client.BaseURL.Host, strings.TrimSuffix(client.BaseURL.Path, "api/v3/"))
 	} else {
 		client = github.NewClient(httpClient)
+		githubEnterprise = false
 	}
 
 	return &Client{
-		Client:        client,
-		regTokens:     map[string]*github.RegistrationToken{},
-		mu:            sync.Mutex{},
-		GithubBaseURL: githubBaseURL,
+		Client:           client,
+		regTokens:        map[string]*github.RegistrationToken{},
+		mu:               sync.Mutex{},
+		GithubBaseURL:    githubBaseURL,
+		GithubEnterprise: githubEnterprise,
 	}, nil
 }
 

@@ -46,6 +46,7 @@ type HorizontalRunnerAutoscalerReconciler struct {
 	Log          logr.Logger
 	Recorder     record.EventRecorder
 	Scheme       *runtime.Scheme
+	SyncPeriod   *time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;update;patch

@@ -148,6 +148,7 @@ func main() {
 		Log:          ctrl.Log.WithName("controllers").WithName("HorizontalRunnerAutoscaler"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: ghClient,
+		SyncPeriod:   &syncPeriod,
 	}
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {

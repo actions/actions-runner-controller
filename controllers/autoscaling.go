@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
-	"github.com/google/go-github/v32/github"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
@@ -31,36 +31,39 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q: only supported value is %s", tpe, v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns)
 	}
 
+	// Github Enterprise API doesn't offer an endpoint for checking the Actions queue on org level, neither does it offer an endpoint for checking what repos Actions is enabled. This means that, in case of GH Enterprise, you must pass a slice of repositories.
+	if len(metrics[0].RepositoryNames) < 1 && r.GitHubClient.GithubEnterprise {
+		return nil, fmt.Errorf("[ERROR] user didn't pass any repository! Please pass a list of repositories the controller has to monitor")
+	}
+
+	// If the above conditionally didn't return an error, we  automatically assume, in case on an empty repository slice, that an organization is used.
 	if len(metrics[0].RepositoryNames) == 0 {
-		options := &github.RepositoryListByOrgOptions{
-			Type: "private",
-			Sort: "pushed",
-		}
-		orgRepos, _, err := r.GitHubClient.Repositories.ListByOrg(context.Background(), orgName, options)
+		enabledRepos, _, err := r.GitHubClient.Actions.ListEnabledReposInOrg(context.Background(), orgName, nil)
 		if err != nil {
-			return nil, fmt.Errorf("[ERROR] error fetching a list of repositories for the %s organization with error message: %s", orgName, err)
+			return nil, fmt.Errorf("[ERROR] 'ListEnabledReposInOrg' failed with error message: %s", err)
 		}
 
-		if len(orgRepos) < 1 {
-			return nil, fmt.Errorf("[ERROR] ListByOrg returned empty slice! Does your PAT have enough access and is it authorized to list the organizational repositories?")
+		if len(enabledRepos.Repositories) < 1 {
+			return nil, fmt.Errorf("[ERROR] 'ListEnabledReposInOrg' returned an empty slice of repositories, check your permissions. Error message: %s", err)
 		}
 
-		for _, v := range orgRepos {
+		for _, v := range enabledRepos.Repositories {
 			repoName := fmt.Sprint(*v.Name)
 
-			// We kind of already make sure that we don't use these repo's by using the `ListByOrgOptions` field, this is just an extra safeguard.
 			if *v.Archived || *v.Disabled {
 				continue
 			}
 
-			// Some organizations have hundreds to thousands of repositories; we only need the X most recent ones.
-			if len(repos) >= 10 {
-				log.Printf("[INFO] Reached the limit of repos, performing check on these repositories: %s", repos)
-				break
+			lastChange := (int(time.Now().UTC().Sub(v.PushedAt.Time).Minutes()))
+			// We need a conditional here, since the `ListEnabledReposInOrg(ListOptions)` doesn't allow us to filter on `pushedAt`: https://docs.github.com/en/free-pro-team@latest/rest/reference/actions#list-selected-repositories-enabled-for-github-actions-in-an-organization
+			if lastChange > int(r.SyncPeriod.Minutes()) {
+				continue
+			} else if len(repos) < 20 {
+				repos = append(repos, []string{orgName, repoName})
 			}
-			repos = append(repos, []string{orgName, repoName})
 		}
 		log.Printf("[INFO] watching the following organizational repositories: %s", repos)
+
 	} else {
 		repoID := rd.Spec.Template.Spec.Repository
 		if repoID == "" {
