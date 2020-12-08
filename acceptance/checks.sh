@@ -24,6 +24,6 @@ echo Found pod ${pod_name}.
 
 echo Waiting for pod ${runner_name} to become ready... 1>&2
 
-kubectl wait pod/${runner_name} --for condition=ready --timeout 120s
+kubectl wait pod/${runner_name} --for condition=ready --timeout 180s
 
 echo All tests passed. 1>&2
