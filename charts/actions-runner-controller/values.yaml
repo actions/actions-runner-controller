@@ -47,7 +47,7 @@ githubAuthenticationSchema:
     github_app_installation_id: ""
     github_app_private_key: ""
   token:
-    enabled: fakse
+    enabled: false
     github_token: ""
 
 service:
