@@ -39,16 +39,16 @@ securityContext: {}
   # runAsUser: 1000
 
 # Only 1 authentication method can be enabled at a time
-# Values need to be base64'ed in .yaml
-appGithubAuthenticationSchema:
-  enabled: false
-  github_app_id: 
-  github_app_installation_id: 
-  github_app_private_key: 
-
-tokenGithubAuthenticationSchema:
-  enabled: false
-  github_token: 
+# Values need to be base64'ed in values.yaml
+githubAuthenticationSchema:
+  app:
+    enabled: false
+    github_app_id: ""
+    github_app_installation_id: ""
+    github_app_private_key: ""
+  token:
+    enabled: fakse
+    github_token: ""
 
 service:
   type: ClusterIP
