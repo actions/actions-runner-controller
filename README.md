@@ -42,6 +42,7 @@ Regardless of which authentication method you use, the same permissions are requ
 - Repository: Actions (read)
 - Organization: Self-hosted runners (read/write)
 
+_Below is how to setup your authentication manually using kubectl. If you are running the Helm chart this can be done via the charts `values.yaml` file_
 
 **NOTE: It is extremely important to only follow one of the sections below and not both.**
 
@@ -453,7 +454,7 @@ This solution is primarily a Kustomize repo, Helm is supported however because t
 **Solutions**<br />
 Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
 * `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documeneted flags
+* Create the secret as described in the docs using the shell and documented flags or via the Helm chart if appropriate for your environment
 
 # Developing
 
