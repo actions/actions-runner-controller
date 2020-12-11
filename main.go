@@ -36,7 +36,7 @@ import (
 
 const (
 	defaultRunnerImage = "summerwind/actions-runner:latest"
-	defaultDockerImage = "docker:dind"
+	defaultDockerImage = "docker:20.10.0-dind"
 )
 
 var (
