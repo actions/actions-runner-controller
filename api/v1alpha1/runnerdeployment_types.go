@@ -22,6 +22,7 @@ import (
 
 const (
 	AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns = "TotalNumberOfQueuedAndInProgressWorkflowRuns"
+	AutoscalingMetricTypePercentageRunnersBusy                        = "PercentageRunnersBusy"
 )
 
 // RunnerReplicaSetSpec defines the desired state of RunnerDeployment
