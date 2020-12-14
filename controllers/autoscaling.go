@@ -218,7 +218,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	var desiredReplicas int
 	fractionBusy := float64(numRunnersBusy) / float64(numRunners)
 	if fractionBusy >= scaleUpThreshold {
-		scaleUpReplicas := int(float64(numRunners)*scaleUpFactor + 0.5)
+		scaleUpReplicas := int(float64(numRunners) * scaleUpFactor)
 		if scaleUpReplicas > maxReplicas {
 			desiredReplicas = maxReplicas
 		} else {
