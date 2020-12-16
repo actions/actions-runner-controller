@@ -267,11 +267,7 @@ spec:
     - summerwind/actions-runner-controller
 ```
 
-An alternate Autoscaling scheme that can be applied is evaluating the number of desired pods by checking how many runners are currently busy.
-By setting the metric type to PercentageRunnersBusy, the HorizontalRunnerAutoscaler will query github for the number of busy runners which live in the RunnerDeployment namespace.
-scaleup and scaledown thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. scaleup and scaledown factors are the multiplicative factor applied to the current number of runners used to calculate the number of desired runners.
-
-This scheme is especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
+If you do not want to manage an explicit list of repositories to scale, an alternate autoscaling scheme that can be applied is the PercentageRunnersBusy scheme. The number of desired pods are evaulated by checking how many runners are currently busy and applying a scaleup or scale down factor if certain thresholds are met. By setting the metric type to PercentageRunnersBusy, the HorizontalRunnerAutoscaler will query github for the number of busy runners which live in the RunnerDeployment namespace. Scaleup and scaledown thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. Scaleup and scaledown factors are the multiplicative factor applied to the current number of runners used to calculate the number of desired runners. This scheme is also especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
 
 ```yaml
 ---
