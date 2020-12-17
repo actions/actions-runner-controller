@@ -9,16 +9,16 @@ replicaCount: 1
 syncPeriod: 10m
 
 # Only 1 authentication method can be deployed at a time
-# Comment out 1 of the 2 sections and fill in
+# Uncomment the configuration you are applying and fill in
 authSecret:
   enabled: false
-  # GitHub Apps Configuration
-  github_app_id: ""
-  github_app_installation_id: ""
-  github_app_private_key: |
-      ""
-  # GitHub PAT Configuration
-  github_token: ""
+  ### GitHub Apps Configuration
+  #github_app_id: ""
+  #github_app_installation_id: ""
+  #github_app_private_key: |
+  #    ""
+  ### GitHub PAT Configuration
+  #github_token: ""
 
 image:
   repository: summerwind/actions-runner-controller
