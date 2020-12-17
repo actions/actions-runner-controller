@@ -267,6 +267,28 @@ spec:
     - summerwind/actions-runner-controller
 ```
 
+If you do not want to manage an explicit list of repositories to scale, an alternate autoscaling scheme that can be applied is the PercentageRunnersBusy scheme. The number of desired pods are evaulated by checking how many runners are currently busy and applying a scaleup or scale down factor if certain thresholds are met. By setting the metric type to PercentageRunnersBusy, the HorizontalRunnerAutoscaler will query github for the number of busy runners which live in the RunnerDeployment namespace. Scaleup and scaledown thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. Scaleup and scaledown factors are the multiplicative factor applied to the current number of runners used to calculate the number of desired runners. This scheme is also especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
+
+```yaml
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  scaleDownDelaySecondsAfterScaleOut: 60
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.3'
+    scaleUpFactor: '1.4'
+    scaleDownFactor: '0.7'
+```
+
 ## Runner with DinD
 
 When using default runner, runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). This might create issues if there's `LimitRange` set to namespace.
@@ -321,7 +343,7 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
-      # If set to false, there are no privileged container and you cannot use docker. 
+      # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
       # image summerwind/actions-runner-dind or custom one should be used with true -value
