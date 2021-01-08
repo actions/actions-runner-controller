@@ -88,7 +88,15 @@ From an account that has `admin` privileges for the repository, create a [person
 
 Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). This token is used to register a self-hosted runner by *actions-runner-controller*.
 
-For adding a runner to a repository, the token should have `repo` scope. If the runner should be added to an organization, the token should have `admin:org` scope. Note that to use a Personal Access Token, you must issue the token with an account that has `admin` privileges (on the repository and/or the organization).
+Note that to use a Personal Access Token, you must issue the token with an account that has `admin` privileges (on the repository and/or the organization). For adding a runner to a repository, the token should have `repo` scope. If the runner should be added to an organization, the token should have the following scopes: 
+
+* repo (all)
+* admin:org (all) **_(mandatory for organization-wide runner)_**
+* admin:public_key - read:public_key
+* admin:repo_hook - read:repo_hook
+* admin:org_hook
+* notifications
+* workflow
 
 Open the Create Token page from the following link, grant the `repo` and/or `admin:org` scope, and press the "Generate Token" button at the bottom of the page to create the token.
 
