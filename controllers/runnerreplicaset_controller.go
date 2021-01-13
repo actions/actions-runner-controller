@@ -52,7 +52,7 @@ type RunnerReplicaSetReconciler struct {
 
 func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("runner", req.NamespacedName)
+	log := r.Log.WithValues("runnerreplicaset", req.NamespacedName)
 
 	var rs v1alpha1.RunnerReplicaSet
 	if err := r.Get(ctx, req.NamespacedName, &rs); err != nil {
