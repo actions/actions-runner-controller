@@ -9,7 +9,7 @@ replicaCount: 1
 syncPeriod: 10m
 
 # Only 1 authentication method can be deployed at a time
-# Uncomment the configuration you are applying and fill in
+# Uncomment the configuration you are applying and fill in the details
 authSecret:
   enabled: false
   ### GitHub Apps Configuration
