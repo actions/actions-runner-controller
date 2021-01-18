@@ -66,7 +66,9 @@ jobs:
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist
       - name: Install cert-manager
-        run: helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
+        run: |
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
 
       - name: Run chart-testing (install)
         run: ct install --config charts/.ci/ct-config.yaml
