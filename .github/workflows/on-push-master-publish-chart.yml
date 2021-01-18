@@ -67,6 +67,12 @@ jobs:
         uses: helm/kind-action@v1.0.0
         if: steps.list-changed.outputs.changed == 'true'
 
+      # We need cert-manager already installed in the cluster because we assume the CRDs exist
+      - name: Install cert-manager
+        run: |
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
+
       - name: Run chart-testing (install)
         run: ct install --config charts/.ci/ct-config.yaml
 
@@ -85,17 +91,6 @@ jobs:
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Install Helm
-        uses: azure/setup-helm@v1
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      # We need cert-manager already installed in the cluster because we assume the CRDs exist
-      - name: Install cert-manager
-        run: |
-          helm repo add jetstack https://charts.jetstack.io --force-update
-          helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.1.0
