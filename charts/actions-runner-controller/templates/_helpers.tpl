@@ -89,7 +89,7 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "actions-runner-controller.authProxyServiceName" -}}
-{{- include "actions-runner-controller.fullname" . }}-controller-manager-metrics-service
+{{- include "actions-runner-controller.fullname" . }}-metrics-service
 {{- end }}
 
 {{- define "actions-runner-controller.selfsignedIssuerName" -}}

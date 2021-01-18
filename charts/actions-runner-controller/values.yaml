@@ -87,3 +87,7 @@ affinity: {}
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
+
+# Set the following to true to install cert-manager as a requirement to this chart
+certmanager:
+  enabled: false
