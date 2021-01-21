@@ -85,6 +85,6 @@ RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > .env \
 COPY entrypoint.sh /
 COPY patched $RUNNER_ASSETS_DIR/patched
 
-USER runner/runner
+USER runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["/entrypoint.sh"]
