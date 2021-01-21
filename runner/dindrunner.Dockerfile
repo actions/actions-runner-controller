@@ -48,6 +48,8 @@ ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=19.03.13
 ARG DEBUG=false
 
+RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
+
 # Docker installation
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
@@ -66,6 +68,8 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 	dockerd --version; \
 	docker --version
 
+ENV RUNNER_ASSETS_DIR=/runnertmp
+
 # Runner download supports amd64 as x64
 #
 # libyaml-dev is required for ruby/setup-ruby action.
@@ -73,8 +77,8 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 # to avoid rerunning apt-update on its own.
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
-    && mkdir -p /runner \
-     && cd /runner \
+    && mkdir -p "$RUNNER_ASSETS_DIR" \
+     && cd "$RUNNER_ASSETS_DIR" \
     && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
@@ -100,7 +104,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 VOLUME /var/lib/docker
 
-COPY patched /runner/patched
+COPY patched $RUNNER_ASSETS_DIR/patched
 
 # No group definition, as that makes it harder to run docker.
 USER runner
