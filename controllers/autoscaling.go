@@ -219,22 +219,19 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	var desiredReplicas int
 	fractionBusy := float64(numRunnersBusy) / float64(numRunners)
 	if fractionBusy >= scaleUpThreshold {
-		scaleUpReplicas := int(math.Ceil(float64(numRunners) * scaleUpFactor))
-		if scaleUpReplicas > maxReplicas {
-			desiredReplicas = maxReplicas
-		} else {
-			desiredReplicas = scaleUpReplicas
-		}
+		desiredReplicas = int(math.Ceil(float64(numRunners) * scaleUpFactor))
 	} else if fractionBusy < scaleDownThreshold {
-		scaleDownReplicas := int(float64(numRunners) * scaleDownFactor)
-		if scaleDownReplicas < minReplicas {
-			desiredReplicas = minReplicas
-		} else {
-			desiredReplicas = scaleDownReplicas
-		}
+		desiredReplicas = int(float64(numRunners) * scaleDownFactor)
 	} else {
 		desiredReplicas = *rd.Spec.Replicas
 	}
+	
+	if desiredReplicas < minReplicas {
+		desiredReplicas = minReplicas
+	} else if desiredReplicas > maxReplicas {
+		desiredReplicas = maxReplicas
+	}
+	
 
 	r.Log.V(1).Info(
 		"Calculated desired replicas",
