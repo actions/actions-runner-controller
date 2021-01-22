@@ -468,11 +468,11 @@ The virtual environments from GitHub contain a lot more software packages (diffe
 If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and installing the extra dependencies directly in the docker image:
 
 ```shell
-FROM summerwind/actions-runner:v2.169.1
+FROM summerwind/actions-runner:latest
 
 RUN sudo apt update -y \
-  && apt install YOUR_PACKAGE
-  && rm -rf /var/lib/apt/lists/*
+  && sudo apt install YOUR_PACKAGE
+  && sudo rm -rf /var/lib/apt/lists/*
 ```
 
 You can then configure the runner to use a custom docker image by configuring the `image` field of a `Runner` or `RunnerDeployment`:
