@@ -8,6 +8,17 @@ replicaCount: 1
 
 syncPeriod: 10m
 
+# Only 1 authentication method can be deployed at a time
+# Uncomment the configuration you are applying and fill in the details
+authSecret:
+  enabled: false
+  ### GitHub Apps Configuration
+  #github_app_id: ""
+  #github_app_installation_id: ""
+  #github_app_private_key: |
+  ### GitHub PAT Configuration
+  #github_token: ""
+
 image:
   repository: summerwind/actions-runner-controller
   # Overrides the manager image tag whose default is the chart appVersion if the tag key is commented out
