@@ -40,6 +40,9 @@ helm.sh/chart: {{ include "actions-runner-controller.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- range $k, $v := .Values.labels }}
+{{ $k }}: {{ $v }}
+{{- end }}
 {{- end }}
 
 {{/*

@@ -64,6 +64,24 @@ spec:
                     items:
                       type: string
                     type: array
+                  scaleDownFactor:
+                    description: ScaleDownFactor is the multiplicative factor applied
+                      to the current number of runners used to determine how many
+                      pods should be removed.
+                    type: string
+                  scaleDownThreshold:
+                    description: ScaleDownThreshold is the percentage of busy runners
+                      less than which will trigger the hpa to scale the runners down.
+                    type: string
+                  scaleUpFactor:
+                    description: ScaleUpFactor is the multiplicative factor applied
+                      to the current number of runners used to determine how many
+                      pods should be added.
+                    type: string
+                  scaleUpThreshold:
+                    description: ScaleUpThreshold is the percentage of busy runners
+                      greater than which will trigger the hpa to scale runners up.
+                    type: string
                   type:
                     description: Type is the type of metric to be used for autoscaling.
                       The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns

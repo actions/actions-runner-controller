@@ -126,20 +126,22 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean release
-	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
-	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
-	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/setup acceptance/tests acceptance/teardown
-	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/setup acceptance/tests acceptance/teardown
+acceptance: release/clean docker-build docker-push release
+	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 
-acceptance/setup:
+acceptance/kind:
 	kind create cluster --name acceptance
 	kubectl cluster-info --context kind-acceptance
+
+acceptance/setup:
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
 	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 60s
 	kubectl -n cert-manager wait deploy/cert-manager-webhook --for condition=available --timeout 60s
 	kubectl -n cert-manager wait deploy/cert-manager --for condition=available --timeout 60s
-	kubectl create namespace actions-runner-system
+	kubectl create namespace actions-runner-system || true
 	# Adhocly wait for some time until cert-manager's admission webhook gets ready
 	sleep 5
 

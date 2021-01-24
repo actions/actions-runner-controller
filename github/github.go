@@ -182,7 +182,7 @@ func (c *Client) createRegistrationToken(ctx context.Context, owner, repo string
 		return c.Client.Actions.CreateRegistrationToken(ctx, owner, repo)
 	}
 
-	return CreateOrganizationRegistrationToken(ctx, c, owner)
+	return c.Client.Actions.CreateOrganizationRegistrationToken(ctx, owner)
 }
 
 func (c *Client) removeRunner(ctx context.Context, owner, repo string, runnerID int64) (*github.Response, error) {
@@ -190,7 +190,7 @@ func (c *Client) removeRunner(ctx context.Context, owner, repo string, runnerID 
 		return c.Client.Actions.RemoveRunner(ctx, owner, repo, runnerID)
 	}
 
-	return RemoveOrganizationRunner(ctx, c, owner, runnerID)
+	return c.Client.Actions.RemoveOrganizationRunner(ctx, owner, runnerID)
 }
 
 func (c *Client) listRunners(ctx context.Context, owner, repo string, opts *github.ListOptions) (*github.Runners, *github.Response, error) {
@@ -198,7 +198,7 @@ func (c *Client) listRunners(ctx context.Context, owner, repo string, opts *gith
 		return c.Client.Actions.ListRunners(ctx, owner, repo, opts)
 	}
 
-	return ListOrganizationRunners(ctx, c, owner, opts)
+	return c.Client.Actions.ListOrganizationRunners(ctx, owner, opts)
 }
 
 // Validates owner and repo arguments. Both are optional, but at least one should be specified

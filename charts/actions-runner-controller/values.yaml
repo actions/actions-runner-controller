@@ -2,15 +2,18 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+labels: {}
+
 replicaCount: 1
 
 syncPeriod: 10m
 
 image:
   repository: summerwind/actions-runner-controller
+  # Overrides the manager image tag whose default is the chart appVersion if the tag key is commented out
+  tag: "latest"
+  dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""

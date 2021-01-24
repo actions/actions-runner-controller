@@ -267,6 +267,28 @@ spec:
     - summerwind/actions-runner-controller
 ```
 
+If you do not want to manage an explicit list of repositories to scale, an alternate autoscaling scheme that can be applied is the PercentageRunnersBusy scheme. The number of desired pods are evaulated by checking how many runners are currently busy and applying a scaleup or scale down factor if certain thresholds are met. By setting the metric type to PercentageRunnersBusy, the HorizontalRunnerAutoscaler will query github for the number of busy runners which live in the RunnerDeployment namespace. Scaleup and scaledown thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. Scaleup and scaledown factors are the multiplicative factor applied to the current number of runners used to calculate the number of desired runners. This scheme is also especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
+
+```yaml
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  scaleDownDelaySecondsAfterScaleOut: 60
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.3'
+    scaleUpFactor: '1.4'
+    scaleDownFactor: '0.7'
+```
+
 ## Runner with DinD
 
 When using default runner, runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). This might create issues if there's `LimitRange` set to namespace.
@@ -321,7 +343,7 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
-      # If set to false, there are no privileged container and you cannot use docker. 
+      # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
       # image summerwind/actions-runner-dind or custom one should be used with true -value
@@ -404,6 +426,32 @@ spec:
       group: NewGroup
 ```
 
+## Using EKS IAM role for service accounts
+
+`actions-runner-controller` v0.15.0 or later has support for EKS IAM role for service accounts.
+
+As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
+Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
+
+Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses
+the IAM-role enabled service account.
+
+For `RunnerDeployment`, you can set those two fields under the runner spec at `RunnerDeployment.Spec.Template`:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  template:
+    spec:
+      repository: USER/REO
+      serviceAccountName: my-service-account
+      securityContext:
+        fsGroup: 1447
+```
+
 ## Software installed in the runner image
 
 The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
@@ -458,7 +506,10 @@ If you'd like to modify the controller to fork or contribute, I'd suggest using 
 the acceptance test:
 
 ```shell
-NAME=$DOCKER_USER/actions-runner-controller VERSION=dev \
+# This sets `VERSION` envvar to some appropriate value
+. hack/make-env.sh
+
+NAME=$DOCKER_USER/actions-runner-controller \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
@@ -474,6 +525,19 @@ The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-r
 creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
 controller is able to bring up a runner pod with the actions runner registration token installed.
 
+If you prefer to test in a non-kind cluster, you can instead run:
+
+```shell script
+KUBECONFIG=path/to/kubeconfig \
+NAME=$DOCKER_USER/actions-runner-controller \
+  GITHUB_TOKEN=*** \
+  APP_ID=*** \
+  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
+  INSTALLATION_ID=*** \
+  ACCEPTANCE_TEST_SECRET_TYPE=token \
+  make docker-build docker-push \
+       acceptance/setup acceptance/tests
+```
 # Alternatives
 
 The following is a list of alternative solutions that may better fit you depending on your use-case:

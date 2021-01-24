@@ -50,11 +50,12 @@ if [ ! -d /runner ]; then
   exit 1
 fi
 
+sudo chown -R runner:docker /runner
 mv /runnertmp/* /runner/
 
 cd /runner
 ./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${RUNNER_GROUP_ARG} ${LABEL_ARG} ${WORKDIR_ARG}
-
+mkdir ./externals
 # Hack due to the DinD volumes
 mv ./externalstmp/* ./externals/
 

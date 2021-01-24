@@ -19,7 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
+	"github.com/summerwind/actions-runner-controller/hash"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -39,6 +39,8 @@ import (
 const (
 	containerName = "runner"
 	finalizerName = "runner.actions.summerwind.dev"
+
+	LabelKeyPodTemplateHash = "pod-template-hash"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -198,11 +200,12 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, nil
 		}
 
-		// Filter out token that is changed hourly.
-		currentEnvValues := filterEnvVars(pod.Spec.Containers[0].Env, "RUNNER_TOKEN")
-		newEnvValues := filterEnvVars(newPod.Spec.Containers[0].Env, "RUNNER_TOKEN")
+		// See the `newPod` function called above for more information
+		// about when this hash changes.
+		curHash := pod.Labels[LabelKeyPodTemplateHash]
+		newHash := newPod.Labels[LabelKeyPodTemplateHash]
 
-		if !runnerBusy && (!reflect.DeepEqual(currentEnvValues, newEnvValues) || pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image) {
+		if !runnerBusy && curHash != newHash {
 			restart = true
 		}
 
@@ -363,11 +366,44 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	env = append(env, runner.Spec.Env...)
+
+	labels := map[string]string{}
+
+	for k, v := range runner.Labels {
+		labels[k] = v
+	}
+
+	// This implies that...
+	//
+	// (1) We recreate the runner pod whenever the runner has changes in:
+	// - metadata.labels (excluding "runner-template-hash" added by the parent RunnerReplicaSet
+	// - metadata.annotations
+	// - metadata.spec (including image, env, organization, repository, group, and so on)
+	// - GithubBaseURL setting of the controller (can be configured via GITHUB_ENTERPRISE_URL)
+	//
+	// (2) We don't recreate the runner pod when there are changes in:
+	// - runner.status.registration.token
+	//   - This token expires and changes hourly, but you don't need to recreate the pod due to that.
+	//     It's the opposite.
+	//     An unexpired token is required only when the runner agent is registering itself on launch.
+	//
+	//     In other words, the registered runner doesn't get invalidated on registration token expiration.
+	//     A registered runner's session and the a registration token seem to have two different and independent
+	//     lifecycles.
+	//
+	//     See https://github.com/summerwind/actions-runner-controller/issues/143 for more context.
+	labels[LabelKeyPodTemplateHash] = hash.FNVHashStringObjects(
+		filterLabels(runner.Labels, LabelKeyRunnerTemplateHash),
+		runner.Annotations,
+		runner.Spec,
+		r.GitHubClient.GithubBaseURL,
+	)
+
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        runner.Name,
 			Namespace:   runner.Namespace,
-			Labels:      runner.Labels,
+			Labels:      labels,
 			Annotations: runner.Annotations,
 		},
 		Spec: corev1.PodSpec{
