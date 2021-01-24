@@ -225,13 +225,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	} else {
 		desiredReplicas = *rd.Spec.Replicas
 	}
-	
+
 	if desiredReplicas < minReplicas {
 		desiredReplicas = minReplicas
 	} else if desiredReplicas > maxReplicas {
 		desiredReplicas = maxReplicas
 	}
-	
 
 	r.Log.V(1).Info(
 		"Calculated desired replicas",

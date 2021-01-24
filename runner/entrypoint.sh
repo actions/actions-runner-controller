@@ -44,9 +44,18 @@ if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_GROUP}" ]
   RUNNER_GROUP_ARG="--runnergroup ${RUNNER_GROUP}"
 fi
 
+# Hack due to https://github.com/summerwind/actions-runner-controller/issues/252#issuecomment-758338483
+if [ ! -d /runner ]; then
+  echo "/runner should be an emptyDir mount. Please fix the pod spec." 1>&2
+  exit 1
+fi
+
+sudo chown -R runner:docker /runner
+mv /runnertmp/* /runner/
+
 cd /runner
 ./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${RUNNER_GROUP_ARG} ${LABEL_ARG} ${WORKDIR_ARG}
-
+mkdir ./externals
 # Hack due to the DinD volumes
 mv ./externalstmp/* ./externals/
 

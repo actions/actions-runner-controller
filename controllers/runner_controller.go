@@ -426,6 +426,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	if !dockerdInRunner && dockerEnabled {
+		runnerVolumeName := "runner"
+		runnerVolumeMountPath := "/runner"
+
 		pod.Spec.Volumes = []corev1.Volume{
 			{
 				Name: "work",
@@ -434,7 +437,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 			},
 			{
-				Name: "externals",
+				Name: runnerVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -452,8 +455,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				MountPath: workDir,
 			},
 			{
-				Name:      "externals",
-				MountPath: "/runner/externals",
+				Name:      runnerVolumeName,
+				MountPath: runnerVolumeMountPath,
 			},
 			{
 				Name:      "certs-client",
@@ -484,8 +487,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					MountPath: workDir,
 				},
 				{
-					Name:      "externals",
-					MountPath: "/runner/externals",
+					Name:      runnerVolumeName,
+					MountPath: runnerVolumeMountPath,
 				},
 				{
 					Name:      "certs-client",
