@@ -25,7 +25,7 @@ kubectl apply -f https://github.com/summerwind/actions-runner-controller/release
 If you use either Github Enterprise Cloud or Server (and have recent enought version supporting Actions), you can use **actions-runner-controller**  with those, too. Authentication works same way as with public Github (repo and organization level).
 
 ```shell
-kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL>
+kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
 [Enterprise level](https://docs.github.com/en/enterprise-server@2.22/actions/hosting-your-own-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-an-enterprise) runners are not working yet as there's no API definition for those.
@@ -409,7 +409,7 @@ Note that if you specify `self-hosted` in your workflow, then this will run your
 
 ## Runner Groups
 
-Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level.
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
 To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
 
@@ -468,11 +468,11 @@ The virtual environments from GitHub contain a lot more software packages (diffe
 If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and installing the extra dependencies directly in the docker image:
 
 ```shell
-FROM summerwind/actions-runner:v2.169.1
+FROM summerwind/actions-runner:latest
 
 RUN sudo apt update -y \
-  && apt install YOUR_PACKAGE
-  && rm -rf /var/lib/apt/lists/*
+  && sudo apt install YOUR_PACKAGE
+  && sudo rm -rf /var/lib/apt/lists/*
 ```
 
 You can then configure the runner to use a custom docker image by configuring the `image` field of a `Runner` or `RunnerDeployment`:
