@@ -1,0 +1,101 @@
+name: Publish helm chart
+
+on:
+  push:
+    branches:
+      - master
+      - main # assume that the branch name may change in future
+    paths:
+      - 'charts/**'
+      - '.github/**'
+  workflow_dispatch:
+
+env:
+  KUBE_SCORE_VERSION: 1.10.0
+  HELM_VERSION: v3.4.1
+
+jobs:
+  lint-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up kube-score
+        run: |
+          wget https://github.com/zegl/kube-score/releases/download/v${{ env.KUBE_SCORE_VERSION }}/kube-score_${{ env.KUBE_SCORE_VERSION }}_linux_amd64 -O kube-score
+          chmod 755 kube-score
+
+      - name: Kube-score generated manifests
+        run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
+              --ignore-test pod-networkpolicy
+              --ignore-test deployment-has-poddisruptionbudget
+              --ignore-test deployment-has-host-podantiaffinity
+              --ignore-test container-security-context
+              --ignore-test pod-probes
+              --ignore-test container-image-tag
+              --enable-optional-test container-security-context-privileged
+              --enable-optional-test container-security-context-readonlyrootfilesystem
+
+      # python is a requirement for the chart-testing action below (supports yamllint among other tests)
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.0.1
+
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config charts/.ci/ct-config.yaml)
+          if [[ -n "$changed" ]]; then
+            echo "::set-output name=changed::true"
+          fi
+
+      - name: Run chart-testing (lint)
+        run: ct lint --config charts/.ci/ct-config.yaml
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.0.0
+        if: steps.list-changed.outputs.changed == 'true'
+
+      # We need cert-manager already installed in the cluster because we assume the CRDs exist
+      - name: Install cert-manager
+        run: |
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
+        if: steps.list-changed.outputs.changed == 'true'
+
+      - name: Run chart-testing (install)
+        run: ct install --config charts/.ci/ct-config.yaml
+        if: steps.list-changed.outputs.changed == 'true'
+
+  publish-chart:
+
+    runs-on: ubuntu-latest
+    needs: lint-chart
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.1.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
