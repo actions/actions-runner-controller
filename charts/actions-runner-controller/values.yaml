@@ -103,3 +103,8 @@ affinity: {}
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
+
+env: {}
+  # http_proxy: "proxy.com:8080"
+  # https_proxy: "proxy.com:8080"
+  # no_proxy: ""
