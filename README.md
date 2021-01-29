@@ -17,7 +17,8 @@ actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/insta
 Install the custom resource and actions-runner-controller itself. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 ```
-kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
+helm repo add runner https://summerwind.github.io/actions-runner-controller
+helm install -n actions-runner-system runner runner/actions-runner-controller
 ```
 
 ### Github Enterprise support
