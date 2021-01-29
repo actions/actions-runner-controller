@@ -504,6 +504,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: &privileged,
 			},
+			Resources: runner.Spec.DockerdContainerResources,
 		})
 
 	}
