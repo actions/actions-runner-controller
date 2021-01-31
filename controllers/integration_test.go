@@ -85,11 +85,12 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		client := newGithubClient(fakeGithubServer)
 
 		autoscalerController := &HorizontalRunnerAutoscalerReconciler{
-			Client:       mgr.GetClient(),
-			Scheme:       scheme.Scheme,
-			Log:          logf.Log,
-			GitHubClient: client,
-			Recorder:     mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Client:        mgr.GetClient(),
+			Scheme:        scheme.Scheme,
+			Log:           logf.Log,
+			GitHubClient:  client,
+			Recorder:      mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			CacheDuration: 1 * time.Second,
 		}
 		err = autoscalerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -235,7 +236,7 @@ var _ = Context("Inside of a new namespace", func() {
 						},
 						MinReplicas:                       intPtr(1),
 						MaxReplicas:                       intPtr(3),
-						ScaleDownDelaySecondsAfterScaleUp: nil,
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
 						Metrics:                           nil,
 					},
 				}

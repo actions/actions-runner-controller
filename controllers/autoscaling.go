@@ -38,11 +38,17 @@ func (r *HorizontalRunnerAutoscalerReconciler) getDesiredReplicasFromCache(hra v
 	for i := range hra.Status.CacheEntries {
 		ent := hra.Status.CacheEntries[i]
 
-		if ent.Key == v1alpha1.CacheEntryKeyDesiredReplicas {
-			entry = &ent
-
-			break
+		if ent.Key != v1alpha1.CacheEntryKeyDesiredReplicas {
+			continue
 		}
+
+		if !time.Now().Before(ent.ExpirationTime.Time) {
+			continue
+		}
+
+		entry = &ent
+
+		break
 	}
 
 	if entry != nil {
