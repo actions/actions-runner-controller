@@ -41,6 +41,44 @@ type HorizontalRunnerAutoscalerSpec struct {
 	// Metrics is the collection of various metric targets to calculate desired number of runners
 	// +optional
 	Metrics []MetricSpec `json:"metrics,omitempty"`
+
+	// ScaleUpTriggers is an experimental feature to increase the desired replicas by 1
+	// on each webhook requested received by the webhookBasedAutoscaler.
+	//
+	// This feature requires you to also enable and deploy the webhookBasedAutoscaler onto your cluster.
+	//
+	// Note that the added runners remain until the next sync period at least,
+	// and they may or may not be used by GitHub Actions depending on the timing.
+	// They are intended to be used to gain "resource slack" immediately after you
+	// receive a webhook from GitHub, so that you can loosely expect MinReplicas runners to be always available.
+	ScaleUpTriggers []ScaleUpTriggerSpec `json:"scaleUpTriggers,omitempty"`
+}
+
+type ScaleUpTriggerSpec struct {
+	GitHubEvent *GitHubEventScaleUpTriggerSpec `json:"githubEvent,omitempty"`
+}
+
+type GitHubEventScaleUpTriggerSpec struct {
+	CheckRun    *CheckRunSpec    `json:"checkRun,omitempty"`
+	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
+	Push        *PushSpec        `json:"push,omitempty"`
+}
+
+// https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
+type CheckRunSpec struct {
+	Types  []string `json:"types,omitempty"`
+	Status string   `json:"status,omitempty"`
+}
+
+// https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
+type PullRequestSpec struct {
+	Types    []string `json:"types,omitempty"`
+	Branches []string `json:"branches,omitempty"`
+}
+
+// PushSpec is the condition for triggering scale-up on push event
+// Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+type PushSpec struct {
 }
 
 type ScaleTargetRef struct {

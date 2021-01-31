@@ -1,0 +1,282 @@
+/*
+Copyright 2020 The actions-runner-controller authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controllers
+
+import (
+	"context"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"net/http"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"time"
+
+	"github.com/go-logr/logr"
+	gogithub "github.com/google/go-github/github"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+)
+
+const (
+	scaleTargetKey = "scaleTarget"
+)
+
+// HorizontalRunnerAutoscalerWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each Webhook received
+type HorizontalRunnerAutoscalerWebhook struct {
+	client.Client
+	Log      logr.Logger
+	Recorder record.EventRecorder
+	Scheme   *runtime.Scheme
+
+	SecretKeyBytes []byte
+	WatchNamespace string
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	return ctrl.Result{}, nil
+}
+
+// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWriter, r *http.Request) {
+	payload, err := gogithub.ValidatePayload(r, autoscaler.SecretKeyBytes)
+	if err != nil {
+		autoscaler.Log.Error(err, "error validating request body")
+		return
+	}
+	defer r.Body.Close()
+
+	event, err := gogithub.ParseWebHook(gogithub.WebHookType(r), payload)
+	if err != nil {
+		autoscaler.Log.Error(err, "could not parse webhoo")
+		return
+	}
+
+	var hra *v1alpha1.HorizontalRunnerAutoscaler
+
+	switch e := event.(type) {
+	case *gogithub.PushEvent:
+		hra, err = autoscaler.getScaleUpTarget(
+			context.TODO(),
+			*e.Repo.Name,
+			*e.Repo.Organization,
+			autoscaler.MatchPushEvent(e),
+		)
+	case *gogithub.PullRequestEvent:
+		hra, err = autoscaler.getScaleUpTarget(
+			context.TODO(),
+			*e.Repo.Name,
+			*e.Repo.Organization.Name,
+			autoscaler.MatchPullRequestEvent(e),
+		)
+	case *gogithub.CheckRunEvent:
+		hra, err = autoscaler.getScaleUpTarget(
+			context.TODO(),
+			*e.Repo.Name,
+			*e.Org.Name,
+			autoscaler.MatchCheckRunEvent(e),
+		)
+	default:
+		autoscaler.Log.Info("unknown event type", "eventType", gogithub.WebHookType(r))
+
+		return
+	}
+
+	if err != nil {
+		autoscaler.Log.Error(err, "handling check_run event")
+
+		return
+	}
+
+	if hra == nil {
+		autoscaler.Log.Info("no horizontalrunnerautoscaler to scale for this github event", "eventType", gogithub.WebHookType(r))
+
+		return
+	}
+
+	if err := autoscaler.tryScaleUp(context.TODO(), hra); err != nil {
+		autoscaler.Log.Error(err, "could not scale up")
+		return
+	}
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) findHRA(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
+	ns := autoscaler.WatchNamespace
+
+	var defaultListOpts []client.ListOption
+
+	if ns != "" {
+		defaultListOpts = append(defaultListOpts, client.InNamespace(ns))
+	}
+
+	var hras []v1alpha1.HorizontalRunnerAutoscaler
+
+	if value != "" {
+		opts := append([]client.ListOption{}, defaultListOpts...)
+		opts = append(opts, client.MatchingFields{scaleTargetKey: value})
+
+		var hraList v1alpha1.HorizontalRunnerAutoscalerList
+
+		if err := autoscaler.List(ctx, &hraList, opts...); err != nil {
+			return nil, err
+		}
+
+		for _, d := range hraList.Items {
+			hras = append(hras, d)
+		}
+	}
+
+	return hras, nil
+}
+
+func matchTriggerConditionAgainstEvent(types []string, eventAction *string) bool {
+	if len(types) == 0 {
+		return true
+	}
+
+	if eventAction == nil {
+		return false
+	}
+
+	for _, tpe := range types {
+		if tpe == *eventAction {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) filterHRAs(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTriggerSpec) bool) []v1alpha1.HorizontalRunnerAutoscaler {
+	var matched []v1alpha1.HorizontalRunnerAutoscaler
+
+	for _, hra := range hras {
+		if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		for _, scaleUpTrigger := range hra.Spec.ScaleUpTriggers {
+			if !f(scaleUpTrigger) {
+				continue
+			}
+
+			matched = append(matched, hra)
+		}
+	}
+
+	return matched
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) targetHRA(ctx context.Context, name string, f func(v1alpha1.ScaleUpTriggerSpec) bool) (*v1alpha1.HorizontalRunnerAutoscaler, error) {
+	hras, err := autoscaler.findHRA(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	hras = autoscaler.filterHRAs(hras, f)
+
+	if len(hras) != 1 {
+		return nil, nil
+	}
+
+	return &hras[0], nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTriggerSpec) bool) (*v1alpha1.HorizontalRunnerAutoscaler, error) {
+	if hra, err := autoscaler.targetHRA(ctx, repoNameFromWebhook, f); err != nil {
+		return nil, err
+	} else if hra != nil {
+		return hra, nil
+	}
+
+	if hra, err := autoscaler.targetHRA(ctx, orgNameFromWebhook, f); err != nil {
+		return nil, err
+	} else if hra != nil {
+		return hra, nil
+	}
+
+	return nil, nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) tryScaleUp(ctx context.Context, hra *v1alpha1.HorizontalRunnerAutoscaler) error {
+	if hra == nil {
+		return nil
+	}
+
+	log := autoscaler.Log.WithValues("horizontalrunnerautoscaler", hra.Name)
+
+	newDesiredReplicas := autoscaler.computeNewDesiredReplicas(hra)
+	if newDesiredReplicas == nil {
+		return nil
+	}
+
+	copy := hra.DeepCopy()
+	copy.Status.DesiredReplicas = newDesiredReplicas
+	copy.Status.LastSuccessfulScaleOutTime = &metav1.Time{Time: time.Now()}
+
+	if err := autoscaler.Client.Update(ctx, copy); err != nil {
+		log.Error(err, "Failed to update horizontalrunnerautoscaler resource")
+
+		return err
+	}
+
+	return nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) SetupWithManager(mgr ctrl.Manager) error {
+	autoscaler.Recorder = mgr.GetEventRecorderFor("webhookbasedautoscaler")
+
+	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj runtime.Object) []string {
+		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
+
+		if hra.Spec.ScaleTargetRef.Name == "" {
+			return nil
+		}
+
+		var rd v1alpha1.RunnerDeployment
+
+		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+			return nil
+		}
+
+		return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+	}); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
+		Complete(autoscaler)
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) computeNewDesiredReplicas(hra *v1alpha1.HorizontalRunnerAutoscaler) *int {
+	var newDesired *int
+
+	if curDesired := hra.Status.DesiredReplicas; curDesired != nil {
+		if hra.Spec.MaxReplicas != nil && *curDesired+1 < *hra.Spec.MaxReplicas {
+			*newDesired = *curDesired + 1
+		}
+	}
+
+	return newDesired
+}
