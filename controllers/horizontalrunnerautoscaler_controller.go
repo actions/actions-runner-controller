@@ -108,9 +108,13 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 	now := time.Now()
 
 	for _, reservation := range hra.Spec.CapacityReservations {
-		if reservation.ExpirationTime.Before(&metav1.Time{Time: now}) {
+		if reservation.ExpirationTime.Time.After(now) {
 			newDesiredReplicas += reservation.Replicas
 		}
+	}
+
+	if hra.Spec.MaxReplicas != nil && *hra.Spec.MaxReplicas < newDesiredReplicas {
+		newDesiredReplicas = *hra.Spec.MaxReplicas
 	}
 
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption

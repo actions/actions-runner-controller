@@ -17,6 +17,8 @@ limitations under the License.
 package controllers
 
 import (
+	"github.com/onsi/ginkgo/config"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -42,6 +44,8 @@ var testEnv *envtest.Environment
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
+
+	config.GinkgoConfig.FocusString = os.Getenv("GINKGO_FOCUS")
 
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"Controller Suite",

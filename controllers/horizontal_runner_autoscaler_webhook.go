@@ -119,6 +119,8 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 
 	var target *ScaleTarget
 
+	autoscaler.Log.Info("processing webhook event", "eventType", webhookType)
+
 	switch e := event.(type) {
 	case *gogithub.PushEvent:
 		target, err = autoscaler.getScaleUpTarget(
@@ -193,7 +195,9 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 
 	w.WriteHeader(http.StatusOK)
 
-	msg := fmt.Sprintf("scaled %s by 1", target.Spec.ScaleTargetRef.Name)
+	msg := fmt.Sprintf("scaled %s by 1", target.Name)
+
+	autoscaler.Log.Info(msg)
 
 	if written, err := w.Write([]byte(msg)); err != nil {
 		autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
@@ -294,12 +298,14 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleUpTarget(ctx contex
 	if target, err := autoscaler.getScaleTarget(ctx, repoNameFromWebhook, f); err != nil {
 		return nil, err
 	} else if target != nil {
+		autoscaler.Log.Info("scale up target is repository-wide runners", "repository", repoNameFromWebhook)
 		return target, nil
 	}
 
 	if target, err := autoscaler.getScaleTarget(ctx, orgNameFromWebhook, f); err != nil {
 		return nil, err
 	} else if target != nil {
+		autoscaler.Log.Info("scale up target is organizational runners", "repository", orgNameFromWebhook)
 		return target, nil
 	}
 
@@ -321,7 +327,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) tryScaleUp(ctx context.Cont
 		amount = target.ScaleUpTrigger.Amount
 	}
 
-	target.Spec.CapacityReservations = append(target.Spec.CapacityReservations, v1alpha1.CapacityReservation{
+	copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
 		ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
 		Replicas:       amount,
 	})

@@ -117,7 +117,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 
 		for i := 0; i < n; i++ {
-			if err := r.Client.Delete(ctx, &notBusy[i]); err != nil {
+			if err := r.Client.Delete(ctx, &notBusy[i]); client.IgnoreNotFound(err) != nil {
 				log.Error(err, "Failed to delete runner resource")
 
 				return ctrl.Result{}, err

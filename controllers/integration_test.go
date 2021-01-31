@@ -2,6 +2,11 @@ package controllers
 
 import (
 	"context"
+	"github.com/google/go-github/github"
+	github3 "github.com/google/go-github/v33/github"
+	github2 "github.com/summerwind/actions-runner-controller/github"
+	"net/http"
+	"net/http/httptest"
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/github/fake"
@@ -30,6 +35,12 @@ var (
 	workflowRunsFor1Replicas = `{"total_count": 6, "workflow_runs":[{"status":"queued"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}]}"`
 )
 
+var webhookServer *httptest.Server
+
+var ghClient *github2.Client
+
+var fakeRunnerList *fake.RunnersList
+
 // SetupIntegrationTest will set up a testing environment.
 // This includes:
 // * creating a Namespace to be used during the test
@@ -41,10 +52,13 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 	ns := &corev1.Namespace{}
 
 	responses := &fake.FixedResponses{}
+	responses.ListRunners = fake.DefaultListRunnersHandler()
 	responses.ListRepositoryWorkflowRuns = &fake.Handler{
 		Status: 200,
 		Body:   workflowRunsFor3Replicas,
 	}
+	fakeRunnerList = fake.NewRunnersList()
+	responses.ListRunners = fakeRunnerList.HandleList()
 	fakeGithubServer := fake.NewServer(fake.WithFixedResponses(responses))
 
 	BeforeEach(func() {
@@ -59,9 +73,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
-		runnersList = fake.NewRunnersList()
-		server = runnersList.GetServer()
-		ghClient := newGithubClient(server)
+		ghClient = newGithubClient(fakeGithubServer)
 
 		replicasetController := &RunnerReplicaSetReconciler{
 			Client:       mgr.GetClient(),
@@ -95,6 +107,20 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		err = autoscalerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
+		autoscalerWebhook := &HorizontalRunnerAutoscalerWebhook{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme.Scheme,
+			Log:      logf.Log,
+			Recorder: mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+		}
+		err = autoscalerWebhook.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler webhook")
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", autoscalerWebhook.Handle)
+
+		webhookServer = httptest.NewServer(mux)
+
 		go func() {
 			defer GinkgoRecover()
 
@@ -107,6 +133,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		close(stopCh)
 
 		fakeGithubServer.Close()
+		webhookServer.Close()
 
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
@@ -115,7 +142,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 	return &testEnvironment{Namespace: ns, Responses: responses}
 }
 
-var _ = Context("Inside of a new namespace", func() {
+var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 	ctx := context.TODO()
 	env := SetupIntegrationTest(ctx)
 	ns := env.Namespace
@@ -238,6 +265,18 @@ var _ = Context("Inside of a new namespace", func() {
 						MaxReplicas:                       intPtr(3),
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
 						Metrics:                           nil,
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									PullRequest: &actionsv1alpha1.PullRequestSpec{
+										Types:    []string{"created"},
+										Branches: []string{"main"},
+									},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
 					},
 				}
 
@@ -275,8 +314,33 @@ var _ = Context("Inside of a new namespace", func() {
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(3))
 			}
 
+			{
+				var runnerList actionsv1alpha1.RunnerList
+
+				err := k8sClient.List(ctx, &runnerList, client.InNamespace(ns.Name))
+				if err != nil {
+					logf.Log.Error(err, "list runners")
+				}
+
+				for i, r := range runnerList.Items {
+					fakeRunnerList.Add(&github3.Runner{
+						ID:     github.Int64(int64(i)),
+						Name:   github.String(r.Name),
+						OS:     github.String("linux"),
+						Status: github.String("online"),
+						Busy:   github.Bool(false),
+					})
+				}
+
+				rs, err := ghClient.ListRunners(context.Background(), "", "test/valid")
+				Expect(err).NotTo(HaveOccurred(), "verifying list fake runners response")
+				Expect(len(rs)).To(Equal(3), "count of fake list runners")
+			}
+
 			// Scale-down to 1 replica
 			{
+				time.Sleep(time.Second)
+
 				responses.ListRepositoryWorkflowRuns.Body = workflowRunsFor1Replicas
 
 				var hra actionsv1alpha1.HorizontalRunnerAutoscaler
@@ -309,7 +373,60 @@ var _ = Context("Inside of a new namespace", func() {
 
 						return *runnerSets.Items[0].Spec.Replicas
 					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1), "runners after HRA force update for scale-down")
+			}
+
+			{
+				resp, err := sendWebhook(webhookServer, "pull_request", &github.PullRequestEvent{
+					PullRequest: &github.PullRequest{
+						Base: &github.PullRequestBranch{
+							Ref: github.String("main"),
+						},
+					},
+					Repo: &github.Repository{
+						Name: github.String("test/valid"),
+						Organization: &github.Organization{
+							Name: github.String("test"),
+						},
+					},
+					Action: github.String("created"),
+				})
+
+				Expect(err).NotTo(HaveOccurred(), "failed to send pull_request event")
+
+				Expect(resp.StatusCode).To(Equal(200))
+			}
+
+			// Scale-up to 2 replicas
+			{
+				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+				Eventually(
+					func() int {
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						if err != nil {
+							logf.Log.Error(err, "list runner sets")
+						}
+
+						return len(runnerSets.Items)
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1), "runner sets after webhook")
+
+				Eventually(
+					func() int {
+						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						if err != nil {
+							logf.Log.Error(err, "list runner sets")
+						}
+
+						if len(runnerSets.Items) == 0 {
+							logf.Log.Info("No runnerreplicasets exist yet")
+							return -1
+						}
+
+						return *runnerSets.Items[0].Spec.Replicas
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2), "runners after webhook")
 			}
 		})
 	})

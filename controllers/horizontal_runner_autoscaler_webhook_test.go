@@ -94,20 +94,29 @@ func TestWebhookPing(t *testing.T) {
 	)
 }
 
+func installTestLogger(webhook *HorizontalRunnerAutoscalerWebhook) *bytes.Buffer {
+	logs := &bytes.Buffer{}
+
+	log := testLogger{
+		name:   "testlog",
+		writer: logs,
+	}
+
+	webhook.Log = &log
+
+	return logs
+}
+
 func testServer(t *testing.T, eventType string, event interface{}, wantCode int, wantBody string) {
 	t.Helper()
 
-	jsonBuf := &bytes.Buffer{}
-	enc := json.NewEncoder(jsonBuf)
-	enc.SetIndent("  ", "")
-	err := enc.Encode(event)
-	if err != nil {
-		t.Fatalf("[bug in test] encoding event to json: %+v", err)
-	}
+	hraWebhook := &HorizontalRunnerAutoscalerWebhook{}
 
-	reqBody := jsonBuf.Bytes()
+	var initObjs []runtime.Object
 
-	logs := &bytes.Buffer{}
+	client := fake.NewFakeClientWithScheme(sc, initObjs...)
+
+	logs := installTestLogger(hraWebhook)
 
 	defer func() {
 		if t.Failed() {
@@ -115,18 +124,6 @@ func testServer(t *testing.T, eventType string, event interface{}, wantCode int,
 		}
 	}()
 
-	var hraWebhook HorizontalRunnerAutoscalerWebhook
-
-	log := testLogger{
-		name:   "testlog",
-		writer: logs,
-	}
-
-	var initObjs []runtime.Object
-
-	client := fake.NewFakeClientWithScheme(sc, initObjs...)
-
-	hraWebhook.Log = &log
 	hraWebhook.Client = client
 
 	mux := http.NewServeMux()
@@ -135,26 +132,16 @@ func testServer(t *testing.T, eventType string, event interface{}, wantCode int,
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	u, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatalf("parsing server url: %v", err)
-	}
-
-	req := &http.Request{
-		Method: http.MethodPost,
-		URL:    u,
-		Header: map[string][]string{
-			"X-GitHub-Event": {eventType},
-			"Content-Type":   {"application/json"},
-		},
-		Body: ioutil.NopCloser(bytes.NewBuffer(reqBody)),
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sendWebhook(server, eventType, event)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if resp != nil {
+			resp.Body.Close()
+		}
+	}()
 
 	if resp.StatusCode != wantCode {
 		t.Error("status:", resp.StatusCode)
@@ -168,6 +155,35 @@ func testServer(t *testing.T, eventType string, event interface{}, wantCode int,
 	if string(respBody) != wantBody {
 		t.Fatal("body:", string(respBody))
 	}
+}
+
+func sendWebhook(server *httptest.Server, eventType string, event interface{}) (*http.Response, error) {
+	jsonBuf := &bytes.Buffer{}
+	enc := json.NewEncoder(jsonBuf)
+	enc.SetIndent("  ", "")
+	err := enc.Encode(event)
+	if err != nil {
+		return nil, fmt.Errorf("[bug in test] encoding event to json: %+v", err)
+	}
+
+	reqBody := jsonBuf.Bytes()
+
+	u, err := url.Parse(server.URL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing server url: %v", err)
+	}
+
+	req := &http.Request{
+		Method: http.MethodPost,
+		URL:    u,
+		Header: map[string][]string{
+			"X-GitHub-Event": {eventType},
+			"Content-Type":   {"application/json"},
+		},
+		Body: ioutil.NopCloser(bytes.NewBuffer(reqBody)),
+	}
+
+	return http.DefaultClient.Do(req)
 }
 
 // testLogger is a sample logr.Logger that logs in-memory.
