@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
@@ -59,16 +61,59 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Reconcile(request reconcile
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWriter, r *http.Request) {
-	payload, err := gogithub.ValidatePayload(r, autoscaler.SecretKeyBytes)
-	if err != nil {
-		autoscaler.Log.Error(err, "error validating request body")
-		return
-	}
-	defer r.Body.Close()
+	var (
+		ok bool
 
-	event, err := gogithub.ParseWebHook(gogithub.WebHookType(r), payload)
+		err error
+	)
+
+	defer func() {
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+
+			if err != nil {
+				msg := err.Error()
+				if written, err := w.Write([]byte(msg)); err != nil {
+					autoscaler.Log.Error(err, "failed writing http error response", "msg", msg, "written", written)
+				}
+			}
+		}
+	}()
+
+	defer func() {
+		if r.Body != nil {
+			r.Body.Close()
+		}
+	}()
+
+	var payload []byte
+
+	if len(autoscaler.SecretKeyBytes) > 0 {
+		payload, err = gogithub.ValidatePayload(r, autoscaler.SecretKeyBytes)
+		if err != nil {
+			autoscaler.Log.Error(err, "error validating request body")
+
+			return
+		}
+	} else {
+		payload, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			autoscaler.Log.Error(err, "error reading request body")
+
+			return
+		}
+	}
+
+	webhookType := gogithub.WebHookType(r)
+	event, err := gogithub.ParseWebHook(webhookType, payload)
 	if err != nil {
-		autoscaler.Log.Error(err, "could not parse webhoo")
+		var s string
+		if payload != nil {
+			s = string(payload)
+		}
+
+		autoscaler.Log.Error(err, "could not parse webhook", "webhookType", webhookType, "payload", s)
+
 		return
 	}
 
@@ -96,8 +141,22 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 			*e.Org.Name,
 			autoscaler.MatchCheckRunEvent(e),
 		)
+	case *gogithub.PingEvent:
+		ok = true
+
+		w.WriteHeader(http.StatusOK)
+
+		msg := "pong"
+
+		if written, err := w.Write([]byte(msg)); err != nil {
+			autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
+		}
+
+		autoscaler.Log.Info("received ping event")
+
+		return
 	default:
-		autoscaler.Log.Info("unknown event type", "eventType", gogithub.WebHookType(r))
+		autoscaler.Log.Info("unknown event type", "eventType", webhookType)
 
 		return
 	}
@@ -109,14 +168,35 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 	}
 
 	if hra == nil {
-		autoscaler.Log.Info("no horizontalrunnerautoscaler to scale for this github event", "eventType", gogithub.WebHookType(r))
+		msg := "no horizontalrunnerautoscaler to scale for this github event"
+
+		autoscaler.Log.Info(msg, "eventType", webhookType)
+
+		ok = true
+
+		w.WriteHeader(http.StatusOK)
+
+		if written, err := w.Write([]byte(msg)); err != nil {
+			autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
+		}
 
 		return
 	}
 
 	if err := autoscaler.tryScaleUp(context.TODO(), hra); err != nil {
 		autoscaler.Log.Error(err, "could not scale up")
+
 		return
+	}
+
+	ok = true
+
+	w.WriteHeader(http.StatusOK)
+
+	msg := fmt.Sprintf("scaled %s by 1", hra.Spec.ScaleTargetRef.Name)
+
+	if written, err := w.Write([]byte(msg)); err != nil {
+		autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
 	}
 }
 

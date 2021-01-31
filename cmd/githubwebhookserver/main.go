@@ -56,6 +56,7 @@ func main() {
 	var (
 		err error
 
+		webhookAddr          string
 		metricsAddr          string
 		enableLeaderElection bool
 		syncPeriod           time.Duration
@@ -67,12 +68,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: Environment variable read failed.")
 	}
 
+	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&c.Token, "github-webhook-secret-token", c.Token, "The secret token of the GitHub Webhook. See https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks")
+	flag.StringVar(&c.Token, "webhook-secret-token", c.Token, "The secret token of the GitHub Webhook. See https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.Parse()
+
+	if c.Token == "" {
+		setupLog.Info("-webhook-secret-token is missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks")
+
+		os.Exit(1)
+	}
 
 	logger := zap.New(func(o *zap.Options) {
 		o.Development = true
@@ -126,7 +134,7 @@ func main() {
 	mux.HandleFunc("/", hraWebhook.Handle)
 
 	srv := http.Server{
-		Addr:    ":3000",
+		Addr:    webhookAddr,
 		Handler: mux,
 	}
 
