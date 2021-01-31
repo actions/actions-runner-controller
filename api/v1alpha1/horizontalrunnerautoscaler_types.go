@@ -51,11 +51,15 @@ type HorizontalRunnerAutoscalerSpec struct {
 	// and they may or may not be used by GitHub Actions depending on the timing.
 	// They are intended to be used to gain "resource slack" immediately after you
 	// receive a webhook from GitHub, so that you can loosely expect MinReplicas runners to be always available.
-	ScaleUpTriggers []ScaleUpTriggerSpec `json:"scaleUpTriggers,omitempty"`
+	ScaleUpTriggers []ScaleUpTrigger `json:"scaleUpTriggers,omitempty"`
+
+	CapacityReservations []CapacityReservation `json:"capacityReservations,omitempty" patchStrategy:"merge" patchMergeKey:"name"`
 }
 
-type ScaleUpTriggerSpec struct {
+type ScaleUpTrigger struct {
 	GitHubEvent *GitHubEventScaleUpTriggerSpec `json:"githubEvent,omitempty"`
+	Amount      int                            `json:"amount,omitempty"`
+	Duration    metav1.Duration                `json:"duration,omitempty"`
 }
 
 type GitHubEventScaleUpTriggerSpec struct {
@@ -79,6 +83,14 @@ type PullRequestSpec struct {
 // PushSpec is the condition for triggering scale-up on push event
 // Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
 type PushSpec struct {
+}
+
+// CapacityReservation specifies the number of replicas temporarily added
+// to the scale target until ExpirationTime.
+type CapacityReservation struct {
+	Name           string      `json:"name,omitempty"`
+	ExpirationTime metav1.Time `json:"expirationTime,omitempty"`
+	Replicas       int         `json:"replicas,omitempty"`
 }
 
 type ScaleTargetRef struct {
@@ -129,6 +141,17 @@ type HorizontalRunnerAutoscalerStatus struct {
 
 	// +optional
 	LastSuccessfulScaleOutTime *metav1.Time `json:"lastSuccessfulScaleOutTime,omitempty"`
+
+	// +optional
+	CacheEntries []CacheEntry `json:"cacheEntries,omitempty"`
+}
+
+const CacheEntryKeyDesiredReplicas = "desiredReplicas"
+
+type CacheEntry struct {
+	Key            string      `json:"key,omitempty"`
+	Value          int         `json:"value,omitempty"`
+	ExpirationTime metav1.Time `json:"expirationTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

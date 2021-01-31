@@ -5,8 +5,8 @@ import (
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) MatchCheckRunEvent(event *github.CheckRunEvent) func(scaleUpTrigger v1alpha1.ScaleUpTriggerSpec) bool {
-	return func(scaleUpTrigger v1alpha1.ScaleUpTriggerSpec) bool {
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) MatchCheckRunEvent(event *github.CheckRunEvent) func(scaleUpTrigger v1alpha1.ScaleUpTrigger) bool {
+	return func(scaleUpTrigger v1alpha1.ScaleUpTrigger) bool {
 		g := scaleUpTrigger.GitHubEvent
 
 		if g == nil {

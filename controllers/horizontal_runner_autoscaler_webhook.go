@@ -117,25 +117,25 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 		return
 	}
 
-	var hra *v1alpha1.HorizontalRunnerAutoscaler
+	var target *ScaleTarget
 
 	switch e := event.(type) {
 	case *gogithub.PushEvent:
-		hra, err = autoscaler.getScaleUpTarget(
+		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
 			*e.Repo.Name,
 			*e.Repo.Organization,
 			autoscaler.MatchPushEvent(e),
 		)
 	case *gogithub.PullRequestEvent:
-		hra, err = autoscaler.getScaleUpTarget(
+		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
 			*e.Repo.Name,
 			*e.Repo.Organization.Name,
 			autoscaler.MatchPullRequestEvent(e),
 		)
 	case *gogithub.CheckRunEvent:
-		hra, err = autoscaler.getScaleUpTarget(
+		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
 			*e.Repo.Name,
 			*e.Org.Name,
@@ -167,7 +167,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 		return
 	}
 
-	if hra == nil {
+	if target == nil {
 		msg := "no horizontalrunnerautoscaler to scale for this github event"
 
 		autoscaler.Log.Info(msg, "eventType", webhookType)
@@ -183,7 +183,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 		return
 	}
 
-	if err := autoscaler.tryScaleUp(context.TODO(), hra); err != nil {
+	if err := autoscaler.tryScaleUp(context.TODO(), target); err != nil {
 		autoscaler.Log.Error(err, "could not scale up")
 
 		return
@@ -193,14 +193,14 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 
 	w.WriteHeader(http.StatusOK)
 
-	msg := fmt.Sprintf("scaled %s by 1", hra.Spec.ScaleTargetRef.Name)
+	msg := fmt.Sprintf("scaled %s by 1", target.Spec.ScaleTargetRef.Name)
 
 	if written, err := w.Write([]byte(msg)); err != nil {
 		autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
 	}
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) findHRA(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) findHRAsByKey(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
 	ns := autoscaler.WatchNamespace
 
 	var defaultListOpts []client.ListOption
@@ -247,8 +247,13 @@ func matchTriggerConditionAgainstEvent(types []string, eventAction *string) bool
 	return false
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) filterHRAs(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTriggerSpec) bool) []v1alpha1.HorizontalRunnerAutoscaler {
-	var matched []v1alpha1.HorizontalRunnerAutoscaler
+type ScaleTarget struct {
+	v1alpha1.HorizontalRunnerAutoscaler
+	v1alpha1.ScaleUpTrigger
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
+	var matched []ScaleTarget
 
 	for _, hra := range hras {
 		if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -260,59 +265,66 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) filterHRAs(hras []v1alpha1.
 				continue
 			}
 
-			matched = append(matched, hra)
+			matched = append(matched, ScaleTarget{
+				HorizontalRunnerAutoscaler: hra,
+				ScaleUpTrigger:             scaleUpTrigger,
+			})
 		}
 	}
 
 	return matched
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) targetHRA(ctx context.Context, name string, f func(v1alpha1.ScaleUpTriggerSpec) bool) (*v1alpha1.HorizontalRunnerAutoscaler, error) {
-	hras, err := autoscaler.findHRA(ctx, name)
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleTarget(ctx context.Context, name string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+	hras, err := autoscaler.findHRAsByKey(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 
-	hras = autoscaler.filterHRAs(hras, f)
+	targets := autoscaler.searchScaleTargets(hras, f)
 
-	if len(hras) != 1 {
+	if len(targets) != 1 {
 		return nil, nil
 	}
 
-	return &hras[0], nil
+	return &targets[0], nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTriggerSpec) bool) (*v1alpha1.HorizontalRunnerAutoscaler, error) {
-	if hra, err := autoscaler.targetHRA(ctx, repoNameFromWebhook, f); err != nil {
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+	if target, err := autoscaler.getScaleTarget(ctx, repoNameFromWebhook, f); err != nil {
 		return nil, err
-	} else if hra != nil {
-		return hra, nil
+	} else if target != nil {
+		return target, nil
 	}
 
-	if hra, err := autoscaler.targetHRA(ctx, orgNameFromWebhook, f); err != nil {
+	if target, err := autoscaler.getScaleTarget(ctx, orgNameFromWebhook, f); err != nil {
 		return nil, err
-	} else if hra != nil {
-		return hra, nil
+	} else if target != nil {
+		return target, nil
 	}
 
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) tryScaleUp(ctx context.Context, hra *v1alpha1.HorizontalRunnerAutoscaler) error {
-	if hra == nil {
+func (autoscaler *HorizontalRunnerAutoscalerWebhook) tryScaleUp(ctx context.Context, target *ScaleTarget) error {
+	if target == nil {
 		return nil
 	}
 
-	log := autoscaler.Log.WithValues("horizontalrunnerautoscaler", hra.Name)
+	log := autoscaler.Log.WithValues("horizontalrunnerautoscaler", target.HorizontalRunnerAutoscaler.Name)
 
-	newDesiredReplicas := autoscaler.computeNewDesiredReplicas(hra)
-	if newDesiredReplicas == nil {
-		return nil
+	copy := target.HorizontalRunnerAutoscaler.DeepCopy()
+
+	amount := 1
+
+	if target.ScaleUpTrigger.Amount > 0 {
+		amount = target.ScaleUpTrigger.Amount
 	}
 
-	copy := hra.DeepCopy()
-	copy.Status.DesiredReplicas = newDesiredReplicas
-	copy.Status.LastSuccessfulScaleOutTime = &metav1.Time{Time: time.Now()}
+	target.Spec.CapacityReservations = append(target.Spec.CapacityReservations, v1alpha1.CapacityReservation{
+		ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
+		Replicas:       amount,
+	})
 
 	if err := autoscaler.Client.Update(ctx, copy); err != nil {
 		log.Error(err, "Failed to update horizontalrunnerautoscaler resource")
@@ -347,16 +359,4 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) SetupWithManager(mgr ctrl.M
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
 		Complete(autoscaler)
-}
-
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) computeNewDesiredReplicas(hra *v1alpha1.HorizontalRunnerAutoscaler) *int {
-	var newDesired *int
-
-	if curDesired := hra.Status.DesiredReplicas; curDesired != nil {
-		if hra.Spec.MaxReplicas != nil && *curDesired+1 < *hra.Spec.MaxReplicas {
-			*newDesired = *curDesired + 1
-		}
-	}
-
-	return newDesired
 }

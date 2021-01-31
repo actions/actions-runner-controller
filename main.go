@@ -144,10 +144,11 @@ func main() {
 	}
 
 	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("HorizontalRunnerAutoscaler"),
-		Scheme:       mgr.GetScheme(),
-		GitHubClient: ghClient,
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("HorizontalRunnerAutoscaler"),
+		Scheme:        mgr.GetScheme(),
+		GitHubClient:  ghClient,
+		CacheDuration: syncPeriod - 10*time.Second,
 	}
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
