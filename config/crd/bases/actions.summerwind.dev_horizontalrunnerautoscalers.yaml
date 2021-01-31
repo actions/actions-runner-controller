@@ -48,6 +48,20 @@ spec:
           description: HorizontalRunnerAutoscalerSpec defines the desired state of
             HorizontalRunnerAutoscaler
           properties:
+            capacityReservations:
+              items:
+                description: CapacityReservation specifies the number of replicas
+                  temporarily added to the scale target until ExpirationTime.
+                properties:
+                  expirationTime:
+                    format: date-time
+                    type: string
+                  name:
+                    type: string
+                  replicas:
+                    type: integer
+                type: object
+              type: array
             maxReplicas:
               description: MinReplicas is the maximum number of replicas the deployment
                 is allowed to scale
@@ -116,6 +130,10 @@ spec:
                 MinReplicas runners to be always available."
               items:
                 properties:
+                  amount:
+                    type: integer
+                  duration:
+                    type: string
                   githubEvent:
                     properties:
                       checkRun:
@@ -150,6 +168,18 @@ spec:
           type: object
         status:
           properties:
+            cacheEntries:
+              items:
+                properties:
+                  expirationTime:
+                    format: date-time
+                    type: string
+                  key:
+                    type: string
+                  value:
+                    type: integer
+                type: object
+              type: array
             desiredReplicas:
               description: DesiredReplicas is the total number of desired, non-terminated
                 and latest pods to be set for the primary RunnerSet This doesn't include
