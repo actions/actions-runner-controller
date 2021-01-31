@@ -68,7 +68,9 @@ type ServerConfig struct {
 
 // NewServer creates a fake server for running unit tests
 func NewServer(opts ...Option) *httptest.Server {
-	config := ServerConfig{}
+	config := ServerConfig{
+		FixedResponses: &FixedResponses{},
+	}
 
 	for _, o := range opts {
 		o(&config)
