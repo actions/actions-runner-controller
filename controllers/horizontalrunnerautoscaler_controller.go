@@ -147,7 +147,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		var cacheEntries []v1alpha1.CacheEntry
 
 		for _, ent := range updated.Status.CacheEntries {
-			if ent.ExpirationTime.Before(&metav1.Time{now}) {
+			if ent.ExpirationTime.Before(&metav1.Time{Time: now}) {
 				cacheEntries = append(cacheEntries, ent)
 			}
 		}
