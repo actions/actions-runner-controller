@@ -43,7 +43,6 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.274.1
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=19.03.13
 ARG DEBUG=false
@@ -75,10 +74,11 @@ ENV RUNNER_ASSETS_DIR=/runnertmp
 # libyaml-dev is required for ruby/setup-ruby action.
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
-RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+RUN export RUNNER_VERSION=$(curl https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name | cut -c 2-) \
+    export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
-     && cd "$RUNNER_ASSETS_DIR" \
+    && cd "$RUNNER_ASSETS_DIR" \
     && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \

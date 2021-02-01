@@ -2,7 +2,6 @@ NAME ?= summerwind/actions-runner
 DIND_RUNNER_NAME ?= ${NAME}-dind
 TAG ?= latest
 
-RUNNER_VERSION ?= 2.274.2
 DOCKER_VERSION ?= 19.03.12
 
 # default list of platforms for which multiarch image is built
@@ -23,8 +22,8 @@ else
 endif
 
 docker-build:
-	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
-	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f dindrunner.Dockerfile .
+	docker build --build-arg TARGETPLATFORM=amd64 --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
+	docker build --build-arg TARGETPLATFORM=amd64 --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f dindrunner.Dockerfile .
 
 
 docker-push:
@@ -37,13 +36,11 @@ docker-buildx:
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
 	docker buildx build --platform ${PLATFORMS} \
-		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		-t "${NAME}:latest" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
-		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		-t "${DIND_RUNNER_NAME}:latest" \
 		-f dindrunner.Dockerfile \
