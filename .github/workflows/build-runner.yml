@@ -60,5 +60,5 @@ jobs:
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ github.run_number }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
