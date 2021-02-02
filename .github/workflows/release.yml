@@ -52,5 +52,7 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ github.sha }}
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ github.sha }}
 
