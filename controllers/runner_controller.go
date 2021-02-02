@@ -95,7 +95,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		if removed {
 			if len(runner.Status.Registration.Token) > 0 {
-				ok, err := r.unregisterRunner(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+				ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 				if err != nil {
 					log.Error(err, "Failed to unregister runner")
 					return ctrl.Result{}, err
@@ -194,7 +194,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		runnerBusy, err := r.isRunnerBusy(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+		runnerBusy, err := r.isRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 		if err != nil {
 			log.Error(err, "Failed to check if runner is busy")
 			return ctrl.Result{}, nil
@@ -227,8 +227,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) isRunnerBusy(ctx context.Context, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+func (r *RunnerReconciler) isRunnerBusy(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
 	if err != nil {
 		return false, err
 	}
@@ -242,8 +242,8 @@ func (r *RunnerReconciler) isRunnerBusy(ctx context.Context, org, repo, name str
 	return false, fmt.Errorf("runner not found")
 }
 
-func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+func (r *RunnerReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
 	if err != nil {
 		return false, err
 	}
@@ -263,7 +263,7 @@ func (r *RunnerReconciler) unregisterRunner(ctx context.Context, org, repo, name
 		return false, nil
 	}
 
-	if err := r.GitHubClient.RemoveRunner(ctx, org, repo, id); err != nil {
+	if err := r.GitHubClient.RemoveRunner(ctx, enterprise, org, repo, id); err != nil {
 		return false, err
 	}
 
@@ -277,7 +277,7 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 	log := r.Log.WithValues("runner", runner.Name)
 
-	rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+	rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 	if err != nil {
 		r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
 		log.Error(err, "Failed to get new registration token")
@@ -338,6 +338,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		{
 			Name:  "RUNNER_REPO",
 			Value: runner.Spec.Repository,
+		},
+		{
+			Name:  "RUNNER_ENTERPRISE",
+			Value: runner.Spec.Enterprise,
 		},
 		{
 			Name:  "RUNNER_LABELS",

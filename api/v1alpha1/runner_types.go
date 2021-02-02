@@ -27,6 +27,10 @@ import (
 type RunnerSpec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^[^/]+$`
+	Enterprise string `json:"enterprise,omitempty"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[^/]+$`
 	Organization string `json:"organization,omitempty"`
 
 	// +optional
@@ -92,12 +96,22 @@ type RunnerSpec struct {
 
 // ValidateRepository validates repository field.
 func (rs *RunnerSpec) ValidateRepository() error {
-	// Organization and repository are both exclusive.
-	if len(rs.Organization) == 0 && len(rs.Repository) == 0 {
-		return errors.New("Spec needs organization or repository")
+	// Enterprise, Organization and repository are both exclusive.
+	foundCount := 0
+	if len(rs.Organization) > 0 {
+		foundCount += 1
 	}
-	if len(rs.Organization) > 0 && len(rs.Repository) > 0 {
-		return errors.New("Spec cannot have both organization and repository")
+	if len(rs.Repository) > 0 {
+		foundCount += 1
+	}
+	if len(rs.Enterprise) > 0 {
+		foundCount += 1
+	}
+	if foundCount == 0 {
+		return errors.New("Spec needs enterprise, organization or repository")
+	}
+	if foundCount > 1 {
+		return errors.New("Spec cannot have many fields defined enterprise, organization and repository")
 	}
 
 	return nil
@@ -113,6 +127,7 @@ type RunnerStatus struct {
 
 // RunnerStatusRegistration contains runner registration status
 type RunnerStatusRegistration struct {
+	Enterprise   string      `json:"enterprise,omitempty"`
 	Organization string      `json:"organization,omitempty"`
 	Repository   string      `json:"repository,omitempty"`
 	Labels       []string    `json:"labels,omitempty"`
@@ -122,6 +137,7 @@ type RunnerStatusRegistration struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.enterprise",name=Enterprise,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
