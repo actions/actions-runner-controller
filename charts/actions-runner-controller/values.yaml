@@ -108,3 +108,46 @@ env: {}
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
+
+githubWebhookServer:
+  enabled: false
+  labels: {}
+  replicaCount: 1
+  syncPeriod: 10m
+  secret:
+    enabled: false
+    ### GitHub Webhook Configuration
+    #github_webhook_secret_token: ""
+  image:
+    repository: summerwind/actions-runner-controller
+    # Overrides the manager image tag whose default is the chart appVersion if the tag key is commented out
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+  podAnnotations: {}
+  podSecurityContext: {}
+  # fsGroup: 2000
+  securityContext: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  service:
+    type: NodePort
+    ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+      #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc

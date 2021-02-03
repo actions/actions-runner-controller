@@ -1,0 +1,17 @@
+{{- if .Values.githubWebhookServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "actions-runner-controller-github-webhook-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.githubWebhookServer.service.type }}
+  ports:
+    {{ range $_, $port := .Values.githubWebhookServer.service.ports -}}
+    - {{ $port | toYaml | nindent 6 }}
+    {{- end }}
+  selector:
+    {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}
+{{- end }}
