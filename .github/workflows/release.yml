@@ -8,6 +8,7 @@ jobs:
     name: Release
     env:
       DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+      SHA_SHORT: ${{ github.sha::7 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -54,5 +55,5 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
-            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ github.sha::7 }}
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ env.SHA_SHORT }}
 

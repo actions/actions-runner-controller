@@ -30,6 +30,7 @@ jobs:
       RUNNER_VERSION: 2.275.1
       DOCKER_VERSION: 19.03.12
       DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+      SHA_SHORT: ${{ github.sha::7 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -61,5 +62,5 @@ jobs:
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${ github.sha::7 }
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ env.SHA_SHORT }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
