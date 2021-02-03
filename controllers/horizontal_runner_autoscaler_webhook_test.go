@@ -94,7 +94,7 @@ func TestWebhookPing(t *testing.T) {
 	)
 }
 
-func installTestLogger(webhook *HorizontalRunnerAutoscalerWebhook) *bytes.Buffer {
+func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.Buffer {
 	logs := &bytes.Buffer{}
 
 	log := testLogger{
@@ -110,7 +110,7 @@ func installTestLogger(webhook *HorizontalRunnerAutoscalerWebhook) *bytes.Buffer
 func testServer(t *testing.T, eventType string, event interface{}, wantCode int, wantBody string) {
 	t.Helper()
 
-	hraWebhook := &HorizontalRunnerAutoscalerWebhook{}
+	hraWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{}
 
 	var initObjs []runtime.Object
 

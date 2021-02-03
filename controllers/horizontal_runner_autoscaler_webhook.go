@@ -40,18 +40,25 @@ const (
 	scaleTargetKey = "scaleTarget"
 )
 
-// HorizontalRunnerAutoscalerWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each Webhook received
-type HorizontalRunnerAutoscalerWebhook struct {
+// HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
+// GitHub Webhook received
+type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	client.Client
 	Log      logr.Logger
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 
+	// SecretKeyBytes is the byte representation of the Webhook secret token
+	// the administrator is generated and specified in GitHub Web UI.
 	SecretKeyBytes []byte
+
+	// WatchNamespace is the namespace to watch for HorizontalRunnerAutoscaler's to be
+	// scaled on Webhook.
+	// Set to empty for letting it watch for all namespaces.
 	WatchNamespace string
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	return ctrl.Result{}, nil
 }
 
@@ -60,7 +67,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Reconcile(request reconcile
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWriter, r *http.Request) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.ResponseWriter, r *http.Request) {
 	var (
 		ok bool
 
@@ -204,7 +211,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) Handle(w http.ResponseWrite
 	}
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) findHRAsByKey(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
 	ns := autoscaler.WatchNamespace
 
 	var defaultListOpts []client.ListOption
@@ -256,7 +263,7 @@ type ScaleTarget struct {
 	v1alpha1.ScaleUpTrigger
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
 	var matched []ScaleTarget
 
 	for _, hra := range hras {
@@ -279,7 +286,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) searchScaleTargets(hras []v
 	return matched
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleTarget(ctx context.Context, name string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx context.Context, name string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
 	hras, err := autoscaler.findHRAsByKey(ctx, name)
 	if err != nil {
 		return nil, err
@@ -294,7 +301,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleTarget(ctx context.
 	return &targets[0], nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
 	if target, err := autoscaler.getScaleTarget(ctx, repoNameFromWebhook, f); err != nil {
 		return nil, err
 	} else if target != nil {
@@ -312,7 +319,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) getScaleUpTarget(ctx contex
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) tryScaleUp(ctx context.Context, target *ScaleTarget) error {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx context.Context, target *ScaleTarget) error {
 	if target == nil {
 		return nil
 	}
@@ -341,7 +348,7 @@ func (autoscaler *HorizontalRunnerAutoscalerWebhook) tryScaleUp(ctx context.Cont
 	return nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerWebhook) SetupWithManager(mgr ctrl.Manager) error {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr ctrl.Manager) error {
 	autoscaler.Recorder = mgr.GetEventRecorderFor("webhookbasedautoscaler")
 
 	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj runtime.Object) []string {

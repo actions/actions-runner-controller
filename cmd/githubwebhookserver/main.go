@@ -20,16 +20,13 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
-	"github.com/summerwind/actions-runner-controller/github"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/exec"
@@ -56,30 +53,36 @@ func main() {
 	var (
 		err error
 
-		webhookAddr          string
-		metricsAddr          string
+		webhookAddr string
+		metricsAddr string
+
+		// The secret token of the GitHub Webhook. See https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks
+		webhookSecretToken string
+
+		watchNamespace string
+
 		enableLeaderElection bool
 		syncPeriod           time.Duration
 	)
 
-	var c github.Config
-	err = envconfig.Process("github", &c)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error: Environment variable read failed.")
-	}
+	webhookSecretToken = os.Getenv("GITHUB_WEBHOOK_SECRET_TOKEN")
 
 	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&watchNamespace, "watch-namespace", "", "The namespace to watch for HorizontalRunnerAutoscaler's to scale on Webhook. Set to empty for letting it watch for all namespaces.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&c.Token, "webhook-secret-token", c.Token, "The secret token of the GitHub Webhook. See https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.Parse()
 
-	if c.Token == "" {
+	if webhookSecretToken == "" {
 		setupLog.Info("-webhook-secret-token is missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks")
+	}
 
-		os.Exit(1)
+	if watchNamespace == "" {
+		setupLog.Info("-watch-namespace is empty. HorizontalRunnerAutoscalers in all the namespaces are watched, cached, and considered as scale targets.")
+	} else {
+		setupLog.Info("-watch-namespace is %q. Only HorizontalRunnerAutoscalers in %q are watched, cached, and considered as scale targets.")
 	}
 
 	logger := zap.New(func(o *zap.Options) {
@@ -90,26 +93,27 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		Port:               9443,
 		SyncPeriod:         &syncPeriod,
+		LeaderElection:     enableLeaderElection,
+		Namespace:          watchNamespace,
+		MetricsBindAddress: metricsAddr,
+		Port:               9443,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	hraWebhook := &controllers.HorizontalRunnerAutoscalerWebhook{
+	hraGitHubWebhook := &controllers.HorizontalRunnerAutoscalerGitHubWebhook{
 		Client:         mgr.GetClient(),
 		Log:            ctrl.Log.WithName("controllers").WithName("Runner"),
 		Recorder:       nil,
 		Scheme:         mgr.GetScheme(),
-		SecretKeyBytes: nil,
-		WatchNamespace: "",
+		SecretKeyBytes: []byte(webhookSecretToken),
+		WatchNamespace: watchNamespace,
 	}
 
-	if err = hraWebhook.SetupWithManager(mgr); err != nil {
+	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Runner")
 		os.Exit(1)
 	}
@@ -131,7 +135,7 @@ func main() {
 	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", hraWebhook.Handle)
+	mux.HandleFunc("/", hraGitHubWebhook.Handle)
 
 	srv := http.Server{
 		Addr:    webhookAddr,
