@@ -22,7 +22,8 @@ COPY . .
 RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
   export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
   GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3 | cut -c2-) && \
-  go build -a -o manager main.go
+  go build -a -o manager main.go && \
+  go build -a -o github-webhook-server ./cmd/githubwebhookserver
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -31,6 +32,7 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 
 COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/github-webhook-server .
 
 USER nonroot:nonroot
 
