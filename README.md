@@ -38,7 +38,43 @@ If you use either Github Enterprise Cloud or Server (and have recent enought ver
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-[Enterprise level](https://docs.github.com/en/enterprise-server@2.22/actions/hosting-your-own-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-an-enterprise) runners are not working yet as there's no API definition for those.
+#### Enterprise runners usage
+
+In order to use enterprise runners you must have Admin access to Github Enterprise and you should do Personal Access Token (PAT)
+with `enterprise:admin` access. Enterprise runners are not possible to run with Github APP or any other permission.
+
+When you use enterprise runners those will get access to Github Organisations. However, access to the repositories is **NOT**
+allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories.
+This is needed only one time and is permanent after that.
+
+Example:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: ghe-runner-deployment
+spec:
+  replicas: 2
+  template:
+    spec:
+      enterprise: your-enterprise-name
+      dockerdWithinRunnerContainer: true
+      resources:
+        limits:
+          cpu: "4000m"
+          memory: "2Gi"
+        requests:
+          cpu: "200m"
+          memory: "200Mi"
+      volumeMounts:
+      - mountPath: /runner
+        name: runner
+      volumes:
+      - name: runner
+        emptyDir: {}
+
+```
 
 ## Setting up authentication with GitHub API
 
