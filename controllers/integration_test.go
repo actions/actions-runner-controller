@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"context"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v33/github"
 	github3 "github.com/google/go-github/v33/github"
 	github2 "github.com/summerwind/actions-runner-controller/github"
 	"net/http"

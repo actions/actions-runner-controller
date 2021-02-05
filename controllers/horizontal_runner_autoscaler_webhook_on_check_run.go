@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v33/github"
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
