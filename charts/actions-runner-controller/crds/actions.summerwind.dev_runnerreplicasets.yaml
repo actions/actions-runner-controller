@@ -426,6 +426,9 @@ spec:
                       type: object
                     dockerdWithinRunnerContainer:
                       type: boolean
+                    enterprise:
+                      pattern: ^[^/]+$
+                      type: string
                     env:
                       items:
                         description: EnvVar represents an environment variable present in a Container.

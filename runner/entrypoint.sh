@@ -16,14 +16,16 @@ if [ -z "${RUNNER_NAME}" ]; then
   exit 1
 fi
 
-if [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_REPO}" ]; then
+if [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_REPO}" ] && [ -n "${RUNNER_ENTERPRISE}" ]; then
   ATTACH="${RUNNER_ORG}/${RUNNER_REPO}"
 elif [ -n "${RUNNER_ORG}" ]; then
   ATTACH="${RUNNER_ORG}"
 elif [ -n "${RUNNER_REPO}" ]; then
   ATTACH="${RUNNER_REPO}"
+elif [ -n "${RUNNER_ENTERPRISE}" ]; then
+  ATTACH="enterprises/${RUNNER_ENTERPRISE}"
 else
-  echo "At least one of RUNNER_ORG or RUNNER_REPO must be set" 1>&2
+  echo "At least one of RUNNER_ORG or RUNNER_REPO or RUNNER_ENTERPRISE must be set" 1>&2
   exit 1
 fi
 

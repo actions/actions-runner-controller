@@ -39,22 +39,26 @@ func TestMain(m *testing.M) {
 
 func TestGetRegistrationToken(t *testing.T) {
 	tests := []struct {
-		org   string
-		repo  string
-		token string
-		err   bool
+		enterprise string
+		org        string
+		repo       string
+		token      string
+		err        bool
 	}{
-		{org: "", repo: "test/valid", token: fake.RegistrationToken, err: false},
-		{org: "", repo: "test/invalid", token: "", err: true},
-		{org: "", repo: "test/error", token: "", err: true},
-		{org: "test", repo: "", token: fake.RegistrationToken, err: false},
-		{org: "invalid", repo: "", token: "", err: true},
-		{org: "error", repo: "", token: "", err: true},
+		{enterprise: "", org: "", repo: "test/valid", token: fake.RegistrationToken, err: false},
+		{enterprise: "", org: "", repo: "test/invalid", token: "", err: true},
+		{enterprise: "", org: "", repo: "test/error", token: "", err: true},
+		{enterprise: "", org: "test", repo: "", token: fake.RegistrationToken, err: false},
+		{enterprise: "", org: "invalid", repo: "", token: "", err: true},
+		{enterprise: "", org: "error", repo: "", token: "", err: true},
+		{enterprise: "test", org: "", repo: "", token: fake.RegistrationToken, err: false},
+		{enterprise: "invalid", org: "", repo: "", token: "", err: true},
+		{enterprise: "error", org: "", repo: "", token: "", err: true},
 	}
 
 	client := newTestClient()
 	for i, tt := range tests {
-		rt, err := client.GetRegistrationToken(context.Background(), tt.org, tt.repo, "test")
+		rt, err := client.GetRegistrationToken(context.Background(), tt.enterprise, tt.org, tt.repo, "test")
 		if !tt.err && err != nil {
 			t.Errorf("[%d] unexpected error: %v", i, err)
 		}
@@ -66,22 +70,26 @@ func TestGetRegistrationToken(t *testing.T) {
 
 func TestListRunners(t *testing.T) {
 	tests := []struct {
-		org    string
-		repo   string
-		length int
-		err    bool
+		enterprise string
+		org        string
+		repo       string
+		length     int
+		err        bool
 	}{
-		{org: "", repo: "test/valid", length: 2, err: false},
-		{org: "", repo: "test/invalid", length: 0, err: true},
-		{org: "", repo: "test/error", length: 0, err: true},
-		{org: "test", repo: "", length: 2, err: false},
-		{org: "invalid", repo: "", length: 0, err: true},
-		{org: "error", repo: "", length: 0, err: true},
+		{enterprise: "", org: "", repo: "test/valid", length: 2, err: false},
+		{enterprise: "", org: "", repo: "test/invalid", length: 0, err: true},
+		{enterprise: "", org: "", repo: "test/error", length: 0, err: true},
+		{enterprise: "", org: "test", repo: "", length: 2, err: false},
+		{enterprise: "", org: "invalid", repo: "", length: 0, err: true},
+		{enterprise: "", org: "error", repo: "", length: 0, err: true},
+		{enterprise: "test", org: "", repo: "", length: 2, err: false},
+		{enterprise: "invalid", org: "", repo: "", length: 0, err: true},
+		{enterprise: "error", org: "", repo: "", length: 0, err: true},
 	}
 
 	client := newTestClient()
 	for i, tt := range tests {
-		runners, err := client.ListRunners(context.Background(), tt.org, tt.repo)
+		runners, err := client.ListRunners(context.Background(), tt.enterprise, tt.org, tt.repo)
 		if !tt.err && err != nil {
 			t.Errorf("[%d] unexpected error: %v", i, err)
 		}
@@ -93,21 +101,25 @@ func TestListRunners(t *testing.T) {
 
 func TestRemoveRunner(t *testing.T) {
 	tests := []struct {
-		org  string
-		repo string
-		err  bool
+		enterprise string
+		org        string
+		repo       string
+		err        bool
 	}{
-		{org: "", repo: "test/valid", err: false},
-		{org: "", repo: "test/invalid", err: true},
-		{org: "", repo: "test/error", err: true},
-		{org: "test", repo: "", err: false},
-		{org: "invalid", repo: "", err: true},
-		{org: "error", repo: "", err: true},
+		{enterprise: "", org: "", repo: "test/valid", err: false},
+		{enterprise: "", org: "", repo: "test/invalid", err: true},
+		{enterprise: "", org: "", repo: "test/error", err: true},
+		{enterprise: "", org: "test", repo: "", err: false},
+		{enterprise: "", org: "invalid", repo: "", err: true},
+		{enterprise: "", org: "error", repo: "", err: true},
+		{enterprise: "test", org: "", repo: "", err: false},
+		{enterprise: "invalid", org: "", repo: "", err: true},
+		{enterprise: "error", org: "", repo: "", err: true},
 	}
 
 	client := newTestClient()
 	for i, tt := range tests {
-		err := client.RemoveRunner(context.Background(), tt.org, tt.repo, int64(1))
+		err := client.RemoveRunner(context.Background(), tt.enterprise, tt.org, tt.repo, int64(1))
 		if !tt.err && err != nil {
 			t.Errorf("[%d] unexpected error: %v", i, err)
 		}

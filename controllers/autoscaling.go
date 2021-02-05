@@ -204,7 +204,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	}
 
 	// ListRunners will return all runners managed by GitHub - not restricted to ns
-	runners, err := r.GitHubClient.ListRunners(ctx, orgName, "")
+	runners, err := r.GitHubClient.ListRunners(ctx, "", orgName, "")
 	if err != nil {
 		return nil, err
 	}
