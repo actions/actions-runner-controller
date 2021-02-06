@@ -26,3 +26,6 @@ bin
 
 .envrc
 *.pem
+
+# OS
+.DS_STORE
