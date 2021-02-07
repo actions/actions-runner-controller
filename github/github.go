@@ -207,6 +207,34 @@ func (c *Client) listRunners(ctx context.Context, enterprise, org, repo string, 
 	return c.Client.Enterprise.ListRunners(ctx, enterprise, opts)
 }
 
+func (c *Client) ListRepositoryWorkflowRuns(ctx context.Context, user string, repoName string) ([]*github.WorkflowRun, error) {
+	c.Client.Actions.ListRepositoryWorkflowRuns(ctx, user, repoName, nil)
+
+	var workflowRuns []*github.WorkflowRun
+
+	opts := github.ListWorkflowRunsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	for {
+		list, res, err := c.Client.Actions.ListRepositoryWorkflowRuns(ctx, user, repoName, &opts)
+
+		if err != nil {
+			return workflowRuns, fmt.Errorf("failed to list workflow runs: %v", err)
+		}
+
+		workflowRuns = append(workflowRuns, list.WorkflowRuns...)
+		if res.NextPage == 0 {
+			break
+		}
+		opts.Page = res.NextPage
+	}
+
+	return workflowRuns, nil
+}
+
 // Validates enterprise, organisation and repo arguments. Both are optional, but at least one should be specified
 func getEnterpriseOrganisationAndRepo(enterprise, org, repo string) (string, string, string, error) {
 	if len(repo) > 0 {

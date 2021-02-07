@@ -138,12 +138,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 
 	for _, repo := range repos {
 		user, repoName := repo[0], repo[1]
-		list, _, err := r.GitHubClient.Actions.ListRepositoryWorkflowRuns(context.TODO(), user, repoName, nil)
+		workflowRuns, err := r.GitHubClient.ListRepositoryWorkflowRuns(context.TODO(), user, repoName)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, run := range list.WorkflowRuns {
+		for _, run := range workflowRuns {
 			total++
 
 			// In May 2020, there are only 3 statuses.
