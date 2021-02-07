@@ -2,6 +2,30 @@
 
 This controller operates self-hosted runners for GitHub Actions on your Kubernetes cluster.
 
+ToC:
+
+- [Motivation](#motivation)
+- [Installation](#installation)
+  - [GitHub Enterprise support](#github-enterprise-support)
+- [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
+  - [Using GitHub App](#using-github-app)
+  - [Using Personal AccessToken ](#using-personal-access-token)
+- [Usage](#usage)
+  - [Repository Runners](#repository-runners)
+  - [Organization Runners](#organization-runners)
+  - [Runner Deployments](#runnerdeployments)
+    - [Autoscaling](#autoscaling)
+      - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
+  - [Runner with DinD](#runner-with-dind)
+  - [Additional tweaks](#additional-tweaks)
+  - [Runner labels](#runner-labels)
+  - [Runer groups](#runner-groups)
+  - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
+  - [Software installed in the runner image](#software-installed-in-the-runner-image)
+  - [Common errors](#common-errors)
+- [Developing](#developing)
+- [Alternatives](#alternatives)
+
 ## Motivation
 
 [GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
@@ -339,7 +363,119 @@ spec:
     scaleDownFactor: '0.7'
 ```
 
-## Runner with DinD
+#### Faster Autoscaling with GitHub Webhook
+
+> This feature is an ADVANCED feature which may require more work to set up.
+> Please get prepared to put some time and effort to learn and leverage this feature!
+
+`actions-runner-controller` has an optional Webhook server that receives GitHub Webhook events and scale
+[`RunnerDeployment`s](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscaler`s](#autoscaling).
+
+Today, the Webhook server can be configured to respond GitHub `check_run`, `pull_request`, and `push` events
+by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within
+`HorizontalRunerAutoscaler`'s `Spec`.
+
+More concretely, you can configure the targeted GitHub event types and the `N` in
+`scaleUpTriggers`:
+
+```yaml
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTrigggers:
+  - githubEvent:
+      checkRun:
+        types: ["created"]
+        status: "queued"
+    amount: 1
+    duration: "5m"
+```
+
+With the above example, the webhook server scales `myrunners` by `1` replica for 5 minutes on each `check_run` event
+with the type of `created` and the status of `queued` received. 
+
+The primary benefit of autoscaling on Webhook compared to the standard autoscaling is that this one allows you to
+immediately add "resource slack" for future GitHub Actions job runs.
+
+In contrast, the standard autoscaling requires you to wait next sync period to add
+insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
+But doing so eventually result in the controller not functional due to GitHub API rate limit.
+
+> You can learn the implementation details in #282
+
+To enable this feature, you firstly need to install the webhook server.
+
+Currently, only our Helm chart has the ability install it.
+
+```console
+$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+  githubWebhookServer.enabled=true \
+  githubWebhookServer.ports[0].nodePort=33080
+```
+
+The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
+external loadbalancer targeted to the node port, and register the hostname or the IP address of the external loadbalancer
+to the GitHub Webhook.
+
+Once you were able to confirm that the Webhook server is ready and running from GitHub - this is usually verified by the
+GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
+by learning the following configuration examples.
+
+- [Example 1: Scale up on each `check_run` event](#example-1-scale-up-on-each-check_run-event)
+- [Example 2: Scale on each `pull_request` event against `develop` or `main` branches](#example-2-scale-on-each-pull_request-event-against-develop-or-main-branches)
+
+##### Example 1: Scale up on each `check_run` event
+
+> Note: This should work almost like https://github.com/philips-labs/terraform-aws-github-runner
+
+To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `check_run`, you write manifests like the below:
+
+```yaml
+kind: RunnerDeployment
+metadata:
+   name: myrunners
+spec:
+  repository: example/myrepo
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTrigggers:
+  - githubEvent:
+      checkRun:
+        types: ["created"]
+        status: "queued"
+    amount: 1
+    duration: "5m"
+```
+
+###### Example 2: Scale on each `pull_request` event against `develop` or `main` branches
+
+```yaml
+kind: RunnerDeployment:
+metadata:
+   name: myrunners
+spec:
+  repository: example/myrepo
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTrigggers:
+  - githubEvent:
+      pullRequest:
+        types: ["synchronize"]
+        branches: ["main", "develop"]
+    amount: 1
+    duration: "5m"
+```
+
+See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
+
+### Runner with DinD
 
 When using default runner, runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). This might create issues if there's `LimitRange` set to namespace.
 
@@ -361,7 +497,7 @@ spec:
 
 This also helps with resources, as you don't need to give resources separately to docker and runner.
 
-## Additional tweaks
+### Additional tweaks
 
 You can pass details through the spec selector. Here's an eg. of what you may like to do:
 
@@ -420,7 +556,7 @@ spec:
       workDir: /home/runner/work
 ```
 
-## Runner labels
+### Runner labels
 
 To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:
 
@@ -457,7 +593,7 @@ jobs:
 
 Note that if you specify `self-hosted` in your workflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
 
-## Runner Groups
+### Runner Groups
 
 Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
@@ -476,7 +612,7 @@ spec:
       group: NewGroup
 ```
 
-## Using EKS IAM role for service accounts
+### Using EKS IAM role for service accounts
 
 `actions-runner-controller` v0.15.0 or later has support for EKS IAM role for service accounts.
 
@@ -502,7 +638,7 @@ spec:
         fsGroup: 1447
 ```
 
-## Software installed in the runner image
+### Software installed in the runner image
 
 The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
 
@@ -537,9 +673,9 @@ spec:
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
-## Common Errors
+### Common Errors
 
-### invalid header field value
+#### invalid header field value
 
 ```json
 2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	{"controller": "runner", "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9", "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"}

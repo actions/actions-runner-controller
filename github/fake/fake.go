@@ -24,6 +24,16 @@ const (
 `
 )
 
+type ListRunnersHandler struct {
+	Status int
+	Body   string
+}
+
+func (h *ListRunnersHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(h.Status)
+	fmt.Fprintf(w, h.Body)
+}
+
 type Handler struct {
 	Status int
 	Body   string
@@ -94,10 +104,7 @@ func NewServer(opts ...Option) *httptest.Server {
 		},
 
 		// For ListRunners
-		"/repos/test/valid/actions/runners": &Handler{
-			Status: http.StatusOK,
-			Body:   RunnersListBody,
-		},
+		"/repos/test/valid/actions/runners": config.FixedResponses.ListRunners,
 		"/repos/test/invalid/actions/runners": &Handler{
 			Status: http.StatusNoContent,
 			Body:   "",
@@ -158,4 +165,11 @@ func NewServer(opts ...Option) *httptest.Server {
 	}
 
 	return httptest.NewServer(mux)
+}
+
+func DefaultListRunnersHandler() *ListRunnersHandler {
+	return &ListRunnersHandler{
+		Status: http.StatusOK,
+		Body:   RunnersListBody,
+	}
 }

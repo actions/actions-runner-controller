@@ -41,6 +41,56 @@ type HorizontalRunnerAutoscalerSpec struct {
 	// Metrics is the collection of various metric targets to calculate desired number of runners
 	// +optional
 	Metrics []MetricSpec `json:"metrics,omitempty"`
+
+	// ScaleUpTriggers is an experimental feature to increase the desired replicas by 1
+	// on each webhook requested received by the webhookBasedAutoscaler.
+	//
+	// This feature requires you to also enable and deploy the webhookBasedAutoscaler onto your cluster.
+	//
+	// Note that the added runners remain until the next sync period at least,
+	// and they may or may not be used by GitHub Actions depending on the timing.
+	// They are intended to be used to gain "resource slack" immediately after you
+	// receive a webhook from GitHub, so that you can loosely expect MinReplicas runners to be always available.
+	ScaleUpTriggers []ScaleUpTrigger `json:"scaleUpTriggers,omitempty"`
+
+	CapacityReservations []CapacityReservation `json:"capacityReservations,omitempty" patchStrategy:"merge" patchMergeKey:"name"`
+}
+
+type ScaleUpTrigger struct {
+	GitHubEvent *GitHubEventScaleUpTriggerSpec `json:"githubEvent,omitempty"`
+	Amount      int                            `json:"amount,omitempty"`
+	Duration    metav1.Duration                `json:"duration,omitempty"`
+}
+
+type GitHubEventScaleUpTriggerSpec struct {
+	CheckRun    *CheckRunSpec    `json:"checkRun,omitempty"`
+	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
+	Push        *PushSpec        `json:"push,omitempty"`
+}
+
+// https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
+type CheckRunSpec struct {
+	Types  []string `json:"types,omitempty"`
+	Status string   `json:"status,omitempty"`
+}
+
+// https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
+type PullRequestSpec struct {
+	Types    []string `json:"types,omitempty"`
+	Branches []string `json:"branches,omitempty"`
+}
+
+// PushSpec is the condition for triggering scale-up on push event
+// Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+type PushSpec struct {
+}
+
+// CapacityReservation specifies the number of replicas temporarily added
+// to the scale target until ExpirationTime.
+type CapacityReservation struct {
+	Name           string      `json:"name,omitempty"`
+	ExpirationTime metav1.Time `json:"expirationTime,omitempty"`
+	Replicas       int         `json:"replicas,omitempty"`
 }
 
 type ScaleTargetRef struct {
@@ -91,6 +141,17 @@ type HorizontalRunnerAutoscalerStatus struct {
 
 	// +optional
 	LastSuccessfulScaleOutTime *metav1.Time `json:"lastSuccessfulScaleOutTime,omitempty"`
+
+	// +optional
+	CacheEntries []CacheEntry `json:"cacheEntries,omitempty"`
+}
+
+const CacheEntryKeyDesiredReplicas = "desiredReplicas"
+
+type CacheEntry struct {
+	Key            string      `json:"key,omitempty"`
+	Value          int         `json:"value,omitempty"`
+	ExpirationTime metav1.Time `json:"expirationTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

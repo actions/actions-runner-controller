@@ -157,7 +157,11 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		_ = v1alpha1.AddToScheme(scheme)
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
-			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns), fake.WithListWorkflowJobsResponse(200, tc.workflowJobs))
+			server := fake.NewServer(
+				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns),
+				fake.WithListWorkflowJobsResponse(200, tc.workflowJobs),
+				fake.WithListRunnersResponse(200, fake.RunnersListBody),
+			)
 			defer server.Close()
 			client := newGithubClient(server)
 
@@ -368,7 +372,11 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		_ = v1alpha1.AddToScheme(scheme)
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
-			server := fake.NewServer(fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns), fake.WithListWorkflowJobsResponse(200, tc.workflowJobs))
+			server := fake.NewServer(
+				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns),
+				fake.WithListWorkflowJobsResponse(200, tc.workflowJobs),
+				fake.WithListRunnersResponse(200, fake.RunnersListBody),
+			)
 			defer server.Close()
 			client := newGithubClient(server)
 

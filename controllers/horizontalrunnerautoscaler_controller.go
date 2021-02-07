@@ -46,6 +46,8 @@ type HorizontalRunnerAutoscalerReconciler struct {
 	Log          logr.Logger
 	Recorder     record.EventRecorder
 	Scheme       *runtime.Scheme
+
+	CacheDuration time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;update;patch
@@ -79,19 +81,41 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	replicas, err := r.computeReplicas(rd, hra)
-	if err != nil {
-		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+	var replicas *int
 
-		log.Error(err, "Could not compute replicas")
+	replicasFromCache := r.getDesiredReplicasFromCache(hra)
 
-		return ctrl.Result{}, err
+	if replicasFromCache != nil {
+		replicas = replicasFromCache
+	} else {
+		var err error
+
+		replicas, err = r.computeReplicas(rd, hra)
+		if err != nil {
+			r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+
+			log.Error(err, "Could not compute replicas")
+
+			return ctrl.Result{}, err
+		}
 	}
 
 	const defaultReplicas = 1
 
 	currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
 	newDesiredReplicas := getIntOrDefault(replicas, defaultReplicas)
+
+	now := time.Now()
+
+	for _, reservation := range hra.Spec.CapacityReservations {
+		if reservation.ExpirationTime.Time.After(now) {
+			newDesiredReplicas += reservation.Replicas
+		}
+	}
+
+	if hra.Spec.MaxReplicas != nil && *hra.Spec.MaxReplicas < newDesiredReplicas {
+		newDesiredReplicas = *hra.Spec.MaxReplicas
+	}
 
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 	if currentDesiredReplicas != newDesiredReplicas {
@@ -103,12 +127,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 
 			return ctrl.Result{}, err
 		}
-
-		return ctrl.Result{}, err
 	}
 
+	var updated *v1alpha1.HorizontalRunnerAutoscaler
+
 	if hra.Status.DesiredReplicas == nil || *hra.Status.DesiredReplicas != *replicas {
-		updated := hra.DeepCopy()
+		updated = hra.DeepCopy()
 
 		if (hra.Status.DesiredReplicas == nil && *replicas > 1) ||
 			(hra.Status.DesiredReplicas != nil && *replicas > *hra.Status.DesiredReplicas) {
@@ -117,7 +141,37 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		}
 
 		updated.Status.DesiredReplicas = replicas
+	}
 
+	if replicasFromCache == nil {
+		if updated == nil {
+			updated = hra.DeepCopy()
+		}
+
+		var cacheEntries []v1alpha1.CacheEntry
+
+		for _, ent := range updated.Status.CacheEntries {
+			if ent.ExpirationTime.Before(&metav1.Time{Time: now}) {
+				cacheEntries = append(cacheEntries, ent)
+			}
+		}
+
+		var cacheDuration time.Duration
+
+		if r.CacheDuration > 0 {
+			cacheDuration = r.CacheDuration
+		} else {
+			cacheDuration = 10 * time.Minute
+		}
+
+		updated.Status.CacheEntries = append(updated.Status.CacheEntries, v1alpha1.CacheEntry{
+			Key:            v1alpha1.CacheEntryKeyDesiredReplicas,
+			Value:          *replicas,
+			ExpirationTime: metav1.Time{Time: time.Now().Add(cacheDuration)},
+		})
+	}
+
+	if updated != nil {
 		if err := r.Status().Update(ctx, updated); err != nil {
 			log.Error(err, "Failed to update horizontalrunnerautoscaler status")
 

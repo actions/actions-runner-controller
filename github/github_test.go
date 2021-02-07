@@ -32,7 +32,10 @@ func newTestClient() *Client {
 }
 
 func TestMain(m *testing.M) {
-	server = fake.NewServer()
+	res := &fake.FixedResponses{
+		ListRunners: fake.DefaultListRunnersHandler(),
+	}
+	server = fake.NewServer(fake.WithFixedResponses(res))
 	defer server.Close()
 	m.Run()
 }

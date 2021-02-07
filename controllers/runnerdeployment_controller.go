@@ -177,7 +177,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			rs := oldSets[i]
 
 			if err := r.Client.Delete(ctx, &rs); err != nil {
-				log.Error(err, "Failed to delete runner resource")
+				log.Error(err, "Failed to delete runnerreplicaset resource")
 
 				return ctrl.Result{}, err
 			}

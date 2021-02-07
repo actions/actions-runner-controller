@@ -48,6 +48,20 @@ spec:
           description: HorizontalRunnerAutoscalerSpec defines the desired state of
             HorizontalRunnerAutoscaler
           properties:
+            capacityReservations:
+              items:
+                description: CapacityReservation specifies the number of replicas
+                  temporarily added to the scale target until ExpirationTime.
+                properties:
+                  expirationTime:
+                    format: date-time
+                    type: string
+                  name:
+                    type: string
+                  replicas:
+                    type: integer
+                type: object
+              type: array
             maxReplicas:
               description: MinReplicas is the maximum number of replicas the deployment
                 is allowed to scale
@@ -104,9 +118,68 @@ spec:
                 name:
                   type: string
               type: object
+            scaleUpTriggers:
+              description: "ScaleUpTriggers is an experimental feature to increase
+                the desired replicas by 1 on each webhook requested received by the
+                webhookBasedAutoscaler. \n This feature requires you to also enable
+                and deploy the webhookBasedAutoscaler onto your cluster. \n Note that
+                the added runners remain until the next sync period at least, and
+                they may or may not be used by GitHub Actions depending on the timing.
+                They are intended to be used to gain \"resource slack\" immediately
+                after you receive a webhook from GitHub, so that you can loosely expect
+                MinReplicas runners to be always available."
+              items:
+                properties:
+                  amount:
+                    type: integer
+                  duration:
+                    type: string
+                  githubEvent:
+                    properties:
+                      checkRun:
+                        description: https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
+                        properties:
+                          status:
+                            type: string
+                          types:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      pullRequest:
+                        description: https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
+                        properties:
+                          branches:
+                            items:
+                              type: string
+                            type: array
+                          types:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      push:
+                        description: PushSpec is the condition for triggering scale-up
+                          on push event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+                        type: object
+                    type: object
+                type: object
+              type: array
           type: object
         status:
           properties:
+            cacheEntries:
+              items:
+                properties:
+                  expirationTime:
+                    format: date-time
+                    type: string
+                  key:
+                    type: string
+                  value:
+                    type: integer
+                type: object
+              type: array
             desiredReplicas:
               description: DesiredReplicas is the total number of desired, non-terminated
                 and latest pods to be set for the primary RunnerSet This doesn't include

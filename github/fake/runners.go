@@ -29,15 +29,15 @@ func (r *RunnersList) Add(runner *github.Runner) {
 func (r *RunnersList) GetServer() *httptest.Server {
 	router := mux.NewRouter()
 
-	router.Handle("/repos/{owner}/{repo}/actions/runners", r.handleList())
+	router.Handle("/repos/{owner}/{repo}/actions/runners", r.HandleList())
 	router.Handle("/repos/{owner}/{repo}/actions/runners/{id}", r.handleRemove())
-	router.Handle("/orgs/{org}/actions/runners", r.handleList())
+	router.Handle("/orgs/{org}/actions/runners", r.HandleList())
 	router.Handle("/orgs/{org}/actions/runners/{id}", r.handleRemove())
 
 	return httptest.NewServer(router)
 }
 
-func (r *RunnersList) handleList() http.HandlerFunc {
+func (r *RunnersList) HandleList() http.HandlerFunc {
 	return func(w http.ResponseWriter, res *http.Request) {
 		j, err := json.Marshal(github.Runners{
 			TotalCount: len(r.runners),

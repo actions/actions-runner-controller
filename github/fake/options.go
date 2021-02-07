@@ -1,8 +1,11 @@
 package fake
 
+import "net/http"
+
 type FixedResponses struct {
 	ListRepositoryWorkflowRuns *Handler
 	ListWorkflowJobs           *MapHandler
+	ListRunners                http.Handler
 }
 
 type Option func(*ServerConfig)
@@ -21,6 +24,15 @@ func WithListWorkflowJobsResponse(status int, bodies map[int]string) Option {
 		c.FixedResponses.ListWorkflowJobs = &MapHandler{
 			Status: status,
 			Bodies: bodies,
+		}
+	}
+}
+
+func WithListRunnersResponse(status int, body string) Option {
+	return func(c *ServerConfig) {
+		c.FixedResponses.ListRunners = &ListRunnersHandler{
+			Status: status,
+			Body:   body,
 		}
 	}
 }
