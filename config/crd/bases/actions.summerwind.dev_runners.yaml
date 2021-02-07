@@ -7,6 +7,9 @@ metadata:
   name: runners.actions.summerwind.dev
 spec:
   additionalPrinterColumns:
+    - JSONPath: .spec.enterprise
+      name: Enterprise
+      type: string
     - JSONPath: .spec.organization
       name: Organization
       type: string
@@ -419,6 +422,9 @@ spec:
               type: object
             dockerdWithinRunnerContainer:
               type: boolean
+            enterprise:
+              pattern: ^[^/]+$
+              type: string
             env:
               items:
                 description: EnvVar represents an environment variable present in a Container.
@@ -1541,6 +1547,8 @@ spec:
             registration:
               description: RunnerStatusRegistration contains runner registration status
               properties:
+                enterprise:
+                  type: string
                 expiresAt:
                   format: date-time
                   type: string

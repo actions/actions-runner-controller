@@ -104,7 +104,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 VOLUME /var/lib/docker
 
-COPY patched $RUNNER_ASSETS_DIR/patched
+COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 # No group definition, as that makes it harder to run docker.
 USER runner

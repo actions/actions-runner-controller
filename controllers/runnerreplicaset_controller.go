@@ -102,7 +102,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		// get runners that are currently not busy
 		var notBusy []v1alpha1.Runner
 		for _, runner := range myRunners {
-			busy, err := r.isRunnerBusy(ctx, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+			busy, err := r.isRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
 				log.Error(err, "Failed to check if runner is busy")
 				return ctrl.Result{}, err
@@ -187,8 +187,8 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *RunnerReplicaSetReconciler) isRunnerBusy(ctx context.Context, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, org, repo)
+func (r *RunnerReplicaSetReconciler) isRunnerBusy(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
+	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
 	r.Log.Info("runners", "github", runners)
 	if err != nil {
 		return false, err

@@ -83,7 +83,7 @@ RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > .env \
   && chmod g+rwx /opt/hostedtoolcache
 
 COPY entrypoint.sh /
-COPY patched $RUNNER_ASSETS_DIR/patched
+COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 USER runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
