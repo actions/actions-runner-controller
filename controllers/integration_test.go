@@ -332,7 +332,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					})
 				}
 
-				rs, err := ghClient.ListRunners(context.Background(), "", "test/valid")
+				rs, err := ghClient.ListRunners(context.Background(), "", "", "test/valid")
 				Expect(err).NotTo(HaveOccurred(), "verifying list fake runners response")
 				Expect(len(rs)).To(Equal(3), "count of fake list runners")
 			}
