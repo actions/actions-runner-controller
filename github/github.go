@@ -124,7 +124,7 @@ func (c *Client) RemoveRunner(ctx context.Context, enterprise, org, repo string,
 	res, err := c.removeRunner(ctx, enterprise, owner, repo, runnerID)
 
 	if err != nil {
-		return fmt.Errorf("failed to remove runner: %v", err)
+		return fmt.Errorf("failed to remove runner: %w", err)
 	}
 
 	if res.StatusCode != 204 {
@@ -149,7 +149,7 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 		list, res, err := c.listRunners(ctx, enterprise, owner, repo, &opts)
 
 		if err != nil {
-			return runners, fmt.Errorf("failed to list runners: %v", err)
+			return runners, fmt.Errorf("failed to list runners: %w", err)
 		}
 
 		runners = append(runners, list.Runners...)
@@ -281,4 +281,27 @@ func getEnterpriseApiUrl(baseURL string) (string, error) {
 
 	// Trim trailing slash, otherwise there's double slash added to token endpoint
 	return fmt.Sprintf("%s://%s%s", baseEndpoint.Scheme, baseEndpoint.Host, strings.TrimSuffix(baseEndpoint.Path, "/")), nil
+}
+
+type RunnerNotFound struct {
+	runnerName string
+}
+
+func (e RunnerNotFound) Error() string {
+	return fmt.Sprintf("runner %q not found", e.runnerName)
+}
+
+func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
+	runners, err := r.ListRunners(ctx, enterprise, org, repo)
+	if err != nil {
+		return false, err
+	}
+
+	for _, runner := range runners {
+		if runner.GetName() == name {
+			return runner.GetBusy(), nil
+		}
+	}
+
+	return false, RunnerNotFound{runnerName: name}
 }

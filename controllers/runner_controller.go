@@ -18,12 +18,15 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	gogithub "github.com/google/go-github/v33/github"
 	"github.com/summerwind/actions-runner-controller/hash"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,6 +44,8 @@ const (
 	finalizerName = "runner.actions.summerwind.dev"
 
 	LabelKeyPodTemplateHash = "pod-template-hash"
+
+	retryDelayOnGitHubAPIRateLimitError = 30 * time.Second
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -97,7 +102,20 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			if len(runner.Status.Registration.Token) > 0 {
 				ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 				if err != nil {
-					log.Error(err, "Failed to unregister runner")
+					if errors.Is(err, &gogithub.RateLimitError{}) {
+						// We log the underlying error when we failed calling GitHub API to list or unregisters,
+						// or the runner is still busy.
+						log.Error(
+							err,
+							fmt.Sprintf(
+								"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
+								retryDelayOnGitHubAPIRateLimitError,
+							),
+						)
+
+						return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+					}
+
 					return ctrl.Result{}, err
 				}
 
@@ -124,7 +142,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
-		if !errors.IsNotFound(err) {
+		if !kerrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 
@@ -194,10 +212,31 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		runnerBusy, err := r.isRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+		var notRegistered bool
+
+		runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 		if err != nil {
-			log.Error(err, "Failed to check if runner is busy")
-			return ctrl.Result{}, nil
+			if errors.Is(err, github.RunnerNotFound{}) {
+				log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub.")
+
+				notRegistered = true
+			} else {
+				if errors.Is(err, &gogithub.RateLimitError{}) {
+					// We log the underlying error when we failed calling GitHub API to list or unregisters,
+					// or the runner is still busy.
+					log.Error(
+						err,
+						fmt.Sprintf(
+							"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
+							retryDelayOnGitHubAPIRateLimitError,
+						),
+					)
+
+					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+				}
+
+				return ctrl.Result{}, err
+			}
 		}
 
 		// See the `newPod` function called above for more information
@@ -209,9 +248,27 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			restart = true
 		}
 
+		registrationTimeout := 10 * time.Minute
+		currentTime := time.Now()
+		registrationDidTimeout := pod.CreationTimestamp.Add(registrationTimeout).Sub(currentTime) > 0
+
+		if !notRegistered && registrationDidTimeout {
+			log.Info(
+				"Runner failed to register itself to GitHub in timely manner. "+
+					"Recreating the pod to see if it resolves the issue. "+
+					"CAUTION: If you see this a lot, you should investigate the root cause. "+
+					"See https://github.com/summerwind/actions-runner-controller/issues/288",
+				"podCreationTimestamp", pod.CreationTimestamp,
+				"currentTime", currentTime,
+				"configuredRegistrationTimeout", registrationTimeout,
+			)
+
+			restart = true
+		}
+
 		// Don't do anything if there's no need to restart the runner
 		if !restart {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 		// Delete current pod if recreation is needed
@@ -225,21 +282,6 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *RunnerReconciler) isRunnerBusy(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
-	if err != nil {
-		return false, err
-	}
-
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			return runner.GetBusy(), nil
-		}
-	}
-
-	return false, fmt.Errorf("runner not found")
 }
 
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {

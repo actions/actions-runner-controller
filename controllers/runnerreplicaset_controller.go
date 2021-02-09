@@ -18,10 +18,13 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	gogithub "github.com/google/go-github/v33/github"
+	"time"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -65,7 +68,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	var allRunners v1alpha1.RunnerList
 	if err := r.List(ctx, &allRunners, client.InNamespace(req.Namespace)); err != nil {
-		if !errors.IsNotFound(err) {
+		if !kerrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 	}
@@ -102,12 +105,54 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		// get runners that are currently not busy
 		var notBusy []v1alpha1.Runner
 		for _, runner := range myRunners {
-			busy, err := r.isRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+			busy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
-				log.Error(err, "Failed to check if runner is busy")
-				return ctrl.Result{}, err
-			}
-			if !busy {
+				log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub, and therefore we prioritize it for deletion", "runnerName", runner.Name)
+
+				var notRegistered bool
+
+				if err != nil {
+					if errors.Is(err, github.RunnerNotFound{}) {
+						log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub.")
+
+						notRegistered = true
+					} else {
+						if errors.Is(err, &gogithub.RateLimitError{}) {
+							// We log the underlying error when we failed calling GitHub API to list or unregisters,
+							// or the runner is still busy.
+							log.Error(
+								err,
+								fmt.Sprintf(
+									"Failed to check if runner is busy due to GitHub API rate limit. Retrying in %s to avoid excessive GitHub API calls",
+									retryDelayOnGitHubAPIRateLimitError,
+								),
+							)
+
+							return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+						}
+
+						return ctrl.Result{}, err
+					}
+				}
+
+				registrationTimeout := 15 * time.Minute
+				currentTime := time.Now()
+				registrationDidTimeout := runner.CreationTimestamp.Add(registrationTimeout).Sub(currentTime) > 0
+
+				if !notRegistered && registrationDidTimeout {
+					log.Info(
+						"Runner failed to register itself to GitHub in timely manner. "+
+							"Recreating the pod to see if it resolves the issue. "+
+							"CAUTION: If you see this a lot, you should investigate the root cause. "+
+							"See https://github.com/summerwind/actions-runner-controller/issues/288",
+						"runnerCreationTimestamp", runner.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
+
+					notBusy = append(notBusy, runner)
+				}
+			} else if !busy {
 				notBusy = append(notBusy, runner)
 			}
 		}
@@ -185,20 +230,4 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.RunnerReplicaSet{}).
 		Owns(&v1alpha1.Runner{}).
 		Complete(r)
-}
-
-func (r *RunnerReplicaSetReconciler) isRunnerBusy(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
-	r.Log.Info("runners", "github", runners)
-	if err != nil {
-		return false, err
-	}
-
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			return runner.GetBusy(), nil
-		}
-	}
-
-	return false, fmt.Errorf("runner not found")
 }
