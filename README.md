@@ -570,12 +570,12 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
-      # false = there are no privileged container and you cannot use docker.
-      # true (default) = docker sidecar container launched in privileged mode, 
+      # true (default) = A privileged docker sidecar container is included in the runner pod.
+      # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       dockerEnabled: false
-      # false (default) = docker is not ran without the runner container
-      # true = runner pod container is expected to run docker instead of a sidecar, if true summerwind/actions-runner-dind is used by default
-      dockerdWithinRunnerContainer: false
+      # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
+      # true = No docker sidecar container is deployed in the runner pod but docker can be used within teh runner container instead. The image summerwind/actions-runner-dind is used by default.
+      dockerdWithinRunnerContainer: true
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
