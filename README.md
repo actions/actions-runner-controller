@@ -59,7 +59,7 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
 Authentication works same way as with public Github (repo and organization level).
 The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-__**NOTE : THE Maintainers do not have environment where to test changes and SO are reliant on the community for testing, Enterprise support from the maintainers is a best endeavors effort only**__
+__**NOTE : THE maintainers do not have an enterprise environment to be able to test changes and so are reliant on the community for testing, support is a best endeavors effort only and community driven**__
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
