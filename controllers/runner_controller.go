@@ -250,7 +250,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		registrationTimeout := 10 * time.Minute
 		currentTime := time.Now()
-		registrationDidTimeout := pod.CreationTimestamp.Add(registrationTimeout).Sub(currentTime) > 0
+		registrationDidTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout)) > 0
 
 		if !notRegistered && registrationDidTimeout {
 			log.Info(

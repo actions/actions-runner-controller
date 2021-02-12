@@ -137,7 +137,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 				registrationTimeout := 15 * time.Minute
 				currentTime := time.Now()
-				registrationDidTimeout := runner.CreationTimestamp.Add(registrationTimeout).Sub(currentTime) > 0
+				registrationDidTimeout := currentTime.Sub(runner.CreationTimestamp.Add(registrationTimeout)) > 0
 
 				if !notRegistered && registrationDidTimeout {
 					log.Info(
