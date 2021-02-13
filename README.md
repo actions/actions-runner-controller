@@ -293,10 +293,10 @@ The scale out performance is controlled via the manager containers startup `--sy
 **Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch
 **Helm Config :** `syncPeriod`
 
-**Positives to this metric**
+**Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
 
-**Negatives to this metric**
+**Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
 2. May not scale quick enough for some users needs
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
@@ -367,16 +367,16 @@ This metric the HorizontalRunnerAutoscaler will pole GitHub based on the configu
 **Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch
 **Helm Config :** `syncPeriod`
 
-**Positives to this metric**
+**Benefits of this metric**
 1. This scheme is especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
 2. This scheme does not require a list of repositories allowing you to support workflows without having to maintain a explicit list of repositories, this is espcially useful for those that are working at a larger scale.
-3. Like all scaling metrics you can still manage how distribution to this kind of runner through the use of [Github labels](#runner-labels), this is useful if you want to run multiple versions of this metric labels
+3. Like all scaling metrics, you can still manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels), this is useful if you want to run multiple versions of this metric labels.
 
-**Negatives to this metric**
+**Drawbacks of this metric**
 1. May not scale quick enough for some users needs
 2. It does not support named repositories (this can be somewhat worked around through the use of github labels as highlighted). If you require named repositories consider the `TotalNumberOfQueuedAndInProgressWorkflowRuns` scaling metric.
 
-Scaleup and scaledown thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. Scaleup and scaledown factors are the multiplicative factor applied to the current number of runners used to calculate the number of desired runners.
+`scaleUpThreshold` and `scaleDownThreshold` thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. The `scaleUpFactor` and `scaleDownFactor` are multiplier factors applied to the current number of runners used to calculate the number of desired runners.
 
 ```yaml
 ---
@@ -397,7 +397,7 @@ spec:
     scaleDownFactor: '0.7'      # The scale down multiplier factor applied to desired count
 ```
 
-Like the previous metric, this scaling factor also supports the anti-flapping option as mentioned previously the same way.
+Like the previous metric, the scale down factor also supports the anti-flapping option as mentioned previously the same way.
 
 ```yaml
 spec:
