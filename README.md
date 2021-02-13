@@ -59,7 +59,7 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
 Authentication works same way as with public Github (repo and organization level).
 The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-__**NOTE : THE maintainers do not have an enterprise environment to be able to test changes and so are reliant on the community for testing, support is a best endeavors effort only and community driven**__
+__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so are reliant on the community for testing, support is a best endeavors basis only and is community driven**__
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -772,9 +772,11 @@ NAME=$DOCKER_USER/actions-runner-controller \
 The following is a list of alternative solutions that may better fit you depending on your use-case:
 
 - <https://github.com/evryfs/github-actions-runner-operator/>
+- <https://github.com/philips-labs/terraform-aws-github-runner/>
 
 Although the situation can change over time, as of writing this sentence, the benefits of using `actions-runner-controller` over the alternatives are:
 
 - `actions-runner-controller` has the ability to autoscale runners based on number of pending/progressing jobs (#99)
 - `actions-runner-controller` is able to gracefully stop runners (#103)
 - `actions-runner-controller` has ARM support
+- `actions-runner-controller` has GitHub Enterprise support (see Enterprise section for caveats)
