@@ -779,4 +779,4 @@ Although the situation can change over time, as of writing this sentence, the be
 - `actions-runner-controller` has the ability to autoscale runners based on number of pending/progressing jobs (#99)
 - `actions-runner-controller` is able to gracefully stop runners (#103)
 - `actions-runner-controller` has ARM support
-- `actions-runner-controller` has GitHub Enterprise support (see Enterprise section for caveats)
+- `actions-runner-controller` has GitHub Enterprise support (see [GitHub Enterprise support](#github-enterprise-support) section for caveats)
