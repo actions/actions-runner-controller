@@ -287,7 +287,7 @@ type RunnerNotFound struct {
 	runnerName string
 }
 
-func (e RunnerNotFound) Error() string {
+func (e *RunnerNotFound) Error() string {
 	return fmt.Sprintf("runner %q not found", e.runnerName)
 }
 
@@ -303,5 +303,5 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 		}
 	}
 
-	return false, RunnerNotFound{runnerName: name}
+	return false, &RunnerNotFound{runnerName: name}
 }

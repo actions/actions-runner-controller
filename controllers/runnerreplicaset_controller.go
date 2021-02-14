@@ -107,39 +107,36 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		for _, runner := range myRunners {
 			busy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
-				log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub, and therefore we prioritize it for deletion", "runnerName", runner.Name)
+				notRegistered := false
 
-				var notRegistered bool
+				var e *github.RunnerNotFound
+				if errors.As(err, &e) {
+					log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub, and therefore we prioritize it for deletion", "runnerName", runner.Name)
+					notRegistered = true
+				} else {
+					var e *gogithub.RateLimitError
+					if errors.As(err, &e) {
+						// We log the underlying error when we failed calling GitHub API to list or unregisters,
+						// or the runner is still busy.
+						log.Error(
+							err,
+							fmt.Sprintf(
+								"Failed to check if runner is busy due to GitHub API rate limit. Retrying in %s to avoid excessive GitHub API calls",
+								retryDelayOnGitHubAPIRateLimitError,
+							),
+						)
 
-				if err != nil {
-					if errors.Is(err, github.RunnerNotFound{}) {
-						log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub.")
-
-						notRegistered = true
-					} else {
-						if errors.Is(err, &gogithub.RateLimitError{}) {
-							// We log the underlying error when we failed calling GitHub API to list or unregisters,
-							// or the runner is still busy.
-							log.Error(
-								err,
-								fmt.Sprintf(
-									"Failed to check if runner is busy due to GitHub API rate limit. Retrying in %s to avoid excessive GitHub API calls",
-									retryDelayOnGitHubAPIRateLimitError,
-								),
-							)
-
-							return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-						}
-
-						return ctrl.Result{}, err
+						return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
 					}
+
+					return ctrl.Result{}, err
 				}
 
 				registrationTimeout := 15 * time.Minute
 				currentTime := time.Now()
 				registrationDidTimeout := currentTime.Sub(runner.CreationTimestamp.Add(registrationTimeout)) > 0
 
-				if !notRegistered && registrationDidTimeout {
+				if notRegistered && registrationDidTimeout {
 					log.Info(
 						"Runner failed to register itself to GitHub in timely manner. "+
 							"Recreating the pod to see if it resolves the issue. "+
