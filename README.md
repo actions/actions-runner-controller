@@ -529,6 +529,14 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
+      
+      # Timeout after a node crashed or became unreachable to evict your pods somewhere else (default 5mins)
+      tolerations:
+        - key: "node.kubernetes.io/unreachable"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 10
+          
       # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
