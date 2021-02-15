@@ -244,16 +244,18 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		var notRegistered bool
+		notRegistered := false
 
 		runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 		if err != nil {
-			if errors.Is(err, github.RunnerNotFound{}) {
+			var e *github.RunnerNotFound
+			if errors.As(err, &e) {
 				log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub.")
 
 				notRegistered = true
 			} else {
-				if errors.Is(err, &gogithub.RateLimitError{}) {
+				var e *gogithub.RateLimitError
+				if errors.As(err, &e) {
 					// We log the underlying error when we failed calling GitHub API to list or unregisters,
 					// or the runner is still busy.
 					log.Error(
@@ -284,7 +286,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		currentTime := time.Now()
 		registrationDidTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout)) > 0
 
-		if !notRegistered && registrationDidTimeout {
+		if notRegistered && registrationDidTimeout {
 			log.Info(
 				"Runner failed to register itself to GitHub in timely manner. "+
 					"Recreating the pod to see if it resolves the issue. "+
