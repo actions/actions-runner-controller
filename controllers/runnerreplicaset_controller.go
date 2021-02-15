@@ -111,7 +111,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 				var e *github.RunnerNotFound
 				if errors.As(err, &e) {
-					log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub, and therefore we prioritize it for deletion", "runnerName", runner.Name)
+					log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or has not managed yet to, and therefore we prioritize it for deletion", "runnerName", runner.Name)
 					notRegistered = true
 				} else {
 					var e *gogithub.RateLimitError
