@@ -185,7 +185,39 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
-			return ctrl.Result{}, err
+			deletionTimeout := 1 * time.Minute
+			currentTime := time.Now()
+			deletionDidTimeout := currentTime.Sub(pod.DeletionTimestamp.Add(deletionTimeout)) > 0
+
+			if deletionDidTimeout {
+				log.Info(
+					"Pod failed to delete itself in a timely manner. "+
+						"This is typically the case when a Kubernetes node became unreachable "+
+						"and the kube controller started evicting nodes. Forcefully deleting the pod to not get stuck.",
+					"podDeletionTimestamp", pod.DeletionTimestamp,
+					"currentTime", currentTime,
+					"configuredDeletionTimeout", deletionTimeout,
+				)
+
+				var force int64 = 0
+				// forcefully delete runner as we would otherwise get stuck if the node stays unreachable
+				if err := r.Delete(ctx, &pod, &client.DeleteOptions{GracePeriodSeconds: &force}); err != nil {
+					// probably
+					if !kerrors.IsNotFound(err) {
+						log.Error(err, "Failed to forcefully delete pod resource ...")
+						return ctrl.Result{}, err
+					}
+					// forceful deletion finally succeeded
+					return ctrl.Result{Requeue: true}, nil
+				}
+
+				r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Forcefully deleted pod '%s'", pod.Name))
+				log.Info("Forcefully deleted runner pod", "repository", runner.Spec.Repository)
+				// give kube manager a little time to forcefully delete the stuck pod
+				return ctrl.Result{RequeueAfter: 3 * time.Second}, err
+			} else {
+				return ctrl.Result{}, err
+			}
 		}
 
 		if pod.Status.Phase == corev1.PodRunning {
