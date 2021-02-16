@@ -295,11 +295,16 @@ The scale out performance is controlled via the manager containers startup `--sy
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
+2. Scales quickly (within the bounds of the syncPeriod) as it will spin up the number of runners based on the depth of the workflow queue
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
 2. May not scale quick enough for some users needs
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
+
+
+Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`
 
 
 ```yaml
@@ -327,37 +332,12 @@ spec:
     - summerwind/actions-runner-controller
 ```
 
-Additionally, the autoscaling feature has an anti-flapping option that prevents periodic loop of scaling up and down.
+Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
 By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured however by adding the setting `scaleDownDelaySecondsAfterScaleUp` in the `HorizontalRunnerAutoscaler` `spec`:
 
 ```yaml
 spec:
   scaleDownDelaySecondsAfterScaleOut: 60
-```
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runner-deployment
-spec:
-  template:
-    spec:
-      repository: summerwind/actions-runner-controller
----
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: HorizontalRunnerAutoscaler
-metadata:
-  name: example-runner-deployment-autoscaler
-spec:
-  scaleTargetRef:
-    name: example-runner-deployment
-  minReplicas: 1
-  maxReplicas: 3
-  metrics:
-  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
-    repositoryNames:
-    - summerwind/actions-runner-controller  # organisation/repository to monitor for queued workflows
 ```
 
 **PercentageRunnersBusy**
@@ -368,15 +348,18 @@ This metric the HorizontalRunnerAutoscaler will pole GitHub based on the configu
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
-1. This scheme is especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
-2. This scheme does not require a list of repositories allowing you to support workflows without having to maintain a explicit list of repositories, this is espcially useful for those that are working at a larger scale.
-3. Like all scaling metrics, you can still manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels), this is useful if you want to run multiple versions of this metric labels.
+1. Allows for multiple controllers to be deployed as each controller deployed is responsible for scaling their own runner pods on a per namespace basis.
+2. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
+3. Supports github organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+4. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
+5. Supports scaling runner count on both a percentage increase / descrease basis as well as on a fixed runner count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
-1. May not scale quick enough for some users needs
-2. It does not support named repositories (this can be somewhat worked around through the use of github labels as highlighted). If you require named repositories consider the `TotalNumberOfQueuedAndInProgressWorkflowRuns` scaling metric.
+1. May not scale quick enough for some users needs as we are scaling up and down based on indicative information rather than a direct count of the workflow queue depth
 
-`scaleUpThreshold` and `scaleDownThreshold` thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. The `scaleUpFactor` and `scaleDownFactor` are multiplier factors applied to the current number of runners used to calculate the number of desired runners.
+
+Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
+
 
 ```yaml
 ---
@@ -393,11 +376,30 @@ spec:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
     scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
-    scaleUpFactor: '1.4'        # The scale up Multiplier factor applied to desired count
+    scaleUpFactor: '1.4'        # The scale up multiplier factor applied to desired count
     scaleDownFactor: '0.7'      # The scale down multiplier factor applied to desired count
 ```
 
-Like the previous metric, the scale down factor also supports the anti-flapping option as mentioned previously the same way.
+```yaml
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
+    scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
+    ScaleUpAdjustment: '2'      # The scale up runner count added to desired count
+    ScaleDownAdjustment: '1'    # The scale down runner count subtracted from the desired count
+```
+
+Like the previous metric, the scale down factor respects the anti-flapping configuration is applied to the `HorizontalRunnerAutoscaler` as mentioned previously:
 
 ```yaml
 spec:
