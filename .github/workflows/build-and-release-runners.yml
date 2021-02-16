@@ -18,7 +18,7 @@ on:
       - .github/workflows/build-runner.yml
   release:
     types: [published]
-name: Runner
+
 jobs:
   build:
     runs-on: ubuntu-latest
