@@ -1,5 +1,7 @@
 # actions-runner-controller
 
+[![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
+
 This controller operates self-hosted runners for GitHub Actions on your Kubernetes cluster.
 
 ToC:
@@ -393,7 +395,7 @@ spec:
 ```
 
 With the above example, the webhook server scales `myrunners` by `1` replica for 5 minutes on each `check_run` event
-with the type of `created` and the status of `queued` received. 
+with the type of `created` and the status of `queued` received.
 
 The primary benefit of autoscaling on Webhook compared to the standard autoscaling is that this one allows you to
 immediately add "resource slack" for future GitHub Actions job runs.
@@ -529,14 +531,14 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
-      
+
       # Timeout after a node crashed or became unreachable to evict your pods somewhere else (default 5mins)
       tolerations:
         - key: "node.kubernetes.io/unreachable"
           operator: "Exists"
           effect: "NoExecute"
           tolerationSeconds: 10
-          
+
       # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
       # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
