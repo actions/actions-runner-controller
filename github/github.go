@@ -11,6 +11,7 @@ import (
 
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v33/github"
+	"github.com/summerwind/actions-runner-controller/github/metrics"
 	"golang.org/x/oauth2"
 )
 
@@ -34,15 +35,9 @@ type Client struct {
 
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
-	var (
-		httpClient *http.Client
-		client     *github.Client
-	)
-	githubBaseURL := "https://github.com/"
+	var transport http.RoundTripper
 	if len(c.Token) > 0 {
-		httpClient = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: c.Token},
-		))
+		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
 		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
 		if err != nil {
@@ -55,9 +50,13 @@ func (c *Config) NewClient() (*Client, error) {
 			}
 			tr.BaseURL = githubAPIURL
 		}
-		httpClient = &http.Client{Transport: tr}
+		transport = tr
 	}
+	transport = metrics.Transport{Transport: transport}
+	httpClient := &http.Client{Transport: transport}
 
+	var client *github.Client
+	var githubBaseURL string
 	if len(c.EnterpriseURL) > 0 {
 		var err error
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
@@ -67,6 +66,7 @@ func (c *Config) NewClient() (*Client, error) {
 		githubBaseURL = fmt.Sprintf("%s://%s%s", client.BaseURL.Scheme, client.BaseURL.Host, strings.TrimSuffix(client.BaseURL.Path, "api/v3/"))
 	} else {
 		client = github.NewClient(httpClient)
+		githubBaseURL = "https://github.com/"
 	}
 
 	return &Client{
