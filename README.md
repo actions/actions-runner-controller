@@ -603,7 +603,7 @@ spec:
           securityContext:
             runAsUser: 0
       # workDir if not specified (default = /runner/_work)
-      # You can customise this setting allowing you to the default working directory location
+      # You can customise this setting allowing you to change the default working directory location
       # for example, the below setting is the same as on the ubuntu-18.04 image
       workDir: /home/runner/work
 ```
