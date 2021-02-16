@@ -31,8 +31,12 @@ type testEnvironment struct {
 }
 
 var (
-	workflowRunsFor3Replicas = `{"total_count": 5, "workflow_runs":[{"status":"queued"}, {"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
-	workflowRunsFor1Replicas = `{"total_count": 6, "workflow_runs":[{"status":"queued"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}]}"`
+	workflowRunsFor3Replicas             = `{"total_count": 5, "workflow_runs":[{"status":"queued"}, {"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
+	workflowRunsFor3Replicas_queued      = `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"queued"}]}"`
+	workflowRunsFor3Replicas_in_progress = `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`
+	workflowRunsFor1Replicas             = `{"total_count": 6, "workflow_runs":[{"status":"queued"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}]}"`
+	workflowRunsFor1Replicas_queued      = `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`
+	workflowRunsFor1Replicas_in_progress = `{"total_count": 0, "workflow_runs":[]}"`
 )
 
 var webhookServer *httptest.Server
@@ -56,6 +60,10 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 	responses.ListRepositoryWorkflowRuns = &fake.Handler{
 		Status: 200,
 		Body:   workflowRunsFor3Replicas,
+		Statuses: map[string]string{
+			"queued":      workflowRunsFor3Replicas_queued,
+			"in_progress": workflowRunsFor3Replicas_in_progress,
+		},
 	}
 	fakeRunnerList = fake.NewRunnersList()
 	responses.ListRunners = fakeRunnerList.HandleList()
@@ -342,6 +350,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				time.Sleep(time.Second)
 
 				responses.ListRepositoryWorkflowRuns.Body = workflowRunsFor1Replicas
+				responses.ListRepositoryWorkflowRuns.Statuses["queued"] = workflowRunsFor1Replicas_queued
+				responses.ListRepositoryWorkflowRuns.Statuses["in_progress"] = workflowRunsFor1Replicas_in_progress
 
 				var hra actionsv1alpha1.HorizontalRunnerAutoscaler
 

@@ -189,6 +189,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 		"workflow_runs_in_progress", inProgress,
 		"workflow_runs_queued", queued,
 		"workflow_runs_unknown", unknown,
+		"namespace", hra.Namespace,
+		"runner_deployment", rd.Name,
+		"horizontal_runner_autoscaler", hra.Name,
 	)
 
 	return &replicas, nil
@@ -196,7 +199,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 
 func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	ctx := context.Background()
-	orgName := rd.Spec.Template.Spec.Organization
 	minReplicas := *hra.Spec.MinReplicas
 	maxReplicas := *hra.Spec.MaxReplicas
 	metrics := hra.Spec.Metrics[0]
@@ -220,14 +222,34 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 
 		scaleDownThreshold = sdt
 	}
-	if metrics.ScaleUpFactor != "" {
+
+	scaleUpAdjustment := metrics.ScaleUpAdjustment
+	if scaleUpAdjustment != 0 {
+		if metrics.ScaleUpAdjustment < 0 {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleUpAdjustment cannot be lower than 0")
+		}
+
+		if metrics.ScaleUpFactor != "" {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[]: scaleUpAdjustment and scaleUpFactor cannot be specified together")
+		}
+	} else if metrics.ScaleUpFactor != "" {
 		suf, err := strconv.ParseFloat(metrics.ScaleUpFactor, 64)
 		if err != nil {
 			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleUpFactor cannot be parsed into a float64")
 		}
 		scaleUpFactor = suf
 	}
-	if metrics.ScaleDownFactor != "" {
+
+	scaleDownAdjustment := metrics.ScaleDownAdjustment
+	if scaleDownAdjustment != 0 {
+		if metrics.ScaleDownAdjustment < 0 {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleDownAdjustment cannot be lower than 0")
+		}
+
+		if metrics.ScaleDownFactor != "" {
+			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[]: scaleDownAdjustment and scaleDownFactor cannot be specified together")
+		}
+	} else if metrics.ScaleDownFactor != "" {
 		sdf, err := strconv.ParseFloat(metrics.ScaleDownFactor, 64)
 		if err != nil {
 			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].scaleDownFactor cannot be parsed into a float64")
@@ -245,8 +267,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		runnerMap[items.Name] = struct{}{}
 	}
 
+	var (
+		enterprise   = rd.Spec.Template.Spec.Enterprise
+		organization = rd.Spec.Template.Spec.Organization
+		repository   = rd.Spec.Template.Spec.Repository
+	)
+
 	// ListRunners will return all runners managed by GitHub - not restricted to ns
-	runners, err := r.GitHubClient.ListRunners(ctx, "", orgName, "")
+	runners, err := r.GitHubClient.ListRunners(
+		ctx,
+		enterprise,
+		organization,
+		repository)
 	if err != nil {
 		return nil, err
 	}
@@ -261,9 +293,17 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	var desiredReplicas int
 	fractionBusy := float64(numRunnersBusy) / float64(numRunners)
 	if fractionBusy >= scaleUpThreshold {
-		desiredReplicas = int(math.Ceil(float64(numRunners) * scaleUpFactor))
+		if scaleUpAdjustment > 0 {
+			desiredReplicas = numRunners + scaleUpAdjustment
+		} else {
+			desiredReplicas = int(math.Ceil(float64(numRunners) * scaleUpFactor))
+		}
 	} else if fractionBusy < scaleDownThreshold {
-		desiredReplicas = int(float64(numRunners) * scaleDownFactor)
+		if scaleDownAdjustment > 0 {
+			desiredReplicas = numRunners - scaleDownAdjustment
+		} else {
+			desiredReplicas = int(float64(numRunners) * scaleDownFactor)
+		}
 	} else {
 		desiredReplicas = *rd.Spec.Replicas
 	}
@@ -282,6 +322,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		"current_replicas", rd.Spec.Replicas,
 		"num_runners", numRunners,
 		"num_runners_busy", numRunnersBusy,
+		"namespace", hra.Namespace,
+		"runner_deployment", rd.Name,
+		"horizontal_runner_autoscaler", hra.Name,
+		"enterprise", enterprise,
+		"organization", organization,
+		"repository", repository,
 	)
 
 	rd.Status.Replicas = &desiredReplicas
