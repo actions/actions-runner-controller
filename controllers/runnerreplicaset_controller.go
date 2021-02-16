@@ -221,10 +221,12 @@ func (r *RunnerReplicaSetReconciler) newRunner(rs v1alpha1.RunnerReplicaSet) (v1
 }
 
 func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("runnerreplicaset-controller")
+	name := "runnerreplicaset-controller"
+	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerReplicaSet{}).
 		Owns(&v1alpha1.Runner{}).
+		Named(name).
 		Complete(r)
 }

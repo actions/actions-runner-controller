@@ -349,7 +349,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr ctrl.Manager) error {
-	autoscaler.Recorder = mgr.GetEventRecorderFor("webhookbasedautoscaler")
+	name := "webhookbasedautoscaler"
+	autoscaler.Recorder = mgr.GetEventRecorderFor(name)
 
 	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj runtime.Object) []string {
 		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
@@ -371,5 +372,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
+		Named(name).
 		Complete(autoscaler)
 }

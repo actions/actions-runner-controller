@@ -655,11 +655,14 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("runner-controller")
+	name := "runner-controller"
+
+	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Runner{}).
 		Owns(&corev1.Pod{}).
+		Named(name).
 		Complete(r)
 }
 
