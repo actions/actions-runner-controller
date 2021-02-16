@@ -102,6 +102,18 @@ func NewServer(opts ...Option) *httptest.Server {
 			Status: http.StatusBadRequest,
 			Body:   "",
 		},
+		"/enterprises/test/actions/runners/registration-token": &Handler{
+			Status: http.StatusCreated,
+			Body:   fmt.Sprintf("{\"token\": \"%s\", \"expires_at\": \"%s\"}", RegistrationToken, time.Now().Add(time.Hour*1).Format(time.RFC3339)),
+		},
+		"/enterprises/invalid/actions/runners/registration-token": &Handler{
+			Status: http.StatusOK,
+			Body:   fmt.Sprintf("{\"token\": \"%s\", \"expires_at\": \"%s\"}", RegistrationToken, time.Now().Add(time.Hour*1).Format(time.RFC3339)),
+		},
+		"/enterprises/error/actions/runners/registration-token": &Handler{
+			Status: http.StatusBadRequest,
+			Body:   "",
+		},
 
 		// For ListRunners
 		"/repos/test/valid/actions/runners": config.FixedResponses.ListRunners,
@@ -122,6 +134,18 @@ func NewServer(opts ...Option) *httptest.Server {
 			Body:   "",
 		},
 		"/orgs/error/actions/runners": &Handler{
+			Status: http.StatusBadRequest,
+			Body:   "",
+		},
+		"/enterprises/test/actions/runners": &Handler{
+			Status: http.StatusOK,
+			Body:   RunnersListBody,
+		},
+		"/enterprises/invalid/actions/runners": &Handler{
+			Status: http.StatusNoContent,
+			Body:   "",
+		},
+		"/enterprises/error/actions/runners": &Handler{
 			Status: http.StatusBadRequest,
 			Body:   "",
 		},
@@ -148,6 +172,18 @@ func NewServer(opts ...Option) *httptest.Server {
 			Body:   "",
 		},
 		"/orgs/error/actions/runners/1": &Handler{
+			Status: http.StatusBadRequest,
+			Body:   "",
+		},
+		"/enterprises/test/actions/runners/1": &Handler{
+			Status: http.StatusNoContent,
+			Body:   "",
+		},
+		"/enterprises/invalid/actions/runners/1": &Handler{
+			Status: http.StatusOK,
+			Body:   "",
+		},
+		"/enterprises/error/actions/runners/1": &Handler{
 			Status: http.StatusBadRequest,
 			Body:   "",
 		},

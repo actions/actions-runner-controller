@@ -82,7 +82,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := getRegistrationKey(org, repo)
+	key := getRegistrationKey(org, repo, enterprise)
 	rt, ok := c.regTokens[key]
 
 	if ok && rt.GetExpiresAt().After(time.Now()) {
@@ -250,11 +250,8 @@ func getEnterpriseOrganisationAndRepo(enterprise, org, repo string) (string, str
 	return "", "", "", fmt.Errorf("enterprise, organization and repository are all empty")
 }
 
-func getRegistrationKey(org, repo string) string {
-	if len(org) > 0 {
-		return org
-	}
-	return repo
+func getRegistrationKey(org, repo, enterprise string) string {
+	return fmt.Sprintf("org=%s,repo=%s,enterprise=%s", org, repo, enterprise)
 }
 
 func splitOwnerAndRepo(repo string) (string, string, error) {
