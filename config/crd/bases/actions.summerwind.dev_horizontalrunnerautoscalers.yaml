@@ -78,6 +78,11 @@ spec:
                     items:
                       type: string
                     type: array
+                  scaleDownAdjustment:
+                    description: ScaleDownAdjustment is the number of runners removed
+                      on scale-down. You can only specify either ScaleDownFactor or
+                      ScaleDownAdjustment.
+                    type: integer
                   scaleDownFactor:
                     description: ScaleDownFactor is the multiplicative factor applied
                       to the current number of runners used to determine how many
@@ -87,6 +92,10 @@ spec:
                     description: ScaleDownThreshold is the percentage of busy runners
                       less than which will trigger the hpa to scale the runners down.
                     type: string
+                  scaleUpAdjustment:
+                    description: ScaleUpAdjustment is the number of runners added
+                      on scale-up. You can only specify either ScaleUpFactor or ScaleUpAdjustment.
+                    type: integer
                   scaleUpFactor:
                     description: ScaleUpFactor is the multiplicative factor applied
                       to the current number of runners used to determine how many
