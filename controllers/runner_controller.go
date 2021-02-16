@@ -250,7 +250,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err != nil {
 			var e *github.RunnerNotFound
 			if errors.As(err, &e) {
-				log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub.")
+				log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
 
 				notRegistered = true
 			} else {
