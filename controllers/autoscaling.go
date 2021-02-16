@@ -189,6 +189,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 		"workflow_runs_in_progress", inProgress,
 		"workflow_runs_queued", queued,
 		"workflow_runs_unknown", unknown,
+		"namespace", hra.Namespace,
+		"runner_deployment", rd.Name,
+		"horizontal_runner_autoscaler", hra.Name,
 	)
 
 	return &replicas, nil
@@ -196,7 +199,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 
 func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	ctx := context.Background()
-	orgName := rd.Spec.Template.Spec.Organization
 	minReplicas := *hra.Spec.MinReplicas
 	maxReplicas := *hra.Spec.MaxReplicas
 	metrics := hra.Spec.Metrics[0]
@@ -245,8 +247,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		runnerMap[items.Name] = struct{}{}
 	}
 
+	var (
+		enterprise   = rd.Spec.Template.Spec.Enterprise
+		organization = rd.Spec.Template.Spec.Organization
+		repository   = rd.Spec.Template.Spec.Repository
+	)
+
 	// ListRunners will return all runners managed by GitHub - not restricted to ns
-	runners, err := r.GitHubClient.ListRunners(ctx, "", orgName, "")
+	runners, err := r.GitHubClient.ListRunners(
+		ctx,
+		enterprise,
+		organization,
+		repository)
 	if err != nil {
 		return nil, err
 	}
@@ -282,6 +294,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		"current_replicas", rd.Spec.Replicas,
 		"num_runners", numRunners,
 		"num_runners_busy", numRunnersBusy,
+		"namespace", hra.Namespace,
+		"runner_deployment", rd.Name,
+		"horizontal_runner_autoscaler", hra.Name,
+		"enterprise", enterprise,
+		"organization", organization,
+		"repository", repository,
 	)
 
 	rd.Status.Replicas = &desiredReplicas
