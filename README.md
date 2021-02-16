@@ -572,8 +572,15 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
+      # Timeout after a node crashed or became unreachable to evict your pods somewhere else (default 5mins)
+      tolerations:
+        - key: "node.kubernetes.io/unreachable"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 10
       # true (default) = A privileged docker sidecar container is included in the runner pod.
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
+      # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
       # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
       # true = No docker sidecar container is deployed in the runner pod but docker can be used within teh runner container instead. The image summerwind/actions-runner-dind is used by default.

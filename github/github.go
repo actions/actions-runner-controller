@@ -11,6 +11,7 @@ import (
 
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v33/github"
+	"github.com/summerwind/actions-runner-controller/github/metrics"
 	"golang.org/x/oauth2"
 )
 
@@ -34,15 +35,9 @@ type Client struct {
 
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
-	var (
-		httpClient *http.Client
-		client     *github.Client
-	)
-	githubBaseURL := "https://github.com/"
+	var transport http.RoundTripper
 	if len(c.Token) > 0 {
-		httpClient = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: c.Token},
-		))
+		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
 		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
 		if err != nil {
@@ -55,9 +50,13 @@ func (c *Config) NewClient() (*Client, error) {
 			}
 			tr.BaseURL = githubAPIURL
 		}
-		httpClient = &http.Client{Transport: tr}
+		transport = tr
 	}
+	transport = metrics.Transport{Transport: transport}
+	httpClient := &http.Client{Transport: transport}
 
+	var client *github.Client
+	var githubBaseURL string
 	if len(c.EnterpriseURL) > 0 {
 		var err error
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
@@ -67,6 +66,7 @@ func (c *Config) NewClient() (*Client, error) {
 		githubBaseURL = fmt.Sprintf("%s://%s%s", client.BaseURL.Scheme, client.BaseURL.Host, strings.TrimSuffix(client.BaseURL.Path, "api/v3/"))
 	} else {
 		client = github.NewClient(httpClient)
+		githubBaseURL = "https://github.com/"
 	}
 
 	return &Client{
@@ -82,7 +82,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := getRegistrationKey(org, repo)
+	key := getRegistrationKey(org, repo, enterprise)
 	rt, ok := c.regTokens[key]
 
 	if ok && rt.GetExpiresAt().After(time.Now()) {
@@ -210,12 +210,34 @@ func (c *Client) listRunners(ctx context.Context, enterprise, org, repo string, 
 func (c *Client) ListRepositoryWorkflowRuns(ctx context.Context, user string, repoName string) ([]*github.WorkflowRun, error) {
 	c.Client.Actions.ListRepositoryWorkflowRuns(ctx, user, repoName, nil)
 
+	queued, err := c.listRepositoryWorkflowRuns(ctx, user, repoName, "queued")
+	if err != nil {
+		return nil, fmt.Errorf("listing queued workflow runs: %w", err)
+	}
+
+	inProgress, err := c.listRepositoryWorkflowRuns(ctx, user, repoName, "in_progress")
+	if err != nil {
+		return nil, fmt.Errorf("listing in_progress workflow runs: %w", err)
+	}
+
+	var workflowRuns []*github.WorkflowRun
+
+	workflowRuns = append(workflowRuns, queued...)
+	workflowRuns = append(workflowRuns, inProgress...)
+
+	return workflowRuns, nil
+}
+
+func (c *Client) listRepositoryWorkflowRuns(ctx context.Context, user string, repoName, status string) ([]*github.WorkflowRun, error) {
+	c.Client.Actions.ListRepositoryWorkflowRuns(ctx, user, repoName, nil)
+
 	var workflowRuns []*github.WorkflowRun
 
 	opts := github.ListWorkflowRunsOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 100,
 		},
+		Status: status,
 	}
 
 	for {
@@ -250,11 +272,8 @@ func getEnterpriseOrganisationAndRepo(enterprise, org, repo string) (string, str
 	return "", "", "", fmt.Errorf("enterprise, organization and repository are all empty")
 }
 
-func getRegistrationKey(org, repo string) string {
-	if len(org) > 0 {
-		return org
-	}
-	return repo
+func getRegistrationKey(org, repo, enterprise string) string {
+	return fmt.Sprintf("org=%s,repo=%s,enterprise=%s", org, repo, enterprise)
 }
 
 func splitOwnerAndRepo(repo string) (string, string, error) {
@@ -287,7 +306,7 @@ type RunnerNotFound struct {
 	runnerName string
 }
 
-func (e RunnerNotFound) Error() string {
+func (e *RunnerNotFound) Error() string {
 	return fmt.Sprintf("runner %q not found", e.runnerName)
 }
 
@@ -303,5 +322,5 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 		}
 	}
 
-	return false, RunnerNotFound{runnerName: name}
+	return false, &RunnerNotFound{runnerName: name}
 }

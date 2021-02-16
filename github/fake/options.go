@@ -10,11 +10,15 @@ type FixedResponses struct {
 
 type Option func(*ServerConfig)
 
-func WithListRepositoryWorkflowRunsResponse(status int, body string) Option {
+func WithListRepositoryWorkflowRunsResponse(status int, body, queued, in_progress string) Option {
 	return func(c *ServerConfig) {
 		c.FixedResponses.ListRepositoryWorkflowRuns = &Handler{
 			Status: status,
 			Body:   body,
+			Statuses: map[string]string{
+				"queued":      queued,
+				"in_progress": in_progress,
+			},
 		}
 	}
 }

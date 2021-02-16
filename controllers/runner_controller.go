@@ -185,7 +185,39 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
-			return ctrl.Result{}, err
+			deletionTimeout := 1 * time.Minute
+			currentTime := time.Now()
+			deletionDidTimeout := currentTime.Sub(pod.DeletionTimestamp.Add(deletionTimeout)) > 0
+
+			if deletionDidTimeout {
+				log.Info(
+					"Pod failed to delete itself in a timely manner. "+
+						"This is typically the case when a Kubernetes node became unreachable "+
+						"and the kube controller started evicting nodes. Forcefully deleting the pod to not get stuck.",
+					"podDeletionTimestamp", pod.DeletionTimestamp,
+					"currentTime", currentTime,
+					"configuredDeletionTimeout", deletionTimeout,
+				)
+
+				var force int64 = 0
+				// forcefully delete runner as we would otherwise get stuck if the node stays unreachable
+				if err := r.Delete(ctx, &pod, &client.DeleteOptions{GracePeriodSeconds: &force}); err != nil {
+					// probably
+					if !kerrors.IsNotFound(err) {
+						log.Error(err, "Failed to forcefully delete pod resource ...")
+						return ctrl.Result{}, err
+					}
+					// forceful deletion finally succeeded
+					return ctrl.Result{Requeue: true}, nil
+				}
+
+				r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Forcefully deleted pod '%s'", pod.Name))
+				log.Info("Forcefully deleted runner pod", "repository", runner.Spec.Repository)
+				// give kube manager a little time to forcefully delete the stuck pod
+				return ctrl.Result{RequeueAfter: 3 * time.Second}, err
+			} else {
+				return ctrl.Result{}, err
+			}
 		}
 
 		if pod.Status.Phase == corev1.PodRunning {
@@ -212,16 +244,18 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		var notRegistered bool
+		notRegistered := false
 
 		runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 		if err != nil {
-			if errors.Is(err, github.RunnerNotFound{}) {
-				log.Error(err, "Failed to check if runner is busy. Probably this runner has never been successfully registered to GitHub.")
+			var e *github.RunnerNotFound
+			if errors.As(err, &e) {
+				log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
 
 				notRegistered = true
 			} else {
-				if errors.Is(err, &gogithub.RateLimitError{}) {
+				var e *gogithub.RateLimitError
+				if errors.As(err, &e) {
 					// We log the underlying error when we failed calling GitHub API to list or unregisters,
 					// or the runner is still busy.
 					log.Error(
@@ -252,7 +286,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		currentTime := time.Now()
 		registrationDidTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout)) > 0
 
-		if !notRegistered && registrationDidTimeout {
+		if notRegistered && registrationDidTimeout {
 			log.Info(
 				"Runner failed to register itself to GitHub in timely manner. "+
 					"Recreating the pod to see if it resolves the issue. "+
@@ -621,11 +655,14 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("runner-controller")
+	name := "runner-controller"
+
+	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Runner{}).
 		Owns(&corev1.Pod{}).
+		Named(name).
 		Complete(r)
 }
 

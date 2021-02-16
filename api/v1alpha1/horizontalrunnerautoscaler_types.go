@@ -126,6 +126,16 @@ type MetricSpec struct {
 	// to determine how many pods should be removed.
 	// +optional
 	ScaleDownFactor string `json:"scaleDownFactor,omitempty"`
+
+	// ScaleUpAdjustment is the number of runners added on scale-up.
+	// You can only specify either ScaleUpFactor or ScaleUpAdjustment.
+	// +optional
+	ScaleUpAdjustment int `json:"scaleUpAdjustment,omitempty"`
+
+	// ScaleDownAdjustment is the number of runners removed on scale-down.
+	// You can only specify either ScaleDownFactor or ScaleDownAdjustment.
+	// +optional
+	ScaleDownAdjustment int `json:"scaleDownAdjustment,omitempty"`
 }
 
 type HorizontalRunnerAutoscalerStatus struct {
