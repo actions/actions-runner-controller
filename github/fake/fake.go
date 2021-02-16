@@ -37,10 +37,21 @@ func (h *ListRunnersHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 type Handler struct {
 	Status int
 	Body   string
+
+	Statuses map[string]string
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(h.Status)
+
+	status := req.URL.Query().Get("status")
+	if h.Statuses != nil {
+		if body, ok := h.Statuses[status]; ok {
+			fmt.Fprintf(w, body)
+			return
+		}
+	}
+
 	fmt.Fprintf(w, h.Body)
 }
 

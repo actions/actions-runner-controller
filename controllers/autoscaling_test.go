@@ -40,14 +40,18 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 	metav1Now := metav1.Now()
 	testcases := []struct {
-		repo         string
-		org          string
-		fixed        *int
-		max          *int
-		min          *int
-		sReplicas    *int
-		sTime        *metav1.Time
-		workflowRuns string
+		repo      string
+		org       string
+		fixed     *int
+		max       *int
+		min       *int
+		sReplicas *int
+		sTime     *metav1.Time
+
+		workflowRuns             string
+		workflowRuns_queued      string
+		workflowRuns_in_progress string
+
 		workflowJobs map[int]string
 		want         int
 		err          string
@@ -55,87 +59,107 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		// Legacy functionality
 		// 3 demanded, max at 3
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 		// 2 demanded, max at 3, currently 3, delay scaling down due to grace period
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(3),
-			sReplicas:    intPtr(3),
-			sTime:        &metav1Now,
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			sReplicas:                intPtr(3),
+			sTime:                    &metav1Now,
+			workflowRuns:             `{"total_count": 3, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 		// 3 demanded, max at 2
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(2),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         2,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(2),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
+			want:                     2,
 		},
 		// 2 demanded, min at 2
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 3, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         2,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 3, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     2,
 		},
 		// 1 demanded, min at 2
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
-			want:         2,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
+			want:                     2,
 		},
 		// 1 demanded, min at 2
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         2,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     2,
 		},
 		// 1 demanded, min at 1
 		{
-			repo:         "test/valid",
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
-			want:         1,
+			repo:                     "test/valid",
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
+			want:                     1,
 		},
 		// 1 demanded, min at 1
 		{
-			repo:         "test/valid",
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         1,
+			repo:                     "test/valid",
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     1,
 		},
 		// fixed at 3
 		{
-			repo:         "test/valid",
-			min:          intPtr(1),
-			max:          intPtr(3),
-			fixed:        intPtr(3),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			repo:                     "test/valid",
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			fixed:                    intPtr(3),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 3, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 
 		// Job-level autoscaling
 		// 5 requested from 3 workflows
 		{
-			repo:         "test/valid",
-			min:          intPtr(2),
-			max:          intPtr(10),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(10),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}]}"`,
 			workflowJobs: map[int]string{
 				1: `{"jobs": [{"status":"queued"}, {"status":"queued"}]}`,
 				2: `{"jobs": [{"status": "in_progress"}, {"status":"completed"}]}`,
@@ -158,7 +182,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
 			server := fake.NewServer(
-				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns),
+				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns, tc.workflowRuns_queued, tc.workflowRuns_in_progress),
 				fake.WithListWorkflowJobsResponse(200, tc.workflowJobs),
 				fake.WithListRunnersResponse(200, fake.RunnersListBody),
 			)
@@ -228,129 +252,157 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 
 	metav1Now := metav1.Now()
 	testcases := []struct {
-		repos        []string
-		org          string
-		fixed        *int
-		max          *int
-		min          *int
-		sReplicas    *int
-		sTime        *metav1.Time
-		workflowRuns string
+		repos     []string
+		org       string
+		fixed     *int
+		max       *int
+		min       *int
+		sReplicas *int
+		sTime     *metav1.Time
+
+		workflowRuns             string
+		workflowRuns_queued      string
+		workflowRuns_in_progress string
+
 		workflowJobs map[int]string
 		want         int
 		err          string
 	}{
 		// 3 demanded, max at 3
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 		// 2 demanded, max at 3, currently 3, delay scaling down due to grace period
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(3),
-			sReplicas:    intPtr(3),
-			sTime:        &metav1Now,
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			sReplicas:                intPtr(3),
+			sTime:                    &metav1Now,
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 		// 3 demanded, max at 2
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(2),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         2,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(2),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
+			want:                     2,
 		},
 		// 2 demanded, min at 2
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 3, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         2,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 3, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     2,
 		},
 		// 1 demanded, min at 2
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
-			want:         2,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
+			want:                     2,
 		},
 		// 1 demanded, min at 2
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         2,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     2,
 		},
 		// 1 demanded, min at 1
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
-			want:         1,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
+			want:                     1,
 		},
 		// 1 demanded, min at 1
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         1,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			want:                     1,
 		},
 		// fixed at 3
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			fixed:        intPtr(1),
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			fixed:                    intPtr(1),
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 3, "workflow_runs":[{"status":"in_progress"},{"status":"in_progress"},{"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 		// org runner, fixed at 3
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			fixed:        intPtr(1),
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			want:         3,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			fixed:                    intPtr(1),
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 3, "workflow_runs":[{"status":"in_progress"},{"status":"in_progress"},{"status":"in_progress"}]}"`,
+			want:                     3,
 		},
 		// org runner, 1 demanded, min at 1, no repos
 		{
-			org:          "test",
-			min:          intPtr(1),
-			max:          intPtr(3),
-			workflowRuns: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
-			err:          "validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment",
+			org:                      "test",
+			min:                      intPtr(1),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
+			err:                      "validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment",
 		},
 
 		// Job-level autoscaling
 		// 5 requested from 3 workflows
 		{
-			org:          "test",
-			repos:        []string{"valid"},
-			min:          intPtr(2),
-			max:          intPtr(10),
-			workflowRuns: `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(10),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
 			workflowJobs: map[int]string{
 				1: `{"jobs": [{"status":"queued"}, {"status":"queued"}]}`,
 				2: `{"jobs": [{"status": "in_progress"}, {"status":"completed"}]}`,
@@ -373,7 +425,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
 			server := fake.NewServer(
-				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns),
+				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns, tc.workflowRuns_queued, tc.workflowRuns_in_progress),
 				fake.WithListWorkflowJobsResponse(200, tc.workflowJobs),
 				fake.WithListRunnersResponse(200, fake.RunnersListBody),
 			)
