@@ -6,7 +6,7 @@ on:
       - '**'
     paths:
       - 'runner/**'
-      - .github/workflows/build-runner.yml
+      - .github/workflows/build-and-release-runners.yml
   push:
     branches:
       - master
