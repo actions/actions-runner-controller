@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/github/fake"
@@ -281,40 +282,49 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1, "runners after HRA force update for scale-down")
 			}
 
+			// Scale-up to 2 replicas on first pull_request create webhook event
 			{
-				resp, err := sendWebhook(webhookServer, "pull_request", &github.PullRequestEvent{
-					PullRequest: &github.PullRequest{
-						Base: &github.PullRequestBranch{
-							Ref: github.String("main"),
-						},
-					},
-					Repo: &github.Repository{
-						Name: github.String("test/valid"),
-						Organization: &github.Organization{
-							Name: github.String("test"),
-						},
-					},
-					Action: github.String("created"),
-				})
-
-				Expect(err).NotTo(HaveOccurred(), "failed to send pull_request event")
-
-				Expect(resp.StatusCode).To(Equal(200))
+				SendPullRequestEvent("test/valid", "main", "created")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 			}
 
-			// Scale-up to 2 replicas
+			// Scale-up to 3 replicas on second pull_request create webhook event
 			{
-				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
-				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after webhook")
+				SendPullRequestEvent("test/valid", "main", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
 			}
 		})
 	})
 })
 
+func SendPullRequestEvent(repo string, branch string, action string) {
+	org := strings.Split(repo, "/")[0]
+
+	resp, err := sendWebhook(webhookServer, "pull_request", &github.PullRequestEvent{
+		PullRequest: &github.PullRequest{
+			Base: &github.PullRequestBranch{
+				Ref: github.String(branch),
+			},
+		},
+		Repo: &github.Repository{
+			Name: github.String(repo),
+			Organization: &github.Organization{
+				Name: github.String(org),
+			},
+		},
+		Action: github.String(action),
+	})
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send pull_request event")
+
+	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
+}
+
 func ExpectCreate(ctx context.Context, rd runtime.Object, s string) {
 	err := k8sClient.Create(ctx, rd)
 
-	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to create %s resource", s))
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), fmt.Sprintf("failed to create %s resource", s))
 }
 
 func ExpectRunnerDeploymentEventuallyUpdates(ctx context.Context, ns string, name string, f func(rd *actionsv1alpha1.RunnerDeployment)) {
