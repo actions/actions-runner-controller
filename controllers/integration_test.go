@@ -2,11 +2,14 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/go-github/v33/github"
 	github3 "github.com/google/go-github/v33/github"
 	github2 "github.com/summerwind/actions-runner-controller/github"
+	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/github/fake"
@@ -162,7 +165,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			name := "example-runnerdeploy"
 
 			{
-				rs := &actionsv1alpha1.RunnerDeployment{
+				rd := &actionsv1alpha1.RunnerDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      name,
 						Namespace: ns.Name,
@@ -182,80 +185,17 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 				}
 
-				err := k8sClient.Create(ctx, rs)
-
-				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerDeployment resource")
-
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
 			}
 
 			{
-				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
-				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
-				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
-				Eventually(func() error {
-					var rd actionsv1alpha1.RunnerDeployment
-
-					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rd)
-
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerDeployment resource")
-
+				ExpectRunnerDeploymentEventuallyUpdates(ctx, ns.Name, name, func(rd *actionsv1alpha1.RunnerDeployment) {
 					rd.Spec.Replicas = intPtr(2)
-
-					return k8sClient.Update(ctx, &rd)
-				},
-					time.Second*1, time.Millisecond*500).Should(BeNil())
-
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
+				})
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Namespace, 2)
 			}
 
 			// Scale-up to 3 replicas
@@ -288,38 +228,10 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 				}
 
-				err := k8sClient.Create(ctx, hra)
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
 
-				Expect(err).NotTo(HaveOccurred(), "failed to create test HorizontalRunnerAutoscaler resource")
-
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(3))
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
 			}
 
 			{
@@ -367,77 +279,107 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				Expect(err).NotTo(HaveOccurred(), "failed to get test HorizontalRunnerAutoscaler resource")
 
-				Eventually(
-					func() int {
-						var runnerSets actionsv1alpha1.RunnerReplicaSetList
-
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1), "runners after HRA force update for scale-down")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1, "runners after HRA force update for scale-down")
 			}
 
+			// Scale-up to 2 replicas on first pull_request create webhook event
 			{
-				resp, err := sendWebhook(webhookServer, "pull_request", &github.PullRequestEvent{
-					PullRequest: &github.PullRequest{
-						Base: &github.PullRequestBranch{
-							Ref: github.String("main"),
-						},
-					},
-					Repo: &github.Repository{
-						Name: github.String("test/valid"),
-						Organization: &github.Organization{
-							Name: github.String("test"),
-						},
-					},
-					Action: github.String("created"),
-				})
-
-				Expect(err).NotTo(HaveOccurred(), "failed to send pull_request event")
-
-				Expect(resp.StatusCode).To(Equal(200))
+				SendPullRequestEvent("test/valid", "main", "created")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 			}
 
-			// Scale-up to 2 replicas
+			// Scale-up to 3 replicas on second pull_request create webhook event
 			{
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1), "runner sets after webhook")
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2), "runners after webhook")
+				SendPullRequestEvent("test/valid", "main", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
 			}
 		})
 	})
 })
+
+func SendPullRequestEvent(repo string, branch string, action string) {
+	org := strings.Split(repo, "/")[0]
+
+	resp, err := sendWebhook(webhookServer, "pull_request", &github.PullRequestEvent{
+		PullRequest: &github.PullRequest{
+			Base: &github.PullRequestBranch{
+				Ref: github.String(branch),
+			},
+		},
+		Repo: &github.Repository{
+			Name: github.String(repo),
+			Organization: &github.Organization{
+				Name: github.String(org),
+			},
+		},
+		Action: github.String(action),
+	})
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send pull_request event")
+
+	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
+}
+
+func ExpectCreate(ctx context.Context, rd runtime.Object, s string) {
+	err := k8sClient.Create(ctx, rd)
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), fmt.Sprintf("failed to create %s resource", s))
+}
+
+func ExpectRunnerDeploymentEventuallyUpdates(ctx context.Context, ns string, name string, f func(rd *actionsv1alpha1.RunnerDeployment)) {
+	// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
+	// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
+	//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
+	EventuallyWithOffset(
+		1,
+		func() error {
+			var rd actionsv1alpha1.RunnerDeployment
+
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, &rd)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerDeployment resource")
+
+			f(&rd)
+
+			return k8sClient.Update(ctx, &rd)
+		},
+		time.Second*1, time.Millisecond*500).Should(BeNil())
+}
+
+func ExpectRunnerSetsCountEventuallyEquals(ctx context.Context, ns string, count int, optionalDescription ...interface{}) {
+	runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+	EventuallyWithOffset(
+		1,
+		func() int {
+			err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns))
+			if err != nil {
+				logf.Log.Error(err, "list runner sets")
+			}
+
+			return len(runnerSets.Items)
+		},
+		time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(count), optionalDescription...)
+}
+
+func ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx context.Context, ns string, count int, optionalDescription ...interface{}) {
+	runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+	EventuallyWithOffset(
+		1,
+		func() int {
+			err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns))
+			if err != nil {
+				logf.Log.Error(err, "list runner sets")
+			}
+
+			if len(runnerSets.Items) == 0 {
+				logf.Log.Info("No runnerreplicasets exist yet")
+				return -1
+			}
+
+			return *runnerSets.Items[0].Spec.Replicas
+		},
+		time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(count), optionalDescription...)
+}
