@@ -57,6 +57,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
 
