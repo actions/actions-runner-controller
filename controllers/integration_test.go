@@ -2,9 +2,11 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/go-github/v33/github"
 	github3 "github.com/google/go-github/v33/github"
 	github2 "github.com/summerwind/actions-runner-controller/github"
+	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -162,7 +164,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			name := "example-runnerdeploy"
 
 			{
-				rs := &actionsv1alpha1.RunnerDeployment{
+				rd := &actionsv1alpha1.RunnerDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      name,
 						Namespace: ns.Name,
@@ -182,31 +184,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 				}
 
-				err := k8sClient.Create(ctx, rs)
-
-				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerDeployment resource")
-
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
 			}
 
 			{
-				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
-				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
-				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
-				Eventually(func() error {
-					var rd actionsv1alpha1.RunnerDeployment
-
-					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rd)
-
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerDeployment resource")
-
+				ExpectRunnerDeploymentEventuallyUpdates(ctx, ns.Name, name, func(rd *actionsv1alpha1.RunnerDeployment) {
 					rd.Spec.Replicas = intPtr(2)
-
-					return k8sClient.Update(ctx, &rd)
-				},
-					time.Second*1, time.Millisecond*500).Should(BeNil())
-
+				})
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Namespace, 2)
 			}
@@ -241,9 +227,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 				}
 
-				err := k8sClient.Create(ctx, hra)
-
-				Expect(err).NotTo(HaveOccurred(), "failed to create test HorizontalRunnerAutoscaler resource")
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
@@ -326,6 +310,32 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 		})
 	})
 })
+
+func ExpectCreate(ctx context.Context, rd runtime.Object, s string) {
+	err := k8sClient.Create(ctx, rd)
+
+	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to create %s resource", s))
+}
+
+func ExpectRunnerDeploymentEventuallyUpdates(ctx context.Context, ns string, name string, f func(rd *actionsv1alpha1.RunnerDeployment)) {
+	// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
+	// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
+	//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
+	EventuallyWithOffset(
+		1,
+		func() error {
+			var rd actionsv1alpha1.RunnerDeployment
+
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, &rd)
+
+			Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerDeployment resource")
+
+			f(&rd)
+
+			return k8sClient.Update(ctx, &rd)
+		},
+		time.Second*1, time.Millisecond*500).Should(BeNil())
+}
 
 func ExpectRunnerSetsCountEventuallyEquals(ctx context.Context, ns string, count int, optionalDescription ...interface{}) {
 	runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
