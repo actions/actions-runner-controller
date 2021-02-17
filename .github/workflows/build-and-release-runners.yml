@@ -16,8 +16,6 @@ on:
       - runner/dindrunner.Dockerfile
       - runner/entrypoint.sh
       - .github/workflows/build-runner.yml
-  release:
-    types: [published]
 
 jobs:
   build:
@@ -57,31 +55,12 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
-      # Considered unstable builds
-      # Mutable (no sha) and immutable (include sha) tags are created, see Issue 285 and PR 286 for why
-      - name: Build and push canary builds
+      - name: Build and Push
         uses: docker/build-push-action@v2
         with:
           context: ./runner
           file: ./runner/${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' && github.event_name != 'release' }}
-          build-args: |
-            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
-            DOCKER_VERSION=${{ env.DOCKER_VERSION }}
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-canary
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-canary-${{ steps.vars.outputs.sha_short }}
-
-      # Considered stable builds
-      # Mutable (no sha) and immutable (include sha) tags are created, see Issue 285 and PR 286 for why
-      - name: Build and push release builds
-        uses: docker/build-push-action@v2
-        with:
-          context: ./runner
-          file: ./runner/${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'release' }}
           build-args: |
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
