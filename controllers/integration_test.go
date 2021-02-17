@@ -186,34 +186,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerDeployment resource")
 
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
 			}
 
 			{
@@ -233,29 +207,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				},
 					time.Second*1, time.Millisecond*500).Should(BeNil())
 
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Namespace, 2)
 			}
 
 			// Scale-up to 3 replicas
@@ -292,34 +245,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				Expect(err).NotTo(HaveOccurred(), "failed to create test HorizontalRunnerAutoscaler resource")
 
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(3))
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
 			}
 
 			{
@@ -367,23 +294,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				Expect(err).NotTo(HaveOccurred(), "failed to get test HorizontalRunnerAutoscaler resource")
 
-				Eventually(
-					func() int {
-						var runnerSets actionsv1alpha1.RunnerReplicaSetList
-
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1), "runners after HRA force update for scale-down")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1, "runners after HRA force update for scale-down")
 			}
 
 			{
@@ -409,35 +320,46 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas
 			{
-				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1), "runner sets after webhook")
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
-							return -1
-						}
-
-						return *runnerSets.Items[0].Spec.Replicas
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2), "runners after webhook")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after webhook")
 			}
 		})
 	})
 })
+
+func ExpectRunnerSetsCountEventuallyEquals(ctx context.Context, ns string, count int, optionalDescription ...interface{}) {
+	runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+	EventuallyWithOffset(
+		1,
+		func() int {
+			err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns))
+			if err != nil {
+				logf.Log.Error(err, "list runner sets")
+			}
+
+			return len(runnerSets.Items)
+		},
+		time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(count), optionalDescription...)
+}
+
+func ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx context.Context, ns string, count int, optionalDescription ...interface{}) {
+	runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+	EventuallyWithOffset(
+		1,
+		func() int {
+			err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns))
+			if err != nil {
+				logf.Log.Error(err, "list runner sets")
+			}
+
+			if len(runnerSets.Items) == 0 {
+				logf.Log.Info("No runnerreplicasets exist yet")
+				return -1
+			}
+
+			return *runnerSets.Items[0].Spec.Replicas
+		},
+		time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(count), optionalDescription...)
+}
