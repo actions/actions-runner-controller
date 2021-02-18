@@ -6,6 +6,7 @@ require (
 	github.com/bradleyfalzon/ghinstallation v1.1.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v0.1.0
+	github.com/google/go-cmp v0.3.1
 	github.com/google/go-github/v33 v33.0.1-0.20210204004227-319dcffb518a
 	github.com/gorilla/mux v1.8.0
 	github.com/kelseyhightower/envconfig v1.4.0
