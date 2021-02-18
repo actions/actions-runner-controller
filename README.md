@@ -155,6 +155,7 @@ Self-hosted runners in GitHub can either be connected to a single repository, or
 
 **Scopes for a Repository Runner**
 
+* repo (Full control)
 
 **Scopes for a Organisation Runner**
 
