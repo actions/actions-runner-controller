@@ -190,6 +190,10 @@ func (s *commaSeparatedStringSlice) String() string {
 
 func (s *commaSeparatedStringSlice) Set(value string) error {
 	for _, v := range strings.Split(value, ",") {
+		if v == "" {
+			continue
+		}
+
 		*s = append(*s, v)
 	}
 	return nil
