@@ -15,7 +15,7 @@ on:
       - runner/Dockerfile
       - runner/dindrunner.Dockerfile
       - runner/entrypoint.sh
-      - .github/workflows/build-runner.yml
+      - .github/workflows/build-and-release-runners.yml
   release:
     types: [published]
 
