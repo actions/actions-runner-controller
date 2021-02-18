@@ -32,7 +32,6 @@ spec:
       containers:
       - args:
         - "--metrics-addr=127.0.0.1:8080"
-        - "--enable-leader-election"
         - "--sync-period={{ .Values.githubWebhookServer.syncPeriod }}"
         command:
         - "/github-webhook-server"
@@ -52,7 +51,7 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 8000
-          name: github-webhook-server
+          name: http
           protocol: TCP
         resources:
           {{- toYaml .Values.githubWebhookServer.resources | nindent 12 }}
