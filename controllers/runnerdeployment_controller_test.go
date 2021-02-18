@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"context"
+	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/runtime"
+	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +20,40 @@ import (
 
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
+
+func TestNewRunnerReplicaSet(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := actionsv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	r := &RunnerDeploymentReconciler{
+		CommonRunnerLabels: []string{"dev"},
+		Scheme:             scheme,
+	}
+	rd := actionsv1alpha1.RunnerDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "example",
+		},
+		Spec: actionsv1alpha1.RunnerDeploymentSpec{
+			Template: actionsv1alpha1.RunnerTemplate{
+				Spec: actionsv1alpha1.RunnerSpec{
+					Labels: []string{"project1"},
+				},
+			},
+		},
+	}
+
+	rs, err := r.newRunnerReplicaSet(rd)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	want := []string{"project1", "dev"}
+	if d := cmp.Diff(want, rs.Spec.Template.Spec.Labels); d != "" {
+		t.Errorf("%s", d)
+	}
+}
 
 // SetupDeploymentTest will set up a testing environment.
 // This includes:
