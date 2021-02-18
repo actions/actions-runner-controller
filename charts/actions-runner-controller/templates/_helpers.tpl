@@ -85,11 +85,11 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "actions-runner-controller.webhookServiceName" -}}
-{{- include "actions-runner-controller.fullname" . }}-webhook
+{{- include "actions-runner-controller.fullname" . | trunc 55 }}-webhook
 {{- end }}
 
 {{- define "actions-runner-controller.authProxyServiceName" -}}
-{{- include "actions-runner-controller.fullname" . }}-metrics-service
+{{- include "actions-runner-controller.fullname" . | trunc 47 }}-metrics-service
 {{- end }}
 
 {{- define "actions-runner-controller.selfsignedIssuerName" -}}
