@@ -151,7 +151,11 @@ $ kubectl create secret generic controller-manager \
 
 ### Deploying using PAT Authentication
 
-Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). This token is used to register a self-hosted runner by *actions-runner-controller*. Depending on how you plan on using the runner will depend on what scopes are needed, from an account that has `admin` privileges  for the repository, create a [personal access token](https://github.com/settings/tokens/new).
+Personal Acess Token can be used to register a self-hosted runner by *actions-runner-controller*.
+
+Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). How you plan on using the runner will affect what scopes are needed for the token.
+
+Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
 **Scopes for a Repository Runner**
 
