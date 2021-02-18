@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 )
@@ -28,20 +29,18 @@ func init() {
 }
 
 func TestWebhookCheckRun(t *testing.T) {
+	f, err := os.Open("testdata/webhook_check_run_payload.json")
+	if err != nil {
+		t.Fatalf("could not open the fixture: %s", err)
+	}
+	defer f.Close()
+	var e github.CheckRunEvent
+	if err := json.NewDecoder(f).Decode(&e); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
 	testServer(t,
 		"check_run",
-		&github.CheckRunEvent{
-			CheckRun: &github.CheckRun{
-				Status: github.String("queued"),
-			},
-			Repo: &github.Repository{
-				Name: github.String("myorg/myrepo"),
-			},
-			Org: &github.Organization{
-				Name: github.String("myorg"),
-			},
-			Action: github.String("created"),
-		},
+		&e,
 		200,
 		"no horizontalrunnerautoscaler to scale for this github event",
 	)

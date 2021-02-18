@@ -146,8 +146,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	case *gogithub.CheckRunEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
-			*e.Repo.Name,
-			*e.Org.Name,
+			e.GetRepo().GetName(),
+			e.GetOrg().GetLogin(), // empty string if the repo is not in an organization
 			autoscaler.MatchCheckRunEvent(e),
 		)
 	case *gogithub.PingEvent:
