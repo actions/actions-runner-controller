@@ -147,7 +147,7 @@ githubWebhookServer:
     type: NodePort
     ports:
     - port: 80
-      targetPort: 8000
+      targetPort: http
       protocol: TCP
       name: http
       #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
