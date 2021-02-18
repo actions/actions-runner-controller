@@ -1,5 +1,7 @@
 # actions-runner-controller
 
+[![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
+
 This controller operates self-hosted runners for GitHub Actions on your Kubernetes cluster.
 
 ToC:
@@ -441,7 +443,7 @@ spec:
 ```
 
 With the above example, the webhook server scales `myrunners` by `1` replica for 5 minutes on each `check_run` event
-with the type of `created` and the status of `queued` received. 
+with the type of `created` and the status of `queued` received.
 
 The primary benefit of autoscaling on Webhook compared to the standard autoscaling is that this one allows you to
 immediately add "resource slack" for future GitHub Actions job runs.

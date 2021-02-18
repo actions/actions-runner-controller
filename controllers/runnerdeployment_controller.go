@@ -48,9 +48,10 @@ const (
 // RunnerDeploymentReconciler reconciles a Runner object
 type RunnerDeploymentReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Recorder record.EventRecorder
-	Scheme   *runtime.Scheme
+	Log                logr.Logger
+	Recorder           record.EventRecorder
+	Scheme             *runtime.Scheme
+	CommonRunnerLabels []string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -261,6 +262,10 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
 	labels := CloneAndAddLabel(rd.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
+
+	for _, l := range r.CommonRunnerLabels {
+		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
+	}
 
 	newRSTemplate.Labels = labels
 

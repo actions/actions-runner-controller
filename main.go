@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -62,6 +63,8 @@ func main() {
 
 		runnerImage string
 		dockerImage string
+
+		commonRunnerLabels commaSeparatedStringSlice
 	)
 
 	var c github.Config
@@ -80,6 +83,7 @@ func main() {
 	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
+	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/summerwind/actions-runner-controller/issues/321 for more information")
 	flag.Parse()
 
 	logger := zap.New(func(o *zap.Options) {
@@ -133,9 +137,10 @@ func main() {
 	}
 
 	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
-		Scheme: mgr.GetScheme(),
+		Client:             mgr.GetClient(),
+		Log:                ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
+		Scheme:             mgr.GetScheme(),
+		CommonRunnerLabels: commonRunnerLabels,
 	}
 
 	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
@@ -175,4 +180,21 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+type commaSeparatedStringSlice []string
+
+func (s *commaSeparatedStringSlice) String() string {
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *commaSeparatedStringSlice) Set(value string) error {
+	for _, v := range strings.Split(value, ",") {
+		if v == "" {
+			continue
+		}
+
+		*s = append(*s, v)
+	}
+	return nil
 }
