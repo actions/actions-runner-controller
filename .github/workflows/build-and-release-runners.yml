@@ -6,7 +6,7 @@ on:
       - '**'
     paths:
       - 'runner/**'
-      - .github/workflows/build-runner.yml
+      - .github/workflows/build-and-release-runners.yml
   push:
     branches:
       - master
@@ -15,7 +15,7 @@ on:
       - runner/Dockerfile
       - runner/dindrunner.Dockerfile
       - runner/entrypoint.sh
-      - .github/workflows/build-runner.yml
+      - .github/workflows/build-and-release-runners.yml
 
 jobs:
   build:
@@ -29,7 +29,7 @@ jobs:
           - name: actions-runner-dind
             dockerfile: dindrunner.Dockerfile
     env:
-      RUNNER_VERSION: 2.276.1
+      RUNNER_VERSION: 2.277.1
       DOCKER_VERSION: 19.03.12
       DOCKERHUB_USERNAME: ${{ github.repository_owner }}
     steps:
