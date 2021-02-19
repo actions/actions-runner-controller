@@ -541,6 +541,11 @@ func (in *RunnerReplicaSetSpec) DeepCopyInto(out *RunnerReplicaSetSpec) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.Selector != nil {
+		in, out := &in.Selector, &out.Selector
+		*out = new(metav1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
 	in.Template.DeepCopyInto(&out.Template)
 }
 
