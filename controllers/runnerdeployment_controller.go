@@ -76,8 +76,12 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
+	selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	var myRunnerReplicaSetList v1alpha1.RunnerReplicaSetList
-	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
+	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return ctrl.Result{}, err
 	}
 

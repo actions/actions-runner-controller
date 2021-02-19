@@ -115,8 +115,17 @@ var _ = Context("Inside of a new namespace", func() {
 					},
 					Spec: actionsv1alpha1.RunnerReplicaSetSpec{
 						Replicas: intPtr(1),
-						Selector: &metav1.LabelSelector{},
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
 						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
 							Spec: actionsv1alpha1.RunnerSpec{
 								Repository: "foo/bar",
 								Image:      "bar",
