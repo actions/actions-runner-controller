@@ -48,6 +48,7 @@ type HorizontalRunnerAutoscalerReconciler struct {
 	Scheme       *runtime.Scheme
 
 	CacheDuration time.Duration
+	Name          string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;update;patch
@@ -184,6 +185,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 
 func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	name := "horizontalrunnerautoscaler-controller"
+	if r.Name != "" {
+		name = r.Name
+	}
+
 	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	return ctrl.NewControllerManagedBy(mgr).

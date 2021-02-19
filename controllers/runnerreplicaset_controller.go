@@ -44,6 +44,7 @@ type RunnerReplicaSetReconciler struct {
 	Recorder     record.EventRecorder
 	Scheme       *runtime.Scheme
 	GitHubClient *github.Client
+	Name         string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets,verbs=get;list;watch;create;update;patch;delete
@@ -222,6 +223,10 @@ func (r *RunnerReplicaSetReconciler) newRunner(rs v1alpha1.RunnerReplicaSet) (v1
 
 func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	name := "runnerreplicaset-controller"
+	if r.Name != "" {
+		name = r.Name
+	}
+
 	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	return ctrl.NewControllerManagedBy(mgr).

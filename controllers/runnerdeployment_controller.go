@@ -52,6 +52,7 @@ type RunnerDeploymentReconciler struct {
 	Recorder           record.EventRecorder
 	Scheme             *runtime.Scheme
 	CommonRunnerLabels []string
+	Name               string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -291,6 +292,10 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 
 func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	name := "runnerdeployment-controller"
+	if r.Name != "" {
+		name = r.Name
+	}
+
 	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
