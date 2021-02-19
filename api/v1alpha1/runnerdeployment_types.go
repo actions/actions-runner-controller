@@ -25,13 +25,14 @@ const (
 	AutoscalingMetricTypePercentageRunnersBusy                        = "PercentageRunnersBusy"
 )
 
-// RunnerReplicaSetSpec defines the desired state of RunnerDeployment
+// RunnerDeploymentSpec defines the desired state of RunnerDeployment
 type RunnerDeploymentSpec struct {
 	// +optional
 	// +nullable
 	Replicas *int `json:"replicas,omitempty"`
 
-	Template RunnerTemplate `json:"template"`
+	Selector *metav1.LabelSelector `json:"selector"`
+	Template RunnerTemplate        `json:"template"`
 }
 
 type RunnerDeploymentStatus struct {
