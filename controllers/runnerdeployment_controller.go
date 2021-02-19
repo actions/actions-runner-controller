@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"sort"
@@ -258,6 +259,47 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
+// Clones the given selector and returns a new selector with the given key and value added.
+// Returns the given selector, if labelKey is empty.
+//
+// Proudly copied from k8s.io/kubernetes/pkg/util/labels.CloneSelectorAndAddLabel
+func CloneSelectorAndAddLabel(selector *metav1.LabelSelector, labelKey, labelValue string) *metav1.LabelSelector {
+	if labelKey == "" {
+		// Don't need to add a label.
+		return selector
+	}
+
+	// Clone.
+	newSelector := new(metav1.LabelSelector)
+
+	newSelector.MatchLabels = make(map[string]string)
+	if selector.MatchLabels != nil {
+		for key, val := range selector.MatchLabels {
+			newSelector.MatchLabels[key] = val
+		}
+	}
+	newSelector.MatchLabels[labelKey] = labelValue
+
+	if selector.MatchExpressions != nil {
+		newMExps := make([]metav1.LabelSelectorRequirement, len(selector.MatchExpressions))
+		for i, me := range selector.MatchExpressions {
+			newMExps[i].Key = me.Key
+			newMExps[i].Operator = me.Operator
+			if me.Values != nil {
+				newMExps[i].Values = make([]string, len(me.Values))
+				copy(newMExps[i].Values, me.Values)
+			} else {
+				newMExps[i].Values = nil
+			}
+		}
+		newSelector.MatchExpressions = newMExps
+	} else {
+		newSelector.MatchExpressions = nil
+	}
+
+	return newSelector
+}
+
 func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 	templateHash := ComputeHash(&newRSTemplate)
@@ -270,6 +312,12 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 
 	newRSTemplate.Labels = labels
 
+	if rd.Spec.Selector == nil {
+		return nil, errors.New("validating runnerdeployment spec: spec.selector is required")
+	}
+
+	newRSSelector := CloneSelectorAndAddLabel(rd.Spec.Selector, LabelKeyRunnerTemplateHash, templateHash)
+
 	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
@@ -279,6 +327,7 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
 			Replicas: rd.Spec.Replicas,
+			Selector: newRSSelector,
 			Template: newRSTemplate,
 		},
 	}
