@@ -2,10 +2,11 @@ package controllers
 
 import (
 	"context"
-	"github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/runtime"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,6 +37,7 @@ func TestNewRunnerReplicaSet(t *testing.T) {
 			Name: "example",
 		},
 		Spec: actionsv1alpha1.RunnerDeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
 			Template: actionsv1alpha1.RunnerTemplate{
 				Spec: actionsv1alpha1.RunnerSpec{
 					Labels: []string{"project1"},
@@ -122,6 +124,7 @@ var _ = Context("Inside of a new namespace", func() {
 					},
 					Spec: actionsv1alpha1.RunnerDeploymentSpec{
 						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{},
 						Template: actionsv1alpha1.RunnerTemplate{
 							Spec: actionsv1alpha1.RunnerSpec{
 								Repository: "foo/bar",
