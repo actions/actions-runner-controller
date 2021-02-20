@@ -287,17 +287,19 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) searchScaleTargets(hr
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx context.Context, name string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+	autoscaler.Log.Info("finding HRAs by key", "key", name)
 	hras, err := autoscaler.findHRAsByKey(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 
+	autoscaler.Log.Info("searching scale targets", "hras", hras)
 	targets := autoscaler.searchScaleTargets(hras, f)
-
 	if len(targets) != 1 {
 		return nil, nil
 	}
 
+	autoscaler.Log.Info("found the scale target", "targets", targets)
 	return &targets[0], nil
 }
 
@@ -351,6 +353,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr ctrl.Manager) error {
 	name := "webhookbasedautoscaler"
 	autoscaler.Recorder = mgr.GetEventRecorderFor(name)
+	autoscaler.Log.Info("setup", "name", name)
 
 	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj runtime.Object) []string {
 		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
@@ -365,7 +368,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			return nil
 		}
 
-		return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+		keys := []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+		autoscaler.Log.Info("indexing", "hra", hra.Name, "keys", keys)
+		return keys
 	}); err != nil {
 		return err
 	}
