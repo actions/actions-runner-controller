@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/github/fake"
@@ -297,14 +296,14 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas on first pull_request create webhook event
 			{
-				env.SendPullRequestEvent("test/valid", "main", "created")
+				env.SendPullRequestEvent("test", "valid", "main", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 			}
 
 			// Scale-up to 3 replicas on second pull_request create webhook event
 			{
-				env.SendPullRequestEvent("test/valid", "main", "created")
+				env.SendPullRequestEvent("test", "valid", "main", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
 			}
 		})
@@ -386,7 +385,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 4 replicas on first check_run create webhook event
 			{
-				env.SendCheckRunEvent("test/valid", "pending", "created")
+				env.SendCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 4, "runners after first webhook event")
 			}
@@ -397,7 +396,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 5 replicas on second check_run create webhook event
 			{
-				env.SendCheckRunEvent("test/valid", "pending", "created")
+				env.SendCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 5, "runners after second webhook event")
 			}
 
@@ -420,9 +419,7 @@ func (env *testEnvironment) ExpectRegisteredNumberCountEventuallyEquals(want int
 		time.Second*1, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
 }
 
-func (env *testEnvironment) SendPullRequestEvent(repo string, branch string, action string) {
-	org := strings.Split(repo, "/")[0]
-
+func (env *testEnvironment) SendPullRequestEvent(org, repo, branch, action string) {
 	resp, err := sendWebhook(env.webhookServer, "pull_request", &github.PullRequestEvent{
 		PullRequest: &github.PullRequest{
 			Base: &github.PullRequestBranch{
@@ -443,9 +440,7 @@ func (env *testEnvironment) SendPullRequestEvent(repo string, branch string, act
 	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
 }
 
-func (env *testEnvironment) SendCheckRunEvent(repo string, status string, action string) {
-	org := strings.Split(repo, "/")[0]
-
+func (env *testEnvironment) SendCheckRunEvent(org, repo, status, action string) {
 	resp, err := sendWebhook(env.webhookServer, "check_run", &github.CheckRunEvent{
 		CheckRun: &github.CheckRun{
 			Status: github.String(status),
