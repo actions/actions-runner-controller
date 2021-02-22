@@ -107,6 +107,7 @@ githubWebhookServer:
   syncPeriod: 10m
   secret:
     enabled: false
+    existingSecret: ""
     ### GitHub Webhook Configuration
     #github_webhook_secret_token: ""
   image:
