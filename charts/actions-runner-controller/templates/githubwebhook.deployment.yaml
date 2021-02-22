@@ -41,7 +41,7 @@ spec:
           valueFrom:
             secretKeyRef:
               key: github_webhook_secret_token
-              name: github-webhook-server
+              name: {{- include "actions-runner-controller-github-webhook-server.secretName" . }}
               optional: true
         {{- range $key, $val := .Values.githubWebhookServer.env }}
         - name: {{ $key }}
@@ -74,10 +74,6 @@ spec:
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}     
       terminationGracePeriodSeconds: 10
-      volumes:
-      - name: github-webhook-server
-        secret:
-          secretName: github-webhook-server
       {{- with .Values.githubWebhookServer.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
