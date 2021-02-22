@@ -65,7 +65,7 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "actions-runner-controller.secretName" -}}
-{{- default "controller-manager" .Values.authSecret.existingSecret }} -}}
+{{- default "controller-manager" .Values.authSecret.existingSecret -}}
 {{- end }}
 
 {{- define "actions-runner-controller.leaderElectionRoleName" -}}
