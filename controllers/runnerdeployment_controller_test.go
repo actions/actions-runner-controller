@@ -82,6 +82,7 @@ func SetupDeploymentTest(ctx context.Context) *corev1.Namespace {
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
 			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Name:     "runnerdeployment-" + ns.Name,
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")

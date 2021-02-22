@@ -28,8 +28,26 @@ func init() {
 	_ = actionsv1alpha1.AddToScheme(sc)
 }
 
-func TestWebhookCheckRun(t *testing.T) {
-	f, err := os.Open("testdata/webhook_check_run_payload.json")
+func TestOrgWebhookCheckRun(t *testing.T) {
+	f, err := os.Open("testdata/org_webhook_check_run_payload.json")
+	if err != nil {
+		t.Fatalf("could not open the fixture: %s", err)
+	}
+	defer f.Close()
+	var e github.CheckRunEvent
+	if err := json.NewDecoder(f).Decode(&e); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
+	testServer(t,
+		"check_run",
+		&e,
+		200,
+		"no horizontalrunnerautoscaler to scale for this github event",
+	)
+}
+
+func TestRepoWebhookCheckRun(t *testing.T) {
+	f, err := os.Open("testdata/repo_webhook_check_run_payload.json")
 	if err != nil {
 		t.Fatalf("could not open the fixture: %s", err)
 	}

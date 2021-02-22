@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -133,22 +134,25 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	case *gogithub.PushEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
-			*e.Repo.Name,
-			*e.Repo.Organization,
+			e.Repo.GetName(),
+			e.Repo.Owner.GetLogin(),
+			e.Repo.Owner.GetType(),
 			autoscaler.MatchPushEvent(e),
 		)
 	case *gogithub.PullRequestEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
-			*e.Repo.Name,
-			*e.Repo.Organization.Name,
+			e.Repo.GetName(),
+			e.Repo.Owner.GetLogin(),
+			e.Repo.Owner.GetType(),
 			autoscaler.MatchPullRequestEvent(e),
 		)
 	case *gogithub.CheckRunEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
-			e.GetRepo().GetName(),
-			e.GetOrg().GetLogin(), // empty string if the repo is not in an organization
+			e.Repo.GetName(),
+			e.Repo.Owner.GetLogin(),
+			e.Repo.Owner.GetType(),
 			autoscaler.MatchCheckRunEvent(e),
 		)
 	case *gogithub.PingEvent:
@@ -227,6 +231,10 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx con
 		opts := append([]client.ListOption{}, defaultListOpts...)
 		opts = append(opts, client.MatchingFields{scaleTargetKey: value})
 
+		if autoscaler.WatchNamespace != "" {
+			opts = append(opts, client.InNamespace(autoscaler.WatchNamespace))
+		}
+
 		var hraList v1alpha1.HorizontalRunnerAutoscalerList
 
 		if err := autoscaler.List(ctx, &hraList, opts...); err != nil {
@@ -296,27 +304,45 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 	targets := autoscaler.searchScaleTargets(hras, f)
 
 	if len(targets) != 1 {
+		var scaleTargetIDs []string
+
+		for _, t := range targets {
+			scaleTargetIDs = append(scaleTargetIDs, t.HorizontalRunnerAutoscaler.Name)
+		}
+
+		autoscaler.Log.Info(
+			"Found too many scale targets: "+
+				"It must be exactly one to avoid ambiguity. "+
+				"Either set WatchNamespace for the webhook-based autoscaler to let it only find HRAs in the namespace, "+
+				"or update Repository or Organization fields in your RunnerDeployment resources to fix the ambiguity.",
+			"scaleTargets", strings.Join(scaleTargetIDs, ","))
+
 		return nil, nil
 	}
 
 	return &targets[0], nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
-	repositoryRunnerKey := orgNameFromWebhook + "/" + repoNameFromWebhook
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, repo, owner, ownerType string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+	repositoryRunnerKey := owner + "/" + repo
+
 	autoscaler.Log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
 	if target, err := autoscaler.getScaleTarget(ctx, repositoryRunnerKey, f); err != nil {
 		return nil, err
 	} else if target != nil {
-		autoscaler.Log.Info("scale up target is repository-wide runners", "repository", repoNameFromWebhook)
+		autoscaler.Log.Info("scale up target is repository-wide runners", "repository", repo)
 		return target, nil
 	}
 
-	autoscaler.Log.Info("finding organizational runner", "organization", orgNameFromWebhook)
-	if target, err := autoscaler.getScaleTarget(ctx, orgNameFromWebhook, f); err != nil {
+	if ownerType == "User" {
+		return nil, nil
+	}
+
+	autoscaler.Log.Info("finding organizational runner", "organization", owner)
+	if target, err := autoscaler.getScaleTarget(ctx, owner, f); err != nil {
 		return nil, err
 	} else if target != nil {
-		autoscaler.Log.Info("scale up target is organizational runners", "organization", orgNameFromWebhook)
+		autoscaler.Log.Info("scale up target is organizational runners", "organization", owner)
 		return target, nil
 	}
 
