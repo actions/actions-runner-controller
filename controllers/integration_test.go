@@ -648,7 +648,7 @@ func (env *testEnvironment) ExpectRegisteredNumberCountEventuallyEquals(want int
 
 			return len(rs)
 		},
-		time.Second*1, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
+		time.Second*5, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
 }
 
 func (env *testEnvironment) SendOrgPullRequestEvent(org, repo, branch, action string) {
