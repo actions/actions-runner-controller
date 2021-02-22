@@ -56,6 +56,7 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// scaled on Webhook.
 	// Set to empty for letting it watch for all namespaces.
 	WatchNamespace string
+	Name           string
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -350,6 +351,10 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr ctrl.Manager) error {
 	name := "webhookbasedautoscaler"
+	if autoscaler.Name != "" {
+		name = autoscaler.Name
+	}
+
 	autoscaler.Recorder = mgr.GetEventRecorderFor(name)
 
 	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj runtime.Object) []string {
