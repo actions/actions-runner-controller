@@ -303,17 +303,20 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, repoNameFromWebhook, orgNameFromWebhook string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
-	if target, err := autoscaler.getScaleTarget(ctx, repoNameFromWebhook, f); err != nil {
+	repositoryRunnerKey := orgNameFromWebhook + "/" + repoNameFromWebhook
+	autoscaler.Log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
+	if target, err := autoscaler.getScaleTarget(ctx, repositoryRunnerKey, f); err != nil {
 		return nil, err
 	} else if target != nil {
 		autoscaler.Log.Info("scale up target is repository-wide runners", "repository", repoNameFromWebhook)
 		return target, nil
 	}
 
+	autoscaler.Log.Info("finding organizational runner", "organization", orgNameFromWebhook)
 	if target, err := autoscaler.getScaleTarget(ctx, orgNameFromWebhook, f); err != nil {
 		return nil, err
 	} else if target != nil {
-		autoscaler.Log.Info("scale up target is organizational runners", "repository", orgNameFromWebhook)
+		autoscaler.Log.Info("scale up target is organizational runners", "organization", orgNameFromWebhook)
 		return target, nil
 	}
 
