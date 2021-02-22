@@ -310,6 +310,14 @@ func (e *RunnerNotFound) Error() string {
 	return fmt.Sprintf("runner %q not found", e.runnerName)
 }
 
+type RunnerOffline struct {
+	runnerName string
+}
+
+func (e *RunnerOffline) Error() string {
+	return fmt.Sprintf("runner %q offline", e.runnerName)
+}
+
 func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
 	runners, err := r.ListRunners(ctx, enterprise, org, repo)
 	if err != nil {
@@ -318,6 +326,9 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 
 	for _, runner := range runners {
 		if runner.GetName() == name {
+			if runner.GetStatus() == "offline" {
+				return false, &RunnerOffline{runnerName: name}
+			}
 			return runner.GetBusy(), nil
 		}
 	}

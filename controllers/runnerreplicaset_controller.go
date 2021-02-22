@@ -109,11 +109,15 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			busy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
 				notRegistered := false
+				offline := false
 
-				var e *github.RunnerNotFound
-				if errors.As(err, &e) {
-					log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or has not managed yet to, and therefore we prioritize it for deletion", "runnerName", runner.Name)
+				var notFoundException *github.RunnerNotFound
+				var offlineException *github.RunnerOffline
+				if errors.As(err, &notFoundException) {
+					log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
 					notRegistered = true
+				} else if errors.As(err, &offlineException) {
+					offline = true
 				} else {
 					var e *gogithub.RateLimitError
 					if errors.As(err, &e) {
@@ -140,7 +144,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 				if notRegistered && registrationDidTimeout {
 					log.Info(
 						"Runner failed to register itself to GitHub in timely manner. "+
-							"Recreating the pod to see if it resolves the issue. "+
+							"Marking the runner for scale down. "+
 							"CAUTION: If you see this a lot, you should investigate the root cause. "+
 							"See https://github.com/summerwind/actions-runner-controller/issues/288",
 						"runnerCreationTimestamp", runner.CreationTimestamp,
@@ -150,6 +154,12 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 					notBusy = append(notBusy, runner)
 				}
+
+				// offline runners should always be a great target for scale down
+				if offline {
+					notBusy = append(notBusy, runner)
+				}
+
 			} else if !busy {
 				notBusy = append(notBusy, runner)
 			}

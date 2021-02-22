@@ -244,60 +244,85 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		notRegistered := false
+		// all checks done below only decide whether a restart is needed
+		// if a restart was already decided before, there is no need for the checks
+		// saving API calls and scary log messages
+		if !restart {
 
-		runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-		if err != nil {
-			var e *github.RunnerNotFound
-			if errors.As(err, &e) {
-				log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
+			notRegistered := false
+			offline := false
 
-				notRegistered = true
-			} else {
-				var e *gogithub.RateLimitError
-				if errors.As(err, &e) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
+			runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+			if err != nil {
+				var notFoundException *github.RunnerNotFound
+				var offlineException *github.RunnerOffline
+				if errors.As(err, &notFoundException) {
+					log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
 
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+					notRegistered = true
+				} else if errors.As(err, &offlineException) {
+					log.V(1).Info("GitHub runner appears to be offline, waiting for runner to get online ...", "runnerName", runner.Name)
+					offline = true
+				} else {
+					var e *gogithub.RateLimitError
+					if errors.As(err, &e) {
+						// We log the underlying error when we failed calling GitHub API to list or unregisters,
+						// or the runner is still busy.
+						log.Error(
+							err,
+							fmt.Sprintf(
+								"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
+								retryDelayOnGitHubAPIRateLimitError,
+							),
+						)
+
+						return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+					}
+
+					return ctrl.Result{}, err
 				}
-
-				return ctrl.Result{}, err
 			}
-		}
 
-		// See the `newPod` function called above for more information
-		// about when this hash changes.
-		curHash := pod.Labels[LabelKeyPodTemplateHash]
-		newHash := newPod.Labels[LabelKeyPodTemplateHash]
+			// See the `newPod` function called above for more information
+			// about when this hash changes.
+			curHash := pod.Labels[LabelKeyPodTemplateHash]
+			newHash := newPod.Labels[LabelKeyPodTemplateHash]
 
-		if !runnerBusy && curHash != newHash {
-			restart = true
-		}
+			if !runnerBusy && curHash != newHash {
+				restart = true
+			}
 
-		registrationTimeout := 10 * time.Minute
-		currentTime := time.Now()
-		registrationDidTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout)) > 0
+			registrationTimeout := 10 * time.Minute
+			currentTime := time.Now()
+			registrationDidTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout)) > 0
 
-		if notRegistered && registrationDidTimeout {
-			log.Info(
-				"Runner failed to register itself to GitHub in timely manner. "+
-					"Recreating the pod to see if it resolves the issue. "+
-					"CAUTION: If you see this a lot, you should investigate the root cause. "+
-					"See https://github.com/summerwind/actions-runner-controller/issues/288",
-				"podCreationTimestamp", pod.CreationTimestamp,
-				"currentTime", currentTime,
-				"configuredRegistrationTimeout", registrationTimeout,
-			)
+			if notRegistered && registrationDidTimeout {
+				log.Info(
+					"Runner failed to register itself to GitHub in timely manner. "+
+						"Recreating the pod to see if it resolves the issue. "+
+						"CAUTION: If you see this a lot, you should investigate the root cause. "+
+						"See https://github.com/summerwind/actions-runner-controller/issues/288",
+					"podCreationTimestamp", pod.CreationTimestamp,
+					"currentTime", currentTime,
+					"configuredRegistrationTimeout", registrationTimeout,
+				)
 
-			restart = true
+				restart = true
+			}
+
+			if offline && registrationDidTimeout {
+				log.Info(
+					"Already existing GitHub runner still appears offline . "+
+						"Recreating the pod to see if it resolves the issue. "+
+						"CAUTION: If you see this a lot, you should investigate the root cause. ",
+					"podCreationTimestamp", pod.CreationTimestamp,
+					"currentTime", currentTime,
+					"configuredRegistrationTimeout", registrationTimeout,
+				)
+
+				restart = true
+			}
+
 		}
 
 		// Don't do anything if there's no need to restart the runner
