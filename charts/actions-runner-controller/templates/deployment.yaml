@@ -42,19 +42,19 @@ spec:
           valueFrom:
             secretKeyRef:
               key: github_token
-              name: controller-manager
+              name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
         - name: GITHUB_APP_ID
           valueFrom:
             secretKeyRef:
               key: github_app_id
-              name: controller-manager
+              name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
         - name: GITHUB_APP_INSTALLATION_ID
           valueFrom:
             secretKeyRef:
               key: github_app_installation_id
-              name: controller-manager
+              name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           value: /etc/actions-runner-controller/github_app_private_key
@@ -72,13 +72,13 @@ spec:
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
-          {{- toYaml .Values.securityContext | nindent 12 }}          
+          {{- toYaml .Values.securityContext | nindent 12 }}
         volumeMounts:
         - mountPath: "/etc/actions-runner-controller"
-          name: controller-manager
+          name: secret
           readOnly: true
         - mountPath: /tmp
-          name: tmp         
+          name: tmp
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
@@ -94,14 +94,14 @@ spec:
         - containerPort: 8443
           name: https
         resources:
-          {{- toYaml .Values.resources | nindent 12 }}   
+          {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
-          {{- toYaml .Values.securityContext | nindent 12 }}     
+          {{- toYaml .Values.securityContext | nindent 12 }}
       terminationGracePeriodSeconds: 10
       volumes:
-      - name: controller-manager
+      - name: secret
         secret:
-          secretName: controller-manager
+          secretName: {{ include "actions-runner-controller.secretName" . }}
       - name: cert
         secret:
           defaultMode: 420

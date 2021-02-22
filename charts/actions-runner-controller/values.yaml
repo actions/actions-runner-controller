@@ -11,7 +11,7 @@ syncPeriod: 10m
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:
-  enabled: false
+  existingSecret: ""
   ### GitHub Apps Configuration
   #github_app_id: ""
   #github_app_installation_id: ""
@@ -46,10 +46,12 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext: {}
+podSecurityContext:
+  {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  {}
   # capabilities:
   #   drop:
   #   - ALL
@@ -63,7 +65,8 @@ service:
 
 ingress:
   enabled: false
-  annotations: {}
+  annotations:
+    {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
@@ -74,7 +77,8 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-resources: {}
+resources:
+  {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
@@ -104,7 +108,8 @@ affinity: {}
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-env: {}
+env:
+  {}
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
@@ -146,8 +151,8 @@ githubWebhookServer:
   service:
     type: NodePort
     ports:
-    - port: 80
-      targetPort: http
-      protocol: TCP
-      name: http
-      #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc

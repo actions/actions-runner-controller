@@ -15,17 +15,17 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.5.2
+version: 0.6.0
 
 home: https://github.com/summerwind/actions-runner-controller
 
 sources:
-    - https://github.com/summerwind/actions-runner-controller
+  - https://github.com/summerwind/actions-runner-controller
 
 maintainers:
-    - name: summerwind
-      email: contact@summerwind.jp
-      url: https://github.com/summerwind
-    - name: funkypenguin
-      email: davidy@funkypenguin.co.nz
-      url: https://www.funkypenguin.co.nz
+  - name: summerwind
+    email: contact@summerwind.jp
+    url: https://github.com/summerwind
+  - name: funkypenguin
+    email: davidy@funkypenguin.co.nz
+    url: https://www.funkypenguin.co.nz
