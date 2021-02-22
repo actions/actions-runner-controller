@@ -48,7 +48,7 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "actions-runner-controller-github-webhook-server.secretName" -}}
-{{- default "github-webhook-server" .Values.githubWebhookServer.secret.existingSecret }}
+{{- default (include "actions-runner-controller-github-webhook-server.fullname" .) .Values.githubWebhookServer.secret.existingSecret }}
 {{- end }}
 
 {{- define "actions-runner-controller-github-webhook-server.roleName" -}}
