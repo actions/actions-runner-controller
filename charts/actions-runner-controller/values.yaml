@@ -21,8 +21,7 @@ authSecret:
 
 image:
   repository: summerwind/actions-runner-controller
-  # Overrides the manager image tag whose default is the chart appVersion
-  tag: ""
+  tag: "v0.17.0"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 
@@ -109,11 +108,6 @@ githubWebhookServer:
     existingSecret: "github-webhook-server"
     ### GitHub Webhook Configuration
     #github_webhook_secret_token: ""
-  image:
-    repository: summerwind/actions-runner-controller
-    # Overrides the manager image tag whose default is the chart appVersion
-    tag: ""
-    pullPolicy: IfNotPresent
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""
