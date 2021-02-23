@@ -17,6 +17,8 @@ type: application
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
 version: 0.6.0
 
+appVersion: 0.17.0
+
 home: https://github.com/summerwind/actions-runner-controller
 
 sources:
