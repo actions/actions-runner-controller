@@ -85,7 +85,10 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 	key := getRegistrationKey(org, repo, enterprise)
 	rt, ok := c.regTokens[key]
 
-	if ok && rt.GetExpiresAt().After(time.Now()) {
+	// we like to give runners a chance that are just starting up and may miss the expiration date by a bit
+	runnerStartupTimeout := 3 * time.Minute
+
+	if ok && rt.GetExpiresAt().After(time.Now().Add(runnerStartupTimeout)) {
 		return rt, nil
 	}
 
