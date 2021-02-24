@@ -61,6 +61,7 @@ jobs:
           context: ./runner
           file: ./runner/${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
