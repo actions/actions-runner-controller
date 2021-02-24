@@ -165,7 +165,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 			cacheDuration = 10 * time.Minute
 		}
 
-		updated.Status.CacheEntries = append(updated.Status.CacheEntries, v1alpha1.CacheEntry{
+		updated.Status.CacheEntries = append(cacheEntries, v1alpha1.CacheEntry{
 			Key:            v1alpha1.CacheEntryKeyDesiredReplicas,
 			Value:          *replicas,
 			ExpirationTime: metav1.Time{Time: time.Now().Add(cacheDuration)},
