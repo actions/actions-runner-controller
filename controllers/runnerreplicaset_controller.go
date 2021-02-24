@@ -20,8 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	gogithub "github.com/google/go-github/v33/github"
 	"time"
+
+	gogithub "github.com/google/go-github/v33/github"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -159,7 +160,6 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 				if offline {
 					notBusy = append(notBusy, runner)
 				}
-
 			} else if !busy {
 				notBusy = append(notBusy, runner)
 			}
@@ -176,7 +176,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 				return ctrl.Result{}, err
 			}
 
-			r.Recorder.Event(&rs, corev1.EventTypeNormal, "RunnerDeleted", fmt.Sprintf("Deleted runner '%s'", myRunners[i].Name))
+			r.Recorder.Event(&rs, corev1.EventTypeNormal, "RunnerDeleted", fmt.Sprintf("Deleted runner '%s'", notBusy[i].Name))
 			log.Info("Deleted runner", "runnerreplicaset", rs.ObjectMeta.Name)
 		}
 	} else if desired > available {
