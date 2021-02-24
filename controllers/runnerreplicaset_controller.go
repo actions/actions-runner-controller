@@ -74,7 +74,12 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	}
 	// Get the Runners managed by the target RunnerReplicaSet
 	var myRunners v1alpha1.RunnerList
-	if err := r.List(ctx, &myRunners, client.InNamespace(req.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
+	if err := r.List(
+		ctx,
+		&myRunners,
+		client.InNamespace(req.Namespace),
+		client.MatchingLabelsSelector{Selector: selector},
+	); err != nil {
 		if !kerrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
