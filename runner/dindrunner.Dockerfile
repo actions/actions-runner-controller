@@ -88,7 +88,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
   && mkdir /opt/hostedtoolcache \
-  && chgrp runner /opt/hostedtoolcache \
+  && chgrp docker /opt/hostedtoolcache \
   && chmod g+rwx /opt/hostedtoolcache
 
 COPY modprobe startup.sh /usr/local/bin/
