@@ -60,6 +60,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 			Log:          logf.Log,
 			Recorder:     mgr.GetEventRecorderFor("runnerreplicaset-controller"),
 			GitHubClient: ghClient,
+			Name:         "runnerreplicaset-" + ns.Name,
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
