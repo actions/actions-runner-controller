@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,8 +38,17 @@ func TestNewRunnerReplicaSet(t *testing.T) {
 			Name: "example",
 		},
 		Spec: actionsv1alpha1.RunnerDeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"foo": "bar",
+				},
+			},
 			Template: actionsv1alpha1.RunnerTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"foo": "bar",
+					},
+				},
 				Spec: actionsv1alpha1.RunnerSpec{
 					Labels: []string{"project1"},
 				},
@@ -51,8 +61,16 @@ func TestNewRunnerReplicaSet(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 
-	want := []string{"project1", "dev"}
-	if d := cmp.Diff(want, rs.Spec.Template.Spec.Labels); d != "" {
+	if val, ok := rs.Labels["foo"]; ok {
+		if val != "bar" {
+			t.Errorf("foo label does not have bar but %v", val)
+		}
+	} else {
+		t.Errorf("foo label does not exist")
+	}
+
+	runnerLabel := []string{"project1", "dev"}
+	if d := cmp.Diff(runnerLabel, rs.Spec.Template.Spec.Labels); d != "" {
 		t.Errorf("%s", d)
 	}
 }
@@ -154,24 +172,23 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+						if err != nil {
+							logf.Log.Error(err, "failed to get test RunnerReplicaSet resource")
+							return -1
+						}
+						err = k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+							client.MatchingLabelsSelector{Selector: selector},
+						)
 						if err != nil {
 							logf.Log.Error(err, "list runner sets")
+							return -1
 						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
-						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-						}
-
-						if len(runnerSets.Items) == 0 {
-							logf.Log.Info("No runnerreplicasets exist yet")
+						if len(runnerSets.Items) != 1 {
+							logf.Log.Info("runnerreplicasets is not 1")
 							return -1
 						}
 
@@ -184,13 +201,12 @@ var _ = Context("Inside of a new namespace", func() {
 				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
 				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
 				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
+				var rd actionsv1alpha1.RunnerDeployment
 				Eventually(func() error {
-					var rd actionsv1alpha1.RunnerDeployment
-
 					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rd)
-
-					Expect(err).NotTo(HaveOccurred(), "failed to get test RunnerReplicaSet resource")
-
+					if err != nil {
+						return fmt.Errorf("failed to get test RunnerReplicaSet resource: %v\n", err)
+					}
 					rd.Spec.Replicas = intPtr(2)
 
 					return k8sClient.Update(ctx, &rd)
@@ -201,20 +217,24 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
 						if err != nil {
-							logf.Log.Error(err, "list runner sets")
+							logf.Log.Error(err, "failed to get RunnerDeployment selector")
+							return -1
 						}
-
-						return len(runnerSets.Items)
-					},
-					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
-
-				Eventually(
-					func() int {
-						err := k8sClient.List(ctx, &runnerSets, client.InNamespace(ns.Name))
+						err = k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+							client.MatchingLabelsSelector{Selector: selector},
+						)
 						if err != nil {
 							logf.Log.Error(err, "list runner sets")
+							return -1
+						}
+						if len(runnerSets.Items) != 1 {
+							logf.Log.Info("runnerreplicasets is not 1")
+							return -1
 						}
 
 						return *runnerSets.Items[0].Spec.Replicas

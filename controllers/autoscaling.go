@@ -275,7 +275,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 			return nil, err
 		}
 	}
-	r.Log.V(0).Info("debug", "runnerList", runnerList, "selector", selector)
 
 	runnerMap := make(map[string]struct{})
 	for _, items := range runnerList.Items {
