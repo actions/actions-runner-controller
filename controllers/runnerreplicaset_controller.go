@@ -204,7 +204,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		updated.Status.ReadyReplicas = ready
 
 		if err := r.Status().Update(ctx, updated); err != nil {
-			log.Error(err, "Failed to update status. Retrying immediately")
+			log.Info("Failed to update status. Retrying immediately", "error", err.Error())
 			return ctrl.Result{
 				Requeue: true,
 			}, nil

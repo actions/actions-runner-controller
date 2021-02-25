@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/go-github/v33/github"
-	github3 "github.com/google/go-github/v33/github"
 	github2 "github.com/summerwind/actions-runner-controller/github"
 	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
@@ -248,26 +247,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 
 			{
-				var runnerList actionsv1alpha1.RunnerList
-
-				err := k8sClient.List(ctx, &runnerList, client.InNamespace(ns.Name))
-				if err != nil {
-					logf.Log.Error(err, "list runners")
-				}
-
-				for i, r := range runnerList.Items {
-					env.fakeRunnerList.Add(&github3.Runner{
-						ID:     github.Int64(int64(i)),
-						Name:   github.String(r.Name),
-						OS:     github.String("linux"),
-						Status: github.String("online"),
-						Busy:   github.Bool(false),
-					})
-				}
-
-				rs, err := env.ghClient.ListRunners(context.Background(), "", "", "test/valid")
-				Expect(err).NotTo(HaveOccurred(), "verifying list fake runners response")
-				Expect(len(rs)).To(Equal(3), "count of fake list runners")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake runners after HRA creation")
 			}
 
 			// Scale-down to 1 replica
@@ -478,26 +458,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 
 			{
-				var runnerList actionsv1alpha1.RunnerList
-
-				err := k8sClient.List(ctx, &runnerList, client.InNamespace(ns.Name))
-				if err != nil {
-					logf.Log.Error(err, "list runners")
-				}
-
-				for i, r := range runnerList.Items {
-					env.fakeRunnerList.Add(&github3.Runner{
-						ID:     github.Int64(int64(i)),
-						Name:   github.String(r.Name),
-						OS:     github.String("linux"),
-						Status: github.String("online"),
-						Busy:   github.Bool(false),
-					})
-				}
-
-				rs, err := env.ghClient.ListRunners(context.Background(), "", "", "test/valid")
-				Expect(err).NotTo(HaveOccurred(), "verifying list fake runners response")
-				Expect(len(rs)).To(Equal(3), "count of fake list runners")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake runners after HRA creation")
 			}
 
 			// Scale-down to 1 replica
@@ -746,15 +707,7 @@ func (env *testEnvironment) SyncRunnerRegistrations() {
 		logf.Log.Error(err, "list runners")
 	}
 
-	for i, r := range runnerList.Items {
-		env.fakeRunnerList.Add(&github3.Runner{
-			ID:     github.Int64(int64(i)),
-			Name:   github.String(r.Name),
-			OS:     github.String("linux"),
-			Status: github.String("online"),
-			Busy:   github.Bool(false),
-		})
-	}
+	env.fakeRunnerList.Sync(runnerList.Items)
 }
 
 func ExpectCreate(ctx context.Context, rd runtime.Object, s string) {
