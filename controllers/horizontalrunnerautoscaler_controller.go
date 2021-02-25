@@ -132,16 +132,16 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 
 	var updated *v1alpha1.HorizontalRunnerAutoscaler
 
-	if hra.Status.DesiredReplicas == nil || *hra.Status.DesiredReplicas != *replicas {
+	if hra.Status.DesiredReplicas == nil || *hra.Status.DesiredReplicas != newDesiredReplicas {
 		updated = hra.DeepCopy()
 
-		if (hra.Status.DesiredReplicas == nil && *replicas > 1) ||
-			(hra.Status.DesiredReplicas != nil && *replicas > *hra.Status.DesiredReplicas) {
+		if (hra.Status.DesiredReplicas == nil && newDesiredReplicas > 1) ||
+			(hra.Status.DesiredReplicas != nil && newDesiredReplicas > *hra.Status.DesiredReplicas) {
 
 			updated.Status.LastSuccessfulScaleOutTime = &metav1.Time{Time: time.Now()}
 		}
 
-		updated.Status.DesiredReplicas = replicas
+		updated.Status.DesiredReplicas = &newDesiredReplicas
 	}
 
 	if replicasFromCache == nil {
