@@ -145,9 +145,26 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
+						selector, err := metav1.LabelSelectorAsSelector(
+							&metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"foo": "bar",
+								},
+							},
+						)
+						if err != nil {
+							logf.Log.Error(err, "failed to create labelselector")
+							return -1
+						}
+						err = k8sClient.List(
+							ctx,
+							&runners,
+							client.InNamespace(ns.Name),
+							client.MatchingLabelsSelector{Selector: selector},
+						)
 						if err != nil {
 							logf.Log.Error(err, "list runners")
+							return -1
 						}
 
 						for i, runner := range runners.Items {
@@ -186,7 +203,23 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
+						selector, err := metav1.LabelSelectorAsSelector(
+							&metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"foo": "bar",
+								},
+							},
+						)
+						if err != nil {
+							logf.Log.Error(err, "failed to create labelselector")
+							return -1
+						}
+						err = k8sClient.List(
+							ctx,
+							&runners,
+							client.InNamespace(ns.Name),
+							client.MatchingLabelsSelector{Selector: selector},
+						)
 						if err != nil {
 							logf.Log.Error(err, "list runners")
 						}
@@ -230,6 +263,7 @@ var _ = Context("Inside of a new namespace", func() {
 						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
 						if err != nil {
 							logf.Log.Error(err, "list runners")
+							return -1
 						}
 
 						for i, runner := range runners.Items {
