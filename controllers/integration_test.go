@@ -312,7 +312,17 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 					Spec: actionsv1alpha1.RunnerDeploymentSpec{
 						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
 						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
 							Spec: actionsv1alpha1.RunnerSpec{
 								Repository: "test/valid",
 								Image:      "bar",
@@ -407,7 +417,17 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 					Spec: actionsv1alpha1.RunnerDeploymentSpec{
 						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
 						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
 							Spec: actionsv1alpha1.RunnerSpec{
 								Repository: "test/valid",
 								Image:      "bar",
@@ -526,7 +546,17 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 					},
 					Spec: actionsv1alpha1.RunnerDeploymentSpec{
 						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
 						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
 							Spec: actionsv1alpha1.RunnerSpec{
 								Repository: "test/valid",
 								Image:      "bar",

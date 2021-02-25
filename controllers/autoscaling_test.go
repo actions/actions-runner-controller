@@ -443,7 +443,17 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 					Name: "testrd",
 				},
 				Spec: v1alpha1.RunnerDeploymentSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"foo": "bar",
+						},
+					},
 					Template: v1alpha1.RunnerTemplate{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"foo": "bar",
+							},
+						},
 						Spec: v1alpha1.RunnerSpec{
 							Organization: tc.org,
 						},
