@@ -484,6 +484,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				Expect(err).NotTo(HaveOccurred(), "failed to get test HorizontalRunnerAutoscaler resource")
 
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1, "runners after HRA force update for scale-down")
+				ExpectHRADesiredReplicasEquals(ctx, ns.Name, name, 1, "runner deployment desired replicas")
 			}
 
 			// Scale-up to 2 replicas on first pull_request create webhook event
@@ -491,12 +492,14 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.SendUserPullRequestEvent("test", "valid", "main", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				ExpectHRADesiredReplicasEquals(ctx, ns.Name, name, 2, "runner deployment desired replicas")
 			}
 
 			// Scale-up to 3 replicas on second pull_request create webhook event
 			{
 				env.SendUserPullRequestEvent("test", "valid", "main", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+				ExpectHRADesiredReplicasEquals(ctx, ns.Name, name, 3, "runner deployment desired replicas")
 			}
 		})
 
@@ -597,6 +600,18 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 	})
 })
+
+func ExpectHRADesiredReplicasEquals(ctx context.Context, ns, name string, desired int, optionalDescriptions ...interface{}) {
+	var rd actionsv1alpha1.HorizontalRunnerAutoscaler
+
+	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, &rd)
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to get test HRA resource")
+
+	replicas := rd.Status.DesiredReplicas
+
+	ExpectWithOffset(1, *replicas).To(Equal(desired), optionalDescriptions...)
+}
 
 func (env *testEnvironment) ExpectRegisteredNumberCountEventuallyEquals(want int, optionalDescriptions ...interface{}) {
 	EventuallyWithOffset(
