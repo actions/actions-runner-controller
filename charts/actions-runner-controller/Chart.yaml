@@ -17,10 +17,6 @@ type: application
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
 version: 0.6.0
 
-# This is the minimum summerwind/actions-runner-controller verison that this chart works with.
-# Bump this when a new minimum version is needed for this chart version.
-appVersion: 0.17.0
-
 home: https://github.com/summerwind/actions-runner-controller
 
 sources:
