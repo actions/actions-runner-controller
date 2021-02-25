@@ -128,12 +128,17 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 	var target *ScaleTarget
 
-	autoscaler.Log.Info("processing webhook event", "eventType", webhookType)
+	log := autoscaler.Log.WithValues(
+		"event", webhookType,
+		"hookID", r.Header.Get("X-GitHub-Hook-ID"),
+		"delivery", r.Header.Get("X-GitHub-Delivery"),
+	)
 
 	switch e := event.(type) {
 	case *gogithub.PushEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
+			log,
 			e.Repo.GetName(),
 			e.Repo.Owner.GetLogin(),
 			e.Repo.Owner.GetType(),
@@ -142,6 +147,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	case *gogithub.PullRequestEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
+			log,
 			e.Repo.GetName(),
 			e.Repo.Owner.GetLogin(),
 			e.Repo.Owner.GetType(),
@@ -150,6 +156,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	case *gogithub.CheckRunEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
+			log,
 			e.Repo.GetName(),
 			e.Repo.Owner.GetLogin(),
 			e.Repo.Owner.GetType(),
@@ -163,20 +170,20 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		msg := "pong"
 
 		if written, err := w.Write([]byte(msg)); err != nil {
-			autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
+			log.Error(err, "failed writing http response", "msg", msg, "written", written)
 		}
 
-		autoscaler.Log.Info("received ping event")
+		log.Info("received ping event")
 
 		return
 	default:
-		autoscaler.Log.Info("unknown event type", "eventType", webhookType)
+		log.Info("unknown event type", "eventType", webhookType)
 
 		return
 	}
 
 	if err != nil {
-		autoscaler.Log.Error(err, "handling check_run event")
+		log.Error(err, "handling check_run event")
 
 		return
 	}
@@ -184,21 +191,21 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	if target == nil {
 		msg := "no horizontalrunnerautoscaler to scale for this github event"
 
-		autoscaler.Log.Info(msg, "eventType", webhookType)
+		log.Info(msg, "eventType", webhookType)
 
 		ok = true
 
 		w.WriteHeader(http.StatusOK)
 
 		if written, err := w.Write([]byte(msg)); err != nil {
-			autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
+			log.Error(err, "failed writing http response", "msg", msg, "written", written)
 		}
 
 		return
 	}
 
 	if err := autoscaler.tryScaleUp(context.TODO(), target); err != nil {
-		autoscaler.Log.Error(err, "could not scale up")
+		log.Error(err, "could not scale up")
 
 		return
 	}
@@ -212,7 +219,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	autoscaler.Log.Info(msg)
 
 	if written, err := w.Write([]byte(msg)); err != nil {
-		autoscaler.Log.Error(err, "failed writing http response", "msg", msg, "written", written)
+		log.Error(err, "failed writing http response", "msg", msg, "written", written)
 	}
 }
 
@@ -303,7 +310,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 
 	targets := autoscaler.searchScaleTargets(hras, f)
 
-	if len(targets) != 1 {
+	n := len(targets)
+
+	if n == 0 {
+		return nil, nil
+	}
+
+	if n > 1 {
 		var scaleTargetIDs []string
 
 		for _, t := range targets {
@@ -323,11 +336,11 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 	return &targets[0], nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, repo, owner, ownerType string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
 	repositoryRunnerKey := owner + "/" + repo
 
-	autoscaler.Log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
 	if target, err := autoscaler.getScaleTarget(ctx, repositoryRunnerKey, f); err != nil {
+		autoscaler.Log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
 		return nil, err
 	} else if target != nil {
 		autoscaler.Log.Info("scale up target is repository-wide runners", "repository", repo)
@@ -338,13 +351,17 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 		return nil, nil
 	}
 
-	autoscaler.Log.Info("finding organizational runner", "organization", owner)
 	if target, err := autoscaler.getScaleTarget(ctx, owner, f); err != nil {
+		log.Info("finding organizational runner", "organization", owner)
 		return nil, err
 	} else if target != nil {
-		autoscaler.Log.Info("scale up target is organizational runners", "organization", owner)
+		log.Info("scale up target is organizational runners", "organization", owner)
 		return target, nil
 	}
+
+	log.Info(
+		"Scale target not found. If this is unexpected, ensure that there is exactly one repository-wide or organizational runner deployment that matches this webhook event",
+	)
 
 	return nil, nil
 }
