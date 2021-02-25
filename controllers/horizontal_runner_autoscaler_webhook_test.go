@@ -9,6 +9,7 @@ import (
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"io"
 	"io/ioutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
+	"time"
 )
 
 var (
@@ -109,6 +111,43 @@ func TestWebhookPing(t *testing.T) {
 		200,
 		"pong",
 	)
+}
+
+func TestGetValidCapacityReservations(t *testing.T) {
+	now := time.Now()
+
+	hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+		Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+			CapacityReservations: []actionsv1alpha1.CapacityReservation{
+				{
+					ExpirationTime: metav1.Time{Time: now.Add(-time.Second)},
+					Replicas:       1,
+				},
+				{
+					ExpirationTime: metav1.Time{Time: now},
+					Replicas:       2,
+				},
+				{
+					ExpirationTime: metav1.Time{Time: now.Add(time.Second)},
+					Replicas:       3,
+				},
+			},
+		},
+	}
+
+	revs := getValidCapacityReservations(hra)
+
+	var count int
+
+	for _, r := range revs {
+		count += r.Replicas
+	}
+
+	want := 3
+
+	if count != want {
+		t.Errorf("want %d, got %d", want, count)
+	}
 }
 
 func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.Buffer {

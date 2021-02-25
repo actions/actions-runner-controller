@@ -381,7 +381,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 		amount = target.ScaleUpTrigger.Amount
 	}
 
-	copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
+	capacityReservations := getValidCapacityReservations(copy)
+
+	copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
 		ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
 		Replicas:       amount,
 	})
@@ -393,6 +395,20 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 	}
 
 	return nil
+}
+
+func getValidCapacityReservations(autoscaler *v1alpha1.HorizontalRunnerAutoscaler) []v1alpha1.CapacityReservation {
+	var capacityReservations []v1alpha1.CapacityReservation
+
+	now := time.Now()
+
+	for _, reservation := range autoscaler.Spec.CapacityReservations {
+		if reservation.ExpirationTime.Time.After(now) {
+			capacityReservations = append(capacityReservations, reservation)
+		}
+	}
+
+	return capacityReservations
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr ctrl.Manager) error {
