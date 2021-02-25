@@ -2,6 +2,7 @@ package fake
 
 import (
 	"encoding/json"
+	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -61,6 +62,20 @@ func (r *RunnersList) handleRemove() http.HandlerFunc {
 			}
 		}
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func (r *RunnersList) Sync(runners []v1alpha1.Runner) {
+	r.runners = nil
+
+	for i, want := range runners {
+		r.Add(&github.Runner{
+			ID:     github.Int64(int64(i)),
+			Name:   github.String(want.Name),
+			OS:     github.String("linux"),
+			Status: github.String("online"),
+			Busy:   github.Bool(false),
+		})
 	}
 }
 
