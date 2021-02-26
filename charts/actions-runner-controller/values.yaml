@@ -11,7 +11,8 @@ syncPeriod: 10m
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:
-  enabled: false
+  create: true
+  name: "controller-manager"
   ### GitHub Apps Configuration
   #github_app_id: ""
   #github_app_installation_id: ""
@@ -21,8 +22,7 @@ authSecret:
 
 image:
   repository: summerwind/actions-runner-controller
-  # Overrides the manager image tag whose default is the chart appVersion if the tag key is commented out
-  tag: "latest"
+  tag: "v0.17.0"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 
@@ -46,10 +46,12 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext: {}
+podSecurityContext:
+  {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  {}
   # capabilities:
   #   drop:
   #   - ALL
@@ -61,20 +63,8 @@ service:
   type: ClusterIP
   port: 443
 
-ingress:
-  enabled: false
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths: []
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
-
-resources: {}
+resources:
+  {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
@@ -104,7 +94,8 @@ affinity: {}
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-env: {}
+env:
+  {}
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
@@ -115,14 +106,10 @@ githubWebhookServer:
   replicaCount: 1
   syncPeriod: 10m
   secret:
-    enabled: false
+    create: true
+    name: "github-webhook-server"
     ### GitHub Webhook Configuration
     #github_webhook_secret_token: ""
-  image:
-    repository: summerwind/actions-runner-controller
-    # Overrides the manager image tag whose default is the chart appVersion if the tag key is commented out
-    tag: "latest"
-    pullPolicy: IfNotPresent
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""
@@ -144,10 +131,23 @@ githubWebhookServer:
   affinity: {}
   priorityClassName: ""
   service:
-    type: NodePort
+    type: ClusterIP
     ports:
-    - port: 80
-      targetPort: http
-      protocol: TCP
-      name: http
-      #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+  ingress:
+    enabled: false
+    annotations:
+      {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
