@@ -349,7 +349,7 @@ spec:
 
 **PercentageRunnersBusy**
 
-This metric the HorizontalRunnerAutoscaler will pole GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment namespace and scale based on the settings
+The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
 
 **Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
 **Helm Config :** `syncPeriod`
