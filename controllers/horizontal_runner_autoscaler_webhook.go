@@ -371,8 +371,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 		return nil
 	}
 
-	log := autoscaler.Log.WithValues("horizontalrunnerautoscaler", target.HorizontalRunnerAutoscaler.Name)
-
 	copy := target.HorizontalRunnerAutoscaler.DeepCopy()
 
 	amount := 1
@@ -388,10 +386,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 		Replicas:       amount,
 	})
 
-	if err := autoscaler.Client.Update(ctx, copy); err != nil {
-		log.Error(err, "Failed to update horizontalrunnerautoscaler resource")
-
-		return err
+	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
+		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
 	}
 
 	return nil

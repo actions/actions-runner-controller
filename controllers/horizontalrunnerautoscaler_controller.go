@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/github"
@@ -123,10 +124,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		copy := rd.DeepCopy()
 		copy.Spec.Replicas = &newDesiredReplicas
 
-		if err := r.Client.Update(ctx, copy); err != nil {
-			log.Error(err, "Failed to update runnerderployment resource")
-
-			return ctrl.Result{}, err
+		if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
 		}
 	}
 
@@ -167,10 +166,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 	}
 
 	if updated != nil {
-		if err := r.Status().Update(ctx, updated); err != nil {
-			log.Error(err, "Failed to update horizontalrunnerautoscaler status")
-
-			return ctrl.Result{}, err
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(&hra)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("patching horizontalrunnerautoscaler status to add cache entry: %w", err)
 		}
 	}
 
