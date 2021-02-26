@@ -216,11 +216,10 @@ var _ = Context("Inside of a new namespace", func() {
 				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
 
 				Eventually(
-					func() int {
+					func() (int, error) {
 						selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
 						if err != nil {
-							logf.Log.Error(err, "failed to get RunnerDeployment selector")
-							return -1
+							return 0, err
 						}
 						err = k8sClient.List(
 							ctx,
@@ -229,15 +228,13 @@ var _ = Context("Inside of a new namespace", func() {
 							client.MatchingLabelsSelector{Selector: selector},
 						)
 						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-							return -1
+							return 0, err
 						}
 						if len(runnerSets.Items) != 1 {
-							logf.Log.Info("runnerreplicasets is not 1")
-							return -1
+							return 0, fmt.Errorf("runnerreplicasets is not 1 but %d", len(runnerSets.Items))
 						}
 
-						return *runnerSets.Items[0].Spec.Replicas
+						return *runnerSets.Items[0].Spec.Replicas, nil
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
 			}
