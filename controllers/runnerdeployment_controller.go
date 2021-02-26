@@ -310,12 +310,18 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 	labels := CloneAndAddLabel(rd.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
 	labels = CloneAndAddLabel(labels, "runner-deployment-name", rd.Name)
 
+	for _, l := range r.CommonRunnerLabels {
+		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
+	}
+
 	selector := rd.Spec.Selector
 	if selector == nil {
 		selector = &metav1.LabelSelector{MatchLabels: labels}
 	}
 
 	newRSSelector := CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
+
+	newRSTemplate.Labels = labels
 
 	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
