@@ -149,13 +149,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 			updated = hra.DeepCopy()
 		}
 
-		var cacheEntries []v1alpha1.CacheEntry
-
-		for _, ent := range updated.Status.CacheEntries {
-			if ent.ExpirationTime.Before(&metav1.Time{Time: now}) {
-				cacheEntries = append(cacheEntries, ent)
-			}
-		}
+		cacheEntries := getValidCacheEntries(updated, now)
 
 		var cacheDuration time.Duration
 
@@ -181,6 +175,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func getValidCacheEntries(hra *v1alpha1.HorizontalRunnerAutoscaler, now time.Time) []v1alpha1.CacheEntry {
+	var cacheEntries []v1alpha1.CacheEntry
+
+	for _, ent := range hra.Status.CacheEntries {
+		if ent.ExpirationTime.After(now) {
+			cacheEntries = append(cacheEntries, ent)
+		}
+	}
+
+	return cacheEntries
 }
 
 func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
