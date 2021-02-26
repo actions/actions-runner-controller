@@ -10,8 +10,8 @@ ToC:
 - [Installation](#installation)
   - [GitHub Enterprise support](#github-enterprise-support)
 - [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
-  - [Using GitHub App](#using-github-app)
-  - [Using Personal AccessToken ](#using-personal-access-token)
+  - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
+  - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
@@ -44,14 +44,14 @@ Install the custom resource and actions-runner-controller with `kubectl` or `hel
 
 `kubectl`:
 
-```
+```shell
 # REPLACE "v0.16.1" with the latest release
 kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.16.1/actions-runner-controller.yaml
 ```
 
 `helm`:
 
-```
+```shell
 helm repo add actions-runner-controller https://summerwind.github.io/actions-runner-controller
 helm upgrade --install -n actions-runner-system actions-runner-controller/actions-runner-controller
 ```
@@ -61,8 +61,7 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
 Authentication works same way as with public Github (repo and organization level).
 The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-In most cases maintainers do not have environment where to test changes and are reliant on the community for testing.
-
+__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so are reliant on the community for testing, support is a best endeavors basis only and is community driven**__
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -108,20 +107,14 @@ spec:
 
 ## Setting up authentication with GitHub API
 
-There are two ways for actions-runner-controller to authenticate with the GitHub API:
+There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
 1. Using GitHub App.
 2. Using Personal Access Token.
 
-Regardless of which authentication method you use, the same permissions are required, those permissions are:
-- Repository: Administration (read/write)
-- Repository: Actions (read)
-- Organization: Self-hosted runners (read/write)
+Functionality wise there isn't a difference between the 2 authentication methods. There are however some benefits to using a GitHub App for authentication over a PAT such as an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps), if you run into rate limiting consider deploying this solution using GitHub App authentication instead.
 
-
-**NOTE: It is extremely important to only follow one of the sections below and not both.**
-
-### Using GitHub App
+### Deploying using GitHub App Authentication
 
 You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
@@ -158,19 +151,29 @@ $ kubectl create secret generic controller-manager \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
 
-### Using Personal Access Token
+### Deploying using PAT Authentication
 
-From an account that has `admin` privileges for the repository, create a [personal access token](https://github.com/settings/tokens) with `repo` scope. This token is used to register a self-hosted runner by *actions-runner-controller*.
+Personal Acess Token can be used to register a self-hosted runner by *actions-runner-controller*.
 
-Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). This token is used to register a self-hosted runner by *actions-runner-controller*.
+Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). How you plan on using the runner will affect what scopes are needed for the token.
 
-For adding a runner to a repository, the token should have `repo` scope. If the runner should be added to an organization, the token should have `admin:org` scope. Note that to use a Personal Access Token, you must issue the token with an account that has `admin` privileges (on the repository and/or the organization).
+Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
-Open the Create Token page from the following link, grant the `repo` and/or `admin:org` scope, and press the "Generate Token" button at the bottom of the page to create the token.
+**Scopes for a Repository Runner**
 
-- [Create personal access token](https://github.com/settings/tokens/new)
+* repo (Full control)
 
-Register the created token (`GITHUB_TOKEN`) as a Kubernetes secret.
+**Scopes for a Organisation Runner**
+
+* repo (Full control)
+* admin:org (Full control)
+* admin:public_key - read:public_key
+* admin:repo_hook - read:repo_hook
+* admin:org_hook
+* notifications
+* workflow
+
+Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
 
 ```shell
 kubectl create secret generic controller-manager \
@@ -185,7 +188,7 @@ There are two ways to use this controller:
 - Manage runners one by one with `Runner`.
 - Manage a set of runners with `RunnerDeployment`.
 
-### Repository runners
+### Repository Runners
 
 To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
@@ -283,9 +286,33 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 #### Autoscaling
 
-`RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields, depending on pending workflow runs.
+A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
-In the below example, `actions-runner` checks for pending workflow runs for each sync period, and scale to e.g. 3 if there're 3 pending jobs at sync time.
+**Scaling Metrics**
+
+**TotalNumberOfQueuedAndInProgressWorkflowRuns**
+
+In the below example, `actions-runner` will pole GitHub for all pending workflows with the pole period defined by the sync period configuration. It will then scale to e.g. 3 if there're 3 pending jobs at sync time.
+With this scaling metric we are required to define a list of repositories within our metric.
+
+The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API.
+
+**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch
+**Helm Config :** `syncPeriod`
+
+**Benefits of this metric**
+1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
+2. Scales quickly (within the bounds of the syncPeriod) as it will spin up the number of runners based on the depth of the workflow queue
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels).
+
+**Drawbacks of this metric**
+1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
+2. May not scale quick enough for some users needs
+3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
+
+
+Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`
+
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -312,38 +339,34 @@ spec:
     - summerwind/actions-runner-controller
 ```
 
-The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is 10 minutes to prevent unconfigured deployments rate limiting themselves from the GitHub API. The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch for those that are building the solution via the kustomize setup.
-
-Additionally, the autoscaling feature has an anti-flapping option that prevents periodic loop of scaling up and down.
-By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured by setting `scaleDownDelaySecondsAfterScaleUp`:
+Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
+By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured however by adding the setting `scaleDownDelaySecondsAfterScaleUp` in the `HorizontalRunnerAutoscaler` `spec`:
 
 ```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runner-deployment
 spec:
-  template:
-    spec:
-      repository: summerwind/actions-runner-controller
----
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: HorizontalRunnerAutoscaler
-metadata:
-  name: example-runner-deployment-autoscaler
-spec:
-  scaleTargetRef:
-    name: example-runner-deployment
-  minReplicas: 1
-  maxReplicas: 3
   scaleDownDelaySecondsAfterScaleOut: 60
-  metrics:
-  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
-    repositoryNames:
-    - summerwind/actions-runner-controller
 ```
 
-If you do not want to manage an explicit list of repositories to scale, an alternate autoscaling scheme that can be applied is the PercentageRunnersBusy scheme. The number of desired pods are evaulated by checking how many runners are currently busy and applying a scaleup or scale down factor if certain thresholds are met. By setting the metric type to PercentageRunnersBusy, the HorizontalRunnerAutoscaler will query github for the number of busy runners which live in the RunnerDeployment namespace. Scaleup and scaledown thresholds are the percentage of busy runners at which the number of desired runners are re-evaluated. Scaleup and scaledown factors are the multiplicative factor applied to the current number of runners used to calculate the number of desired runners. This scheme is also especially useful if you want multiple controllers in various clusters, each responsible for scaling their own runner pods per namespace.
+**PercentageRunnersBusy**
+
+This metric the HorizontalRunnerAutoscaler will pole GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment namespace and scale based on the settings
+
+**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch
+**Helm Config :** `syncPeriod`
+
+**Benefits of this metric**
+1. Allows for multiple controllers to be deployed as each controller deployed is responsible for scaling their own runner pods on a per namespace basis.
+2. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
+3. Supports github organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+4. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
+5. Supports scaling runner count on both a percentage increase / descrease basis as well as on a fixed runner count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
+
+**Drawbacks of this metric**
+1. May not scale quick enough for some users needs as we are scaling up and down based on indicative information rather than a direct count of the workflow queue depth
+
+
+Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
+
 
 ```yaml
 ---
@@ -356,13 +379,38 @@ spec:
     name: example-runner-deployment
   minReplicas: 1
   maxReplicas: 3
-  scaleDownDelaySecondsAfterScaleOut: 60
   metrics:
   - type: PercentageRunnersBusy
-    scaleUpThreshold: '0.75'
-    scaleDownThreshold: '0.3'
-    scaleUpFactor: '1.4'
-    scaleDownFactor: '0.7'
+    scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
+    scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
+    scaleUpFactor: '1.4'        # The scale up multiplier factor applied to desired count
+    scaleDownFactor: '0.7'      # The scale down multiplier factor applied to desired count
+```
+
+```yaml
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
+    scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
+    ScaleUpAdjustment: '2'      # The scale up runner count added to desired count
+    ScaleDownAdjustment: '1'    # The scale down runner count subtracted from the desired count
+```
+
+Like the previous metric, the scale down factor respects the anti-flapping configuration is applied to the `HorizontalRunnerAutoscaler` as mentioned previously:
+
+```yaml
+spec:
+  scaleDownDelaySecondsAfterScaleOut: 60
 ```
 
 #### Faster Autoscaling with GitHub Webhook
@@ -531,20 +579,20 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
-
       # Timeout after a node crashed or became unreachable to evict your pods somewhere else (default 5mins)
       tolerations:
         - key: "node.kubernetes.io/unreachable"
           operator: "Exists"
           effect: "NoExecute"
           tolerationSeconds: 10
-
+      # true (default) = A privileged docker sidecar container is included in the runner pod.
+      # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
-      # If set to true, runner pod container only 1 container that's expected to be able to run docker, too.
-      # image summerwind/actions-runner-dind or custom one should be used with true -value
-      dockerdWithinRunnerContainer: false
-      # Valid if dockerdWithinRunnerContainer is not true
+      # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
+      # true = No docker sidecar container is deployed in the runner pod but docker can be used within teh runner container instead. The image summerwind/actions-runner-dind is used by default.
+      dockerdWithinRunnerContainer: true
+      # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
           cpu: "4.0"
@@ -552,6 +600,7 @@ spec:
         requests:
           cpu: "2.0"
           memory: "4Gi"
+      # Additional N number of sidecar containers
       sidecarContainers:
         - name: mysql
           image: mysql:5.7
@@ -560,8 +609,8 @@ spec:
               value: abcd1234
           securityContext:
             runAsUser: 0
-      # if workDir is not specified, the default working directory is /runner/_work
-      # this setting allows you to customize the working directory location
+      # workDir if not specified (default = /runner/_work)
+      # You can customise this setting allowing you to change the default working directory location
       # for example, the below setting is the same as on the ubuntu-18.04 image
       workDir: /home/runner/work
 ```
@@ -739,9 +788,11 @@ NAME=$DOCKER_USER/actions-runner-controller \
 The following is a list of alternative solutions that may better fit you depending on your use-case:
 
 - <https://github.com/evryfs/github-actions-runner-operator/>
+- <https://github.com/philips-labs/terraform-aws-github-runner/>
 
 Although the situation can change over time, as of writing this sentence, the benefits of using `actions-runner-controller` over the alternatives are:
 
 - `actions-runner-controller` has the ability to autoscale runners based on number of pending/progressing jobs (#99)
 - `actions-runner-controller` is able to gracefully stop runners (#103)
 - `actions-runner-controller` has ARM support
+- `actions-runner-controller` has GitHub Enterprise support (see [GitHub Enterprise support](#github-enterprise-support) section for caveats)
