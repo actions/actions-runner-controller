@@ -45,8 +45,8 @@ Install the custom resource and actions-runner-controller with `kubectl` or `hel
 `kubectl`:
 
 ```shell
-# REPLACE "v0.16.1" with the latest release
-kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.16.1/actions-runner-controller.yaml
+# REPLACE "v0.17.0" with the version you wish to deploy
+kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.17.0/actions-runner-controller.yaml
 ```
 
 `helm`:
@@ -297,7 +297,7 @@ With this scaling metric we are required to define a list of repositories within
 
 The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API.
 
-**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch
+**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
@@ -340,7 +340,7 @@ spec:
 ```
 
 Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
-By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured however by adding the setting `scaleDownDelaySecondsAfterScaleUp` in the `HorizontalRunnerAutoscaler` `spec`:
+By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured however by adding the setting `scaleDownDelaySecondsAfterScaleOut` in the `HorizontalRunnerAutoscaler` `spec`:
 
 ```yaml
 spec:
@@ -349,9 +349,9 @@ spec:
 
 **PercentageRunnersBusy**
 
-This metric the HorizontalRunnerAutoscaler will pole GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment namespace and scale based on the settings
+The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
 
-**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch
+**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
