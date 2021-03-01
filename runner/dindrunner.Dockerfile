@@ -21,6 +21,7 @@ RUN apt update \
     netcat \
     openssh-client \
     parallel \
+    python-is-python3 \
     rsync \
     shellcheck \
     sudo \

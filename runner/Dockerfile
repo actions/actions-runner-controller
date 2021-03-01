@@ -37,6 +37,7 @@ RUN apt update -y \
   wget \
   zip \
   zstd \
+  && cd /usr/bin && ln -sf python3 python \
   && rm -rf /var/lib/apt/lists/*
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
