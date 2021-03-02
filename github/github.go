@@ -211,8 +211,6 @@ func (c *Client) listRunners(ctx context.Context, enterprise, org, repo string, 
 }
 
 func (c *Client) ListRepositoryWorkflowRuns(ctx context.Context, user string, repoName string) ([]*github.WorkflowRun, error) {
-	c.Client.Actions.ListRepositoryWorkflowRuns(ctx, user, repoName, nil)
-
 	queued, err := c.listRepositoryWorkflowRuns(ctx, user, repoName, "queued")
 	if err != nil {
 		return nil, fmt.Errorf("listing queued workflow runs: %w", err)
@@ -232,8 +230,6 @@ func (c *Client) ListRepositoryWorkflowRuns(ctx context.Context, user string, re
 }
 
 func (c *Client) listRepositoryWorkflowRuns(ctx context.Context, user string, repoName, status string) ([]*github.WorkflowRun, error) {
-	c.Client.Actions.ListRepositoryWorkflowRuns(ctx, user, repoName, nil)
-
 	var workflowRuns []*github.WorkflowRun
 
 	opts := github.ListWorkflowRunsOptions{
