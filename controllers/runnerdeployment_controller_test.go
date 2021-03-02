@@ -132,7 +132,7 @@ var _ = Context("Inside of a new namespace", func() {
 	Describe("when no existing resources exist", func() {
 
 		It("should create a new RunnerReplicaSet resource from the specified template, add a another RunnerReplicaSet on template modification, and eventually removes old runnerreplicasets", func() {
-			name := "example-runnerdeploy"
+			name := "example-runnerdeploy-1"
 
 			{
 				rs := &actionsv1alpha1.RunnerDeployment{
@@ -171,11 +171,10 @@ var _ = Context("Inside of a new namespace", func() {
 				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
 
 				Eventually(
-					func() int {
+					func() (int, error) {
 						selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
 						if err != nil {
-							logf.Log.Error(err, "failed to get test RunnerReplicaSet resource")
-							return -1
+							return 0, err
 						}
 						err = k8sClient.List(
 							ctx,
@@ -184,15 +183,109 @@ var _ = Context("Inside of a new namespace", func() {
 							client.MatchingLabelsSelector{Selector: selector},
 						)
 						if err != nil {
-							logf.Log.Error(err, "list runner sets")
-							return -1
+							return 0, err
 						}
 						if len(runnerSets.Items) != 1 {
-							logf.Log.Info("runnerreplicasets is not 1")
-							return -1
+							return 0, fmt.Errorf("runnerreplicasets is not 1 but %d", len(runnerSets.Items))
 						}
 
-						return *runnerSets.Items[0].Spec.Replicas
+						return *runnerSets.Items[0].Spec.Replicas, nil
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
+			}
+
+			{
+				// We wrap the update in the Eventually block to avoid the below error that occurs due to concurrent modification
+				// made by the controller to update .Status.AvailableReplicas and .Status.ReadyReplicas
+				//   Operation cannot be fulfilled on runnersets.actions.summerwind.dev "example-runnerset": the object has been modified; please apply your changes to the latest version and try again
+				var rd actionsv1alpha1.RunnerDeployment
+				Eventually(func() error {
+					err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: name}, &rd)
+					if err != nil {
+						return fmt.Errorf("failed to get test RunnerReplicaSet resource: %v\n", err)
+					}
+					rd.Spec.Replicas = intPtr(2)
+
+					return k8sClient.Update(ctx, &rd)
+				},
+					time.Second*1, time.Millisecond*500).Should(BeNil())
+
+				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+				Eventually(
+					func() (int, error) {
+						selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
+						if err != nil {
+							return 0, err
+						}
+						err = k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+							client.MatchingLabelsSelector{Selector: selector},
+						)
+						if err != nil {
+							return 0, err
+						}
+						if len(runnerSets.Items) != 1 {
+							return 0, fmt.Errorf("runnerreplicasets is not 1 but %d", len(runnerSets.Items))
+						}
+
+						return *runnerSets.Items[0].Spec.Replicas, nil
+					},
+					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
+			}
+		})
+
+		It("should create a new RunnerReplicaSet resource from the specified template without labels and selector, add a another RunnerReplicaSet on template modification, and eventually removes old runnerreplicasets", func() {
+			name := "example-runnerdeploy-2"
+
+			{
+				rs := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Template: actionsv1alpha1.RunnerTemplate{
+							Spec: actionsv1alpha1.RunnerSpec{
+								Repository: "foo/bar",
+								Image:      "bar",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "FOOVALUE"},
+								},
+							},
+						},
+					},
+				}
+
+				err := k8sClient.Create(ctx, rs)
+
+				Expect(err).NotTo(HaveOccurred(), "failed to create test RunnerReplicaSet resource")
+
+				runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+				Eventually(
+					func() (int, error) {
+						selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+						if err != nil {
+							return 0, err
+						}
+						err = k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+							client.MatchingLabelsSelector{Selector: selector},
+						)
+						if err != nil {
+							return 0, err
+						}
+						if len(runnerSets.Items) != 1 {
+							return 0, fmt.Errorf("runnerreplicasets is not 1 but %d", len(runnerSets.Items))
+						}
+
+						return *runnerSets.Items[0].Spec.Replicas, nil
 					},
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(1))
 			}

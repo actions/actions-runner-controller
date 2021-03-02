@@ -45,6 +45,7 @@ spec:
               type: integer
             selector:
               description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+              nullable: true
               properties:
                 matchExpressions:
                   description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -1571,7 +1572,6 @@ spec:
                   type: object
               type: object
           required:
-            - selector
             - template
           type: object
         status:

@@ -75,12 +75,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
 	var myRunnerReplicaSetList v1alpha1.RunnerReplicaSetList
-	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
+	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -308,20 +304,18 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
 	labels := CloneAndAddLabel(rd.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
-	labels = CloneAndAddLabel(labels, "runner-deployment-name", rd.Name)
 
 	for _, l := range r.CommonRunnerLabels {
 		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
 	}
 
+	newRSTemplate.Labels = labels
+
 	selector := rd.Spec.Selector
 	if selector == nil {
 		selector = &metav1.LabelSelector{MatchLabels: labels}
 	}
-
 	newRSSelector := CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
-
-	newRSTemplate.Labels = labels
 
 	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
