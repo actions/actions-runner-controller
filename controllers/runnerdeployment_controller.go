@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"reflect"
 	"sort"
 	"time"
 
@@ -140,6 +141,24 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 		// We requeue in order to clean up old runner replica sets later.
 		// Otherwise, they aren't cleaned up until the next re-sync interval.
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	if !reflect.DeepEqual(newestSet.Spec.Selector, desiredRS.Spec.Selector) {
+		// A selector update change doesn't trigger replicaset replacement,
+		// but we still need to update the existing replicaset with it.
+		// Otherwise selector-based runner query will never work on replicasets created before the controller v0.17.0
+		// See https://github.com/summerwind/actions-runner-controller/pull/355#discussion_r585379259
+		if err := r.Client.Update(ctx, desiredRS); err != nil {
+			log.Error(err, "Failed to update runnerreplicaset resource")
+
+			return ctrl.Result{}, err
+		}
+
+		// At this point, we are already sure that there's no need to create a new replicaset thanks
+		// as the runner template hash is not changed.
+		// But we still need to requeue for the (possibly rare) cases that there are still old replicasets that needs
+		// to be cleaned up.
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
