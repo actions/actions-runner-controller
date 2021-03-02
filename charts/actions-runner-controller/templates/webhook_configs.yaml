@@ -20,6 +20,7 @@ webhooks:
       path: /mutate-actions-summerwind-dev-v1alpha1-runner
   failurePolicy: Fail
   name: mutate.runner.actions.summerwind.dev
+  sideEffects: None
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -38,6 +39,7 @@ webhooks:
       path: /mutate-actions-summerwind-dev-v1alpha1-runnerdeployment
   failurePolicy: Fail
   name: mutate.runnerdeployment.actions.summerwind.dev
+  sideEffects: None
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -56,6 +58,7 @@ webhooks:
       path: /mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset
   failurePolicy: Fail
   name: mutate.runnerreplicaset.actions.summerwind.dev
+  sideEffects: None
   rules:
   - apiGroups:
     - actions.summerwind.dev
