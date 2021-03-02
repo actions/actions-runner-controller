@@ -21,6 +21,7 @@ webhooks:
   failurePolicy: Fail
   name: mutate.runner.actions.summerwind.dev
   sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -40,6 +41,7 @@ webhooks:
   failurePolicy: Fail
   name: mutate.runnerdeployment.actions.summerwind.dev
   sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -59,6 +61,7 @@ webhooks:
   failurePolicy: Fail
   name: mutate.runnerreplicaset.actions.summerwind.dev
   sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -91,6 +94,8 @@ webhooks:
       path: /validate-actions-summerwind-dev-v1alpha1-runner
   failurePolicy: Fail
   name: validate.runner.actions.summerwind.dev
+  sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -109,6 +114,8 @@ webhooks:
       path: /validate-actions-summerwind-dev-v1alpha1-runnerdeployment
   failurePolicy: Fail
   name: validate.runnerdeployment.actions.summerwind.dev
+  sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
   rules:
   - apiGroups:
     - actions.summerwind.dev
@@ -127,6 +134,8 @@ webhooks:
       path: /validate-actions-summerwind-dev-v1alpha1-runnerreplicaset
   failurePolicy: Fail
   name: validate.runnerreplicaset.actions.summerwind.dev
+  sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
   rules:
   - apiGroups:
     - actions.summerwind.dev
