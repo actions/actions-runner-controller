@@ -69,9 +69,54 @@ func TestNewRunnerReplicaSet(t *testing.T) {
 		t.Errorf("foo label does not exist")
 	}
 
+	hash1, ok := rs.Labels[LabelKeyRunnerTemplateHash]
+	if !ok {
+		t.Errorf("missing runner-template-hash label")
+	}
+
 	runnerLabel := []string{"project1", "dev"}
 	if d := cmp.Diff(runnerLabel, rs.Spec.Template.Spec.Labels); d != "" {
 		t.Errorf("%s", d)
+	}
+
+	rd2 := rd.DeepCopy()
+	rd2.Spec.Template.Spec.Labels = []string{"project2"}
+
+	rs2, err := r.newRunnerReplicaSet(*rd2)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	hash2, ok := rs2.Labels[LabelKeyRunnerTemplateHash]
+	if !ok {
+		t.Errorf("missing runner-template-hash label")
+	}
+
+	if hash1 == hash2 {
+		t.Errorf(
+			"runner replica sets from runner deployments with varying labels must have different template hash, but got %s and %s",
+			hash1, hash2,
+		)
+	}
+
+	rd3 := rd.DeepCopy()
+	rd3.Spec.Template.Labels["foo"] = "baz"
+
+	rs3, err := r.newRunnerReplicaSet(*rd3)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	hash3, ok := rs3.Labels[LabelKeyRunnerTemplateHash]
+	if !ok {
+		t.Errorf("missing runner-template-hash label")
+	}
+
+	if hash1 == hash3 {
+		t.Errorf(
+			"runner replica sets from runner deployments with varying meta labels must have different template hash, but got %s and %s",
+			hash1, hash3,
+		)
 	}
 }
 
