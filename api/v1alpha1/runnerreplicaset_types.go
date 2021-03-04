@@ -26,6 +26,8 @@ type RunnerReplicaSetSpec struct {
 	// +nullable
 	Replicas *int `json:"replicas,omitempty"`
 
+	// +optional
+	// +nullable
 	Selector *metav1.LabelSelector `json:"selector"`
 	Template RunnerTemplate        `json:"template"`
 }

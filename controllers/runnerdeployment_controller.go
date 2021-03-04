@@ -145,11 +145,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	}
 
 	if !reflect.DeepEqual(newestSet.Spec.Selector, desiredRS.Spec.Selector) {
+		updateSet := newestSet.DeepCopy()
+		updateSet.Spec = *desiredRS.Spec.DeepCopy()
+
 		// A selector update change doesn't trigger replicaset replacement,
 		// but we still need to update the existing replicaset with it.
 		// Otherwise selector-based runner query will never work on replicasets created before the controller v0.17.0
 		// See https://github.com/summerwind/actions-runner-controller/pull/355#discussion_r585379259
-		if err := r.Client.Update(ctx, desiredRS); err != nil {
+		if err := r.Client.Update(ctx, updateSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
 
 			return ctrl.Result{}, err
