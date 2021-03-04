@@ -322,12 +322,17 @@ func CloneSelectorAndAddLabel(selector *metav1.LabelSelector, labelKey, labelVal
 }
 
 func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment) (*v1alpha1.RunnerReplicaSet, error) {
+	return newRunnerReplicaSet(&rd, r.CommonRunnerLabels, r.Scheme)
+}
+
+func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []string, scheme *runtime.Scheme) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
+
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
 	labels := CloneAndAddLabel(rd.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
 
-	for _, l := range r.CommonRunnerLabels {
+	for _, l := range commonRunnerLabels {
 		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
 	}
 
@@ -353,7 +358,7 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 		},
 	}
 
-	if err := ctrl.SetControllerReference(&rd, &rs, r.Scheme); err != nil {
+	if err := ctrl.SetControllerReference(rd, &rs, scheme); err != nil {
 		return &rs, err
 	}
 

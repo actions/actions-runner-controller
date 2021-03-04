@@ -332,5 +332,103 @@ var _ = Context("Inside of a new namespace", func() {
 					time.Second*5, time.Millisecond*500).Should(BeEquivalentTo(2))
 			}
 		})
+
+		It("should adopt RunnerReplicaSet created before 0.18.0 to have Spec.Selector", func() {
+			name := "example-runnerdeploy-2"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Template: actionsv1alpha1.RunnerTemplate{
+							Spec: actionsv1alpha1.RunnerSpec{
+								Repository: "foo/bar",
+								Image:      "bar",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "FOOVALUE"},
+								},
+							},
+						},
+					},
+				}
+
+				createRDErr := k8sClient.Create(ctx, rd)
+				Expect(createRDErr).NotTo(HaveOccurred(), "failed to create test RunnerReplicaSet resource")
+
+				Eventually(
+					func() (int, error) {
+						runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+						err := k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+						)
+						if err != nil {
+							return 0, err
+						}
+
+						return len(runnerSets.Items), nil
+					},
+					time.Second*1, time.Millisecond*500).Should(BeEquivalentTo(1))
+
+				var rs17 *actionsv1alpha1.RunnerReplicaSet
+
+				Consistently(
+					func() (*metav1.LabelSelector, error) {
+						runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+						err := k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+						)
+						if err != nil {
+							return nil, err
+						}
+						if len(runnerSets.Items) != 1 {
+							return nil, fmt.Errorf("runnerreplicasets is not 1 but %d", len(runnerSets.Items))
+						}
+
+						rs17 = &runnerSets.Items[0]
+
+						return runnerSets.Items[0].Spec.Selector, nil
+					},
+					time.Second*1, time.Millisecond*500).Should(Not(BeNil()))
+
+				// We simulate the old, pre 0.18.0 RunnerReplicaSet by updating it.
+				// I've tried to use controllerutil.Set{Owner,Controller}Reference and k8sClient.Create(rs17)
+				// but it didn't work due to missing RD UID, where UID is generated on K8s API server on k8sCLient.Create(rd)
+				rs17.Spec.Selector = nil
+
+				updateRSErr := k8sClient.Update(ctx, rs17)
+				Expect(updateRSErr).NotTo(HaveOccurred())
+
+				Eventually(
+					func() (*metav1.LabelSelector, error) {
+						runnerSets := actionsv1alpha1.RunnerReplicaSetList{Items: []actionsv1alpha1.RunnerReplicaSet{}}
+
+						err := k8sClient.List(
+							ctx,
+							&runnerSets,
+							client.InNamespace(ns.Name),
+						)
+						if err != nil {
+							return nil, err
+						}
+						if len(runnerSets.Items) != 1 {
+							return nil, fmt.Errorf("runnerreplicasets is not 1 but %d", len(runnerSets.Items))
+						}
+
+						return runnerSets.Items[0].Spec.Selector, nil
+					},
+					time.Second*1, time.Millisecond*500).Should(Not(BeNil()))
+			}
+		})
+
 	})
 })
