@@ -21,7 +21,7 @@ ToC:
   - [Runner with DinD](#runner-with-dind)
   - [Additional tweaks](#additional-tweaks)
   - [Runner labels](#runner-labels)
-  - [Runer groups](#runner-groups)
+  - [Runner groups](#runner-groups)
   - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
   - [Software installed in the runner image](#software-installed-in-the-runner-image)
   - [Common errors](#common-errors)
