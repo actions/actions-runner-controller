@@ -158,8 +158,9 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			return ctrl.Result{}, err
 		}
 
-		// At this point, we are already sure that there's no need to create a new replicaset thanks
+		// At this point, we are already sure that there's no need to create a new replicaset
 		// as the runner template hash is not changed.
+		//
 		// But we still need to requeue for the (possibly rare) cases that there are still old replicasets that needs
 		// to be cleaned up.
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
