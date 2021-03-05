@@ -296,27 +296,46 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 	if err != nil {
 		return nil, err
 	}
-	numRunners := len(runnerList.Items)
-	numRunnersBusy := 0
+
+	var desiredReplicasBefore int
+
+	if v := rd.Spec.Replicas; v == nil {
+		desiredReplicasBefore = 1
+	} else {
+		desiredReplicasBefore = *v
+	}
+
+	var (
+		numRunners           int
+		numRunnersRegistered int
+		numRunnersBusy       int
+	)
+
+	numRunners = len(runnerList.Items)
+
 	for _, runner := range runners {
-		if _, ok := runnerMap[*runner.Name]; ok && runner.GetBusy() {
-			numRunnersBusy++
+		if _, ok := runnerMap[*runner.Name]; ok {
+			numRunnersRegistered++
+
+			if runner.GetBusy() {
+				numRunnersBusy++
+			}
 		}
 	}
 
 	var desiredReplicas int
-	fractionBusy := float64(numRunnersBusy) / float64(numRunners)
+	fractionBusy := float64(numRunnersBusy) / float64(desiredReplicasBefore)
 	if fractionBusy >= scaleUpThreshold {
 		if scaleUpAdjustment > 0 {
-			desiredReplicas = numRunners + scaleUpAdjustment
+			desiredReplicas = desiredReplicasBefore + scaleUpAdjustment
 		} else {
-			desiredReplicas = int(math.Ceil(float64(numRunners) * scaleUpFactor))
+			desiredReplicas = int(math.Ceil(float64(desiredReplicasBefore) * scaleUpFactor))
 		}
 	} else if fractionBusy < scaleDownThreshold {
 		if scaleDownAdjustment > 0 {
-			desiredReplicas = numRunners - scaleDownAdjustment
+			desiredReplicas = desiredReplicasBefore - scaleDownAdjustment
 		} else {
-			desiredReplicas = int(float64(numRunners) * scaleDownFactor)
+			desiredReplicas = int(float64(desiredReplicasBefore) * scaleDownFactor)
 		}
 	} else {
 		desiredReplicas = *rd.Spec.Replicas
@@ -328,13 +347,19 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		desiredReplicas = maxReplicas
 	}
 
+	// NOTES for operators:
+	//
+	// - num_runners can be as twice as large as replicas_desired_before while
+	//   the runnerdeployment controller is replacing RunnerReplicaSet for runner update.
+
 	r.Log.V(1).Info(
 		"Calculated desired replicas",
-		"computed_replicas_desired", desiredReplicas,
-		"spec_replicas_min", minReplicas,
-		"spec_replicas_max", maxReplicas,
-		"current_replicas", rd.Spec.Replicas,
+		"replicas_min", minReplicas,
+		"replicas_max", maxReplicas,
+		"replicas_desired_before", desiredReplicasBefore,
+		"replicas_desired", desiredReplicas,
 		"num_runners", numRunners,
+		"num_runners_registered", numRunnersRegistered,
 		"num_runners_busy", numRunnersBusy,
 		"namespace", hra.Namespace,
 		"runner_deployment", rd.Name,
