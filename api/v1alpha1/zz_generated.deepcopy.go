@@ -22,6 +22,7 @@ package v1alpha1
 
 import (
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -403,6 +404,11 @@ func (in *RunnerDeploymentSpec) DeepCopyInto(out *RunnerDeploymentSpec) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.Selector != nil {
+		in, out := &in.Selector, &out.Selector
+		*out = new(metav1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
 	in.Template.DeepCopyInto(&out.Template)
 }
 
@@ -534,6 +540,11 @@ func (in *RunnerReplicaSetSpec) DeepCopyInto(out *RunnerReplicaSetSpec) {
 		in, out := &in.Replicas, &out.Replicas
 		*out = new(int)
 		**out = **in
+	}
+	if in.Selector != nil {
+		in, out := &in.Selector, &out.Selector
+		*out = new(metav1.LabelSelector)
+		(*in).DeepCopyInto(*out)
 	}
 	in.Template.DeepCopyInto(&out.Template)
 }

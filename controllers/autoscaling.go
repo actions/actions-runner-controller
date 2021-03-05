@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -257,11 +259,23 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		scaleDownFactor = sdf
 	}
 
-	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
-	var runnerList v1alpha1.RunnerList
-	if err := r.List(ctx, &runnerList, client.InNamespace(rd.Namespace)); err != nil {
+	selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
+	if err != nil {
 		return nil, err
 	}
+	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
+	var runnerList v1alpha1.RunnerList
+	if err := r.List(
+		ctx,
+		&runnerList,
+		client.InNamespace(rd.Namespace),
+		client.MatchingLabelsSelector{Selector: selector},
+	); err != nil {
+		if !kerrors.IsNotFound(err) {
+			return nil, err
+		}
+	}
+
 	runnerMap := make(map[string]struct{})
 	for _, items := range runnerList.Items {
 		runnerMap[items.Name] = struct{}{}

@@ -68,8 +68,18 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
+	selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// Get the Runners managed by the target RunnerReplicaSet
 	var allRunners v1alpha1.RunnerList
-	if err := r.List(ctx, &allRunners, client.InNamespace(req.Namespace)); err != nil {
+	if err := r.List(
+		ctx,
+		&allRunners,
+		client.InNamespace(req.Namespace),
+		client.MatchingLabelsSelector{Selector: selector},
+	); err != nil {
 		if !kerrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
@@ -77,9 +87,14 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	var myRunners []v1alpha1.Runner
 
-	var available, ready int
+	var (
+		available int
+		ready     int
+	)
 
 	for _, r := range allRunners.Items {
+		// This guard is required to avoid the RunnerReplicaSet created by the controller v0.17.0 or before
+		// to not treat all the runners in the namespace as its children.
 		if metav1.IsControlledBy(&r, &rs) {
 			myRunners = append(myRunners, r)
 
@@ -106,7 +121,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 		// get runners that are currently not busy
 		var notBusy []v1alpha1.Runner
-		for _, runner := range myRunners {
+		for _, runner := range allRunners.Items {
 			busy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
 				notRegistered := false

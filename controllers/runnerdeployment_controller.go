@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"reflect"
 	"sort"
 	"time"
 
@@ -143,6 +144,28 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	if !reflect.DeepEqual(newestSet.Spec.Selector, desiredRS.Spec.Selector) {
+		updateSet := newestSet.DeepCopy()
+		updateSet.Spec = *desiredRS.Spec.DeepCopy()
+
+		// A selector update change doesn't trigger replicaset replacement,
+		// but we still need to update the existing replicaset with it.
+		// Otherwise selector-based runner query will never work on replicasets created before the controller v0.17.0
+		// See https://github.com/summerwind/actions-runner-controller/pull/355#discussion_r585379259
+		if err := r.Client.Update(ctx, updateSet); err != nil {
+			log.Error(err, "Failed to update runnerreplicaset resource")
+
+			return ctrl.Result{}, err
+		}
+
+		// At this point, we are already sure that there's no need to create a new replicaset
+		// as the runner template hash is not changed.
+		//
+		// But we still need to requeue for the (possibly rare) cases that there are still old replicasets that needs
+		// to be cleaned up.
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	const defaultReplicas = 1
 
 	currentDesiredReplicas := getIntOrDefault(newestSet.Spec.Replicas, defaultReplicas)
@@ -258,17 +281,69 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
+// Clones the given selector and returns a new selector with the given key and value added.
+// Returns the given selector, if labelKey is empty.
+//
+// Proudly copied from k8s.io/kubernetes/pkg/util/labels.CloneSelectorAndAddLabel
+func CloneSelectorAndAddLabel(selector *metav1.LabelSelector, labelKey, labelValue string) *metav1.LabelSelector {
+	if labelKey == "" {
+		// Don't need to add a label.
+		return selector
+	}
+
+	// Clone.
+	newSelector := new(metav1.LabelSelector)
+
+	newSelector.MatchLabels = make(map[string]string)
+	if selector.MatchLabels != nil {
+		for key, val := range selector.MatchLabels {
+			newSelector.MatchLabels[key] = val
+		}
+	}
+	newSelector.MatchLabels[labelKey] = labelValue
+
+	if selector.MatchExpressions != nil {
+		newMExps := make([]metav1.LabelSelectorRequirement, len(selector.MatchExpressions))
+		for i, me := range selector.MatchExpressions {
+			newMExps[i].Key = me.Key
+			newMExps[i].Operator = me.Operator
+			if me.Values != nil {
+				newMExps[i].Values = make([]string, len(me.Values))
+				copy(newMExps[i].Values, me.Values)
+			} else {
+				newMExps[i].Values = nil
+			}
+		}
+		newSelector.MatchExpressions = newMExps
+	} else {
+		newSelector.MatchExpressions = nil
+	}
+
+	return newSelector
+}
+
 func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeployment) (*v1alpha1.RunnerReplicaSet, error) {
+	return newRunnerReplicaSet(&rd, r.CommonRunnerLabels, r.Scheme)
+}
+
+func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []string, scheme *runtime.Scheme) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
+
 	templateHash := ComputeHash(&newRSTemplate)
 	// Add template hash label to selector.
 	labels := CloneAndAddLabel(rd.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
 
-	for _, l := range r.CommonRunnerLabels {
+	for _, l := range commonRunnerLabels {
 		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
 	}
 
 	newRSTemplate.Labels = labels
+
+	selector := rd.Spec.Selector
+	if selector == nil {
+		selector = &metav1.LabelSelector{MatchLabels: labels}
+	}
+	newRSSelector := CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
 
 	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
@@ -279,11 +354,12 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
 			Replicas: rd.Spec.Replicas,
+			Selector: newRSSelector,
 			Template: newRSTemplate,
 		},
 	}
 
-	if err := ctrl.SetControllerReference(&rd, &rs, r.Scheme); err != nil {
+	if err := ctrl.SetControllerReference(rd, &rs, scheme); err != nil {
 		return &rs, err
 	}
 
