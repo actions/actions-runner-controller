@@ -42,7 +42,7 @@ if [ -z "${RUNNER_TOKEN}" ]; then
   exit 1
 fi
 
-if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_GROUP}" ];then
+if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
   RUNNER_GROUP_ARG="--runnergroup ${RUNNER_GROUP}"
 fi
 
