@@ -113,6 +113,19 @@ func TestWebhookPing(t *testing.T) {
 	)
 }
 
+func TestGetRequest(t *testing.T) {
+	hra := HorizontalRunnerAutoscalerGitHubWebhook{}
+	request, _ := http.NewRequest(http.MethodGet, "/", nil)
+	recorder := httptest.ResponseRecorder{}
+
+	hra.Handle(&recorder, request)
+	response := recorder.Result()
+
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("want %d, got %d", http.StatusOK, response.StatusCode)
+	}
+}
+
 func TestGetValidCapacityReservations(t *testing.T) {
 	now := time.Now()
 
