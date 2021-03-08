@@ -433,7 +433,7 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: myrunners
-  scaleUpTrigggers:
+  scaleUpTriggers:
   - githubEvent:
       checkRun:
         types: ["created"]
@@ -492,7 +492,7 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: myrunners
-  scaleUpTrigggers:
+  scaleUpTriggers:
   - githubEvent:
       checkRun:
         types: ["created"]
@@ -514,7 +514,7 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: myrunners
-  scaleUpTrigggers:
+  scaleUpTriggers:
   - githubEvent:
       pullRequest:
         types: ["synchronize"]
