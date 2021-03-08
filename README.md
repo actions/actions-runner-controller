@@ -355,11 +355,11 @@ The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration syn
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
-1. Allows for multiple controllers to be deployed as each controller deployed is responsible for scaling their own runner pods on a per namespace basis.
+1. Allows for multiple controllers to be deployed as each controller deployed is responsible for scaling their own runner pods on a per namespace basis. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
 2. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
 3. Supports github organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
 4. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
-5. Supports scaling runner count on both a percentage increase / descrease basis as well as on a fixed runner count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
+5. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
 1. May not scale quick enough for some users needs as we are scaling up and down based on indicative information rather than a direct count of the workflow queue depth
