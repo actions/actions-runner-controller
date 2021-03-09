@@ -174,6 +174,93 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 	Describe("when no existing resources exist", func() {
 
+		It("should create and scale organizational runners without any scaling metrics on pull_request event", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								Organization: "test",
+								Image:        "bar",
+								Group:        "baz",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "FOOVALUE"},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			// Scale-up to 2 replicas
+			{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(2),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						Metrics:                           nil,
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									PullRequest: &actionsv1alpha1.PullRequestSpec{
+										Types:    []string{"created"},
+										Branches: []string{"main"},
+									},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2)
+				ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx, ns.Name, name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake runners after HRA creation")
+			}
+
+			// Scale-up to 3 replicas on second pull_request create webhook event
+			{
+				env.SendOrgPullRequestEvent("test", "valid", "main", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+			}
+		})
+
 		It("should create and scale organization's repository runners on pull_request event", func() {
 			name := "example-runnerdeploy"
 

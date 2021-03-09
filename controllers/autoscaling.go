@@ -91,6 +91,13 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 			return nil, fmt.Errorf("asserting runner deployment spec to detect bug: spec.template.organization should not be empty on this code path")
 		}
 
+		// In case it's an organizational runners deployment without any scaling metrics defined,
+		// we assume that the desired replicas should always be `minReplicas + capacityReservedThroughWebhook`.
+		// See https://github.com/summerwind/actions-runner-controller/issues/377#issuecomment-793372693
+		if len(metrics) == 0 {
+			return hra.Spec.MinReplicas, nil
+		}
+
 		if len(metrics[0].RepositoryNames) == 0 {
 			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment")
 		}
