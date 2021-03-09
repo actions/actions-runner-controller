@@ -110,7 +110,7 @@ func main() {
 		Recorder:       nil,
 		Scheme:         mgr.GetScheme(),
 		SecretKeyBytes: []byte(webhookSecretToken),
-		WatchNamespace: watchNamespace,
+		Namespace:      watchNamespace,
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
