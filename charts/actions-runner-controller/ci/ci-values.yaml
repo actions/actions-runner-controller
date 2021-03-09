@@ -22,6 +22,9 @@ resources:
     cpu: 100m
     memory: 128Mi  
 
+authSecret:
+  create: false
+
 # Set the following to true to create a dummy secret, allowing the manager pod to start
 # This is only useful in CI
 createDummySecret: true
