@@ -53,11 +53,11 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// the administrator is generated and specified in GitHub Web UI.
 	SecretKeyBytes []byte
 
-	// WatchNamespace is the namespace to watch for HorizontalRunnerAutoscaler's to be
+	// Namespace is the namespace to watch for HorizontalRunnerAutoscaler's to be
 	// scaled on Webhook.
 	// Set to empty for letting it watch for all namespaces.
-	WatchNamespace string
-	Name           string
+	Namespace string
+	Name      string
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -230,7 +230,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
-	ns := autoscaler.WatchNamespace
+	ns := autoscaler.Namespace
 
 	var defaultListOpts []client.ListOption
 
@@ -244,8 +244,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx con
 		opts := append([]client.ListOption{}, defaultListOpts...)
 		opts = append(opts, client.MatchingFields{scaleTargetKey: value})
 
-		if autoscaler.WatchNamespace != "" {
-			opts = append(opts, client.InNamespace(autoscaler.WatchNamespace))
+		if autoscaler.Namespace != "" {
+			opts = append(opts, client.InNamespace(autoscaler.Namespace))
 		}
 
 		var hraList v1alpha1.HorizontalRunnerAutoscalerList
@@ -332,7 +332,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 		autoscaler.Log.Info(
 			"Found too many scale targets: "+
 				"It must be exactly one to avoid ambiguity. "+
-				"Either set WatchNamespace for the webhook-based autoscaler to let it only find HRAs in the namespace, "+
+				"Either set Namespace for the webhook-based autoscaler to let it only find HRAs in the namespace, "+
 				"or update Repository or Organization fields in your RunnerDeployment resources to fix the ambiguity.",
 			"scaleTargets", strings.Join(scaleTargetIDs, ","))
 

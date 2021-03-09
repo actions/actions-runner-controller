@@ -100,6 +100,13 @@ env:
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
 
+scope:
+  # If true, the controller will only watch custom resources in a single namespace
+  singleNamespace: false
+  # If `scope.singleNamespace=true`, the controller will only watch custom resources in this namespace
+  # The default value is "", which means the namespace of the controller
+  watchNamespace: ""
+
 githubWebhookServer:
   enabled: false
   labels: {}

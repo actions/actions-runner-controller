@@ -131,12 +131,12 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 		autoscalerWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{
-			Client:         mgr.GetClient(),
-			Scheme:         scheme.Scheme,
-			Log:            logf.Log,
-			Recorder:       mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
-			Name:           controllerName("horizontalrunnerautoscalergithubwebhook"),
-			WatchNamespace: ns.Name,
+			Client:    mgr.GetClient(),
+			Scheme:    scheme.Scheme,
+			Log:       logf.Log,
+			Recorder:  mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Name:      controllerName("horizontalrunnerautoscalergithubwebhook"),
+			Namespace: ns.Name,
 		}
 		err = autoscalerWebhook.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler webhook")

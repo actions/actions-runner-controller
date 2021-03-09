@@ -63,6 +63,7 @@ func main() {
 
 		runnerImage string
 		dockerImage string
+		namespace   string
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
@@ -84,6 +85,7 @@ func main() {
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/summerwind/actions-runner-controller/issues/321 for more information")
+	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.Parse()
 
 	logger := zap.New(func(o *zap.Options) {
@@ -104,6 +106,7 @@ func main() {
 		LeaderElection:     enableLeaderElection,
 		Port:               9443,
 		SyncPeriod:         &syncPeriod,
+		Namespace:          namespace,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

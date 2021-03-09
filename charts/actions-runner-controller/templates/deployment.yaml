@@ -35,6 +35,9 @@ spec:
         - "--enable-leader-election"
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
+        {{- if .Values.scope.singleNamespace }}
+        - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
+        {{- end }}
         command:
         - "/manager"
         env:
