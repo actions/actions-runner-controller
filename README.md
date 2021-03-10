@@ -303,7 +303,7 @@ The scale out performance is controlled via the manager containers startup `--sy
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
 2. Scales the runner count based on the actual queue depth of the jobs meaning a more 1:1 scaling of runners to queued jobs.
-4. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels).
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
