@@ -159,6 +159,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			e.Repo.Owner.GetType(),
 			autoscaler.MatchPullRequestEvent(e),
 		)
+
+		if pullRequest := e.PullRequest; pullRequest != nil {
+			log = log.WithValues(
+				"pullRequest.base.ref", e.PullRequest.Base.GetRef(),
+				"action", e.GetAction(),
+			)
+		}
 	case *gogithub.CheckRunEvent:
 		target, err = autoscaler.getScaleUpTarget(
 			context.TODO(),
@@ -168,6 +175,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			e.Repo.Owner.GetType(),
 			autoscaler.MatchCheckRunEvent(e),
 		)
+
+		if checkRun := e.GetCheckRun(); checkRun != nil {
+			log = log.WithValues(
+				"checkRun.status", checkRun.GetStatus(),
+				"action", e.GetAction(),
+			)
+		}
 	case *gogithub.PingEvent:
 		ok = true
 
@@ -195,9 +209,11 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}
 
 	if target == nil {
-		msg := "no horizontalrunnerautoscaler to scale for this github event"
+		log.Info(
+			"Scale target not found. If this is unexpected, ensure that there is exactly one repository-wide or organizational runner deployment that matches this webhook event",
+		)
 
-		log.Info(msg, "eventType", webhookType)
+		msg := "no horizontalrunnerautoscaler to scale for this github event"
 
 		ok = true
 
@@ -364,10 +380,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 		log.Info("scale up target is organizational runners", "organization", owner)
 		return target, nil
 	}
-
-	log.Info(
-		"Scale target not found. If this is unexpected, ensure that there is exactly one repository-wide or organizational runner deployment that matches this webhook event",
-	)
 
 	return nil, nil
 }
