@@ -92,6 +92,8 @@ type RunnerSpec struct {
 	DockerdWithinRunnerContainer *bool `json:"dockerdWithinRunnerContainer,omitempty"`
 	// +optional
 	DockerEnabled *bool `json:"dockerEnabled,omitempty"`
+	// +optional
+	DockerMTU *int64 `json:"dockerMTU,omitempty"`
 }
 
 // ValidateRepository validates repository field.

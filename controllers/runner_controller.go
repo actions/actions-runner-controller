@@ -530,6 +530,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
+	if dockerdInRunner {
+		pod.Spec.Containers[0].Command = []string{"startup.sh", fmt.Sprintf( "--mtu %d", *runner.Spec.DockerMTU)}
+	}
+
 	if !dockerdInRunner && dockerEnabled {
 		runnerVolumeName := "runner"
 		runnerVolumeMountPath := "/runner"
@@ -600,6 +604,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					MountPath: "/certs/client",
 				},
 			},
+			Args: []string{fmt.Sprintf("--mtu %d", *runner.Spec.DockerMTU)},
 			Env: []corev1.EnvVar{
 				{
 					Name:  "DOCKER_TLS_CERTDIR",

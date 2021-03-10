@@ -1,6 +1,25 @@
 #!/bin/bash
 source /opt/bash-utils/logger.sh
 
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    -m|--mtu)
+    MTU="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    *)    # unknown option
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past argument
+    ;;
+esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
 function wait_for_process () {
     local max_time_wait=30
     local process_name="$1"
@@ -32,6 +51,10 @@ for process in "${processes[@]}"; do
         INFO "$process is running"
     fi
 done
+
+if [ -z "${MTU}" ]; then
+  ifconfig docker0 mtu ${MTU} up
+fi
 
 # Wait processes to be running
 entrypoint.sh
