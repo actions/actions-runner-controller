@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,10 +40,20 @@ func (c *Config) NewClient() (*Client, error) {
 	if len(c.Token) > 0 {
 		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
-		tr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
-		if err != nil {
-			return nil, fmt.Errorf("authentication failed: %v", err)
+		var tr *ghinstallation.Transport
+
+		if _, err := os.Stat(c.AppPrivateKey); err == nil {
+			tr, err = ghinstallation.NewKeyFromFile(http.DefaultTransport, c.AppID, c.AppInstallationID, c.AppPrivateKey)
+			if err != nil {
+				return nil, fmt.Errorf("authentication failed: using private key at %s: %v", c.AppPrivateKey, err)
+			}
+		} else {
+			tr, err = ghinstallation.New(http.DefaultTransport, c.AppID, c.AppInstallationID, []byte(c.AppPrivateKey))
+			if err != nil {
+				return nil, fmt.Errorf("authentication failed: using private key of size %d (%s...): %v", len(c.AppPrivateKey), strings.Split(c.AppPrivateKey, "\n")[0], err)
+			}
 		}
+
 		if len(c.EnterpriseURL) > 0 {
 			githubAPIURL, err := getEnterpriseApiUrl(c.EnterpriseURL)
 			if err != nil {
