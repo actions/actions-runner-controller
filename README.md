@@ -307,7 +307,7 @@ The scale out performance is controlled via the manager containers startup `--sy
 
 **Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
-2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag scaling.
+2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
 
 
@@ -362,7 +362,7 @@ The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration syn
 
 **Drawbacks of this metric**
 1. Scaling is based on an indicative metric rather than a direct count of the workflow queue depth unlike the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric
-2. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag scaling. Additionally we are scaling up and down based on indicative information and so the desired runner count is likely to under provision new runners or overprovision them relative to the actual amount of jobs queued.
+2. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity. Additionally we are scaling up and down based on indicative information and so the desired runner count is likely to under provision new runners or overprovision them relative to the actual amount of jobs queued.
 
 
 
