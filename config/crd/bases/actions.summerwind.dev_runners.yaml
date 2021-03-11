@@ -398,6 +398,9 @@ spec:
               type: array
             dockerEnabled:
               type: boolean
+            dockerMTU:
+              format: int64
+              type: integer
             dockerdContainerResources:
               description: ResourceRequirements describes the compute resource requirements.
               properties:

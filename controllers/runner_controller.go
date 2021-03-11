@@ -530,6 +530,15 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	}
 
+	if mtu := runner.Spec.DockerMTU; mtu != nil && dockerdInRunner {
+		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, []corev1.EnvVar{
+			{
+				Name:  "MTU",
+				Value: fmt.Sprintf("%d", *runner.Spec.DockerMTU),
+			},
+		}...)
+	}
+
 	if !dockerdInRunner && dockerEnabled {
 		runnerVolumeName := "runner"
 		runnerVolumeMountPath := "/runner"
@@ -611,6 +620,15 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			},
 			Resources: runner.Spec.DockerdContainerResources,
 		})
+
+		if mtu := runner.Spec.DockerMTU; mtu != nil {
+			pod.Spec.Containers[1].Env = append(pod.Spec.Containers[1].Env, []corev1.EnvVar{
+				{
+					Name:  "DOCKERD_ROOTLESS_ROOTLESSKIT_MTU",
+					Value: fmt.Sprintf("%d", *runner.Spec.DockerMTU),
+				},
+			}...)
+		}
 
 	}
 

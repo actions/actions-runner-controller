@@ -33,5 +33,9 @@ for process in "${processes[@]}"; do
     fi
 done
 
+if [ -n "${MTU}" ]; then
+  ifconfig docker0 mtu ${MTU} up
+fi
+
 # Wait processes to be running
 entrypoint.sh
