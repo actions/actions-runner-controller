@@ -361,10 +361,8 @@ The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration syn
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
-1. Scaling is based on an indicative metric rather than a direct count of the workflow queue depth unlike the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric
-2. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity. Additionally we are scaling up and down based on indicative information and so the desired runner count is likely to under provision new runners or overprovision them relative to the actual amount of jobs queued.
-
-
+1. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
+2. We are scaling up and down based on indicative information rather than a count of the actual number of queued jobs and so the desired runner count is likely to under provision new runners or overprovision them relative to actual job queue depth, this may or may not be a problem for you.
 
 
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
