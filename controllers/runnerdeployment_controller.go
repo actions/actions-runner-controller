@@ -41,7 +41,8 @@ import (
 )
 
 const (
-	LabelKeyRunnerTemplateHash = "runner-template-hash"
+	LabelKeyRunnerTemplateHash   = "runner-template-hash"
+	LabelKeyRunnerDeploymentName = "runner-deployment-name"
 
 	runnerSetOwnerKey = ".metadata.controller"
 )
@@ -326,23 +327,32 @@ func (r *RunnerDeploymentReconciler) newRunnerReplicaSet(rd v1alpha1.RunnerDeplo
 	return newRunnerReplicaSet(&rd, r.CommonRunnerLabels, r.Scheme)
 }
 
+func getSelector(rd *v1alpha1.RunnerDeployment) *metav1.LabelSelector {
+	selector := rd.Spec.Selector
+	if selector == nil {
+		selector = &metav1.LabelSelector{MatchLabels: map[string]string{LabelKeyRunnerDeploymentName: rd.Name}}
+	}
+
+	return selector
+}
+
 func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []string, scheme *runtime.Scheme) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
-
-	templateHash := ComputeHash(&newRSTemplate)
-	// Add template hash label to selector.
-	labels := CloneAndAddLabel(rd.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
 
 	for _, l := range commonRunnerLabels {
 		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
 	}
 
-	newRSTemplate.Labels = labels
+	templateHash := ComputeHash(&newRSTemplate)
 
-	selector := rd.Spec.Selector
-	if selector == nil {
-		selector = &metav1.LabelSelector{MatchLabels: labels}
-	}
+	// Add template hash label to selector.
+	newRSTemplate.ObjectMeta.Labels = CloneAndAddLabel(newRSTemplate.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
+
+	// This label selector is used by default when rd.Spec.Selector is empty.
+	newRSTemplate.ObjectMeta.Labels = CloneAndAddLabel(newRSTemplate.ObjectMeta.Labels, LabelKeyRunnerDeploymentName, rd.Name)
+
+	selector := getSelector(rd)
+
 	newRSSelector := CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
 
 	rs := v1alpha1.RunnerReplicaSet{
@@ -350,7 +360,7 @@ func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []str
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: rd.ObjectMeta.Name + "-",
 			Namespace:    rd.ObjectMeta.Namespace,
-			Labels:       labels,
+			Labels:       newRSTemplate.ObjectMeta.Labels,
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
 			Replicas: rd.Spec.Replicas,
