@@ -302,12 +302,12 @@ The scale out performance is controlled via the manager containers startup `--sy
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
-2. Scales quickly (within the bounds of the syncPeriod) as it will spin up the number of runners based on the depth of the workflow queue
+2. Scales the runner count based on the actual queue depth of the jobs meaning a more 1:1 scaling of runners to queued jobs.
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
-2. May not scale quick enough for some users needs
+2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
 
 
@@ -355,14 +355,14 @@ The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration syn
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
-1. Allows for multiple controllers to be deployed as each controller deployed is responsible for scaling their own runner pods on a per namespace basis.
-2. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
-3. Supports github organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
-4. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
-5. Supports scaling runner count on both a percentage increase / descrease basis as well as on a fixed runner count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
+1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
+2. Supports GitHub organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
+4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
-1. May not scale quick enough for some users needs as we are scaling up and down based on indicative information rather than a direct count of the workflow queue depth
+1. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
+2. We are scaling up and down based on indicative information rather than a count of the actual number of queued jobs and so the desired runner count is likely to under provision new runners or overprovision them relative to actual job queue depth, this may or may not be a problem for you.
 
 
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
