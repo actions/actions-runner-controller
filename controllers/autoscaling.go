@@ -266,17 +266,26 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		scaleDownFactor = sdf
 	}
 
-	selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
+	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
+	var runnerList v1alpha1.RunnerList
+
+	var opts []client.ListOption
+
+	opts = append(opts, client.InNamespace(rd.Namespace))
+
+	selector, err := metav1.LabelSelectorAsSelector(getSelector(&rd))
 	if err != nil {
 		return nil, err
 	}
-	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
-	var runnerList v1alpha1.RunnerList
+
+	opts = append(opts, client.MatchingLabelsSelector{Selector: selector})
+
+	r.Log.V(2).Info("Finding runners with selector", "ns", rd.Namespace)
+
 	if err := r.List(
 		ctx,
 		&runnerList,
-		client.InNamespace(rd.Namespace),
-		client.MatchingLabelsSelector{Selector: selector},
+		opts...,
 	); err != nil {
 		if !kerrors.IsNotFound(err) {
 			return nil, err
