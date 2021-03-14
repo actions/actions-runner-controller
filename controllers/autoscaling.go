@@ -71,7 +71,13 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 	}
 
 	metrics := hra.Spec.Metrics
-	if len(metrics) == 0 || metrics[0].Type == v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
+	if len(metrics) == 0 {
+		if len(hra.Spec.ScaleUpTriggers) == 0 {
+			return r.calculateReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
+		}
+
+		return hra.Spec.MinReplicas, nil
+	} else if metrics[0].Type == v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
 		return r.calculateReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
 	} else if metrics[0].Type == v1alpha1.AutoscalingMetricTypePercentageRunnersBusy {
 		return r.calculateReplicasByPercentageRunnersBusy(rd, hra)
