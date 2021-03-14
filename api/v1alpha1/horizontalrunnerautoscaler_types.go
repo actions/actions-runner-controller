@@ -72,6 +72,12 @@ type GitHubEventScaleUpTriggerSpec struct {
 type CheckRunSpec struct {
 	Types  []string `json:"types,omitempty"`
 	Status string   `json:"status,omitempty"`
+
+	// Names is a list of GitHub Actions glob patterns.
+	// Any check_run event whose name matches one of patterns in the list can trigger autoscaling.
+	// Note that check_run name seem to equal to the job name you've defined in your actions workflow yaml file.
+	// So it is very likely that you can utilize this to trigger depending on the job.
+	Names []string `json:"names,omitempty"`
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
