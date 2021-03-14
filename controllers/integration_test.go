@@ -322,7 +322,11 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						MinReplicas:                       intPtr(1),
 						MaxReplicas:                       intPtr(3),
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
-						Metrics:                           nil,
+						Metrics: []actionsv1alpha1.MetricSpec{
+							{
+								Type: actionsv1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns,
+							},
+						},
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
 								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
@@ -447,7 +451,11 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						MinReplicas:                       intPtr(1),
 						MaxReplicas:                       intPtr(5),
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
-						Metrics:                           nil,
+						Metrics: []actionsv1alpha1.MetricSpec{
+							{
+								Type: actionsv1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns,
+							},
+						},
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
 								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
@@ -491,6 +499,110 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 
 			env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
+		})
+
+		It("should create and scale organization's repository runners only on check_run event", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								Repository: "test/valid",
+								Image:      "bar",
+								Group:      "baz",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "FOOVALUE"},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 3 replicas by the default TotalNumberOfQueuedAndInProgressWorkflowRuns-based scaling
+			// See workflowRunsFor3Replicas_queued and workflowRunsFor3Replicas_in_progress for GitHub List-Runners API responses
+			// used while testing.
+			{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									CheckRun: &actionsv1alpha1.CheckRunSpec{
+										Types:  []string{"created"},
+										Status: "pending",
+									},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first check_run create webhook event
+			{
+				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+
+			// Scale-up to 3 replicas on second check_run create webhook event
+			{
+				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+			}
+
+			env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 		})
 
 		It("should create and scale user's repository runners on pull_request event", func() {
@@ -554,7 +666,11 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						MinReplicas:                       intPtr(1),
 						MaxReplicas:                       intPtr(3),
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
-						Metrics:                           nil,
+						Metrics: []actionsv1alpha1.MetricSpec{
+							{
+								Type: actionsv1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns,
+							},
+						},
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
 								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
@@ -604,6 +720,99 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1, "runners after HRA force update for scale-down")
 				ExpectHRADesiredReplicasEquals(ctx, ns.Name, name, 1, "runner deployment desired replicas")
+			}
+
+			// Scale-up to 2 replicas on first pull_request create webhook event
+			{
+				env.SendUserPullRequestEvent("test", "valid", "main", "created")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				ExpectHRADesiredReplicasEquals(ctx, ns.Name, name, 2, "runner deployment desired replicas")
+			}
+
+			// Scale-up to 3 replicas on second pull_request create webhook event
+			{
+				env.SendUserPullRequestEvent("test", "valid", "main", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+				ExpectHRADesiredReplicasEquals(ctx, ns.Name, name, 3, "runner deployment desired replicas")
+			}
+		})
+
+		It("should create and scale user's repository runners only on pull_request event", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								Repository: "test/valid",
+								Image:      "bar",
+								Group:      "baz",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "FOOVALUE"},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(3),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									PullRequest: &actionsv1alpha1.PullRequestSpec{
+										Types:    []string{"created"},
+										Branches: []string{"main"},
+									},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake runners after HRA creation")
 			}
 
 			// Scale-up to 2 replicas on first pull_request create webhook event
@@ -681,7 +890,11 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						MinReplicas:                       intPtr(1),
 						MaxReplicas:                       intPtr(5),
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
-						Metrics:                           nil,
+						Metrics: []actionsv1alpha1.MetricSpec{
+							{
+								Type: actionsv1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns,
+							},
+						},
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
 								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
@@ -725,6 +938,110 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 
 			env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
+		})
+
+		It("should create and scale user's repository runners only on check_run event", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								Repository: "test/valid",
+								Image:      "bar",
+								Group:      "baz",
+								Env: []corev1.EnvVar{
+									{Name: "FOO", Value: "FOOVALUE"},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 3 replicas by the default TotalNumberOfQueuedAndInProgressWorkflowRuns-based scaling
+			// See workflowRunsFor3Replicas_queued and workflowRunsFor3Replicas_in_progress for GitHub List-Runners API responses
+			// used while testing.
+			{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									CheckRun: &actionsv1alpha1.CheckRunSpec{
+										Types:  []string{"created"},
+										Status: "pending",
+									},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first check_run create webhook event
+			{
+				env.SendUserCheckRunEvent("test", "valid", "pending", "created")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+
+			// Scale-up to 3 replicas on second check_run create webhook event
+			{
+				env.SendUserCheckRunEvent("test", "valid", "pending", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+			}
+
+			env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 		})
 
 	})
