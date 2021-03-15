@@ -130,8 +130,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			newRunner := runner.DeepCopy()
 			newRunner.ObjectMeta.Finalizers = finalizers
 
-			if err := r.Update(ctx, newRunner); err != nil {
-				log.Error(err, "Failed to update runner")
+			if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
+				log.Error(err, "Failed to update runner for finalizer removal")
 				return ctrl.Result{}, err
 			}
 
@@ -167,24 +167,6 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
 		log.Info("Created runner pod", "repository", runner.Spec.Repository)
 	} else {
-		// If pod has ended up succeeded we need to restart it
-		// Happens e.g. when dind is in runner and run completes
-		restart := pod.Status.Phase == corev1.PodSucceeded
-
-		if !restart && runner.Status.Phase != string(pod.Status.Phase) {
-			updated := runner.DeepCopy()
-			updated.Status.Phase = string(pod.Status.Phase)
-			updated.Status.Reason = pod.Status.Reason
-			updated.Status.Message = pod.Status.Message
-
-			if err := r.Status().Update(ctx, updated); err != nil {
-				log.Error(err, "Failed to update runner status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, nil
-		}
-
 		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
 			deletionTimeout := 1 * time.Minute
 			currentTime := time.Now()
@@ -221,6 +203,10 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 		}
 
+		// If pod has ended up succeeded we need to restart it
+		// Happens e.g. when dind is in runner and run completes
+		restart := pod.Status.Phase == corev1.PodSucceeded
+
 		if pod.Status.Phase == corev1.PodRunning {
 			for _, status := range pod.Status.ContainerStatuses {
 				if status.Name != containerName {
@@ -245,24 +231,26 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		var registrationTimeoutRecheckDelay time.Duration
+		var registrationRecheckDelay time.Duration
 
 		// all checks done below only decide whether a restart is needed
 		// if a restart was already decided before, there is no need for the checks
 		// saving API calls and scary log messages
 		if !restart {
-
-			notRegistered := false
+			notFound := false
 			offline := false
 
 			runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+
+			currentTime := time.Now()
+
 			if err != nil {
 				var notFoundException *github.RunnerNotFound
 				var offlineException *github.RunnerOffline
 				if errors.As(err, &notFoundException) {
 					log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
 
-					notRegistered = true
+					notFound = true
 				} else if errors.As(err, &offlineException) {
 					log.V(1).Info("GitHub runner appears to be offline, waiting for runner to get online ...", "runnerName", runner.Name)
 					offline = true
@@ -284,6 +272,12 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 					return ctrl.Result{}, err
 				}
+			} else {
+				log.Info(
+					"Runner appears to have registered and running.",
+					"podCreationTimestamp", pod.CreationTimestamp,
+					"currentTime", currentTime,
+				)
 			}
 
 			// See the `newPod` function called above for more information
@@ -296,11 +290,10 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 
 			registrationTimeout := 10 * time.Minute
-			currentTime := time.Now()
 			durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
 			registrationDidTimeout := durationAfterRegistrationTimeout > 0
 
-			if notRegistered && registrationDidTimeout {
+			if notFound && registrationDidTimeout {
 				log.Info(
 					"Runner failed to register itself to GitHub in timely manner. "+
 						"Recreating the pod to see if it resolves the issue. "+
@@ -312,9 +305,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				)
 
 				restart = true
-			}
-
-			if offline && registrationDidTimeout {
+			} else if offline && registrationDidTimeout {
 				log.Info(
 					"Already existing GitHub runner still appears offline . "+
 						"Recreating the pod to see if it resolves the issue. "+
@@ -327,22 +318,31 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				restart = true
 			}
 
-			if (notRegistered || offline) && !registrationDidTimeout {
-				registrationTimeoutRecheckDelay += -durationAfterRegistrationTimeout
-				if registrationTimeoutRecheckDelay < 0 {
-					registrationTimeoutRecheckDelay = 0
-				}
-				registrationTimeoutRecheckDelay += time.Minute
-				registrationTimeoutRecheckDelay = wait.Jitter(registrationTimeoutRecheckDelay, 0.1)
-
-				log.V(1).Info(fmt.Sprintf("Still waiting for the runner to get registered. Resyncing in %s to see if we need to retry from the pod creation.", registrationTimeoutRecheckDelay))
+			if (notFound || offline) && !registrationDidTimeout {
+				registrationRecheckDelay = wait.Jitter(time.Minute, 0.1)
 			}
 		}
 
 		// Don't do anything if there's no need to restart the runner
 		if !restart {
-			if registrationTimeoutRecheckDelay > 0 {
-				return ctrl.Result{RequeueAfter: registrationTimeoutRecheckDelay}, nil
+			// This guard enables us to update runner.Status.Phase to `Running` only after
+			// the runner is registered to GitHub.
+			if registrationRecheckDelay > 0 {
+				log.V(1).Info(fmt.Sprintf("Still waiting for the runner to get registered. Resyncing in %s to see if we need to retry from the pod creation.", registrationRecheckDelay))
+
+				return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
+			}
+
+			if runner.Status.Phase != string(pod.Status.Phase) {
+				updated := runner.DeepCopy()
+				updated.Status.Phase = string(pod.Status.Phase)
+				updated.Status.Reason = pod.Status.Reason
+				updated.Status.Message = pod.Status.Message
+
+				if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
+					log.Error(err, "Failed to update runner status")
+					return ctrl.Result{}, err
+				}
 			}
 
 			return ctrl.Result{}, nil

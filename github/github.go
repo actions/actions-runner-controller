@@ -158,7 +158,7 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 
 	var runners []*github.Runner
 
-	opts := github.ListOptions{PerPage: 10}
+	opts := github.ListOptions{PerPage: 100}
 	for {
 		list, res, err := c.listRunners(ctx, enterprise, owner, repo, &opts)
 
