@@ -22,6 +22,7 @@ import (
 	"fmt"
 	gogithub "github.com/google/go-github/v33/github"
 	"github.com/summerwind/actions-runner-controller/hash"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"strings"
 	"time"
 
@@ -244,6 +245,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
+		var registrationTimeoutRecheckDelay time.Duration
+
 		// all checks done below only decide whether a restart is needed
 		// if a restart was already decided before, there is no need for the checks
 		// saving API calls and scary log messages
@@ -294,7 +297,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 			registrationTimeout := 10 * time.Minute
 			currentTime := time.Now()
-			registrationDidTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout)) > 0
+			durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
+			registrationDidTimeout := durationAfterRegistrationTimeout > 0
 
 			if notRegistered && registrationDidTimeout {
 				log.Info(
@@ -323,10 +327,24 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				restart = true
 			}
 
+			if (notRegistered || offline) && !registrationDidTimeout {
+				registrationTimeoutRecheckDelay += -durationAfterRegistrationTimeout
+				if registrationTimeoutRecheckDelay < 0 {
+					registrationTimeoutRecheckDelay = 0
+				}
+				registrationTimeoutRecheckDelay += time.Minute
+				registrationTimeoutRecheckDelay = wait.Jitter(registrationTimeoutRecheckDelay, 0.1)
+
+				log.V(1).Info(fmt.Sprintf("Still waiting for the runner to get registered. Resyncing in %s to see if we need to retry from the pod creation.", registrationTimeoutRecheckDelay))
+			}
 		}
 
 		// Don't do anything if there's no need to restart the runner
 		if !restart {
+			if registrationTimeoutRecheckDelay > 0 {
+				return ctrl.Result{RequeueAfter: registrationTimeoutRecheckDelay}, nil
+			}
+
 			return ctrl.Result{}, nil
 		}
 
