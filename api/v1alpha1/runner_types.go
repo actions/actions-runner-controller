@@ -125,6 +125,9 @@ type RunnerStatus struct {
 	Phase        string                   `json:"phase"`
 	Reason       string                   `json:"reason"`
 	Message      string                   `json:"message"`
+
+	//+optional
+	LastRegistrationCheckTime *metav1.Time `json:"lastRegistrationCheckTime"`
 }
 
 // RunnerStatusRegistration contains runner registration status
