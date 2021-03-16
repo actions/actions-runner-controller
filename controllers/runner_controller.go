@@ -160,7 +160,17 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		if err := r.Create(ctx, &newPod); err != nil {
+			if kerrors.IsAlreadyExists(err) {
+				// Gracefully handle pod-already-exists errors due to informer cache delay.
+				// Without this we got a few errors like the below on new runner pod:
+				// 2021-03-16T00:23:10.116Z        ERROR   controller-runtime.controller   Reconciler error      {"controller": "runner-controller", "request": "default/example-runnerdeploy-b2g2g-j4mcp", "error": "pods \"example-runnerdeploy-b2g2g-j4mcp\" already exists"}
+				log.Info("Runner pod already exists. Probably this pod has been already created in previous reconcilation but the new pod is not yet cached.")
+
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
 			log.Error(err, "Failed to create pod resource")
+
 			return ctrl.Result{}, err
 		}
 
@@ -235,8 +245,28 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		// all checks done below only decide whether a restart is needed
 		// if a restart was already decided before, there is no need for the checks
-		// saving API calls and scary log messages
+		// saving API calls and scary{ log messages
 		if !restart {
+			registrationCheckInterval := time.Minute
+
+			// We want to call ListRunners GitHub Actions API only once per runner per minute.
+			// This if block, in conjunction with:
+			//   return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
+			// achieves that.
+			if lastCheckTime := runner.Status.LastRegistrationCheckTime; lastCheckTime != nil {
+				nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
+				if nextCheckTime.After(time.Now()) {
+					log.Info(
+						fmt.Sprintf("Skipping registration check because it's deferred until %s", nextCheckTime),
+					)
+
+					// Note that we don't need to explicitly requeue on this reconcilation because
+					// the requeue should have been already scheduled previsouly
+					// (with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil` as noted above and coded below)
+					return ctrl.Result{}, nil
+				}
+			}
+
 			notFound := false
 			offline := false
 
@@ -248,11 +278,8 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				var notFoundException *github.RunnerNotFound
 				var offlineException *github.RunnerOffline
 				if errors.As(err, &notFoundException) {
-					log.V(1).Info("Failed to check if runner is busy. Either this runner has never been successfully registered to GitHub or it still needs more time.", "runnerName", runner.Name)
-
 					notFound = true
 				} else if errors.As(err, &offlineException) {
-					log.V(1).Info("GitHub runner appears to be offline, waiting for runner to get online ...", "runnerName", runner.Name)
 					offline = true
 				} else {
 					var e *gogithub.RateLimitError
@@ -272,12 +299,6 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 					return ctrl.Result{}, err
 				}
-			} else {
-				log.Info(
-					"Runner appears to have registered and running.",
-					"podCreationTimestamp", pod.CreationTimestamp,
-					"currentTime", currentTime,
-				)
 			}
 
 			// See the `newPod` function called above for more information
@@ -293,33 +314,47 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
 			registrationDidTimeout := durationAfterRegistrationTimeout > 0
 
-			if notFound && registrationDidTimeout {
-				log.Info(
-					"Runner failed to register itself to GitHub in timely manner. "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. "+
-						"See https://github.com/summerwind/actions-runner-controller/issues/288",
-					"podCreationTimestamp", pod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
+			if notFound {
+				if registrationDidTimeout {
+					log.Info(
+						"Runner failed to register itself to GitHub in timely manner. "+
+							"Recreating the pod to see if it resolves the issue. "+
+							"CAUTION: If you see this a lot, you should investigate the root cause. "+
+							"See https://github.com/summerwind/actions-runner-controller/issues/288",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
 
-				restart = true
-			} else if offline && registrationDidTimeout {
-				log.Info(
-					"Already existing GitHub runner still appears offline . "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. ",
-					"podCreationTimestamp", pod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
+					restart = true
+				} else {
+					log.V(1).Info(
+						"Runner pod exists but we failed to check if runner is busy. Apparently it still needs more time.",
+						"runnerName", runner.Name,
+					)
+				}
+			} else if offline {
+				if registrationDidTimeout {
+					log.Info(
+						"Already existing GitHub runner still appears offline . "+
+							"Recreating the pod to see if it resolves the issue. "+
+							"CAUTION: If you see this a lot, you should investigate the root cause. ",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
 
-				restart = true
+					restart = true
+				} else {
+					log.V(1).Info(
+						"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
+						"runnerName", runner.Name,
+					)
+				}
 			}
 
 			if (notFound || offline) && !registrationDidTimeout {
-				registrationRecheckDelay = wait.Jitter(time.Minute, 0.1)
+				registrationRecheckDelay = registrationCheckInterval + wait.Jitter(10*time.Second, 0.1)
 			}
 		}
 
@@ -328,12 +363,28 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			// This guard enables us to update runner.Status.Phase to `Running` only after
 			// the runner is registered to GitHub.
 			if registrationRecheckDelay > 0 {
-				log.V(1).Info(fmt.Sprintf("Still waiting for the runner to get registered. Resyncing in %s to see if we need to retry from the pod creation.", registrationRecheckDelay))
+				log.V(1).Info(fmt.Sprintf("Rechecking the runner registration in %s", registrationRecheckDelay))
+
+				updated := runner.DeepCopy()
+				updated.Status.LastRegistrationCheckTime = &metav1.Time{Time: time.Now()}
+
+				if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
+					log.Error(err, "Failed to update runner status")
+					return ctrl.Result{}, err
+				}
 
 				return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
 			}
 
 			if runner.Status.Phase != string(pod.Status.Phase) {
+				if pod.Status.Phase == corev1.PodRunning {
+					// Seeing this message, you can expect the runner to become `Running` soon.
+					log.Info(
+						"Runner appears to have registered and running.",
+						"podCreationTimestamp", pod.CreationTimestamp,
+					)
+				}
+
 				updated := runner.DeepCopy()
 				updated.Status.Phase = string(pod.Status.Phase)
 				updated.Status.Reason = pod.Status.Reason

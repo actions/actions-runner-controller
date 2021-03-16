@@ -1541,6 +1541,9 @@ spec:
         status:
           description: RunnerStatus defines the observed state of Runner
           properties:
+            lastRegistrationCheckTime:
+              format: date-time
+              type: string
             message:
               type: string
             phase:

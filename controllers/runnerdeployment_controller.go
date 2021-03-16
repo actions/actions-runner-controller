@@ -194,7 +194,10 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 				Namespace: newestSet.Namespace,
 				Name:      newestSet.Name,
 			}).
-				Info("Waiting until the newest runner replica set to be 100% available")
+				Info("Waiting until the newest runner replica set to be 100% available",
+					"ready", readyReplicas,
+					"desired", currentDesiredReplicas,
+				)
 
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
