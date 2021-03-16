@@ -195,4 +195,20 @@ func TestMatch(t *testing.T) {
 			Want:    false,
 		})
 	})
+
+	t.Run("actions-*-metrics == actions-workflow-metrics", func(t *testing.T) {
+		run(t, testcase{
+			Pattern: "actions-*-metrics",
+			Target:  "actions-workflow-metrics",
+			Want:    true,
+		})
+	})
+
+	t.Run("!actions-*-metrics == actions-workflow-metrics", func(t *testing.T) {
+		run(t, testcase{
+			Pattern: "!actions-*-metrics",
+			Target:  "actions-workflow-metrics",
+			Want:    false,
+		})
+	})
 }
