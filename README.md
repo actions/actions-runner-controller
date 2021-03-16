@@ -292,7 +292,7 @@ A `RunnerDeployment` can scale the number of runners between `minReplicas` and `
 
 **TotalNumberOfQueuedAndInProgressWorkflowRuns**
 
-In the below example, `actions-runner` will pole GitHub for all pending workflows with the pole period defined by the sync period configuration. It will then scale to e.g. 3 if there're 3 pending jobs at sync time.
+In the below example, `actions-runner` will poll GitHub for all pending workflows with the poll period defined by the sync period configuration. It will then scale to e.g. 3 if there're 3 pending jobs at sync time.
 With this scaling metric we are required to define a list of repositories within our metric.
 
 The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API.
@@ -349,7 +349,7 @@ spec:
 
 **PercentageRunnersBusy**
 
-The `HorizontalRunnerAutoscaler` will pole GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
+The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
 
 **Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
 **Helm Config :** `syncPeriod`
