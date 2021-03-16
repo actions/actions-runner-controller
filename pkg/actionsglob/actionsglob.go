@@ -65,7 +65,7 @@ func Match(pat string, s string) bool {
 
 		s = subs[1]
 
-		wildcardInHead = false
+		wildcardInHead = wildcardInTail
 	}
 
 	r := s == ""
