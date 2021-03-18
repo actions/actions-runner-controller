@@ -463,7 +463,7 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 		ExpiresAt:    metav1.NewTime(rt.GetExpiresAt().Time),
 	}
 
-	if err := r.Status().Update(ctx, updated); err != nil {
+	if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
 		log.Error(err, "Failed to update runner status for Registration")
 		return false, err
 	}
