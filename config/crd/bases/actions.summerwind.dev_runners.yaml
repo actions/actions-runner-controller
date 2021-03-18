@@ -1572,11 +1572,6 @@ spec:
                 - expiresAt
                 - token
               type: object
-          required:
-            - message
-            - phase
-            - reason
-            - registration
           type: object
       type: object
   version: v1alpha1

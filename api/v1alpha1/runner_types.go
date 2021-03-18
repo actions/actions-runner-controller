@@ -121,13 +121,16 @@ func (rs *RunnerSpec) ValidateRepository() error {
 
 // RunnerStatus defines the observed state of Runner
 type RunnerStatus struct {
+	// +optional
 	Registration RunnerStatusRegistration `json:"registration"`
-	Phase        string                   `json:"phase"`
-	Reason       string                   `json:"reason"`
-	Message      string                   `json:"message"`
-
-	//+optional
-	LastRegistrationCheckTime *metav1.Time `json:"lastRegistrationCheckTime"`
+	// +optional
+	Phase string `json:"phase,omitempty"`
+	// +optional
+	Reason string `json:"reason,omitempty"`
+	// +optional
+	Message string `json:"message,omitempty"`
+	// +optional
+	LastRegistrationCheckTime *metav1.Time `json:"lastRegistrationCheckTime,omitempty"`
 }
 
 // RunnerStatusRegistration contains runner registration status
