@@ -369,7 +369,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				updated.Status.LastRegistrationCheckTime = &metav1.Time{Time: time.Now()}
 
 				if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
-					log.Error(err, "Failed to update runner status")
+					log.Error(err, "Failed to update runner status for LastRegistrationCheckTime")
 					return ctrl.Result{}, err
 				}
 
@@ -391,7 +391,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				updated.Status.Message = pod.Status.Message
 
 				if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
-					log.Error(err, "Failed to update runner status")
+					log.Error(err, "Failed to update runner status for Phase/Reason/Message")
 					return ctrl.Result{}, err
 				}
 			}
@@ -464,7 +464,7 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 	}
 
 	if err := r.Status().Update(ctx, updated); err != nil {
-		log.Error(err, "Failed to update runner status")
+		log.Error(err, "Failed to update runner status for Registration")
 		return false, err
 	}
 
