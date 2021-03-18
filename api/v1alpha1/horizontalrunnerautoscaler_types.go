@@ -156,6 +156,7 @@ type HorizontalRunnerAutoscalerStatus struct {
 	DesiredReplicas *int `json:"desiredReplicas,omitempty"`
 
 	// +optional
+	// +nullable
 	LastSuccessfulScaleOutTime *metav1.Time `json:"lastSuccessfulScaleOutTime,omitempty"`
 
 	// +optional
