@@ -207,6 +207,7 @@ spec:
               type: integer
             lastSuccessfulScaleOutTime:
               format: date-time
+              nullable: true
               type: string
             observedGeneration:
               description: ObservedGeneration is the most recent generation observed
