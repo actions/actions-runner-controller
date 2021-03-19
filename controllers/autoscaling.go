@@ -34,7 +34,7 @@ func getValueAvailableAt(now time.Time, from, to *time.Time, reservedValue int) 
 	return &reservedValue
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) getDesiredReplicasFromCache(hra v1alpha1.HorizontalRunnerAutoscaler) *int {
+func (r *HorizontalRunnerAutoscalerReconciler) fetchSuggestedReplicasFromCache(hra v1alpha1.HorizontalRunnerAutoscaler) *int {
 	var entry *v1alpha1.CacheEntry
 
 	for i := range hra.Status.CacheEntries {
@@ -63,7 +63,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) getDesiredReplicasFromCache(hra v
 	return nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	if hra.Spec.MinReplicas == nil {
 		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing minReplicas", hra.Namespace, hra.Name)
 	} else if hra.Spec.MaxReplicas == nil {
@@ -73,20 +73,20 @@ func (r *HorizontalRunnerAutoscalerReconciler) determineDesiredReplicas(rd v1alp
 	metrics := hra.Spec.Metrics
 	if len(metrics) == 0 {
 		if len(hra.Spec.ScaleUpTriggers) == 0 {
-			return r.calculateReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
+			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
 		}
 
-		return hra.Spec.MinReplicas, nil
+		return nil, nil
 	} else if metrics[0].Type == v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
-		return r.calculateReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
+		return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
 	} else if metrics[0].Type == v1alpha1.AutoscalingMetricTypePercentageRunnersBusy {
-		return r.calculateReplicasByPercentageRunnersBusy(rd, hra)
+		return r.suggestReplicasByPercentageRunnersBusy(rd, hra)
 	} else {
 		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q", metrics[0].Type)
 	}
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInProgressWorkflowRuns(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 
 	var repos [][]string
 	metrics := hra.Spec.Metrics
@@ -101,7 +101,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 		// we assume that the desired replicas should always be `minReplicas + capacityReservedThroughWebhook`.
 		// See https://github.com/summerwind/actions-runner-controller/issues/377#issuecomment-793372693
 		if len(metrics) == 0 {
-			return hra.Spec.MinReplicas, nil
+			return nil, nil
 		}
 
 		if len(metrics[0].RepositoryNames) == 0 {
@@ -178,28 +178,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 		}
 	}
 
-	minReplicas := *hra.Spec.MinReplicas
-	maxReplicas := *hra.Spec.MaxReplicas
 	necessaryReplicas := queued + inProgress
 
-	var desiredReplicas int
-
-	if necessaryReplicas < minReplicas {
-		desiredReplicas = minReplicas
-	} else if necessaryReplicas > maxReplicas {
-		desiredReplicas = maxReplicas
-	} else {
-		desiredReplicas = necessaryReplicas
-	}
-
-	rd.Status.Replicas = &desiredReplicas
-	replicas := desiredReplicas
-
 	r.Log.V(1).Info(
-		"Calculated desired replicas",
-		"computed_replicas_desired", desiredReplicas,
-		"spec_replicas_min", minReplicas,
-		"spec_replicas_max", maxReplicas,
+		fmt.Sprintf("Suggested desired replicas of %d by TotalNumberOfQueuedAndInProgressWorkflowRuns", necessaryReplicas),
 		"workflow_runs_completed", completed,
 		"workflow_runs_in_progress", inProgress,
 		"workflow_runs_queued", queued,
@@ -209,13 +191,11 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByQueuedAndInPro
 		"horizontal_runner_autoscaler", hra.Name,
 	)
 
-	return &replicas, nil
+	return &necessaryReplicas, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	ctx := context.Background()
-	minReplicas := *hra.Spec.MinReplicas
-	maxReplicas := *hra.Spec.MaxReplicas
 	metrics := hra.Spec.Metrics[0]
 	scaleUpThreshold := defaultScaleUpThreshold
 	scaleDownThreshold := defaultScaleDownThreshold
@@ -363,21 +343,13 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		desiredReplicas = *rd.Spec.Replicas
 	}
 
-	if desiredReplicas < minReplicas {
-		desiredReplicas = minReplicas
-	} else if desiredReplicas > maxReplicas {
-		desiredReplicas = maxReplicas
-	}
-
 	// NOTES for operators:
 	//
 	// - num_runners can be as twice as large as replicas_desired_before while
 	//   the runnerdeployment controller is replacing RunnerReplicaSet for runner update.
 
 	r.Log.V(1).Info(
-		"Calculated desired replicas",
-		"replicas_min", minReplicas,
-		"replicas_max", maxReplicas,
+		fmt.Sprintf("Suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),
 		"replicas_desired_before", desiredReplicasBefore,
 		"replicas_desired", desiredReplicas,
 		"num_runners", numRunners,
@@ -391,8 +363,5 @@ func (r *HorizontalRunnerAutoscalerReconciler) calculateReplicasByPercentageRunn
 		"repository", repository,
 	)
 
-	rd.Status.Replicas = &desiredReplicas
-	replicas := desiredReplicas
-
-	return &replicas, nil
+	return &desiredReplicas, nil
 }

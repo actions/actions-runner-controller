@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"time"
 
 	"github.com/summerwind/actions-runner-controller/github"
@@ -30,7 +31,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
@@ -51,6 +51,8 @@ type HorizontalRunnerAutoscalerReconciler struct {
 	CacheDuration time.Duration
 	Name          string
 }
+
+const defaultReplicas = 1
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerdeployments,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers,verbs=get;list;watch;create;update;patch;delete
@@ -83,41 +85,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	var replicas *int
-
-	replicasFromCache := r.getDesiredReplicasFromCache(hra)
-
-	if replicasFromCache != nil {
-		replicas = replicasFromCache
-	} else {
-		var err error
-
-		replicas, err = r.computeReplicas(rd, hra)
-		if err != nil {
-			r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
-
-			log.Error(err, "Could not compute replicas")
-
-			return ctrl.Result{}, err
-		}
-	}
-
-	const defaultReplicas = 1
-
-	currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
-	newDesiredReplicas := getIntOrDefault(replicas, defaultReplicas)
-
 	now := time.Now()
 
-	for _, reservation := range hra.Spec.CapacityReservations {
-		if reservation.ExpirationTime.Time.After(now) {
-			newDesiredReplicas += reservation.Replicas
-		}
+	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, rd, hra)
+	if err != nil {
+		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+
+		log.Error(err, "Could not compute replicas")
+
+		return ctrl.Result{}, err
 	}
 
-	if hra.Spec.MaxReplicas != nil && *hra.Spec.MaxReplicas < newDesiredReplicas {
-		newDesiredReplicas = *hra.Spec.MaxReplicas
-	}
+	currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
 
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 	if currentDesiredReplicas != newDesiredReplicas {
@@ -143,7 +122,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		updated.Status.DesiredReplicas = &newDesiredReplicas
 	}
 
-	if replicasFromCache == nil {
+	if computedReplicasFromCache == nil {
 		if updated == nil {
 			updated = hra.DeepCopy()
 		}
@@ -160,7 +139,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 
 		updated.Status.CacheEntries = append(cacheEntries, v1alpha1.CacheEntry{
 			Key:            v1alpha1.CacheEntryKeyDesiredReplicas,
-			Value:          *replicas,
+			Value:          computedReplicas,
 			ExpirationTime: metav1.Time{Time: time.Now().Add(cacheDuration)},
 		})
 	}
@@ -200,13 +179,58 @@ func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager
 		Complete(r)
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) computeReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
-	var computedReplicas *int
-
-	replicas, err := r.determineDesiredReplicas(rd, hra)
-	if err != nil {
-		return nil, err
+func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (int, int, *int, error) {
+	minReplicas := defaultReplicas
+	if hra.Spec.MinReplicas != nil && *hra.Spec.MinReplicas > 0 {
+		minReplicas = *hra.Spec.MinReplicas
 	}
+
+	var suggestedReplicas int
+
+	suggestedReplicasFromCache := r.fetchSuggestedReplicasFromCache(hra)
+
+	var cached *int
+
+	if suggestedReplicasFromCache != nil {
+		cached = suggestedReplicasFromCache
+
+		if cached == nil {
+			suggestedReplicas = minReplicas
+		} else {
+			suggestedReplicas = *cached
+		}
+	} else {
+		v, err := r.suggestDesiredReplicas(rd, hra)
+		if err != nil {
+			return 0, 0, nil, err
+		}
+
+		if v == nil {
+			suggestedReplicas = minReplicas
+		} else {
+			suggestedReplicas = *v
+		}
+	}
+
+	var reserved int
+
+	for _, reservation := range hra.Spec.CapacityReservations {
+		if reservation.ExpirationTime.Time.After(now) {
+			reserved += reservation.Replicas
+		}
+	}
+
+	newDesiredReplicas := suggestedReplicas + reserved
+
+	if newDesiredReplicas < minReplicas {
+		newDesiredReplicas = minReplicas
+	} else if hra.Spec.MaxReplicas != nil && newDesiredReplicas > *hra.Spec.MaxReplicas {
+		newDesiredReplicas = *hra.Spec.MaxReplicas
+	}
+
+	//
+	// Delay scaling-down for ScaleDownDelaySecondsAfterScaleUp or DefaultScaleDownDelay
+	//
 
 	var scaleDownDelay time.Duration
 
@@ -216,17 +240,50 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicas(rd v1alpha1.Runne
 		scaleDownDelay = DefaultScaleDownDelay
 	}
 
-	now := time.Now()
+	var scaleDownDelayUntil *time.Time
 
 	if hra.Status.DesiredReplicas == nil ||
-		*hra.Status.DesiredReplicas < *replicas ||
-		hra.Status.LastSuccessfulScaleOutTime == nil ||
-		hra.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay).Before(now) {
+		*hra.Status.DesiredReplicas < newDesiredReplicas ||
+		hra.Status.LastSuccessfulScaleOutTime == nil {
 
-		computedReplicas = replicas
+	} else if hra.Status.LastSuccessfulScaleOutTime != nil {
+		t := hra.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay)
+
+		// ScaleDownDelay is not passed
+		if t.After(now) {
+			scaleDownDelayUntil = &t
+			newDesiredReplicas = *hra.Status.DesiredReplicas
+		}
 	} else {
-		computedReplicas = hra.Status.DesiredReplicas
+		newDesiredReplicas = *hra.Status.DesiredReplicas
 	}
 
-	return computedReplicas, nil
+	//
+	// Logs various numbers for monitoring and debugging purpose
+	//
+
+	kvs := []interface{}{
+		"suggested", suggestedReplicas,
+		"reserved", reserved,
+		"min", minReplicas,
+	}
+
+	if cached != nil {
+		kvs = append(kvs, "cached", *cached)
+	}
+
+	if scaleDownDelayUntil != nil {
+		kvs = append(kvs, "last_scale_up_time", *hra.Status.LastSuccessfulScaleOutTime)
+		kvs = append(kvs, "scale_down_delay_until", scaleDownDelayUntil)
+	}
+
+	if maxReplicas := hra.Spec.MaxReplicas; maxReplicas != nil {
+		kvs = append(kvs, "max", *maxReplicas)
+	}
+
+	log.V(1).Info(fmt.Sprintf("Calculated desired replicas of %d", newDesiredReplicas),
+		kvs...,
+	)
+
+	return newDesiredReplicas, suggestedReplicas, suggestedReplicasFromCache, nil
 }
