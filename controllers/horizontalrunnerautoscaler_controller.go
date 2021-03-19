@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/summerwind/actions-runner-controller/controllers/metrics"
 )
 
 const (
@@ -72,6 +73,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 	if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
+
+	metrics.SetHorizontalRunnerAutoscalerSpec(hra.ObjectMeta, hra.Spec)
 
 	var rd v1alpha1.RunnerDeployment
 	if err := r.Get(ctx, types.NamespacedName{
@@ -145,6 +148,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 	}
 
 	if updated != nil {
+		metrics.SetHorizontalRunnerAutoscalerStatus(updated.ObjectMeta, updated.Status)
+
 		if err := r.Status().Patch(ctx, updated, client.MergeFrom(&hra)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("patching horizontalrunnerautoscaler status to add cache entry: %w", err)
 		}

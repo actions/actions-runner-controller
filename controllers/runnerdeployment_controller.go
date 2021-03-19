@@ -38,6 +38,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/summerwind/actions-runner-controller/controllers/metrics"
 )
 
 const (
@@ -76,6 +77,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	if !rd.ObjectMeta.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
+
+	metrics.SetRunnerDeployment(rd)
 
 	var myRunnerReplicaSetList v1alpha1.RunnerReplicaSetList
 	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
