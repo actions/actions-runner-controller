@@ -224,7 +224,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				},
 			}
 
-			got, err := h.computeReplicas(rd, hra)
+			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -234,12 +234,8 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				return
 			}
 
-			if got == nil {
-				t.Fatalf("unexpected value of rs.Spec.Replicas: nil")
-			}
-
-			if *got != tc.want {
-				t.Errorf("%d: incorrect desired replicas: want %d, got %d", i, tc.want, *got)
+			if got != tc.want {
+				t.Errorf("%d: incorrect desired replicas: want %d, got %d", i, tc.want, got)
 			}
 		})
 	}
@@ -424,6 +420,8 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		_ = v1alpha1.AddToScheme(scheme)
 
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			t.Helper()
+
 			server := fake.NewServer(
 				fake.WithListRepositoryWorkflowRunsResponse(200, tc.workflowRuns, tc.workflowRuns_queued, tc.workflowRuns_in_progress),
 				fake.WithListWorkflowJobsResponse(200, tc.workflowJobs),
@@ -485,7 +483,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				},
 			}
 
-			got, err := h.computeReplicas(rd, hra)
+			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -495,12 +493,8 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				return
 			}
 
-			if got == nil {
-				t.Fatalf("unexpected value of rs.Spec.Replicas: nil, wanted %v", tc.want)
-			}
-
-			if *got != tc.want {
-				t.Errorf("%d: incorrect desired replicas: want %d, got %d", i, tc.want, *got)
+			if got != tc.want {
+				t.Errorf("%d: incorrect desired replicas: want %d, got %d", i, tc.want, got)
 			}
 		})
 	}
