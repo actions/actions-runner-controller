@@ -71,7 +71,9 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		err := k8sClient.Create(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
+		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			Namespace: ns.Name,
+		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
 		responses := &fake.FixedResponses{}
@@ -97,6 +99,21 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 			return fmt.Sprintf("%s%s", ns.Name, name)
 		}
 
+		runnerController := &RunnerReconciler{
+			Client:                      mgr.GetClient(),
+			Scheme:                      scheme.Scheme,
+			Log:                         logf.Log,
+			Recorder:                    mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			GitHubClient:                env.ghClient,
+			RunnerImage:                 "example/runner:test",
+			DockerImage:                 "example/docker:test",
+			Name:                        controllerName("runner"),
+			RegistrationRecheckInterval: time.Millisecond,
+			RegistrationRecheckJitter:   time.Millisecond,
+		}
+		err = runnerController.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup runner controller")
+
 		replicasetController := &RunnerReplicaSetReconciler{
 			Client:       mgr.GetClient(),
 			Scheme:       scheme.Scheme,
@@ -106,7 +123,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 			Name:         controllerName("runnerreplicaset"),
 		}
 		err = replicasetController.SetupWithManager(mgr)
-		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+		Expect(err).NotTo(HaveOccurred(), "failed to setup runnerreplicaset controller")
 
 		deploymentsController := &RunnerDeploymentReconciler{
 			Client:   mgr.GetClient(),
@@ -116,7 +133,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 			Name:     controllerName("runnnerdeployment"),
 		}
 		err = deploymentsController.SetupWithManager(mgr)
-		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+		Expect(err).NotTo(HaveOccurred(), "failed to setup runnerdeployment controller")
 
 		autoscalerController := &HorizontalRunnerAutoscalerReconciler{
 			Client:        mgr.GetClient(),
@@ -128,7 +145,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 			Name:          controllerName("horizontalrunnerautoscaler"),
 		}
 		err = autoscalerController.SetupWithManager(mgr)
-		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler controller")
 
 		autoscalerWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{
 			Client:    mgr.GetClient(),
@@ -475,10 +492,9 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
+				env.SyncRunnerRegistrations()
+				ExpectRunnerCountEventuallyEquals(ctx, ns.Name, 3)
 			}
 
 			// Scale-up to 4 replicas on first check_run create webhook event
@@ -486,19 +502,19 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 4, "runners after first webhook event")
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(4, "count of fake list runners")
+				env.SyncRunnerRegistrations()
+				ExpectRunnerCountEventuallyEquals(ctx, ns.Name, 4)
 			}
 
 			// Scale-up to 5 replicas on second check_run create webhook event
 			{
 				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 5, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
+				env.SyncRunnerRegistrations()
+				ExpectRunnerCountEventuallyEquals(ctx, ns.Name, 5)
 			}
-
-			env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
 		})
 
 		It("should create and scale organization's repository runners only on check_run event", func() {
@@ -1224,6 +1240,44 @@ func ExpectRunnerSetsCountEventuallyEquals(ctx context.Context, ns string, count
 			}
 
 			return len(runnerSets.Items)
+		},
+		time.Second*10, time.Millisecond*500).Should(BeEquivalentTo(count), optionalDescription...)
+}
+
+func ExpectRunnerCountEventuallyEquals(ctx context.Context, ns string, count int, optionalDescription ...interface{}) {
+	runners := actionsv1alpha1.RunnerList{Items: []actionsv1alpha1.Runner{}}
+
+	EventuallyWithOffset(
+		1,
+		func() int {
+			err := k8sClient.List(ctx, &runners, client.InNamespace(ns))
+			if err != nil {
+				logf.Log.Error(err, "list runner sets")
+			}
+
+			var running int
+
+			for _, r := range runners.Items {
+				if r.Status.Phase == string(corev1.PodRunning) {
+					running++
+				} else {
+					var pod corev1.Pod
+					if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: r.Name}, &pod); err != nil {
+						logf.Log.Error(err, "simulating pod controller")
+						continue
+					}
+
+					copy := pod.DeepCopy()
+					copy.Status.Phase = corev1.PodRunning
+
+					if err := k8sClient.Status().Patch(ctx, copy, client.MergeFrom(&pod)); err != nil {
+						logf.Log.Error(err, "simulating pod controller")
+						continue
+					}
+				}
+			}
+
+			return running
 		},
 		time.Second*10, time.Millisecond*500).Should(BeEquivalentTo(count), optionalDescription...)
 }

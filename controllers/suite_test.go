@@ -55,9 +55,17 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
+	var apiServerFlags []string
+
+	apiServerFlags = append(apiServerFlags, envtest.DefaultKubeAPIServerFlags...)
+	// Avoids the following error:
+	// 2021-03-19T15:14:11.673+0900    ERROR   controller-runtime.controller   Reconciler error      {"controller": "testns-tvjzjrunner", "request": "testns-gdnyx/example-runnerdeploy-zps4z-j5562", "error": "Pod \"example-runnerdeploy-zps4z-j5562\" is invalid: [spec.containers[1].image: Required value, spec.containers[1].securityContext.privileged: Forbidden: disallowed by cluster policy]"}
+	apiServerFlags = append(apiServerFlags, "--allow-privileged=true")
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:  []string{filepath.Join("..", "config", "crd", "bases")},
+		KubeAPIServerFlags: apiServerFlags,
 	}
 
 	var err error
