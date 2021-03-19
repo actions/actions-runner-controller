@@ -22,21 +22,21 @@ var (
 var (
 	horizontalRunnerAutoscalerMinReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "horizontal_runner_autoscaler_min_replicas",
+			Name: "horizontalrunnerautoscaler_spec_min_replicas",
 			Help: "minReplicas of HorizontalRunnerAutoscaler",
 		},
 		[]string{hraName, hraNamespace},
 	)
 	horizontalRunnerAutoscalerMaxReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "horizontal_runner_autoscaler_max_replicas",
+			Name: "horizontalrunnerautoscaler_spec_max_replicas",
 			Help: "maxReplicas of HorizontalRunnerAutoscaler",
 		},
 		[]string{hraName, hraNamespace},
 	)
 	horizontalRunnerAutoscalerDesiredReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "horizontal_runner_autoscaler_desired_replicas",
+			Name: "horizontalrunnerautoscaler_status_desired_replicas",
 			Help: "desiredReplicas of HorizontalRunnerAutoscaler",
 		},
 		[]string{hraName, hraNamespace},

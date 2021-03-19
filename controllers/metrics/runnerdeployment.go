@@ -19,7 +19,7 @@ var (
 var (
 	runnerDeploymentReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "runner_deployment_replicas",
+			Name: "runnerdeployment_spec_replicas",
 			Help: "replicas of RunnerDeployment",
 		},
 		[]string{rdName, rdNamespace},
