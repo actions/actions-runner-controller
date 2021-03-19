@@ -192,17 +192,28 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	if len(oldSets) > 0 {
 		readyReplicas := newestSet.Status.ReadyReplicas
 
-		if readyReplicas < currentDesiredReplicas {
-			log.WithValues("runnerreplicaset", types.NamespacedName{
+		oldSetsCount := len(oldSets)
+
+		logWithDebugInfo := log.WithValues(
+			"newest_runnerreplicaset", types.NamespacedName{
 				Namespace: newestSet.Namespace,
 				Name:      newestSet.Name,
-			}).
-				Info("Waiting until the newest runner replica set to be 100% available",
-					"ready", readyReplicas,
-					"desired", currentDesiredReplicas,
-				)
+			},
+			"newest_runnerreplicaset_replicas_ready", readyReplicas,
+			"newest_runnerreplicaset_replicas_desired", currentDesiredReplicas,
+			"old_runnerreplicasets_count", oldSetsCount,
+		)
 
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		if readyReplicas < currentDesiredReplicas {
+			logWithDebugInfo.
+				Info("Waiting until the newest runnerreplicaset to be 100% available")
+
+			return ctrl.Result{}, nil
+		}
+
+		if oldSetsCount > 0 {
+			logWithDebugInfo.
+				Info("The newest runnerreplicaset is 100% available. Deleting old runnerreplicasets")
 		}
 
 		for i := range oldSets {

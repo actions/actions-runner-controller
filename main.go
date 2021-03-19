@@ -41,8 +41,8 @@ const (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme = runtime.NewScheme()
+	log    = ctrl.Log.WithName("actions-runner-controller")
 )
 
 func init() {
@@ -109,13 +109,13 @@ func main() {
 		Namespace:          namespace,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		log.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
 	runnerReconciler := &controllers.RunnerReconciler{
 		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("Runner"),
+		Log:          log.WithName("runner"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: ghClient,
 		RunnerImage:  runnerImage,
@@ -123,64 +123,64 @@ func main() {
 	}
 
 	if err = runnerReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Runner")
+		log.Error(err, "unable to create controller", "controller", "Runner")
 		os.Exit(1)
 	}
 
 	runnerSetReconciler := &controllers.RunnerReplicaSetReconciler{
 		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("RunnerReplicaSet"),
+		Log:          log.WithName("runnerreplicaset"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: ghClient,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
+		log.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
 		os.Exit(1)
 	}
 
 	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
 		Client:             mgr.GetClient(),
-		Log:                ctrl.Log.WithName("controllers").WithName("RunnerDeployment"),
+		Log:                log.WithName("runnerdeployment"),
 		Scheme:             mgr.GetScheme(),
 		CommonRunnerLabels: commonRunnerLabels,
 	}
 
 	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RunnerDeployment")
+		log.Error(err, "unable to create controller", "controller", "RunnerDeployment")
 		os.Exit(1)
 	}
 
 	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
 		Client:        mgr.GetClient(),
-		Log:           ctrl.Log.WithName("controllers").WithName("HorizontalRunnerAutoscaler"),
+		Log:           log.WithName("horizontalrunnerautoscaler"),
 		Scheme:        mgr.GetScheme(),
 		GitHubClient:  ghClient,
 		CacheDuration: syncPeriod - 10*time.Second,
 	}
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
 		os.Exit(1)
 	}
 
 	if err = (&actionsv1alpha1.Runner{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "Runner")
+		log.Error(err, "unable to create webhook", "webhook", "Runner")
 		os.Exit(1)
 	}
 	if err = (&actionsv1alpha1.RunnerDeployment{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "RunnerDeployment")
+		log.Error(err, "unable to create webhook", "webhook", "RunnerDeployment")
 		os.Exit(1)
 	}
 	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
-	setupLog.Info("starting manager")
+	log.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		log.Error(err, "problem running manager")
 		os.Exit(1)
 	}
 }

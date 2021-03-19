@@ -114,13 +114,14 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		desired = 1
 	}
 
-	log.V(0).Info("debug", "desired", desired, "available", available)
-
 	if available > desired {
 		n := available - desired
 
-		// get runners that are currently not busy
-		var notBusy []v1alpha1.Runner
+		log.V(0).Info(fmt.Sprintf("Deleting %d runners", n), "desired", desired, "available", available, "ready", ready)
+
+		// get runners that are currently offline/not busy/timed-out to register
+		var deletionCandidates []v1alpha1.Runner
+
 		for _, runner := range allRunners.Items {
 			busy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 			if err != nil {
@@ -168,34 +169,36 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 						"configuredRegistrationTimeout", registrationTimeout,
 					)
 
-					notBusy = append(notBusy, runner)
+					deletionCandidates = append(deletionCandidates, runner)
 				}
 
 				// offline runners should always be a great target for scale down
 				if offline {
-					notBusy = append(notBusy, runner)
+					deletionCandidates = append(deletionCandidates, runner)
 				}
 			} else if !busy {
-				notBusy = append(notBusy, runner)
+				deletionCandidates = append(deletionCandidates, runner)
 			}
 		}
 
-		if len(notBusy) < n {
-			n = len(notBusy)
+		if len(deletionCandidates) < n {
+			n = len(deletionCandidates)
 		}
 
 		for i := 0; i < n; i++ {
-			if err := r.Client.Delete(ctx, &notBusy[i]); client.IgnoreNotFound(err) != nil {
+			if err := r.Client.Delete(ctx, &deletionCandidates[i]); client.IgnoreNotFound(err) != nil {
 				log.Error(err, "Failed to delete runner resource")
 
 				return ctrl.Result{}, err
 			}
 
-			r.Recorder.Event(&rs, corev1.EventTypeNormal, "RunnerDeleted", fmt.Sprintf("Deleted runner '%s'", notBusy[i].Name))
-			log.Info("Deleted runner", "runnerreplicaset", rs.ObjectMeta.Name)
+			r.Recorder.Event(&rs, corev1.EventTypeNormal, "RunnerDeleted", fmt.Sprintf("Deleted runner '%s'", deletionCandidates[i].Name))
+			log.Info("Deleted runner")
 		}
 	} else if desired > available {
 		n := desired - available
+
+		log.V(0).Info(fmt.Sprintf("Creating %d runner(s)", n), "desired", desired, "available", available, "ready", ready)
 
 		for i := 0; i < n; i++ {
 			newRunner, err := r.newRunner(rs)
