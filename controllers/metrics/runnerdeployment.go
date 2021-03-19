@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	rdName      = "rd_name"
-	rdNamespace = "rd_namespace"
+	rdName      = "runnerdeployment"
+	rdNamespace = "namespace"
 )
 
 var (

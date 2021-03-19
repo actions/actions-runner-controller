@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	hraName      = "hra_name"
-	hraNamespace = "hra_namespace"
+	hraName      = "horizontalrunnerautoscaler"
+	hraNamespace = "namespace"
 )
 
 var (
