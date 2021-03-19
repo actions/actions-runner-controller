@@ -255,15 +255,25 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			// achieves that.
 			if lastCheckTime := runner.Status.LastRegistrationCheckTime; lastCheckTime != nil {
 				nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
-				if nextCheckTime.After(time.Now()) {
+				now := time.Now()
+				if nextCheckTime.After(now) {
+					requeueAfter := nextCheckTime.Sub(now)
+
 					log.Info(
-						fmt.Sprintf("Skipping registration check because it's deferred until %s", nextCheckTime),
+						fmt.Sprintf("Skipped registration check because it's deferred until %s. Retrying in %s at latest", nextCheckTime, requeueAfter),
+						"lastRegistrationCheckTime", lastCheckTime,
+						"registrationCheckInterval", registrationCheckInterval,
 					)
 
-					// Note that we don't need to explicitly requeue on this reconcilation because
-					// the requeue should have been already scheduled previsouly
-					// (with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil` as noted above and coded below)
-					return ctrl.Result{}, nil
+					// Without RequeueAfter, the controller may not retry on scheduled. Instead, it must wait until the
+					// next sync period passes, which can be too much later than nextCheckTime.
+					//
+					// We need to requeue on this reconcilation even though we have already scheduled the initial
+					// requeue previously with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil`.
+					// Apparently, the workqueue used by controller-runtime seems to deduplicate and resets the delay on
+					// other requeues- so the initial scheduled requeue may have been reset due to requeue on
+					// spec/status change.
+					return ctrl.Result{RequeueAfter: requeueAfter}, nil
 				}
 			}
 
