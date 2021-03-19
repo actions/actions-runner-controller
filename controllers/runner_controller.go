@@ -167,9 +167,11 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				// Gracefully handle pod-already-exists errors due to informer cache delay.
 				// Without this we got a few errors like the below on new runner pod:
 				// 2021-03-16T00:23:10.116Z        ERROR   controller-runtime.controller   Reconciler error      {"controller": "runner-controller", "request": "default/example-runnerdeploy-b2g2g-j4mcp", "error": "pods \"example-runnerdeploy-b2g2g-j4mcp\" already exists"}
-				log.Info("Runner pod already exists. Probably this pod has been already created in previous reconcilation but the new pod is not yet cached.")
+				log.Info(
+					"Failed to create pod due to AlreadyExists error. Probably this pod has been already created in previous reconcilation but is still not in the informer cache. Will retry on pod created. If it doesn't repeat, there's no problem",
+				)
 
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				return ctrl.Result{}, nil
 			}
 
 			log.Error(err, "Failed to create pod resource")
@@ -187,7 +189,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 			if deletionDidTimeout {
 				log.Info(
-					"Pod failed to delete itself in a timely manner. "+
+					fmt.Sprintf("Failed to delete pod within %s. ", deletionTimeout)+
 						"This is typically the case when a Kubernetes node became unreachable "+
 						"and the kube controller started evicting nodes. Forcefully deleting the pod to not get stuck.",
 					"podDeletionTimestamp", pod.DeletionTimestamp,
@@ -262,9 +264,12 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			if lastCheckTime := runner.Status.LastRegistrationCheckTime; lastCheckTime != nil {
 				nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
 				now := time.Now()
-				if nextCheckTime.After(now) {
-					requeueAfter := nextCheckTime.Sub(now)
 
+				// Requeue scheduled by RequeueAfter can happen a bit earlier (like dozens of milliseconds)
+				// so to avoid excessive, in-effective retry, we heuristically ignore the remaining delay in case it is
+				// shorter than 1s
+				requeueAfter := nextCheckTime.Sub(now) - time.Second
+				if requeueAfter > 0 {
 					log.Info(
 						fmt.Sprintf("Skipped registration check because it's deferred until %s. Retrying in %s at latest", nextCheckTime, requeueAfter),
 						"lastRegistrationCheckTime", lastCheckTime,
@@ -792,8 +797,6 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Name != "" {
 		name = r.Name
 	}
-
-	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	r.Recorder = mgr.GetEventRecorderFor(name)
 
