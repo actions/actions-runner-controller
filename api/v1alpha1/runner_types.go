@@ -130,6 +130,7 @@ type RunnerStatus struct {
 	// +optional
 	Message string `json:"message,omitempty"`
 	// +optional
+	// +nullable
 	LastRegistrationCheckTime *metav1.Time `json:"lastRegistrationCheckTime,omitempty"`
 }
 

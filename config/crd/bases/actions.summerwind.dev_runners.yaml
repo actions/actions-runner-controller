@@ -1543,6 +1543,7 @@ spec:
           properties:
             lastRegistrationCheckTime:
               format: date-time
+              nullable: true
               type: string
             message:
               type: string
