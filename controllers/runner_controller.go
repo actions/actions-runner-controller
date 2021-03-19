@@ -52,12 +52,15 @@ const (
 // RunnerReconciler reconciles a Runner object
 type RunnerReconciler struct {
 	client.Client
-	Log          logr.Logger
-	Recorder     record.EventRecorder
-	Scheme       *runtime.Scheme
-	GitHubClient *github.Client
-	RunnerImage  string
-	DockerImage  string
+	Log                         logr.Logger
+	Recorder                    record.EventRecorder
+	Scheme                      *runtime.Scheme
+	GitHubClient                *github.Client
+	RunnerImage                 string
+	DockerImage                 string
+	Name                        string
+	RegistrationRecheckInterval time.Duration
+	RegistrationRecheckJitter   time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -248,6 +251,9 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// saving API calls and scary{ log messages
 		if !restart {
 			registrationCheckInterval := time.Minute
+			if r.RegistrationRecheckInterval > 0 {
+				registrationCheckInterval = r.RegistrationRecheckInterval
+			}
 
 			// We want to call ListRunners GitHub Actions API only once per runner per minute.
 			// This if block, in conjunction with:
@@ -364,7 +370,12 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 
 			if (notFound || offline) && !registrationDidTimeout {
-				registrationRecheckDelay = registrationCheckInterval + wait.Jitter(10*time.Second, 0.1)
+				registrationRecheckJitter := 10 * time.Second
+				if r.RegistrationRecheckJitter > 0 {
+					registrationRecheckJitter = r.RegistrationRecheckJitter
+				}
+
+				registrationRecheckDelay = registrationCheckInterval + wait.Jitter(registrationRecheckJitter, 0.1)
 			}
 		}
 
@@ -778,6 +789,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	name := "runner-controller"
+	if r.Name != "" {
+		name = r.Name
+	}
+
+	r.Recorder = mgr.GetEventRecorderFor(name)
 
 	r.Recorder = mgr.GetEventRecorderFor(name)
 

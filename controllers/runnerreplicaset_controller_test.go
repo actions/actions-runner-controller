@@ -47,7 +47,9 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		err := k8sClient.Create(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
+		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			Namespace: ns.Name,
+		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
 		runnersList = fake.NewRunnersList()
@@ -127,7 +129,7 @@ var _ = Context("Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "foo/bar",
+								Repository: "test/valid",
 								Image:      "bar",
 								Env: []corev1.EnvVar{
 									{Name: "FOO", Value: "FOOVALUE"},
