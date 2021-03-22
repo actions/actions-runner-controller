@@ -13,8 +13,9 @@ RUN apt update -y \
     && apt update -y \
     && apt install -y --no-install-recommends \
     build-essential \
-    curl \
     ca-certificates \
+    cmake \
+    curl \
     dnsutils \
     ftp \
     git \
@@ -26,6 +27,8 @@ RUN apt update -y \
     netcat \
     openssh-client \
     parallel \
+    python3-pip \
+    python-is-python3 \
     rsync \
     shellcheck \
     sudo \
@@ -37,12 +40,13 @@ RUN apt update -y \
     wget \
     zip \
     zstd \
-    python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
   && curl -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_${ARCH} \
   && chmod +x /usr/local/bin/dumb-init
+
+ENV PATH="${HOME}/.local/bin:${PATH}"
 
 # Docker download supports arm64 as aarch64 & amd64 as x86_64
 RUN set -vx; \

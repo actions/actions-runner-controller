@@ -8,12 +8,14 @@ RUN apt update -y \
     && apt install -y --no-install-recommends \
     software-properties-common \
     build-essential \
-    curl \
     ca-certificates \
+    cmake \
+    curl \
     dnsutils \
     ftp \
     git \
     iproute2 \
+    iptables \
     iputils-ping \
     jq \
     libunwind8 \
@@ -21,9 +23,12 @@ RUN apt update -y \
     netcat \
     openssh-client \
     parallel \
+    python3-pip
+    python-is-python3 \
     rsync \
     shellcheck \
     sudo \
+    supervisor \
     telnet \
     time \
     tzdata \
@@ -32,10 +37,9 @@ RUN apt update -y \
     wget \
     zip \
     zstd \
-    python-is-python3 \
-    iptables \
-    supervisor \
     && rm -rf /var/lib/apt/list/*
+
+ENV PATH="${HOME}/.local/bin:${PATH}"
 
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid 1000 runner \
