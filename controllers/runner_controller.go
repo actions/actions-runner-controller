@@ -634,45 +634,58 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}...)
 	}
 
-	if !dockerdInRunner && dockerEnabled {
-		runnerVolumeName := "runner"
-		runnerVolumeMountPath := "/runner"
+	//
+	// /runner must be generated on runtime from /runnertmp embedded in the container image.
+	//
+	// When you're NOT using dindWithinRunner=true,
+	// it must also be shared with the dind container as it seems like required to run docker steps.
+	//
 
-		pod.Spec.Volumes = []corev1.Volume{
-			{
+	runnerVolumeName := "runner"
+	runnerVolumeMountPath := "/runner"
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes,
+		corev1.Volume{
+			Name: runnerVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	)
+
+	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+		corev1.VolumeMount{
+			Name:      runnerVolumeName,
+			MountPath: runnerVolumeMountPath,
+		},
+	)
+
+	if !dockerdInRunner && dockerEnabled {
+		pod.Spec.Volumes = append(pod.Spec.Volumes,
+			corev1.Volume{
 				Name: "work",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
-			{
-				Name: runnerVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			{
+			corev1.Volume{
 				Name: "certs-client",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
-		}
-		pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
-			{
+		)
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
 				Name:      "work",
 				MountPath: workDir,
 			},
-			{
-				Name:      runnerVolumeName,
-				MountPath: runnerVolumeMountPath,
-			},
-			{
+			corev1.VolumeMount{
 				Name:      "certs-client",
 				MountPath: "/certs/client",
 				ReadOnly:  true,
 			},
-		}
+		)
 		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, []corev1.EnvVar{
 			{
 				Name:  "DOCKER_HOST",
