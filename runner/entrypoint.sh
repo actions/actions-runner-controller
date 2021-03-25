@@ -29,21 +29,13 @@ else
   exit 1
 fi
 
-if [ -n "${RUNNER_WORKDIR}" ]; then
-  WORKDIR_ARG="--work ${RUNNER_WORKDIR}"
-fi
-
-if [ -n "${RUNNER_LABELS}" ]; then
-  LABEL_ARG="--labels ${RUNNER_LABELS}"
-fi
-
 if [ -z "${RUNNER_TOKEN}" ]; then
   echo "RUNNER_TOKEN must be set" 1>&2
   exit 1
 fi
 
 if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
-  RUNNER_GROUP_ARG="--runnergroup ${RUNNER_GROUP}"
+  RUNNER_GROUPS=${RUNNER_GROUP}
 fi
 
 # Hack due to https://github.com/summerwind/actions-runner-controller/issues/252#issuecomment-758338483
@@ -56,7 +48,14 @@ sudo chown -R runner:docker /runner
 mv /runnertmp/* /runner/
 
 cd /runner
-./config.sh --unattended --replace --name "${RUNNER_NAME}" --url "${GITHUB_URL}${ATTACH}" --token "${RUNNER_TOKEN}" ${RUNNER_GROUP_ARG} ${LABEL_ARG} ${WORKDIR_ARG}
+./config.sh --unattended --replace \
+  --name "${RUNNER_NAME}" \
+  --url "${GITHUB_URL}${ATTACH}" \
+  --token "${RUNNER_TOKEN}" \
+  --runnergroup "${RUNNER_GROUPS}" \
+  --labels "${RUNNER_LABELS}" \
+  --work "${RUNNER_WORKDIR}"
+
 mkdir ./externals
 # Hack due to the DinD volumes
 mv ./externalstmp/* ./externals/
