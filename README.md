@@ -163,7 +163,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * repo (Full control)
 
-**Scopes for a Organisation Runner**
+**Scopes for a Organization Runner**
 
 * repo (Full control)
 * admin:org (Full control)
@@ -419,11 +419,11 @@ spec:
 > Please get prepared to put some time and effort to learn and leverage this feature!
 
 `actions-runner-controller` has an optional Webhook server that receives GitHub Webhook events and scale
-[`RunnerDeployment`s](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscaler`s](#autoscaling).
+[`RunnerDeployments`](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscalers`](#autoscaling).
 
 Today, the Webhook server can be configured to respond GitHub `check_run`, `pull_request`, and `push` events
 by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within
-`HorizontalRunerAutoscaler`'s `Spec`.
+`HorizontalRunerAutoscaler's` `Spec`.
 
 More concretely, you can configure the targeted GitHub event types and the `N` in
 `scaleUpTriggers`:
