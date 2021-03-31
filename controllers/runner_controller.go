@@ -703,6 +703,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
 			Name:  "docker",
 			Image: r.DockerImage,
+			Args:  []string{"dockerd"},
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "work",
@@ -731,11 +732,17 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 		if mtu := runner.Spec.DockerMTU; mtu != nil {
 			pod.Spec.Containers[1].Env = append(pod.Spec.Containers[1].Env, []corev1.EnvVar{
+				// See https://docs.docker.com/engine/security/rootless/
 				{
 					Name:  "DOCKERD_ROOTLESS_ROOTLESSKIT_MTU",
 					Value: fmt.Sprintf("%d", *runner.Spec.DockerMTU),
 				},
 			}...)
+
+			pod.Spec.Containers[1].Args = append(pod.Spec.Containers[1].Args,
+				"--mtu",
+				fmt.Sprintf("%d", *runner.Spec.DockerMTU),
+			)
 		}
 
 	}
