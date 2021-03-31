@@ -16,6 +16,7 @@ on:
       - runner/dindrunner.Dockerfile
       - runner/entrypoint.sh
       - .github/workflows/build-and-release-runners.yml
+  workflow_dispatch:
 
 jobs:
   build:
@@ -31,9 +32,9 @@ jobs:
     env:
       RUNNER_VERSION: 2.277.1
       DOCKER_VERSION: 19.03.12
-      DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+      DOCKER_QUAY_REPO: quay.io/sundae/actions-runner
     steps:
-      - name: Set outputs
+      - name: Set Outputs
         id: vars
         run: echo ::set-output name=sha_short::${GITHUB_SHA::7}
 
@@ -43,29 +44,23 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-        with:
-          version: latest
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        if: ${{ github.event_name == 'push' || github.event_name == 'release' }}
-        with:
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-
-      - name: Build and Push
-        uses: docker/build-push-action@v2
+      - name: Build Image
+        uses: redhat-actions/buildah-build@v2.3
+        id: docker-build
         with:
           context: ./runner
-          file: ./runner/${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          dockerfiles: ./runner/${{ matrix.dockerfile }}
           build-args: |
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ steps.vars.outputs.sha_short }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
+          image: ${{ matrix.name }}
+          tags: v${{ env.RUNNER_VERSION }} v${{ env.RUNNER_VERSION }}-${{ steps.vars.outputs.sha_short }} latest
+
+      - name: Push to Quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.docker-build.outputs.image }}
+          tags: ${{ steps.docker-build.outputs.tags }}
+          registry: ${{ env.DOCKER_QUAY_REPO }}
+          username: ${{ secrets.DOCKER_QUAY_ROBOT_USERNAME }}
+          password: ${{ secrets.DOCKER_QUAY_ROBOT_PASSWORD }}
