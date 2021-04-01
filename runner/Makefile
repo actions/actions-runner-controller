@@ -24,7 +24,7 @@ endif
 
 docker-build:
 	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
-	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f dindrunner.Dockerfile .
+	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
 
 
 docker-push:
@@ -46,5 +46,5 @@ docker-buildx:
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		-t "${DIND_RUNNER_NAME}:latest" \
-		-f dindrunner.Dockerfile \
+		-f Dockerfile.dindrunner \
 		. ${PUSH_ARG}

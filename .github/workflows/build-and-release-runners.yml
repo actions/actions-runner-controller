@@ -13,7 +13,7 @@ on:
     paths:
       - runner/patched/*
       - runner/Dockerfile
-      - runner/dindrunner.Dockerfile
+      - runner/Dockerfile.dindrunner
       - runner/entrypoint.sh
       - .github/workflows/build-and-release-runners.yml
 
@@ -27,7 +27,7 @@ jobs:
           - name: actions-runner
             dockerfile: Dockerfile
           - name: actions-runner-dind
-            dockerfile: dindrunner.Dockerfile
+            dockerfile: Dockerfile.dindrunner
     env:
       RUNNER_VERSION: 2.277.1
       DOCKER_VERSION: 19.03.12
