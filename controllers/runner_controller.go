@@ -25,6 +25,7 @@ import (
 
 	gogithub "github.com/google/go-github/v33/github"
 	"github.com/summerwind/actions-runner-controller/hash"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/go-logr/logr"
@@ -644,12 +645,21 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	runnerVolumeName := "runner"
 	runnerVolumeMountPath := "/runner"
+	runnerVolumeEmptyDir := &corev1.EmptyDirVolumeSource{}
+
+	if runner.Spec.RunnerVolumeSizeLimit != "" {
+		q, err := resource.ParseQuantity(runner.Spec.RunnerVolumeSizeLimit)
+		if err != nil {
+			return pod, err
+		}
+		runnerVolumeEmptyDir.SizeLimit = &q
+	}
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes,
 		corev1.Volume{
 			Name: runnerVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: runnerVolumeEmptyDir,
 			},
 		},
 	)

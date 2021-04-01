@@ -98,6 +98,8 @@ type RunnerSpec struct {
 	DockerMTU *int64 `json:"dockerMTU,omitempty"`
 	// +optional
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
+	// +optional
+	RunnerVolumeSizeLimit string `json:"runnerVolumeSizeLimit,omitempty"`
 }
 
 // ValidateRepository validates repository field.
