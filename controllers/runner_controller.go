@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	gogithub "github.com/google/go-github/v33/github"
 	"github.com/summerwind/actions-runner-controller/hash"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -700,23 +701,31 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				Value: "/certs/client",
 			},
 		}...)
-		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
-			Name:  "docker",
-			Image: r.DockerImage,
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "work",
-					MountPath: workDir,
-				},
-				{
-					Name:      runnerVolumeName,
-					MountPath: runnerVolumeMountPath,
-				},
-				{
-					Name:      "certs-client",
-					MountPath: "/certs/client",
-				},
+
+		// Determine the volume mounts assigned to the docker sidecar. In case extra mounts are included in the RunnerSpec, append them to the standard
+		// set of mounts. See https://github.com/summerwind/actions-runner-controller/issues/435 for context.
+		dockerVolumeMounts := []corev1.VolumeMount{
+			{
+				Name:      "work",
+				MountPath: workDir,
 			},
+			{
+				Name:      runnerVolumeName,
+				MountPath: runnerVolumeMountPath,
+			},
+			{
+				Name:      "certs-client",
+				MountPath: "/certs/client",
+			},
+		}
+		if extraDockerVolumeMounts := runner.Spec.DockerVolumeMounts; extraDockerVolumeMounts != nil {
+			dockerVolumeMounts = append(dockerVolumeMounts, extraDockerVolumeMounts...)
+		}
+
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+			Name:         "docker",
+			Image:        r.DockerImage,
+			VolumeMounts: dockerVolumeMounts,
 			Env: []corev1.EnvVar{
 				{
 					Name:  "DOCKER_TLS_CERTDIR",
