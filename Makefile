@@ -105,14 +105,14 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 # Build the docker image
-docker-build-ubuntu: test
+docker-build: test
 	docker build . -t ${NAME}:${VERSION}
 
 # Push the docker image
-docker-push-ubuntu:
+docker-push:
 	docker push ${NAME}:${VERSION}
 
-docker-buildx-ubuntu:
+docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
@@ -135,7 +135,7 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean docker-build-ubuntu docker-push-ubuntu release
+acceptance: release/clean docker-build docker-push release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
