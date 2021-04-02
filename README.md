@@ -786,7 +786,7 @@ NAME=$DOCKER_USER/actions-runner-controller \
 ```
 
 **Runner Tests**<br />
-A set of example pipelines (./acceptance/pipelinesss) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
+A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
 
 # Alternatives
 
