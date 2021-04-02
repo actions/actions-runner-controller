@@ -1,8 +1,8 @@
 NAME ?= summerwind/actions-runner
 DIND_RUNNER_NAME ?= ${NAME}-dind
-TAG ?= latest
+TAG ?= ubuntu-latest
 
-RUNNER_VERSION ?= 2.274.2
+RUNNER_VERSION ?= 2.277.1
 DOCKER_VERSION ?= 19.03.12
 
 # default list of platforms for which multiarch image is built
@@ -22,16 +22,15 @@ else
 	export PUSH_ARG="--push"
 endif
 
-docker-build:
+docker-build-ubuntu:
 	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
 	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
 
-
-docker-push:
+docker-push-ubuntu:
 	docker push ${NAME}:${TAG}
 	docker push ${DIND_RUNNER_NAME}:${TAG}
 
-docker-buildx:
+docker-buildx-ubuntu:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
@@ -39,12 +38,12 @@ docker-buildx:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${NAME}:latest" \
+		-t "${NAME}:ubuntu-latest" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${DIND_RUNNER_NAME}:latest" \
+		-t "${DIND_RUNNER_NAME}:ubuntu-latest" \
 		-f Dockerfile.dindrunner \
 		. ${PUSH_ARG}
