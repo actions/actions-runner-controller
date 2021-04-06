@@ -7,3 +7,14 @@ spec:
   template:
     spec:
       repository: mumoshu/actions-runner-controller-ci
+      #
+      # dockerd within runner container
+      #
+      ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
+      #dockerdWithinRunnerContainer: true
+      #image: mumoshu/actions-runner-dind:dev
+
+      #
+      # Set the MTU used by dockerd-managed network interfaces (including docker-build)
+      #
+      #dockerMTU: 1450

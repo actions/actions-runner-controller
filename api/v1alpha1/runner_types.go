@@ -48,6 +48,8 @@ type RunnerSpec struct {
 	// +optional
 	DockerdContainerResources corev1.ResourceRequirements `json:"dockerdContainerResources,omitempty"`
 	// +optional
+	DockerVolumeMounts []corev1.VolumeMount `json:"dockerVolumeMounts,omitempty"`
+	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`

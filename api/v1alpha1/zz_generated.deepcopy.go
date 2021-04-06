@@ -595,6 +595,13 @@ func (in *RunnerSpec) DeepCopyInto(out *RunnerSpec) {
 		}
 	}
 	in.DockerdContainerResources.DeepCopyInto(&out.DockerdContainerResources)
+	if in.DockerVolumeMounts != nil {
+		in, out := &in.DockerVolumeMounts, &out.DockerVolumeMounts
+		*out = make([]v1.VolumeMount, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	if in.VolumeMounts != nil {
 		in, out := &in.VolumeMounts, &out.VolumeMounts
