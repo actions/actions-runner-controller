@@ -44,7 +44,7 @@ if [ ! -d /runner ]; then
   exit 1
 fi
 
-sudo chown -R runner:docker /runner
+chown -R runner:docker /runner
 mv /runnertmp/* /runner/
 
 cd /runner

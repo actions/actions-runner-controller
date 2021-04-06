@@ -23,7 +23,7 @@ authSecret:
 image:
   repository: summerwind/actions-runner-controller
   tag: "v0.17.0"
-  dindSidecarRepositoryAndTag: "docker:dind"
+  dindSidecarRepositoryAndTag: "docker:20.10-dind-rootless"
   pullPolicy: IfNotPresent
 
 kube_rbac_proxy:
@@ -47,17 +47,15 @@ serviceAccount:
 podAnnotations: {}
 
 podSecurityContext:
-  {}
-  # fsGroup: 2000
+  fsGroup: 1000
 
 securityContext:
-  {}
   # capabilities:
   #   drop:
   #   - ALL
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
-  # runAsUser: 1000
+  runAsUser: 1000
 
 service:
   type: ClusterIP
