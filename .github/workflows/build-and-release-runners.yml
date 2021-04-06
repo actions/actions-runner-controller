@@ -61,7 +61,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
-      - name: Build and Push
+      - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v2
         with:
           context: ./runner
@@ -72,6 +72,18 @@ jobs:
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:ubuntu-${{ matrix.os-version }}-v${{ env.RUNNER_VERSION }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:ubuntu-${{ matrix.os-version }}-v${{ env.RUNNER_VERSION }}-${{ steps.vars.outputs.sha_short }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:ubuntu-latest
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
+
+      - name: Build and Push Latest Tag
+        uses: docker/build-push-action@v2
+        with:
+          context: ./runner
+          file: ./runner/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
+            DOCKER_VERSION=${{ env.DOCKER_VERSION }}
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest

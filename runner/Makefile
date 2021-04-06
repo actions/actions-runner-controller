@@ -1,6 +1,6 @@
 NAME ?= summerwind/actions-runner
 DIND_RUNNER_NAME ?= ${NAME}-dind
-TAG ?= ubuntu-latest
+TAG ?= latest
 
 RUNNER_VERSION ?= 2.277.1
 DOCKER_VERSION ?= 19.03.12
