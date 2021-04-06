@@ -5,6 +5,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
+  annotations:
+    seccomp.security.alpha.kubernetes.io/pod: runtime/default
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
