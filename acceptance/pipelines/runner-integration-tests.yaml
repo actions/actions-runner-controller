@@ -74,3 +74,11 @@ jobs:
           else
               echo "Ruby version detected : $(ruby --version 2>&1)"
           fi
+  python-shell-test:
+    runs-on: ['self-hosted', 'Linux']
+    steps:      
+      - name: Test Python shell works
+        run: |
+          import os
+          print(os.environ['PATH'])
+        shell: python
