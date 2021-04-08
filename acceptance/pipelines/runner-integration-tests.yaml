@@ -3,9 +3,8 @@ name: Runner Integration Tests
 on:
   workflow_dispatch:
 
-# Update me for the runner version you are using
 env:
-  ImageOS: ubuntu18
+  ImageOS: ubuntu18 # Used by ruby/setup-ruby action | Update me for the runner OS version you are testing against
 
 jobs:
   run-step-in-container-test:
