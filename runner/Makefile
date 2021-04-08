@@ -38,7 +38,7 @@ docker-buildx-ubuntu:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${NAME}:ubuntu-latest" \
+		-t "${NAME}:latest" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
