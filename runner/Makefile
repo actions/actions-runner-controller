@@ -44,6 +44,6 @@ docker-buildx-ubuntu:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${DIND_RUNNER_NAME}:ubuntu-latest" \
+		-t "${DIND_RUNNER_NAME}:latest" \
 		-f Dockerfile.dindrunner \
 		. ${PUSH_ARG}
