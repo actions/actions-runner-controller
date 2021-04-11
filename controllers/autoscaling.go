@@ -348,6 +348,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	// - num_runners can be as twice as large as replicas_desired_before while
 	//   the runnerdeployment controller is replacing RunnerReplicaSet for runner update.
 
+	if desiredReplicas <= 0 {
+		// desiredReplicas of 0 never scale up for the replicas by PercentageRunnersBusy. Force setting
+		// it to 1 when scaling with this metric.
+		desiredReplicas = 1
+	}
+
 	r.Log.V(1).Info(
 		fmt.Sprintf("Suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),
 		"replicas_desired_before", desiredReplicasBefore,
