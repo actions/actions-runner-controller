@@ -776,16 +776,3 @@ NAME=$DOCKER_USER/actions-runner-controller \
   make docker-build docker-push \
        acceptance/setup acceptance/tests
 ```
-# Alternatives
-
-The following is a list of alternative solutions that may better fit you depending on your use-case:
-
-- <https://github.com/evryfs/github-actions-runner-operator/>
-- <https://github.com/philips-labs/terraform-aws-github-runner/>
-
-Although the situation can change over time, as of writing this sentence, the benefits of using `actions-runner-controller` over the alternatives are:
-
-- `actions-runner-controller` has the ability to autoscale runners based on number of pending/progressing jobs (#99)
-- `actions-runner-controller` is able to gracefully stop runners (#103)
-- `actions-runner-controller` has ARM support
-- `actions-runner-controller` has GitHub Enterprise support (see [GitHub Enterprise support](#github-enterprise-support) section for caveats)
