@@ -88,7 +88,6 @@ spec:
   template:
     spec:
       enterprise: your-enterprise-name
-      dockerdWithinRunnerContainer: true
       resources:
         limits:
           cpu: "4000m"
@@ -96,12 +95,6 @@ spec:
         requests:
           cpu: "200m"
           memory: "200Mi"
-      volumeMounts:
-      - mountPath: /runner
-        name: runner
-      volumes:
-      - name: runner
-        emptyDir: {}
 
 ```
 
