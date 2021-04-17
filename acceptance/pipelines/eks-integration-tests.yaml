@@ -1,0 +1,36 @@
+name: EKS Integration Tests
+
+on:
+  workflow_dispatch:
+
+env:
+  IRSA_ROLE_ARN:
+  ASSUME_ROLE_ARN: 
+  AWS_REGION: 
+
+jobs:
+  assume-role-in-runner-test:
+    runs-on: ['self-hosted', 'Linux']
+    steps:
+      - name: Test aws-actions/configure-aws-credentials Action
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.ASSUME_ROLE_ARN }}
+          role-duration-seconds: 900
+  assume-role-in-container-test:
+    runs-on: ['self-hosted', 'Linux']
+    container: 
+      image: amazon/aws-cli
+      env:
+        AWS_WEB_IDENTITY_TOKEN_FILE: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
+        AWS_ROLE_ARN: ${{ env.IRSA_ROLE_ARN }}
+      volumes:
+        - /var/run/secrets/eks.amazonaws.com/serviceaccount/token:/var/run/secrets/eks.amazonaws.com/serviceaccount/token
+    steps:
+      - name: Test aws-actions/configure-aws-credentials Action in container
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.ASSUME_ROLE_ARN }}
+          role-duration-seconds: 900
