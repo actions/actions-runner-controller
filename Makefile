@@ -135,7 +135,7 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean docker-build docker-push release
+acceptance: release/clean docker-build release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
@@ -143,6 +143,7 @@ acceptance: release/clean docker-build docker-push release
 
 acceptance/kind:
 	kind create cluster --name acceptance
+	kind load docker-image ${NAME}:${VERSION} --name acceptance
 	kubectl cluster-info --context kind-acceptance
 
 acceptance/setup:
