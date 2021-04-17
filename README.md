@@ -8,7 +8,7 @@ ToC:
 
 - [Motivation](#motivation)
 - [Installation](#installation)
-  - [GitHub Enterprise Server Support](#github-enterprise-server-support)
+  - [GitHub Enterprise Support](#github-enterprise-support)
 - [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
@@ -56,16 +56,16 @@ helm repo add actions-runner-controller https://summerwind.github.io/actions-run
 helm upgrade --install -n actions-runner-system actions-runner-controller/actions-runner-controller
 ```
 
-### GitHub Enterprise Server Support
+### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions.
-For GitHub Enterprise Cloud authentication works same way as it does with public Github however you are limited to PAT authentication only in the case of GitHub Enterprise Server.
+The solution supports both GitHub Enterprise Cloud and Server editions. 
+In the case of GitHub Enterprise Cloud, authentication works same way as it does with regular Github.
 
-The minimum required version of Github Enterprise Server is [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+For GitHub Enterprise Server you are limited to PAT authentication only, GitHub Apps are not supported on server edition. Additionally, Actions support was introduced in Github Enterprise Server in [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0) and so you need to be running this verison or better.
 
 __**NOTE : The repository maintainers do not have an Enterprise Server environment. Support for this environment is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
-When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable:
+When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -78,7 +78,7 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 1. Using GitHub App (not supported with GitHub Enterprise Server)
 2. Using Personal Access Token
 
-Functionality wise there isn't a difference between the 2 authentication methods. There are however some benefits to using a GitHub App for authentication over a PAT such as an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you run into rate limiting consider deploying the solution using GitHub App authentication instead.
+Functionality wise, there isn't a difference between the 2 authentication methods, there are however some benefits to using a GitHub App over a PAT for authentication. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you run into rate limiting issues consider deploying the solution using GitHub App authentication instead.
 
 ### Deploying using GitHub App Authentication
 
@@ -225,7 +225,7 @@ Now you can see the runner on the organization level (if you have organization o
 
 ### Enterprise Server Runners
 
-For a GitHub Enterprise Server environment we just need to provide our Enterprise as part of our spec:
+To add a runner to your enterprise in a GitHub Enterprise Server environment we just need to replace the `repository` field with `enterprise`, so the runner will register itself with the enterprise.
 
 ```yaml
 # runner.yaml
@@ -238,8 +238,6 @@ spec:
     spec:
       enterprise: your-enterprise-name
 ```
-
-For the other kinds simply follow the spec and just apply the enterprise key. The rest of the documentation will assume a GitHub Enterprise Cloud environment.
 
 ### RunnerDeployments
 
@@ -276,6 +274,8 @@ NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
+
+This kind also supports the `Organisation` or `Enterprise` configuration options which can be used inconjuction with the autoscaling configurations below to provide various advanced scaling options.
 
 #### Autoscaling
 
