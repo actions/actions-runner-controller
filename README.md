@@ -59,7 +59,7 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organisation level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub don't support GitHub Apps at the Enterprise level.
+The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub don't support GitHub Apps at the Enterprise level.
 
 If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
 
@@ -158,7 +158,7 @@ kubectl create secret generic controller-manager \
 
 [GitHub self-hosted runners can be deployed at various levels in a management hierarchy](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#about-self-hosted-runners):
 - The repository level
-- The organisation level
+- The organization level
 - The enterprise level
 
 We can deploy 2 types of runners with various configuration options depending on what level of the hierarchy we are targeting:
@@ -234,7 +234,7 @@ These runners come with some limitations and characteristics to be aware of.
 
 A key limitation of enterprise runners is that they do NOT support autoscaling and so you are limited to deploying a static set of runners, the number being defined by the `replicas` attribute. They do however support [Github labels](#runner-labels) which can help with management of multiple sets.
 
-Additionally, when you assign a enterprise runner group to a set of organisations or all of the organisations within your enterprise they **do not** get any immediate access to any repositories by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories once an organisation has been assigned. Once the approval has been given the change is permanent.
+Additionally, when you assign a enterprise runner group to a set of organizations or all of the organizations within your enterprise they **do not** get any immediate access to any repositories by default. Each Github organization must allow Enterprise runner groups to be used in repositories once an organization has been assigned. Once the approval has been given the change is permanent.
 
 ```yaml
 # runnerdeployment.yaml
@@ -284,8 +284,6 @@ NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
-
-This kind also supports the `Organisation` or `Enterprise` configuration options which can be used inconjuction with the autoscaling configurations below to provide various advanced scaling options.
 
 #### Autoscaling
 
@@ -359,7 +357,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 
 **Benefits of this metric**
 1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
-2. Supports GitHub organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
 
@@ -668,7 +666,7 @@ Note that if you specify `self-hosted` in your workflow, then this will run your
 
 ### Runner Groups
 
-Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an organization level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
 To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
 
