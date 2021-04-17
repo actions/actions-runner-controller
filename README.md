@@ -59,7 +59,7 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub don't support GitHub Apps at the Enterprise level.
+The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub Apps for authentication at the Enterprise level currently.
 
 If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
 
