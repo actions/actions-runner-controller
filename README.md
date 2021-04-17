@@ -225,7 +225,7 @@ Now you can see the runner on the organization level (if you have organization o
 
 ### Enterprise Runners
 
-To add a set of runners to an enterprise you will need to use the `RunnerDeployment`. See the [Runner Deployments](#runnerdeployments) section for more details on this kind.
+To add a set of runners to an enterprise you will need to use the `RunnerDeployment` kind. See the [Runner Deployments](#runnerdeployments) section for more details on this kind.
 
 These runners come with some limitations and characteristics to be aware of.
 
