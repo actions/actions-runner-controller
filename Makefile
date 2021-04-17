@@ -148,12 +148,18 @@ acceptance/kind:
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
 	kind load docker-image summerwind/actions-runner:latest --name acceptance
 	kind load docker-image docker:dind --name acceptance
+	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
+	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
+	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name acceptance
 	kubectl cluster-info --context kind-acceptance
 
 acceptance/pull:
 	docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
 	docker pull summerwind/actions-runner:latest
 	docker pull docker:dind
+	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
 
 acceptance/setup:
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system

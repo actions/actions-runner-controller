@@ -28,7 +28,7 @@ if [ "${tool}" == "helm" ]; then
     --create-namespace \
     --set syncPeriod=5m \
     --set authSecret.create=false
-  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 120s
+  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
 else
   kubectl apply \
     -n actions-runner-system \
