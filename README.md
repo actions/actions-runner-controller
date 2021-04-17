@@ -141,9 +141,6 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * enterprise:admin
 
-When you use Enterprise runners those will get access to Github Organisations. However, access to the repositories is **NOT**
-allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories to enable this. This is only needs to be done once after which it is permanent for that runner group.
-
 ---
 
 Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
