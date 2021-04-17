@@ -8,7 +8,7 @@ ToC:
 
 - [Motivation](#motivation)
 - [Installation](#installation)
-  - [GitHub Enterprise support](#github-enterprise-support)
+  - [GitHub Enterprise Server Support](#github-enterprise-server-support)
 - [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
@@ -56,56 +56,29 @@ helm repo add actions-runner-controller https://summerwind.github.io/actions-run
 helm upgrade --install -n actions-runner-system actions-runner-controller/actions-runner-controller
 ```
 
-### Github Enterprise support
+### GitHub Enterprise Server Support
 
-If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
-Authentication works same way as with public Github (repo and organization level).
-The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so this feature is community driven. Support is on a best endeavors basis.**__
+The solution supports both GitHub Enterprise Cloud and Server editions.
+For GitHub Enterprise Cloud authentication works same way as it does with public Github however you are limited to PAT authentication only in the case of GitHub Enterprise Server.
+
+The minimum required version of Github Enterprise Server is [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+
+__**NOTE : The repository maintainers do not have an Enterprise Server environment. Support for this environment is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+
+When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
-```
-
-#### Enterprise runners usage
-
-In order to use enterprise runners you must have Admin access to Github Enterprise and you should do Personal Access Token (PAT)
-with `enterprise:admin` access. Enterprise runners are not possible to run with Github APP or any other permission.
-
-When you use enterprise runners those will get access to Github Organisations. However, access to the repositories is **NOT**
-allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories.
-This is needed only one time and is permanent after that.
-
-Example:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: ghe-runner-deployment
-spec:
-  replicas: 2
-  template:
-    spec:
-      enterprise: your-enterprise-name
-      resources:
-        limits:
-          cpu: "4000m"
-          memory: "2Gi"
-        requests:
-          cpu: "200m"
-          memory: "200Mi"
-
 ```
 
 ## Setting up authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using GitHub App.
-2. Using Personal Access Token.
+1. Using GitHub App (not supported with GitHub Enterprise Server)
+2. Using Personal Access Token
 
-Functionality wise there isn't a difference between the 2 authentication methods. There are however some benefits to using a GitHub App for authentication over a PAT such as an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps), if you run into rate limiting consider deploying this solution using GitHub App authentication instead.
+Functionality wise there isn't a difference between the 2 authentication methods. There are however some benefits to using a GitHub App for authentication over a PAT such as an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you run into rate limiting consider deploying the solution using GitHub App authentication instead.
 
 ### Deploying using GitHub App Authentication
 
@@ -152,11 +125,11 @@ Self-hosted runners in GitHub can either be connected to a single repository, or
 
 Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
-**Scopes for a Repository Runner**
+**Scopes for a Repository Runners**
 
 * repo (Full control)
 
-**Scopes for a Organization Runner**
+**Scopes for a Organization Runners**
 
 * repo (Full control)
 * admin:org (Full control)
@@ -165,6 +138,15 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 * admin:org_hook
 * notifications
 * workflow
+
+**Scopes for Enterprise Server Runners**
+
+* enterprise:admin
+
+When you use Enterprise Server runners those will get access to Github Organisations. However, access to the repositories is **NOT**
+allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories to enable this. This is only needs to be done once after which it is permanent for that runner group.
+
+---
 
 Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
 
@@ -240,6 +222,24 @@ spec:
 ```
 
 Now you can see the runner on the organization level (if you have organization owner permissions).
+
+### Enterprise Server Runners
+
+For a GitHub Enterprise Server environment we just need to provide our Enterprise as part of our spec:
+
+```yaml
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: example-ghe-runner
+spec:
+  template:
+    spec:
+      enterprise: your-enterprise-name
+```
+
+For the other kinds simply follow the spec and just apply the enterprise key. The rest of the documentation will assume a GitHub Enterprise Cloud environment.
 
 ### RunnerDeployments
 
@@ -445,7 +445,7 @@ In contrast, the standard autoscaling requires you to wait next sync period to a
 insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
 But doing so eventually result in the controller not functional due to GitHub API rate limit.
 
-> You can learn the implementation details in #282
+> You can learn the implementation details in [#282](https://github.com/summerwind/actions-runner-controller/pull/282)
 
 To enable this feature, you firstly need to install the webhook server.
 
@@ -682,8 +682,7 @@ spec:
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
 
-Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses
-the IAM-role enabled service account.
+Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses the IAM-role enabled service account.
 
 For `RunnerDeployment`, you can set those two fields under the runner spec at `RunnerDeployment.Spec.Template`:
 
@@ -698,14 +697,14 @@ spec:
       repository: USER/REO
       serviceAccountName: my-service-account
       securityContext:
-        fsGroup: 1447
+        fsGroup: 1000
 ```
 
 ### Software installed in the runner image
 
-The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
+The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintain a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
 
-The container image is based on Ubuntu 18.04, but it does not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
+This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
 - git (2.26)
