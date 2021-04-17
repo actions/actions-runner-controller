@@ -613,6 +613,17 @@ spec:
       # You can customise this setting allowing you to change the default working directory location
       # for example, the below setting is the same as on the ubuntu-18.04 image
       workDir: /home/runner/work
+      # You can mount some of the shared volumes to the dind container using dockerVolumeMounts, like any other volume mounting.
+      # NOTE: in case you want to use an hostPath like the following example, make sure that Kubernetes doesn't schedule more than one runner
+      # per physical host. You can achieve that by setting pod anti-affinity rules and/or resource requests/limits.
+      volumes:
+        - name: docker-extra
+          hostPath:
+            path: /mnt/docker-extra
+            type: DirectoryOrCreate
+      dockerVolumeMounts:
+        - mountPath: /var/lib/docker
+          name: docker-extra
 ```
 
 ### Runner labels
