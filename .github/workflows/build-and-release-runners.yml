@@ -21,7 +21,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build ${{ matrix.name }}
+    name: Build ${{ matrix.name }}-ubuntu-${{ matrix.os-version }}
     strategy:
       matrix:
         include:
@@ -77,7 +77,7 @@ jobs:
 
   latest-tags:
     runs-on: ubuntu-latest
-    name: Build ${{ matrix.name }}
+    name: Build ${{ matrix.name }}-latest
     strategy:
       matrix:
         include:
