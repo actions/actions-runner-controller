@@ -96,6 +96,8 @@ type RunnerSpec struct {
 	DockerEnabled *bool `json:"dockerEnabled,omitempty"`
 	// +optional
 	DockerMTU *int64 `json:"dockerMTU,omitempty"`
+	// +optional
+	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 }
 
 // ValidateRepository validates repository field.
