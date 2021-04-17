@@ -15,6 +15,7 @@ ToC:
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
+  - [Enterprise Runners](#enterprise-runners)
   - [Runner Deployments](#runnerdeployments)
     - [Autoscaling](#autoscaling)
       - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
@@ -58,12 +59,9 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions. 
-In the case of GitHub Enterprise Cloud, authentication works same way as it does with regular Github.
+The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organisation level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub don't support GitHub Apps at the Enterprise level.
 
-For GitHub Enterprise Server you are limited to PAT authentication only, GitHub Apps are not supported on server edition. Additionally, Actions support was introduced in Github Enterprise Server in [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0) and so you need to be running this verison or better.
-
-__**NOTE : The repository maintainers do not have an Enterprise Server environment. Support for this environment is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
 
 When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
 
@@ -71,11 +69,13 @@ When deploying the solution for a Github Enterprise Server environment you need 
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
+__**NOTE : The repository maintainers do not have an Enterprise Server environment. Support for this environment is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+
 ## Setting up authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using GitHub App (not supported with GitHub Enterprise Server)
+1. Using GitHub App (not supported when you need enterprise level runners)
 2. Using Personal Access Token
 
 Functionality wise, there isn't a difference between the 2 authentication methods, there are however some benefits to using a GitHub App over a PAT for authentication. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you run into rate limiting issues consider deploying the solution using GitHub App authentication instead.
@@ -121,8 +121,6 @@ $ kubectl create secret generic controller-manager \
 
 Personal Acess Token can be used to register a self-hosted runner by *actions-runner-controller*.
 
-Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). How you plan on using the runner will affect what scopes are needed for the token.
-
 Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
 **Scopes for a Repository Runners**
@@ -139,11 +137,11 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 * notifications
 * workflow
 
-**Scopes for Enterprise Server Runners**
+**Scopes for Enterprise Runners**
 
 * enterprise:admin
 
-When you use Enterprise Server runners those will get access to Github Organisations. However, access to the repositories is **NOT**
+When you use Enterprise runners those will get access to Github Organisations. However, access to the repositories is **NOT**
 allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories to enable this. This is only needs to be done once after which it is permanent for that runner group.
 
 ---
@@ -158,14 +156,19 @@ kubectl create secret generic controller-manager \
 
 ## Usage
 
-There are two ways to use this controller:
+[GitHub self-hosted runners can be deployed at various levels in a management hierarchy](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#about-self-hosted-runners):
+- The repository level
+- The organisation level
+- The enterprise level
+
+We can deploy 2 types of runners with various configuration options depending on what level of the hierarchy we are targeting:
 
 - Manage runners one by one with `Runner`.
 - Manage a set of runners with `RunnerDeployment`.
 
 ### Repository Runners
 
-To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
+To launch a single self-hosted runner, you need to create a manifest file includes `Runner` resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
 ```yaml
 # runner.yaml
@@ -223,17 +226,24 @@ spec:
 
 Now you can see the runner on the organization level (if you have organization owner permissions).
 
-### Enterprise Server Runners
+### Enterprise Runners
 
-To add a runner to your enterprise in a GitHub Enterprise Server environment we just need to replace the `repository` field with `enterprise`, so the runner will register itself with the enterprise.
+To add a set of runners to an enterprise you will need to use the `RunnerDeployment`. See the [Runner Deployments](#runnerdeployments) section for more details on this kind.
+
+These runners come with some limitations and characteristics to be aware of.
+
+A key limitation of enterprise runners is that they do NOT support autoscaling and so you are limited to deploying a static set of runners, the number being defined by the `replicas` attribute. They do however support [Github labels](#runner-labels) which can help with management of multiple sets.
+
+Additionally, when you assign a enterprise runner group to a set of organisations or all of the organisations within your enterprise they **do not** get any immediate access to any repositories by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories once an organisation has been assigned. Once the approval has been given the change is permanent.
 
 ```yaml
-# runner.yaml
+# runnerdeployment.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
+kind: RunnerDeployment
 metadata:
-  name: example-ghe-runner
+  name: enterprise-runner-deployment
 spec:
+  replicas: 2
   template:
     spec:
       enterprise: your-enterprise-name
