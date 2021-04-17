@@ -88,7 +88,6 @@ spec:
   template:
     spec:
       enterprise: your-enterprise-name
-      dockerdWithinRunnerContainer: true
       resources:
         limits:
           cpu: "4000m"
@@ -96,12 +95,6 @@ spec:
         requests:
           cpu: "200m"
           memory: "200Mi"
-      volumeMounts:
-      - mountPath: /runner
-        name: runner
-      volumes:
-      - name: runner
-        emptyDir: {}
 
 ```
 
@@ -798,17 +791,3 @@ NAME=$DOCKER_USER/actions-runner-controller \
 
 **Runner Tests**<br />
 A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
-
-# Alternatives
-
-The following is a list of alternative solutions that may better fit you depending on your use-case:
-
-- <https://github.com/evryfs/github-actions-runner-operator/>
-- <https://github.com/philips-labs/terraform-aws-github-runner/>
-
-Although the situation can change over time, as of writing this sentence, the benefits of using `actions-runner-controller` over the alternatives are:
-
-- `actions-runner-controller` has the ability to autoscale runners based on number of pending/progressing jobs (#99)
-- `actions-runner-controller` is able to gracefully stop runners (#103)
-- `actions-runner-controller` has ARM support
-- `actions-runner-controller` has GitHub Enterprise support (see [GitHub Enterprise support](#github-enterprise-support) section for caveats)
