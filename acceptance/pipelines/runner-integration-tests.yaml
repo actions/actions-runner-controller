@@ -1,0 +1,83 @@
+name: Runner Integration Tests
+
+on:
+  workflow_dispatch:
+
+env:
+  ImageOS: ubuntu18 # Used by ruby/setup-ruby action | Update me for the runner OS version you are testing against
+
+jobs:
+  run-step-in-container-test:
+    runs-on: ['self-hosted', 'Linux']
+    container: 
+      image: alpine
+    steps:
+      - name: Test we are working in the container
+        run: |
+          if [[ $(sed -n '2p' < /etc/os-release | cut -d "=" -f2) != "alpine" ]]; then
+              echo "::error ::Failed OS detection test, could not match /etc/os-release with alpine. Are we really running in the container?"
+              echo "/etc/os-release below:"
+              cat /etc/os-release
+              exit 1
+          fi
+  setup-python-test:
+    runs-on: ['self-hosted', 'Linux']
+    steps:
+      - name: Print native Python environment
+        run: |
+          which python
+          python --version
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Test actions/setup-python works
+        run: |
+          VERSION=$(python --version 2>&1 | cut -d ' ' -f2 | cut -d '.' -f1-2)
+          if [[ $VERSION != '3.9' ]]; then
+            echo "Python version detected : $(python --version 2>&1)"
+            echo "::error ::Detected python failed setup version test, could not match version with version specified in the setup action"
+            exit 1
+          else
+            echo "Python version detected : $(python --version 2>&1)"
+          fi
+  setup-node-test:
+    runs-on: ['self-hosted', 'Linux']
+    steps:
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '12'
+      - name: Test actions/setup-node works 
+        run: |
+          VERSION=$(node --version | cut -c 2- | cut -d '.' -f1)
+          if [[ $VERSION != '12' ]]; then
+            echo "Node version detected : $(node --version 2>&1)"
+            echo "::error ::Detected node failed setup version test, could not match version with version specified in the setup action"
+            exit 1
+          else
+            echo "Node version detected : $(node --version 2>&1)"
+          fi
+  setup-ruby-test:
+    runs-on: ['self-hosted', 'Linux']
+    steps:
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.0
+          bundler-cache: true
+      - name: Test ruby/setup-ruby works 
+        run: |
+          VERSION=$(ruby --version | cut -d ' ' -f2 | cut -d '.' -f1-2)
+          if [[ $VERSION != '3.0' ]]; then
+              echo "Ruby version detected : $(ruby --version 2>&1)"
+              echo "::error ::Detected ruby failed setup version test, could not match version with version specified in the setup action"
+              exit 1
+          else
+              echo "Ruby version detected : $(ruby --version 2>&1)"
+          fi
+  python-shell-test:
+    runs-on: ['self-hosted', 'Linux']
+    steps:      
+      - name: Test Python shell works
+        run: |
+          import os
+          print(os.environ['PATH'])
+        shell: python

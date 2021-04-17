@@ -1,11 +1,12 @@
 FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Dev + DinD dependencies
-RUN apt update \
+RUN apt update -y \
     && apt install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
-    && apt install -y \
+    && apt update -y \
+    && apt install -y --no-install-recommends \
+    software-properties-common \
     build-essential \
     curl \
     ca-certificates \
@@ -13,7 +14,6 @@ RUN apt update \
     ftp \
     git \
     iproute2 \
-    iptables \
     iputils-ping \
     jq \
     libunwind8 \
@@ -21,11 +21,9 @@ RUN apt update \
     netcat \
     openssh-client \
     parallel \
-    python-is-python3 \
     rsync \
     shellcheck \
     sudo \
-    supervisor \
     telnet \
     time \
     tzdata \
@@ -34,6 +32,9 @@ RUN apt update \
     wget \
     zip \
     zstd \
+    python-is-python3 \
+    iptables \
+    supervisor \
     && rm -rf /var/lib/apt/list/*
 
 # Runner user
@@ -79,7 +80,7 @@ ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
-     && cd "$RUNNER_ASSETS_DIR" \
+    && cd "$RUNNER_ASSETS_DIR" \
     && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
@@ -88,9 +89,9 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && rm -rf /var/lib/apt/lists/*
 
 RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
-  && mkdir /opt/hostedtoolcache \
-  && chgrp docker /opt/hostedtoolcache \
-  && chmod g+rwx /opt/hostedtoolcache
+    && mkdir /opt/hostedtoolcache \
+    && chgrp docker /opt/hostedtoolcache \
+    && chmod g+rwx /opt/hostedtoolcache
 
 COPY modprobe startup.sh /usr/local/bin/
 COPY supervisor/ /etc/supervisor/conf.d/

@@ -15,6 +15,6 @@ spec:
       #image: mumoshu/actions-runner-dind:dev
 
       #
-      # Set the MTU used by dockerd-managed network interfaces (including docker-build)
+      # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
       #
       #dockerMTU: 1450
