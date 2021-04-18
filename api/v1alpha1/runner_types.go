@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,6 +99,8 @@ type RunnerSpec struct {
 	DockerMTU *int64 `json:"dockerMTU,omitempty"`
 	// +optional
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
+	// +optional
+	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
 }
 
 // ValidateRepository validates repository field.
