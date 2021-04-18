@@ -25,7 +25,7 @@ ToC:
   - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
   - [Software installed in the runner image](#software-installed-in-the-runner-image)
   - [Common errors](#common-errors)
-- [Developing](#developing)
+- [Contributing](#contributing)
 
 ## Motivation
 
