@@ -21,7 +21,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build ${{ matrix.name }}
+    name: Build ${{ matrix.name }}-ubuntu-${{ matrix.os-version }}
     strategy:
       matrix:
         include:
@@ -75,11 +75,45 @@ jobs:
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
 
+  latest-tags:
+    runs-on: ubuntu-latest
+    name: Build ${{ matrix.name }}-latest
+    strategy:
+      matrix:
+        include:
+          - name: actions-runner
+            dockerfile: Dockerfile
+          - name: actions-runner-dind
+            dockerfile: Dockerfile.dindrunner
+    env:
+      RUNNER_VERSION: 2.277.1
+      DOCKER_VERSION: 19.03.12
+      DOCKERHUB_USERNAME: ${{ github.repository_owner }}
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          version: latest
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        if: ${{ github.event_name == 'push' || github.event_name == 'release' }}
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
       - name: Build and Push Latest Tag
         uses: docker/build-push-action@v2
         with:
           context: ./runner
-          file: ./runner/Dockerfile
+          file: ./runner/${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
