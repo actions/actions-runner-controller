@@ -105,7 +105,7 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 # Build the docker image
-docker-build: test
+docker-build:
 	docker build . -t ${NAME}:${VERSION}
 
 # Push the docker image
@@ -163,7 +163,7 @@ acceptance/pull:
 
 acceptance/setup:
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
-	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 60s
+	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 90s
 	kubectl -n cert-manager wait deploy/cert-manager-webhook --for condition=available --timeout 60s
 	kubectl -n cert-manager wait deploy/cert-manager --for condition=available --timeout 60s
 	kubectl create namespace actions-runner-system || true

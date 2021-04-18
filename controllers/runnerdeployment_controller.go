@@ -188,7 +188,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, err
 	}
 
-	// Do we old runner replica sets that should eventually deleted?
+	// Do we have old runner replica sets that should eventually deleted?
 	if len(oldSets) > 0 {
 		readyReplicas := newestSet.Status.ReadyReplicas
 

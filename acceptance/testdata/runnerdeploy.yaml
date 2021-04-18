@@ -6,7 +6,13 @@ spec:
 #  replicas: 1
   template:
     spec:
-      repository: mumoshu/actions-runner-controller-ci
+      repository: mumoshu/actions-test
+      
+      #
+      # Custom runner image
+      #
+      image: mumoshu/actions-runner:dev
+
       #
       # dockerd within runner container
       #
@@ -18,3 +24,13 @@ spec:
       # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
       #
       #dockerMTU: 1450
+
+      #Runner group
+      # labels:
+      # - "mylabel 1"
+      # - "mylabel 2"
+
+      #
+      # Non-standard working directory
+      #
+      # workDir: "/"
