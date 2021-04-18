@@ -26,13 +26,14 @@ if [ "${tool}" == "helm" ]; then
     charts/actions-runner-controller \
     -n actions-runner-system \
     --create-namespace \
-    --set syncPeriod=5m
-  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available
+    --set syncPeriod=5m \
+    --set authSecret.create=false
+  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
 else
   kubectl apply \
     -n actions-runner-system \
     -f release/actions-runner-controller.yaml
-  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available --timeout 60s
+  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available --timeout 120s
 fi
 
 # Adhocly wait for some time until actions-runner-controller's admission webhook gets ready

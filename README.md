@@ -764,7 +764,7 @@ NAME=$DOCKER_USER/actions-runner-controller \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
   INSTALLATION_ID=*** \
-  make docker-build docker-push acceptance
+  make docker-build acceptance
 ```
 
 Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
@@ -785,8 +785,8 @@ NAME=$DOCKER_USER/actions-runner-controller \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
   INSTALLATION_ID=*** \
   ACCEPTANCE_TEST_SECRET_TYPE=token \
-  make docker-build docker-push \
-       acceptance/setup acceptance/tests
+  make docker-build acceptance/setup \
+       acceptance/tests
 ```
 
 **Runner Tests**<br />

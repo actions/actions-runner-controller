@@ -136,6 +136,7 @@ release/clean:
 
 .PHONY: acceptance
 acceptance: release/clean docker-build release
+	make acceptance/pull
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
@@ -144,7 +145,21 @@ acceptance: release/clean docker-build release
 acceptance/kind:
 	kind create cluster --name acceptance
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
+	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
+	kind load docker-image summerwind/actions-runner:latest --name acceptance
+	kind load docker-image docker:dind --name acceptance
+	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
+	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
+	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name acceptance
 	kubectl cluster-info --context kind-acceptance
+
+acceptance/pull:
+	docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
+	docker pull summerwind/actions-runner:latest
+	docker pull docker:dind
+	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
 
 acceptance/setup:
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
