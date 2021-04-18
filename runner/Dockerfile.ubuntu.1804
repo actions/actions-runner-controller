@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:18.04
 
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.274.2
@@ -37,12 +37,12 @@ RUN apt update -y \
     wget \
     zip \
     zstd \
-    python-is-python3 \
+    && cd /usr/bin && ln -sf python3 python \
     && rm -rf /var/lib/apt/lists/*
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-  && curl -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_${ARCH} \
-  && chmod +x /usr/local/bin/dumb-init
+    && curl -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_${ARCH} \
+    && chmod +x /usr/local/bin/dumb-init
 
 # Docker download supports arm64 as aarch64 & amd64 as x86_64
 RUN set -vx; \

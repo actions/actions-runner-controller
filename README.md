@@ -25,8 +25,7 @@ ToC:
   - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
   - [Software installed in the runner image](#software-installed-in-the-runner-image)
   - [Common errors](#common-errors)
-- [Contributing](#contributing)
-- [Alternatives](#alternatives)
+- [Developing](#developing)
 
 ## Motivation
 
@@ -45,8 +44,8 @@ Install the custom resource and actions-runner-controller with `kubectl` or `hel
 `kubectl`:
 
 ```shell
-# REPLACE "v0.17.0" with the version you wish to deploy
-kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.17.0/actions-runner-controller.yaml
+# REPLACE "v0.18.2" with the version you wish to deploy
+kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
 ```
 
 `helm`:
@@ -61,7 +60,7 @@ helm upgrade --install -n actions-runner-system actions-runner-controller/action
 If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
 Authentication works same way as with public Github (repo and organization level).
 The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so are reliant on the community for testing, support is a best endeavors basis only and is community driven**__
+__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so this feature is community driven. Support is on a best endeavors basis.**__
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -88,7 +87,6 @@ spec:
   template:
     spec:
       enterprise: your-enterprise-name
-      dockerdWithinRunnerContainer: true
       resources:
         limits:
           cpu: "4000m"
@@ -96,12 +94,6 @@ spec:
         requests:
           cpu: "200m"
           memory: "200Mi"
-      volumeMounts:
-      - mountPath: /runner
-        name: runner
-      volumes:
-      - name: runner
-        emptyDir: {}
 
 ```
 
@@ -613,6 +605,17 @@ spec:
       # You can customise this setting allowing you to change the default working directory location
       # for example, the below setting is the same as on the ubuntu-18.04 image
       workDir: /home/runner/work
+      # You can mount some of the shared volumes to the dind container using dockerVolumeMounts, like any other volume mounting.
+      # NOTE: in case you want to use an hostPath like the following example, make sure that Kubernetes doesn't schedule more than one runner
+      # per physical host. You can achieve that by setting pod anti-affinity rules and/or resource requests/limits.
+      volumes:
+        - name: docker-extra
+          hostPath:
+            path: /mnt/docker-extra
+            type: DirectoryOrCreate
+      dockerVolumeMounts:
+        - mountPath: /var/lib/docker
+          name: docker-extra
 ```
 
 ### Runner labels
@@ -749,6 +752,7 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 
 For more details about any requirements or process, please check out [Getting Started with Contributing](CONTRIBUTING.md).
 
+**The Controller**<br />
 If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running
 the acceptance test:
 
@@ -761,7 +765,7 @@ NAME=$DOCKER_USER/actions-runner-controller \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
   INSTALLATION_ID=*** \
-  make docker-build docker-push acceptance
+  make docker-build acceptance
 ```
 
 Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
@@ -782,19 +786,9 @@ NAME=$DOCKER_USER/actions-runner-controller \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
   INSTALLATION_ID=*** \
   ACCEPTANCE_TEST_SECRET_TYPE=token \
-  make docker-build docker-push \
-       acceptance/setup acceptance/tests
+  make docker-build acceptance/setup \
+       acceptance/tests
 ```
-# Alternatives
 
-The following is a list of alternative solutions that may better fit you depending on your use-case:
-
-- <https://github.com/evryfs/github-actions-runner-operator/>
-- <https://github.com/philips-labs/terraform-aws-github-runner/>
-
-Although the situation can change over time, as of writing this sentence, the benefits of using `actions-runner-controller` over the alternatives are:
-
-- `actions-runner-controller` has the ability to autoscale runners based on number of pending/progressing jobs (#99)
-- `actions-runner-controller` is able to gracefully stop runners (#103)
-- `actions-runner-controller` has ARM support
-- `actions-runner-controller` has GitHub Enterprise support (see [GitHub Enterprise support](#github-enterprise-support) section for caveats)
+**Runner Tests**<br />
+A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.

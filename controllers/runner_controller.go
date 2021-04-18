@@ -813,6 +813,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.TerminationGracePeriodSeconds = runner.Spec.TerminationGracePeriodSeconds
 	}
 
+	if len(runner.Spec.HostAliases) != 0 {
+		pod.Spec.HostAliases = runner.Spec.HostAliases
+	}
+
 	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
 		return pod, err
 	}

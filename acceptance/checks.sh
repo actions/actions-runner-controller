@@ -12,6 +12,9 @@ done
 
 echo Found runner ${runner_name}.
 
+# Wait a bit to make sure the runner pod is created before looking for it.
+sleep 2
+
 pod_name=
 
 while [ -z "${pod_name}" ]; do
@@ -24,6 +27,6 @@ echo Found pod ${pod_name}.
 
 echo Waiting for pod ${runner_name} to become ready... 1>&2
 
-kubectl wait pod/${runner_name} --for condition=ready --timeout 180s
+kubectl wait pod/${runner_name} --for condition=ready --timeout 270s
 
 echo All tests passed. 1>&2
