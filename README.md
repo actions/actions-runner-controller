@@ -26,7 +26,6 @@ ToC:
   - [Software installed in the runner image](#software-installed-in-the-runner-image)
   - [Common errors](#common-errors)
 - [Developing](#developing)
-- [Alternatives](#alternatives)
 
 ## Motivation
 
