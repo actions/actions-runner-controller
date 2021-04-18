@@ -22,7 +22,6 @@ authSecret:
 
 image:
   repository: summerwind/actions-runner-controller
-  tag: "v0.17.0"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 

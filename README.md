@@ -25,7 +25,7 @@ ToC:
   - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
   - [Software installed in the runner image](#software-installed-in-the-runner-image)
   - [Common errors](#common-errors)
-- [Developing](#developing)
+- [Contributing](#contributing)
 
 ## Motivation
 
@@ -748,7 +748,9 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documeneted flags
 
-# Developing
+# Contributing
+
+For more details about any requirements or process, please check out [Getting Started with Contributing](CONTRIBUTING.md).
 
 **The Controller**<br />
 If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running

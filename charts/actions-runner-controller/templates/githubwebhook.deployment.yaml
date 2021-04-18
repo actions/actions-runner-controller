@@ -47,7 +47,7 @@ spec:
         - name: {{ $key }}
           value: {{ $val | quote }}
         {{- end }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag  | default (cat "v" .Chart.AppVersion | replace " " "") }}"
         name: github-webhook-server
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
