@@ -15,8 +15,8 @@ ToC:
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
-  - [Enterprise Runners](#enterprise-runners)
   - [Runner Deployments](#runnerdeployments)
+  - [Enterprise Runner Deployments](#enterprise-runnerdeployments)  
     - [Autoscaling](#autoscaling)
       - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
   - [Runner with DinD](#runner-with-dind)
@@ -141,6 +141,8 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * enterprise:admin
 
+_Note: when you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each Github organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+
 ---
 
 Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
@@ -158,7 +160,7 @@ kubectl create secret generic controller-manager \
 - The organization level
 - The enterprise level
 
-We can deploy 2 types of runners with various configuration options depending on what level of the hierarchy we are targeting:
+There are two ways to use this controller:
 
 - Manage runners one by one with `Runner`.
 - Manage a set of runners with `RunnerDeployment`.
@@ -223,29 +225,6 @@ spec:
 
 Now you can see the runner on the organization level (if you have organization owner permissions).
 
-### Enterprise Runners
-
-To add a set of runners to an enterprise you will need to use the `RunnerDeployment` kind. See the [Runner Deployments](#runnerdeployments) section for more details on this kind.
-
-These runners come with some limitations and characteristics to be aware of.
-
-A key limitation of enterprise runners is that they do NOT support autoscaling and so you are limited to deploying a static set of runners, the number being defined by the `replicas` attribute. They do however support [Github labels](#runner-labels) which can help with management of multiple sets.
-
-Additionally, when you assign a enterprise runner group to a set of organizations or all of the organizations within your enterprise they **do not** get any immediate access to any repositories by default. Each Github organization must allow Enterprise runner groups to be used in repositories once an organization has been assigned. Once the approval has been given the change is permanent.
-
-```yaml
-# runnerdeployment.yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: enterprise-runner-deployment
-spec:
-  replicas: 2
-  template:
-    spec:
-      enterprise: your-enterprise-name
-```
-
 ### RunnerDeployments
 
 There are `RunnerReplicaSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
@@ -282,9 +261,28 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
+### Enterprise RunnerDeployments
+
+Enterprise runners can also be made with this kind:
+
+```yaml
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-enterprise-runner
+spec:
+  replicas: 2
+  template:
+    spec:
+      enterprise: your-enterprise-name
+```
+
+A key limitation of enteprise runners is they do **NOT** support autoscaling like the other types. You are limited to a static count as defined by the `replicas` attribute.
+
 #### Autoscaling
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
+A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
 **Scaling Metrics**
 
