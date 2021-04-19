@@ -278,7 +278,7 @@ spec:
       enterprise: your-enterprise-name
 ```
 
-A key limitation of enteprise runners is they do **NOT** support autoscaling like the other types. You are limited to a static count as defined by the `replicas` attribute.
+A key limitation of enterprise runners is they do **NOT** support autoscaling like the other types. You are limited to a static count as defined by the `replicas` attribute.
 
 #### Autoscaling
 
