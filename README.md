@@ -8,7 +8,7 @@ ToC:
 
 - [Motivation](#motivation)
 - [Installation](#installation)
-  - [GitHub Enterprise support](#github-enterprise-support)
+  - [GitHub Enterprise Support](#github-enterprise-support)
 - [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
@@ -16,6 +16,7 @@ ToC:
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
   - [Runner Deployments](#runnerdeployments)
+  - [Enterprise Runner Deployments](#enterprise-runnerdeployments)  
     - [Autoscaling](#autoscaling)
       - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
   - [Runner with DinD](#runner-with-dind)
@@ -55,56 +56,28 @@ helm repo add actions-runner-controller https://summerwind.github.io/actions-run
 helm upgrade --install -n actions-runner-system actions-runner-controller/actions-runner-controller
 ```
 
-### Github Enterprise support
+### GitHub Enterprise Support
 
-If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
-Authentication works same way as with public Github (repo and organization level).
-The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so this feature is community driven. Support is on a best endeavors basis.**__
+The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+
+If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+
+When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-#### Enterprise runners usage
-
-In order to use enterprise runners you must have Admin access to Github Enterprise and you should do Personal Access Token (PAT)
-with `enterprise:admin` access. Enterprise runners are not possible to run with Github APP or any other permission.
-
-When you use enterprise runners those will get access to Github Organisations. However, access to the repositories is **NOT**
-allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories.
-This is needed only one time and is permanent after that.
-
-Example:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: ghe-runner-deployment
-spec:
-  replicas: 2
-  template:
-    spec:
-      enterprise: your-enterprise-name
-      resources:
-        limits:
-          cpu: "4000m"
-          memory: "2Gi"
-        requests:
-          cpu: "200m"
-          memory: "200Mi"
-
-```
+__**NOTE : The repository maintainers do not have an Enterprise Server environment. Support for this environment is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
 ## Setting up authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using GitHub App.
-2. Using Personal Access Token.
+1. Using GitHub App (not supported when you need enterprise level runners)
+2. Using Personal Access Token
 
-Functionality wise there isn't a difference between the 2 authentication methods. There are however some benefits to using a GitHub App for authentication over a PAT such as an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps), if you run into rate limiting consider deploying this solution using GitHub App authentication instead.
+Functionality wise, there isn't a difference between the 2 authentication methods, there are however some benefits to using a GitHub App over a PAT for authentication. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you run into rate limiting issues consider deploying the solution using GitHub App authentication instead.
 
 ### Deploying using GitHub App Authentication
 
@@ -147,15 +120,13 @@ $ kubectl create secret generic controller-manager \
 
 Personal Acess Token can be used to register a self-hosted runner by *actions-runner-controller*.
 
-Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). How you plan on using the runner will affect what scopes are needed for the token.
-
 Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
-**Scopes for a Repository Runner**
+**Scopes for a Repository Runners**
 
 * repo (Full control)
 
-**Scopes for a Organization Runner**
+**Scopes for a Organization Runners**
 
 * repo (Full control)
 * admin:org (Full control)
@@ -164,6 +135,14 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 * admin:org_hook
 * notifications
 * workflow
+
+**Scopes for Enterprise Runners**
+
+* enterprise:admin
+
+_Note: when you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each Github organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+
+---
 
 Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
 
@@ -175,6 +154,11 @@ kubectl create secret generic controller-manager \
 
 ## Usage
 
+[GitHub self-hosted runners can be deployed at various levels in a management hierarchy](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#about-self-hosted-runners):
+- The repository level
+- The organization level
+- The enterprise level
+
 There are two ways to use this controller:
 
 - Manage runners one by one with `Runner`.
@@ -182,7 +166,7 @@ There are two ways to use this controller:
 
 ### Repository Runners
 
-To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
+To launch a single self-hosted runner, you need to create a manifest file includes `Runner` resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
 
 ```yaml
 # runner.yaml
@@ -276,9 +260,28 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
+### Enterprise RunnerDeployments
+
+Enterprise runners can also be made with this kind:
+
+```yaml
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-enterprise-runner
+spec:
+  replicas: 2
+  template:
+    spec:
+      enterprise: your-enterprise-name
+```
+
+A key limitation of enterprise runners is they do **NOT** support autoscaling like the other types. You are limited to a static count as defined by the `replicas` attribute.
+
 #### Autoscaling
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
+A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
 **Scaling Metrics**
 
@@ -348,7 +351,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 
 **Benefits of this metric**
 1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
-2. Supports GitHub organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
 
@@ -444,7 +447,7 @@ In contrast, the standard autoscaling requires you to wait next sync period to a
 insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
 But doing so eventually result in the controller not functional due to GitHub API rate limit.
 
-> You can learn the implementation details in #282
+> You can learn the implementation details in [#282](https://github.com/summerwind/actions-runner-controller/pull/282)
 
 To enable this feature, you firstly need to install the webhook server.
 
@@ -657,7 +660,7 @@ Note that if you specify `self-hosted` in your workflow, then this will run your
 
 ### Runner Groups
 
-Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an organization level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
 To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
 
@@ -681,8 +684,7 @@ spec:
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
 
-Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses
-the IAM-role enabled service account.
+Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses the IAM-role enabled service account.
 
 For `RunnerDeployment`, you can set those two fields under the runner spec at `RunnerDeployment.Spec.Template`:
 
@@ -697,14 +699,14 @@ spec:
       repository: USER/REO
       serviceAccountName: my-service-account
       securityContext:
-        fsGroup: 1447
+        fsGroup: 1000
 ```
 
 ### Software installed in the runner image
 
-The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
+The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintain a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
 
-The container image is based on Ubuntu 18.04, but it does not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
+This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
 - git (2.26)
