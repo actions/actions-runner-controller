@@ -37,10 +37,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	TEST_ASSET_KUBE_APISERVER=$(KUBE_APISERVER_BIN) \
-	TEST_ASSET_ETCD=$(ETCD_BIN) \
-	TEST_ASSET_KUBECTL=$(KUBECTL_BIN) \
-	  go test ./... -coverprofile cover.out
+	go test ./... -coverprofile cover.out
 
 test-with-deps: kube-apiserver etcd kubectl
 	# See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
@@ -224,6 +221,7 @@ OS_NAME := $(shell uname -s | tr A-Z a-z)
 
 # find or download etcd
 etcd:
+ifeq (, $(shell which etcd))
 ifeq (, $(wildcard $(TEST_ASSETS)/etcd))
 	@{ \
 	set -xe ;\
@@ -241,9 +239,13 @@ ETCD_BIN=$(TEST_ASSETS)/etcd
 else
 ETCD_BIN=$(TEST_ASSETS)/etcd
 endif
+else
+ETCD_BIN=$(shell which etcd)
+endif
 
 # find or download kube-apiserver
 kube-apiserver:
+ifeq (, $(shell which kube-apiserver))
 ifeq (, $(wildcard $(TEST_ASSETS)/kube-apiserver))
 	@{ \
 	set -xe ;\
@@ -261,10 +263,13 @@ KUBE_APISERVER_BIN=$(TEST_ASSETS)/kube-apiserver
 else
 KUBE_APISERVER_BIN=$(TEST_ASSETS)/kube-apiserver
 endif
-
+else
+KUBE_APISERVER_BIN=$(shell which kube-apiserver)
+endif
 
 # find or download kubectl
 kubectl:
+ifeq (, $(shell which kubectl))
 ifeq (, $(wildcard $(TEST_ASSETS)/kubectl))
 	@{ \
 	set -xe ;\
@@ -281,4 +286,7 @@ ifeq (, $(wildcard $(TEST_ASSETS)/kubectl))
 KUBECTL_BIN=$(TEST_ASSETS)/kubectl
 else
 KUBECTL_BIN=$(TEST_ASSETS)/kubectl
+endif
+else
+KUBECTL_BIN=$(shell which kubectl)
 endif
