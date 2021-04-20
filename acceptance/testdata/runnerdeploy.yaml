@@ -11,7 +11,7 @@ spec:
       #
       # Custom runner image
       #
-      image: mumoshu/actions-runner:dev
+      #image: mumoshu/actions-runner:dev
 
       #
       # dockerd within runner container

@@ -37,7 +37,10 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+	TEST_ASSET_KUBE_APISERVER=$(KUBE_APISERVER_BIN) \
+	TEST_ASSET_ETCD=$(ETCD_BIN) \
+	TEST_ASSET_KUBECTL=$(KUBECTL_BIN) \
+	  go test ./... -coverprofile cover.out
 
 test-with-deps: kube-apiserver etcd kubectl
 	# See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
