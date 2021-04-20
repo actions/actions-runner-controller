@@ -262,8 +262,14 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
-						if err != nil {
+						selector, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						})
+						Expect(err).ToNot(HaveOccurred())
+
+						if err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 							logf.Log.Error(err, "list runners")
 							return -1
 						}

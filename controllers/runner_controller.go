@@ -148,6 +148,27 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
+	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
+	if registrationOnly && runner.Status.Phase != "" {
+		// At this point we are sure that the registration-only runner has successfully configured and
+		// is of `offline` status, because we set runner.Status.Phase to that of the runner pod only after
+		// successful registration.
+
+		var pod corev1.Pod
+		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+			if !kerrors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+		} else if err := r.Delete(ctx, &pod); err != nil {
+			// Delete the pod to free the cluster and node resource
+			return ctrl.Result{}, err
+		}
+
+		// Return here to not recreate the deleted pod, because recreating it is the waste of cluster and node resource,
+		// and also defeats the original purpose of scale-from/to-zero we're trying to implement by using the registration-only runner.
+		return ctrl.Result{}, nil
+	}
+
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -224,9 +245,9 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		// If pod has ended up succeeded we need to restart it
 		// Happens e.g. when dind is in runner and run completes
-		restart := pod.Status.Phase == corev1.PodSucceeded
+		stopped := pod.Status.Phase == corev1.PodSucceeded
 
-		if !restart {
+		if !stopped {
 			if pod.Status.Phase == corev1.PodRunning {
 				for _, status := range pod.Status.ContainerStatuses {
 					if status.Name != containerName {
@@ -234,15 +255,15 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 					}
 
 					if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
-						restart = true
+						stopped = true
 					}
 				}
 			}
 		}
 
-		registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
+		restart := stopped
 
-		if registrationOnly {
+		if registrationOnly && stopped {
 			restart = false
 
 			log.Info(

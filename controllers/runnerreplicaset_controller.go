@@ -79,13 +79,13 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 		runnerForScaleFromToZero, err := r.newRunner(rs)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("Failed to create runner for scale from/to zero: %v", err)
+			return ctrl.Result{}, fmt.Errorf("failed to create runner for scale from/to zero: %v", err)
 		}
 
 		runnerForScaleFromToZero.ObjectMeta.Name = rs.Name
 		runnerForScaleFromToZero.ObjectMeta.GenerateName = ""
 		runnerForScaleFromToZero.ObjectMeta.Labels = nil
-		runnerForScaleFromToZero.ObjectMeta.Annotations[annotationKeyRegistrationOnly] = "true"
+		metav1.SetMetaDataAnnotation(&runnerForScaleFromToZero.ObjectMeta, annotationKeyRegistrationOnly, "true")
 
 		if err := r.Client.Create(ctx, &runnerForScaleFromToZero); err != nil {
 			log.Error(err, "Failed to create runner for scale from/to zero")
