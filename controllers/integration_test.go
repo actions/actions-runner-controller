@@ -933,7 +933,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 
 			{
-				env.ExpectRegisteredNumberCountEventuallyEquals(4 "count of fake list runners")
+				env.ExpectRegisteredNumberCountEventuallyEquals(4, "count of fake list runners")
 			}
 
 			// Scale-up to 4 replicas on first check_run create webhook event
