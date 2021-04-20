@@ -68,9 +68,12 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
+	registrationOnlyRunnerNsName := req.NamespacedName
+	registrationOnlyRunnerNsName.Name = rs.Name + "-registration-only"
+
 	if err := r.Get(
 		ctx,
-		req.NamespacedName,
+		registrationOnlyRunnerNsName,
 		&v1alpha1.Runner{},
 	); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -82,7 +85,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			return ctrl.Result{}, fmt.Errorf("failed to create runner for scale from/to zero: %v", err)
 		}
 
-		runnerForScaleFromToZero.ObjectMeta.Name = rs.Name
+		runnerForScaleFromToZero.ObjectMeta.Name = registrationOnlyRunnerNsName.Name
 		runnerForScaleFromToZero.ObjectMeta.GenerateName = ""
 		runnerForScaleFromToZero.ObjectMeta.Labels = nil
 		metav1.SetMetaDataAnnotation(&runnerForScaleFromToZero.ObjectMeta, annotationKeyRegistrationOnly, "true")
@@ -121,7 +124,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	for _, r := range allRunners.Items {
 		// This guard is required to avoid the RunnerReplicaSet created by the controller v0.17.0 or before
 		// to not treat all the runners in the namespace as its children.
-		if metav1.IsControlledBy(&r, &rs) {
+		if metav1.IsControlledBy(&r, &rs) && !metav1.HasAnnotation(r.ObjectMeta, annotationKeyRegistrationOnly) {
 			myRunners = append(myRunners, r)
 
 			available += 1

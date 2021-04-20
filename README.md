@@ -788,5 +788,23 @@ NAME=$DOCKER_USER/actions-runner-controller \
        acceptance/tests
 ```
 
+**Development Tips**
+
+If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
+
+```
+NAME=$DOCKER_USER/actions-runner-controller \
+  make docker-build docker-push && \
+  kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
+```
+
+Similary, if you'd like to recreate runner pods with the newer runner image,
+
+```
+NAME=$DOCKER_USER/actions-runner make \
+  -C runner docker-{build,push}-ubuntu && \
+  (kubectl get po -ojsonpath={.items[*].metadata.name} | xargs -n1 kubectl delete po)
+```
+
 **Runner Tests**<br />
 A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.

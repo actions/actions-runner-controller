@@ -157,12 +157,19 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {
-				return ctrl.Result{}, err
+				log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
+
+				return ctrl.Result{Requeue: true}, nil
 			}
 		} else if err := r.Delete(ctx, &pod); err != nil {
-			// Delete the pod to free the cluster and node resource
-			return ctrl.Result{}, err
+			if !kerrors.IsNotFound(err) {
+				log.Info(fmt.Sprintf("Retrying soon as we failed to delete registration-only runner pod: %v", err))
+
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
+
+		log.Info("Successfully deleted egistration-only runner pod to free node and cluster resource")
 
 		// Return here to not recreate the deleted pod, because recreating it is the waste of cluster and node resource,
 		// and also defeats the original purpose of scale-from/to-zero we're trying to implement by using the registration-only runner.
@@ -618,6 +625,14 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Name:  "RUNNER_WORKDIR",
 			Value: workDir,
 		},
+	}
+
+	if metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly) {
+		env = append(env, corev1.EnvVar{
+			Name:  "RUNNER_REGISTRATION_ONLY",
+			Value: "true",
+		},
+		)
 	}
 
 	env = append(env, runner.Spec.Env...)

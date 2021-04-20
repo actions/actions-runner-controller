@@ -82,6 +82,8 @@ if [ -f /runner/.runner ]; then
 fi
 
 if [ -n "${RUNNER_REGISTRATION_ONLY}" ]; then
+  echo
+  echo "This runner is configured to be registration-only. Existing without starting the runner service..."
   exit 0
 fi
 
