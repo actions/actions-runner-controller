@@ -27,7 +27,9 @@ if [ "${tool}" == "helm" ]; then
     -n actions-runner-system \
     --create-namespace \
     --set syncPeriod=5m \
-    --set authSecret.create=false
+    --set authSecret.create=false \
+    --set image.repository=${NAME} \
+    --set image.tag=${VERSION}
   kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
 else
   kubectl apply \
