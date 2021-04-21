@@ -77,7 +77,7 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 1. Using GitHub App (not supported when you need enterprise level runners)
 2. Using Personal Access Token
 
-Functionality wise, there isn't a difference between the 2 authentication methods, there are however some benefits to using a GitHub App over a PAT for authentication. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you run into rate limiting issues consider deploying the solution using GitHub App authentication instead.
+Functionality wise, there much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you are deploying the solution for a GitHub Enterprise Server environment then you are able to [configure your rate limiting settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) and so there isn't much of a difference between the 2 authentication methods. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues then consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying using GitHub App Authentication
 
