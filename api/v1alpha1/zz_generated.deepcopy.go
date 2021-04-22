@@ -706,6 +706,11 @@ func (in *RunnerSpec) DeepCopyInto(out *RunnerSpec) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.DockerRegistryMirror != nil {
+		in, out := &in.DockerRegistryMirror, &out.DockerRegistryMirror
+		*out = new(string)
+		**out = **in
+	}
 	if in.HostAliases != nil {
 		in, out := &in.HostAliases, &out.HostAliases
 		*out = make([]v1.HostAlias, len(*in))

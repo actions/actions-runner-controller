@@ -635,6 +635,15 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}...)
 	}
 
+	if mirror := runner.Spec.DockerRegistryMirror; mirror != nil && dockerdInRunner {
+		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, []corev1.EnvVar{
+			{
+				Name:  "DOCKER_REGISTRY_MIRROR",
+				Value: *runner.Spec.DockerRegistryMirror,
+			},
+		}...)
+	}
+
 	//
 	// /runner must be generated on runtime from /runnertmp embedded in the container image.
 	//
@@ -758,6 +767,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			)
 		}
 
+		if mirror := runner.Spec.DockerRegistryMirror; mirror != nil {
+			pod.Spec.Containers[1].Args = append(pod.Spec.Containers[1].Args,
+				fmt.Sprintf("--registry-mirror=%s", *runner.Spec.DockerRegistryMirror),
+			)
+		}
 	}
 
 	if len(runner.Spec.Containers) != 0 {
