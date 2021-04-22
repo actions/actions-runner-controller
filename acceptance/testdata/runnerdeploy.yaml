@@ -8,6 +8,7 @@ spec:
     spec:
       repository: ${NAME}
       image: summerwind/actions-runner:${VERSION}
+      imagePullPolicy: IfNotPresent
 
       #
       # dockerd within runner container
