@@ -1,6 +1,6 @@
 # Contributing
 
-### Helm Verison Bumps
+### Helm Version Bumps
 
 **Chart Version :** When bumping the chart version follow semantic versioning https://semver.org/<br />
 **App Version :** When bumping the app version you will also need to bump the chart verison too. Again, follow semantic verisoning when bumping the chart.
