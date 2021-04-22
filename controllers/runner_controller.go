@@ -520,7 +520,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	runnerImagePullPolicy := runner.Spec.ImagePullPolicy
 	if runnerImagePullPolicy == "" {
-		runnerImagePullPolicy = corev1.PullAlways
+		runnerImagePullPolicy = corev1.PullIfNotPresent
 	}
 
 	env := []corev1.EnvVar{

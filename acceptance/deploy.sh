@@ -41,5 +41,4 @@ fi
 # Adhocly wait for some time until actions-runner-controller's admission webhook gets ready
 sleep 20
 
-kubectl apply \
-  -f acceptance/testdata/runnerdeploy.yaml
+cat acceptance/testdata/runnerdeploy.yaml | envsubst | kubectl apply -f -
