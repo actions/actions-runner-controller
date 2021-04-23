@@ -35,6 +35,7 @@ RUN apt update -y \
     python-is-python3 \
     iptables \
     supervisor \
+    amazon-ecr-credential-helper \
     && rm -rf /var/lib/apt/list/*
 
 # Runner user

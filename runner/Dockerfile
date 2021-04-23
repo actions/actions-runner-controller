@@ -38,6 +38,7 @@ RUN apt update -y \
     zip \
     zstd \
     python-is-python3 \
+    amazon-ecr-credential-helper \
     && rm -rf /var/lib/apt/lists/*
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
