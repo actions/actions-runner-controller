@@ -1,5 +1,11 @@
-NAME ?= summerwind/actions-runner-controller
+ifdef USERNAME
+	NAME ?= ${USERNAME}/actions-runner-controller
+else
+	NAME ?= summerwind/actions-runner-controller
+endif
 VERSION ?= latest
+USERNAME ?= $(shell echo ${NAME} | cut -d / -f1)
+
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
 YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
@@ -24,8 +30,8 @@ endif
 # if IMG_RESULT is unspecified, by default the image will be pushed to registry
 ifeq (${IMG_RESULT}, load)
 	export PUSH_ARG="--load"
-    # if load is specified, image will be built only for the build machine architecture.
-    export PLATFORMS="local"
+	# if load is specified, image will be built only for the build machine architecture.
+	export PLATFORMS="local"
 else ifeq (${IMG_RESULT}, cache)
 	# if cache is specified, image will only be available in the build cache, it won't be pushed or loaded
 	# therefore no PUSH_ARG will be specified
@@ -107,7 +113,7 @@ generate: controller-gen
 # Build the docker image
 docker-build: test
 	docker build . -t ${NAME}:${VERSION}
-	docker build runner -t summerwind/actions-runner:${VERSION} --build-arg TARGETPLATFORM=$(shell arch)
+	docker build runner -t ${USERNAME}/actions-runner:${VERSION} --build-arg TARGETPLATFORM=$(shell arch)
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -123,15 +129,16 @@ docker-buildx:
 
 # Pull the docker images for acceptance
 docker-pull: docker-build
-        docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
-        docker pull docker:dind
-        docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
-        docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
-        docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
+	docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
+	docker pull docker:dind
+	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
 
 # Push the docker image
 docker-push:
-        docker push ${NAME}:${VERSION}
+	docker push ${NAME}:${VERSION}
+	docker push ${USERNAME}/actions-runner:${VERSION}
 
 # Generate the release manifest file
 release: manifests
@@ -154,7 +161,7 @@ acceptance/kind:
 	kind create cluster --name acceptance
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
-	kind load docker-image summerwind/actions-runner:${VERSION} --name acceptance
+	kind load docker-image ${USERNAME}/actions-runner:${VERSION} --name acceptance
 	kind load docker-image docker:dind --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
@@ -174,7 +181,7 @@ acceptance/teardown:
 	kind delete cluster --name acceptance
 
 acceptance/tests:
-	acceptance/deploy.sh
+	NAME=${NAME} VERSION=${VERSION} USERNAME=${USERNAME} acceptance/deploy.sh
 	acceptance/checks.sh
 
 # Upload release file to GitHub.

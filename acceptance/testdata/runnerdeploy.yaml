@@ -7,7 +7,7 @@ spec:
   template:
     spec:
       repository: ${NAME}
-      image: summerwind/actions-runner:${VERSION}
+      image: ${USERNAME}/actions-runner:${VERSION}
       imagePullPolicy: IfNotPresent
 
       #
