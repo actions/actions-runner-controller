@@ -306,8 +306,9 @@ The scale out performance is controlled via the manager containers startup `--sy
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
 
 
-Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`
+Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
+_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
