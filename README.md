@@ -68,7 +68,7 @@ When deploying the solution for a Github Enterprise Server environment you need 
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-__**NOTE : The repository maintainers do not have an Enterprise Server environment. Support for this environment is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+__**NOTE : The repository maintainers do not have an Enterprise environment (cloud or server). Support for the Enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
 ## Setting up authentication with GitHub API
 
