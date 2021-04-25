@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"errors"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	corev1 "k8s.io/api/core/v1"
@@ -97,6 +98,8 @@ type RunnerSpec struct {
 	DockerEnabled *bool `json:"dockerEnabled,omitempty"`
 	// +optional
 	DockerMTU *int64 `json:"dockerMTU,omitempty"`
+	// +optional
+	DockerRegistryMirror *string `json:"dockerRegistryMirror,omitempty"`
 	// +optional
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 	// +optional

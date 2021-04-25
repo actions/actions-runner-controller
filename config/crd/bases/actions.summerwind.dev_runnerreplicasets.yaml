@@ -436,6 +436,8 @@ spec:
                     dockerMTU:
                       format: int64
                       type: integer
+                    dockerRegistryMirror:
+                      type: string
                     dockerVolumeMounts:
                       items:
                         description: VolumeMount describes a mounting of a Volume within a container.

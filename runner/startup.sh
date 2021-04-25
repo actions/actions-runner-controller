@@ -20,21 +20,17 @@ function wait_for_process () {
 sudo /bin/bash <<SCRIPT
 mkdir -p /etc/docker
 
-cat <<EOS > /etc/docker/daemon.json
-{
-EOS
+echo "{}" > /etc/docker/daemon.json
 
 if [ -n "${MTU}" ]; then
-cat <<EOS >> /etc/docker/daemon.json
-  "mtu": ${MTU}
-EOS
+jq ".\"mtu\" = ${MTU}" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
 # See https://docs.docker.com/engine/security/rootless/
 echo "environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=${MTU}" >> /etc/supervisor/conf.d/dockerd.conf
 fi
 
-cat <<EOS >> /etc/docker/daemon.json
-}
-EOS
+if [ -n "${DOCKER_REGISTRY_MIRROR}" ]; then
+jq ".\"registry-mirrors\"[0] = \"${DOCKER_REGISTRY_MIRROR}\"" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
+fi
 SCRIPT
 
 INFO "Using /etc/docker/daemon.json with the following content"
