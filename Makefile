@@ -1,10 +1,12 @@
-ifdef USERNAME
-	NAME ?= ${USERNAME}/actions-runner-controller
+ifdef DOCKER_USER
+	NAME ?= ${DOCKER_USER}/actions-runner-controller
 else
 	NAME ?= summerwind/actions-runner-controller
 endif
+DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
+RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 VERSION ?= latest
-USERNAME ?= $(shell echo ${NAME} | cut -d / -f1)
+TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
@@ -113,7 +115,7 @@ generate: controller-gen
 # Build the docker image
 docker-build: test
 	docker build . -t ${NAME}:${VERSION}
-	docker build runner -t ${USERNAME}/actions-runner:${VERSION} --build-arg TARGETPLATFORM=$(shell arch)
+	docker build runner -t ${RUNNER_NAME}:${VERSION} --build-arg TARGETPLATFORM=$(shell arch)
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -130,7 +132,7 @@ docker-buildx:
 # Push the docker image
 docker-push:
 	docker push ${NAME}:${VERSION}
-	docker push ${USERNAME}/actions-runner:${VERSION}
+	docker push ${RUNNER_NAME}:${VERSION}
 
 # Generate the release manifest file
 release: manifests
@@ -153,7 +155,7 @@ acceptance/kind:
 	kind create cluster --name acceptance
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
-	kind load docker-image ${USERNAME}/actions-runner:${VERSION} --name acceptance
+	kind load docker-image ${RUNNER_NAME}:${VERSION} --name acceptance
 	kind load docker-image docker:dind --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
@@ -181,7 +183,7 @@ acceptance/teardown:
 	kind delete cluster --name acceptance
 
 acceptance/tests:
-	NAME=${NAME} VERSION=${VERSION} USERNAME=${USERNAME} acceptance/deploy.sh
+	NAME=${NAME} RUNNER_NAME=${RUNNER_NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
 	acceptance/checks.sh
 
 # Upload release file to GitHub.

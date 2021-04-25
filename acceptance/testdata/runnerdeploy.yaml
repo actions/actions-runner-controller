@@ -6,8 +6,8 @@ spec:
 #  replicas: 1
   template:
     spec:
-      repository: ${NAME}
-      image: ${USERNAME}/actions-runner:${VERSION}
+      repository: ${TEST_REPO}
+      image: ${RUNNER_NAME}:${VERSION}
       imagePullPolicy: IfNotPresent
 
       #

@@ -762,7 +762,7 @@ the acceptance test:
 # This sets `VERSION` envvar to some appropriate value
 . hack/make-env.sh
 
-USERNAME=$DOCKER_USER \
+DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
@@ -782,7 +782,7 @@ If you prefer to test in a non-kind cluster, you can instead run:
 
 ```shell script
 KUBECONFIG=path/to/kubeconfig \
-USERNAME=$DOCKER_USER \
+  DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
