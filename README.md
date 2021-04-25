@@ -588,11 +588,22 @@ spec:
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
+      # Optional Docker containers network MTU
+      # If your network card MTU is smaller than Docker's default 1500, you might encounter Docker networking issues.
+      # To fix these issues, you should setup Docker MTU smaller than or equal to that on the outgoing network card.
+      # More information:
+      # - https://mlohr.com/docker-mtu/
+      dockerMTU: 1500
+      # Optional Docker registry mirror
+      # Docker Hub has enabled rate-limiting for free plans.
+      # To avoid disruptions in your CI/CD pipelines, you might want to setup an external or on-premises Docker registry mirror.
+      # More information:
+      # - https://docs.docker.com/docker-hub/download-rate-limit/
+      # - https://cloud.google.com/container-registry/docs/pulling-cached-images
+      dockerRegistryMirror: https://mirror.gcr.io/
       # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
       # true = No docker sidecar container is deployed in the runner pod but docker can be used within teh runner container instead. The image summerwind/actions-runner-dind is used by default.
       dockerdWithinRunnerContainer: true
-      # Optional Docker registry mirror, only applicable if dockerdWithinRunnerContainer = true
-      dockerRegistryMirror: https://mirror.gcr.io/
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
