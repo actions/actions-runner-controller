@@ -12,7 +12,13 @@ If you think you can improve future release notes in any way, please do submit a
 Note that even though it looks like a Go template, I don't use any templating to generate the changelog.
 It's just that I'm used to reading and intepreting Go template by myself, not a computer program :)
 
-**Title**: `v{{ .Version }}: {{ .TitlesOfImportantChanges }}`
+**Title**:
+
+```
+v{{ .Version }}: {{ .TitlesOfImportantChanges }}
+```
+
+**Body**:
 
 ```
 **CAUTION:** If you're using the Helm chart, beware to review changes to CRDs and do manually upgrade CRDs! Helm installs CRDs only on installing a chart. It doesn't automatically upgrade CRDs. Otherwise you end up with troubles like #427, #467, and #468
