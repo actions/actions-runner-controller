@@ -14,8 +14,11 @@ onlyLabels: []
 exemptLabels:
   - pinned
   - security
-  - feature
+  - enhancement
   - refactor
+  - documentation
+  - chore
+  - needs-investigation
   - "[Status] Maybe Later"
 
 # Set to true to ignore issues in a project (defaults to false)
