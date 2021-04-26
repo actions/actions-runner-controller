@@ -45,7 +45,7 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.274.1
+ARG RUNNER_VERSION=2.278.0
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=19.03.13
 ARG DEBUG=false
