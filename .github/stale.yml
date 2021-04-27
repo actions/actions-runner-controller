@@ -19,7 +19,7 @@ exemptLabels:
   - documentation
   - chore
   - needs-investigation
-  - "[Status] Maybe Later"
+  - bug
 
 # Set to true to ignore issues in a project (defaults to false)
 exemptProjects: false
