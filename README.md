@@ -53,7 +53,8 @@ kubectl apply -f https://github.com/summerwind/actions-runner-controller/release
 
 ```shell
 helm repo add actions-runner-controller https://summerwind.github.io/actions-runner-controller
-helm upgrade --install -n actions-runner-system actions-runner-controller/actions-runner-controller
+helm upgrade --install --namespace actions-runner-system --create-namespace \ 
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
 ### GitHub Enterprise Support
