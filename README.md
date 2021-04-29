@@ -723,7 +723,7 @@ spec:
 ### Software installed in the runner image
 
 **Cloud Tooling**<br />
-The project supports being deployed on the various clouds Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
+The project supports being deployed on the various cloud Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
 
 **Bundled Software**<br />
 The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintain a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
