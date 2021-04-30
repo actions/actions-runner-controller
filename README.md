@@ -46,20 +46,20 @@ Install the custom resource and actions-runner-controller with `kubectl` or `hel
 
 ```shell
 # REPLACE "v0.18.2" with the version you wish to deploy
-kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
+kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
 ```
 
 `helm`:
 
 ```shell
-helm repo add actions-runner-controller https://summerwind.github.io/actions-runner-controller
+helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
 helm upgrade --install --namespace actions-runner-system --create-namespace \ 
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
 If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
 
@@ -69,26 +69,28 @@ When deploying the solution for a Github Enterprise Server environment you need 
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-__**NOTE : The repository maintainers do not have an Enterprise environment (cloud or server). Support for the Enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+__**NOTE : The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
 ## Setting up authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using GitHub App (not supported when you need enterprise level runners)
-2. Using Personal Access Token
+1. Using a GitHub App (not supported when you need enterprise level runners)
+2. Using a PAT
 
-Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps). If you are deploying the solution for a GitHub Enterprise Server environment then you are able to [configure your rate limiting settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) and so there isn't much of a difference between the 2 authentication methods. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues then consider deploying the solution using the GitHub App authentication method instead.
+Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
+
+If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limiting settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues, consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying using GitHub App Authentication
 
 You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
-- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
+- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
 
-- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
+- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
 
 You will see an *App ID* on the page of the GitHub App you created as follows, the value of this App ID will be used later.
 
@@ -167,7 +169,7 @@ There are two ways to use this controller:
 
 ### Repository Runners
 
-To launch a single self-hosted runner, you need to create a manifest file includes `Runner` resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
+To launch a single self-hosted runner, you need to create a manifest file includes `Runner` resource as follows. This example launches a self-hosted runner with name *example-runner* for the *actions-runner-controller/actions-runner-controller* repository.
 
 ```yaml
 # runner.yaml
@@ -279,7 +281,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 #### Autoscaling
 
-__**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level, the scaling activity works as expected however jobs failed to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/summerwind/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments.**__
+__**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
 
 A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
@@ -351,10 +353,10 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
-1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
-2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
+2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223)
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
-4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
+4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223) [#315](https://github.com/actions-runner-controller/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
 1. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
@@ -413,7 +415,7 @@ spec:
 
 #### Faster Autoscaling with GitHub Webhook
 
-__**IMPORTANT : Due to missing webhook events webhook based scaling is not avaliable for enterprise level RunnerDeployments. This was explored in issue [#470](https://github.com/summerwind/actions-runner-controller/issues/470).**__
+__**IMPORTANT : Due to missing webhook events, webhook based scaling is not avaliable for enterprise level RunnerDeployments. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470).**__
 
 > This feature is an ADVANCED feature which may require more work to set up.
 > Please get prepared to put some time and effort to learn and leverage this feature!
@@ -452,7 +454,7 @@ In contrast, the standard autoscaling requires you to wait next sync period to a
 insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
 But doing so eventually result in the controller not functional due to GitHub API rate limit.
 
-> You can learn the implementation details in [#282](https://github.com/summerwind/actions-runner-controller/pull/282)
+> You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
 To enable this feature, you firstly need to install the webhook server.
 
