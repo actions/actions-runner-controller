@@ -506,6 +506,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		privileged      bool = true
 		dockerdInRunner bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
 		dockerEnabled   bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
+		ephemeral       bool = runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
 	)
 
 	runnerImage := runner.Spec.Image
@@ -563,6 +564,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		{
 			Name:  "RUNNER_WORKDIR",
 			Value: workDir,
+		},
+		{
+			Name:  "RUNNER_EPHEMERAL",
+			Value: fmt.Sprintf("%v", ephemeral),
 		},
 	}
 
