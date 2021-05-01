@@ -1,5 +1,13 @@
-NAME ?= summerwind/actions-runner-controller
+ifdef DOCKER_USER
+	NAME ?= ${DOCKER_USER}/actions-runner-controller
+else
+	NAME ?= summerwind/actions-runner-controller
+endif
+DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
+RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 VERSION ?= latest
+TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
+
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
 YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
@@ -24,8 +32,8 @@ endif
 # if IMG_RESULT is unspecified, by default the image will be pushed to registry
 ifeq (${IMG_RESULT}, load)
 	export PUSH_ARG="--load"
-    # if load is specified, image will be built only for the build machine architecture.
-    export PLATFORMS="local"
+	# if load is specified, image will be built only for the build machine architecture.
+	export PLATFORMS="local"
 else ifeq (${IMG_RESULT}, cache)
 	# if cache is specified, image will only be available in the build cache, it won't be pushed or loaded
 	# therefore no PUSH_ARG will be specified
@@ -107,10 +115,7 @@ generate: controller-gen
 # Build the docker image
 docker-build: test
 	docker build . -t ${NAME}:${VERSION}
-
-# Push the docker image
-docker-push:
-	docker push ${NAME}:${VERSION}
+	docker build runner -t ${RUNNER_NAME}:${VERSION} --build-arg TARGETPLATFORM=$(shell arch)
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -124,6 +129,11 @@ docker-buildx:
 		-f Dockerfile \
 		. ${PUSH_ARG}
 
+# Push the docker image
+docker-push:
+	docker push ${NAME}:${VERSION}
+	docker push ${RUNNER_NAME}:${VERSION}
+
 # Generate the release manifest file
 release: manifests
 	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
@@ -135,8 +145,7 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean docker-build release
-	make acceptance/pull
+acceptance: release/clean acceptance/pull release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
@@ -146,20 +155,20 @@ acceptance/kind:
 	kind create cluster --name acceptance
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
-	kind load docker-image summerwind/actions-runner:latest --name acceptance
+	kind load docker-image ${RUNNER_NAME}:${VERSION} --name acceptance
 	kind load docker-image docker:dind --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name acceptance
 	kubectl cluster-info --context kind-acceptance
 
-acceptance/pull:
-	docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
-	docker pull summerwind/actions-runner:latest
-	docker pull docker:dind
-	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
-	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
-	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
+# Pull the docker images for acceptance
+acceptance/pull: docker-build
+        docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
+        docker pull docker:dind
+        docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
+        docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
+        docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
 
 acceptance/setup:
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
@@ -174,7 +183,7 @@ acceptance/teardown:
 	kind delete cluster --name acceptance
 
 acceptance/tests:
-	acceptance/deploy.sh
+	NAME=${NAME} RUNNER_NAME=${RUNNER_NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
 	acceptance/checks.sh
 
 # Upload release file to GitHub.

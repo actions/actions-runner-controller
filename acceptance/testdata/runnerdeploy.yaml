@@ -6,7 +6,10 @@ spec:
 #  replicas: 1
   template:
     spec:
-      repository: mumoshu/actions-runner-controller-ci
+      repository: ${TEST_REPO}
+      image: ${RUNNER_NAME}:${VERSION}
+      imagePullPolicy: IfNotPresent
+
       #
       # dockerd within runner container
       #

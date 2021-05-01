@@ -786,12 +786,12 @@ the acceptance test:
 # This sets `VERSION` envvar to some appropriate value
 . hack/make-env.sh
 
-NAME=$DOCKER_USER/actions-runner-controller \
+DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
   INSTALLATION_ID=*** \
-  make docker-build acceptance
+  make acceptance
 ```
 
 Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
@@ -806,7 +806,7 @@ If you prefer to test in a non-kind cluster, you can instead run:
 
 ```shell script
 KUBECONFIG=path/to/kubeconfig \
-NAME=$DOCKER_USER/actions-runner-controller \
+  DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
