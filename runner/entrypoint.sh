@@ -66,5 +66,10 @@ for f in runsvc.sh RunnerService.js; do
   sudo mv {patched,bin}/${f}
 done
 
+args=()
+if [ "${RUNNER_EPHEMERAL}" == "true" ]; then
+  args+=(--once)
+fi
+
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh --once
+exec ./bin/runsvc.sh "${args[@]}"
