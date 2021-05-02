@@ -1,0 +1,12 @@
+Makefile
+acceptance
+runner
+hack
+test-assets
+config
+charts
+.github
+.envrc
+*.md
+*.txt
+*.sh
