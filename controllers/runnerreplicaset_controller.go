@@ -71,7 +71,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	registrationOnlyRunnerNeeded := rs.Spec.Replicas != nil && *rs.Spec.Replicas == 0
 	registrationOnlyRunner := v1alpha1.Runner{}
 	registrationOnlyRunnerNsName := req.NamespacedName
-	registrationOnlyRunnerNsName.Name = rs.Name + "-registration-only"
+	registrationOnlyRunnerNsName.Name = registrationOnlyRunnerNameFor(rs.Name)
 
 	registrationOnlyRunnerExists := false
 	if err := r.Get(
@@ -323,4 +323,8 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&v1alpha1.Runner{}).
 		Named(name).
 		Complete(r)
+}
+
+func registrationOnlyRunnerNameFor(rsName string) string {
+	return rsName + "-registration-only"
 }

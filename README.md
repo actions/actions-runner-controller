@@ -808,3 +808,30 @@ NAME=$DOCKER_USER/actions-runner make \
 
 **Runner Tests**<br />
 A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
+
+**Running Ginkgo Tests**
+
+You can run the integration test suite that is written in Ginkgo with:
+
+```bash
+make test-with-deps
+```
+
+This will firstly install a few binaries required to setup the integration test environment and then runs `go test` to start the Ginkgo test.
+
+If you don't want to use `make`, like when you're running tests from your IDE, install required binaries to `/usr/local/kubebuilder/bin`. That's the directory in which controller-runtime's `envtest` framework locates the binaries.
+
+```bash
+sudo mkdir -p /usr/local/kubebuilder/bin
+make kube-apiserver etcd
+sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
+go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
+```
+
+To run Ginkgo tests selectively, set the pattern of target test names to `GINKGO_FOCUS`.
+All the Ginkgo test that matches `GINKGO_FOCUS` will be run.
+
+```bash
+GINKGO_FOCUS='[It] should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0' \
+  go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
+```
