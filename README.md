@@ -604,6 +604,10 @@ spec:
           operator: "Exists"
           effect: "NoExecute"
           tolerationSeconds: 10
+      # true (default) = The runner restarts after running jobs, to ensure a clean and reproducible build environment
+      # false = The runner is persistent across jobs and doesn't automatically restart
+      # This directly controls the behaviour of `--once` flag provided to the github runner
+      ephemeral: false 
       # true (default) = A privileged docker sidecar container is included in the runner pod.
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       # If set to false, there are no privileged container and you cannot use docker.

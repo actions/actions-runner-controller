@@ -46,6 +46,9 @@ type RunnerSpec struct {
 	Group string `json:"group,omitempty"`
 
 	// +optional
+	Ephemeral *bool `json:"ephemeral,omitempty"`
+
+	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
 	// +optional
 	DockerdContainerResources corev1.ResourceRequirements `json:"dockerdContainerResources,omitempty"`

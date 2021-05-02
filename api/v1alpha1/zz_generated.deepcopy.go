@@ -587,6 +587,11 @@ func (in *RunnerSpec) DeepCopyInto(out *RunnerSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Ephemeral != nil {
+		in, out := &in.Ephemeral, &out.Ephemeral
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Containers != nil {
 		in, out := &in.Containers, &out.Containers
 		*out = make([]v1.Container, len(*in))
