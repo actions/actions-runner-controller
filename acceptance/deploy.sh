@@ -5,9 +5,11 @@ set -e
 tpe=${ACCEPTANCE_TEST_SECRET_TYPE}
 
 if [ "${tpe}" == "token" ]; then
-  kubectl create secret generic controller-manager \
-	  -n actions-runner-system \
-	  --from-literal=github_token=${GITHUB_TOKEN:?GITHUB_TOKEN must not be empty}
+  if ! kubectl get secret controller-manager -n actions-runner-system >/dev/null; then
+    kubectl create secret generic controller-manager \
+      -n actions-runner-system \
+      --from-literal=github_token=${GITHUB_TOKEN:?GITHUB_TOKEN must not be empty}
+  fi
 elif [ "${tpe}" == "app" ]; then
   kubectl create secret generic controller-manager \
     -n actions-runner-system \
@@ -26,7 +28,7 @@ if [ "${tool}" == "helm" ]; then
     charts/actions-runner-controller \
     -n actions-runner-system \
     --create-namespace \
-    --set syncPeriod=5m \
+    --set syncPeriod=${SYNC_PERIOD} \
     --set authSecret.create=false \
     --set image.repository=${NAME} \
     --set image.tag=${VERSION}
