@@ -17,6 +17,7 @@ ToC:
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [Runner Deployments](#runnerdeployments)
+    - [Note on scaling to/from 0](#note-on-scaling-to-from-zero)
     - [Autoscaling](#autoscaling)
       - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
   - [Runner with DinD](#runner-with-dind)
@@ -278,6 +279,22 @@ NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
+
+##### Note on scaling to/from 0
+
+You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
+
+```yaml
+# runnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  replicas: 0
+```
+
+The implication of setting `replicas: 0` instead of deleting the runner depoyment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
 
 #### Autoscaling
 
