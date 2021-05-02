@@ -67,7 +67,7 @@ for f in runsvc.sh RunnerService.js; do
 done
 
 args=()
-if [ "${RUNNER_EPHEMERAL}" == "true" ]; then
+if [ "${RUNNER_EPHEMERAL}" != "false" ]; then
   args+=(--once)
 fi
 
