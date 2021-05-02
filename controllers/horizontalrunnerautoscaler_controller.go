@@ -19,8 +19,9 @@ package controllers
 import (
 	"context"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/summerwind/actions-runner-controller/github"
 	"k8s.io/apimachinery/pkg/types"
@@ -186,7 +187,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager
 
 func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (int, int, *int, error) {
 	minReplicas := defaultReplicas
-	if hra.Spec.MinReplicas != nil && *hra.Spec.MinReplicas > 0 {
+	if hra.Spec.MinReplicas != nil && *hra.Spec.MinReplicas >= 0 {
 		minReplicas = *hra.Spec.MinReplicas
 	}
 
