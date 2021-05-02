@@ -7,6 +7,7 @@ DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 VERSION ?= latest
 TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
+SYNC_PERIOD ?= 5m
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
@@ -145,14 +146,21 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean acceptance/pull release
-	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
-	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
-	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
-	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/kind acceptance/setup acceptance/tests acceptance/teardown
+acceptance: release/clean acceptance/pull docker-build release
+	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
+	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
+	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
+
+acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
 
 acceptance/kind:
 	kind create cluster --name acceptance
+
+# Set TMPDIR to somewhere under $HOME when you use docker installed with Ubuntu snap
+# Otherwise `load docker-image` fail while running `docker save`.
+# See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
+acceptance/load:
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
 	kind load docker-image ${RUNNER_NAME}:${VERSION} --name acceptance
@@ -163,12 +171,12 @@ acceptance/kind:
 	kubectl cluster-info --context kind-acceptance
 
 # Pull the docker images for acceptance
-acceptance/pull: docker-build
-        docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
-        docker pull docker:dind
-        docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
-        docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
-        docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
+acceptance/pull:
+	docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
+	docker pull docker:dind
+	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
 
 acceptance/setup:
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
@@ -182,8 +190,10 @@ acceptance/setup:
 acceptance/teardown:
 	kind delete cluster --name acceptance
 
-acceptance/tests:
+acceptance/deploy:
 	NAME=${NAME} RUNNER_NAME=${RUNNER_NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
+
+acceptance/tests:
 	acceptance/checks.sh
 
 # Upload release file to GitHub.

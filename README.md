@@ -811,6 +811,15 @@ DOCKER_USER=*** \
   make acceptance
 ```
 
+> **Notes for Ubuntu 20.04+ users**
+>
+> If you're using Ubuntu 20.04 or greater, you might have installed `docker` with `snap`.
+>
+> If you want to stick with `snap`-provided `docker`, do not forget to set `TMPDIR` to
+> somewhere under `$HOME`.
+> Otherwise `kind load docker-image` fail while running `docker save`.
+> See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap for more information.
+
 Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
 `GITHUB_TOKEN`, and those in [Using GitHub App](#using-github-app) to obtain `APP_ID`, `INSTALLATION_ID`, and
 `PRIAVTE_KEY_FILE_PATH`.
@@ -818,6 +827,26 @@ Please follow the instructions explained in [Using Personal Access Token](#using
 The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-runner-controller`,
 creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
 controller is able to bring up a runner pod with the actions runner registration token installed.
+
+**Rerunning a failed test**
+
+When one of tests run by `make acceptance` failed, you'd probably like to rerun only the failed one.
+
+It can be done by `make acceptance/run` and by setting the combination of `ACCEPTANCE_TEST_DEPLOYMENT_TOOL` and `ACCEPTANCE_TEST_SECRET_TYPE` values that failed.
+
+In the example below, we rerun the test for the combination `ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token` only:
+
+```
+DOCKER_USER=*** \
+  GITHUB_TOKEN=*** \
+  APP_ID=*** \
+  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
+  INSTALLATION_ID=*** \
+  ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token \
+  make acceptance/run
+```
+
+**Testing in a non-kind cluster**
 
 If you prefer to test in a non-kind cluster, you can instead run:
 
@@ -830,6 +859,7 @@ KUBECONFIG=path/to/kubeconfig \
   INSTALLATION_ID=*** \
   ACCEPTANCE_TEST_SECRET_TYPE=token \
   make docker-build acceptance/setup \
+       acceptance/deploy \
        acceptance/tests
 ```
 
@@ -839,7 +869,7 @@ If you've already deployed actions-runner-controller and only want to recreate p
 
 ```
 NAME=$DOCKER_USER/actions-runner-controller \
-  make docker-build docker-push && \
+  make docker-build acceptance/load && \
   kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
 ```
 
