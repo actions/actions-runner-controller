@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.274.2
+ARG RUNNER_VERSION=2.278.0
 ARG DOCKER_VERSION=19.03.12
 
 RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
@@ -67,7 +67,7 @@ ENV RUNNER_ASSETS_DIR=/runnertmp
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
+    && if [ "$ARCH" = "amd64" -o "$ARCH" = "x86_64" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
     && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \

@@ -35,7 +35,7 @@ jobs:
             os-version: 20.04
             dockerfile: Dockerfile.dindrunner
     env:
-      RUNNER_VERSION: 2.277.1
+      RUNNER_VERSION: 2.278.0
       DOCKER_VERSION: 19.03.12
       DOCKERHUB_USERNAME: ${{ github.repository_owner }}
     steps:

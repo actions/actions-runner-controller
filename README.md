@@ -8,13 +8,14 @@ ToC:
 
 - [Motivation](#motivation)
 - [Installation](#installation)
-  - [GitHub Enterprise support](#github-enterprise-support)
+  - [GitHub Enterprise Support](#github-enterprise-support)
 - [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
+  - [Enterprise Runners](#enterprise-runners)
   - [Runner Deployments](#runnerdeployments)
     - [Autoscaling](#autoscaling)
       - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
@@ -25,7 +26,7 @@ ToC:
   - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
   - [Software installed in the runner image](#software-installed-in-the-runner-image)
   - [Common errors](#common-errors)
-- [Developing](#developing)
+- [Contributing](#contributing)
 
 ## Motivation
 
@@ -45,76 +46,51 @@ Install the custom resource and actions-runner-controller with `kubectl` or `hel
 
 ```shell
 # REPLACE "v0.18.2" with the version you wish to deploy
-kubectl apply -f https://github.com/summerwind/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
+kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
 ```
 
 `helm`:
 
 ```shell
-helm repo add actions-runner-controller https://summerwind.github.io/actions-runner-controller
-helm upgrade --install -n actions-runner-system actions-runner-controller/actions-runner-controller
+helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
+helm upgrade --install --namespace actions-runner-system --create-namespace \ 
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
-### Github Enterprise support
+### GitHub Enterprise Support
 
-If you use either Github Enterprise Cloud or Server, you can use **actions-runner-controller**  with those, too.
-Authentication works same way as with public Github (repo and organization level).
-The minimum version of Github Enterprise Server is 3.0.0 (or rc1/rc2).
-__**NOTE : The maintainers do not have an Enterprise environment to be able to test changes and so this feature is community driven. Support is on a best endeavors basis.**__
+The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+
+If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+
+When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-#### Enterprise runners usage
-
-In order to use enterprise runners you must have Admin access to Github Enterprise and you should do Personal Access Token (PAT)
-with `enterprise:admin` access. Enterprise runners are not possible to run with Github APP or any other permission.
-
-When you use enterprise runners those will get access to Github Organisations. However, access to the repositories is **NOT**
-allowed by default. Each Github Organisation must allow Enterprise runner groups to be used in repositories.
-This is needed only one time and is permanent after that.
-
-Example:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: ghe-runner-deployment
-spec:
-  replicas: 2
-  template:
-    spec:
-      enterprise: your-enterprise-name
-      resources:
-        limits:
-          cpu: "4000m"
-          memory: "2Gi"
-        requests:
-          cpu: "200m"
-          memory: "200Mi"
-
-```
+__**NOTE : The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
 ## Setting up authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using GitHub App.
-2. Using Personal Access Token.
+1. Using a GitHub App (not supported when you need enterprise level runners)
+2. Using a PAT
 
-Functionality wise there isn't a difference between the 2 authentication methods. There are however some benefits to using a GitHub App for authentication over a PAT such as an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps), if you run into rate limiting consider deploying this solution using GitHub App authentication instead.
+Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
+
+If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limiting settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues, consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying using GitHub App Authentication
 
 You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
-- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
+- [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
 
-- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/summerwind/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
+- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
 
 You will see an *App ID* on the page of the GitHub App you created as follows, the value of this App ID will be used later.
 
@@ -145,17 +121,15 @@ $ kubectl create secret generic controller-manager \
 
 ### Deploying using PAT Authentication
 
-Personal Acess Token can be used to register a self-hosted runner by *actions-runner-controller*.
-
-Self-hosted runners in GitHub can either be connected to a single repository, or to a GitHub organization (so they are available to all repositories in the organization). How you plan on using the runner will affect what scopes are needed for the token.
+Personal Access Tokens can be used to register a self-hosted runner by *actions-runner-controller*.
 
 Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
-**Scopes for a Repository Runner**
+**Scopes for a Repository Runners**
 
 * repo (Full control)
 
-**Scopes for a Organization Runner**
+**Scopes for a Organization Runners**
 
 * repo (Full control)
 * admin:org (Full control)
@@ -164,6 +138,14 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 * admin:org_hook
 * notifications
 * workflow
+
+**Scopes for Enterprise Runners**
+
+* enterprise:admin (Full control)
+
+_Note: when you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each Github organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+
+---
 
 Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
 
@@ -175,6 +157,11 @@ kubectl create secret generic controller-manager \
 
 ## Usage
 
+[GitHub self-hosted runners can be deployed at various levels in a management hierarchy](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#about-self-hosted-runners):
+- The repository level
+- The organization level
+- The enterprise level
+
 There are two ways to use this controller:
 
 - Manage runners one by one with `Runner`.
@@ -182,7 +169,7 @@ There are two ways to use this controller:
 
 ### Repository Runners
 
-To launch a single self-hosted runner, you need to create a manifest file includes *Runner* resource as follows. This example launches a self-hosted runner with name *example-runner* for the *summerwind/actions-runner-controller* repository.
+To launch a single self-hosted runner, you need to create a manifest file includes `Runner` resource as follows. This example launches a self-hosted runner with name *example-runner* for the *actions-runner-controller/actions-runner-controller* repository.
 
 ```yaml
 # runner.yaml
@@ -240,6 +227,22 @@ spec:
 
 Now you can see the runner on the organization level (if you have organization owner permissions).
 
+### Enterprise Runners
+
+To add the runner to an enterprise, you only need to replace the `repository` field with `enterprise`, so the runner will register itself to the enterprise.
+
+```yaml
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: example-enterprise-runner
+spec:
+  enterprise: your-enterprise-name
+```
+
+Now you can see the runner on the enterprise level (if you have enterprise access permissions).
+
 ### RunnerDeployments
 
 There are `RunnerReplicaSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
@@ -278,7 +281,9 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 #### Autoscaling
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
+__**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
+
+A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
 **Scaling Metrics**
 
@@ -303,8 +308,9 @@ The scale out performance is controlled via the manager containers startup `--sy
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
 
 
-Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`
+Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
+_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -347,10 +353,10 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 **Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
-1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/summerwind/actions-runner-controller/pull/313)
-2. Supports GitHub organisation wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/summerwind/actions-runner-controller/pull/223)
+1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
+2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223)
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
-4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/summerwind/actions-runner-controller/pull/223) [#315](https://github.com/summerwind/actions-runner-controller/pull/315)
+4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223) [#315](https://github.com/actions-runner-controller/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
 1. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
@@ -359,6 +365,8 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
+
+_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_
 
 ```yaml
 ---
@@ -407,6 +415,8 @@ spec:
 
 #### Faster Autoscaling with GitHub Webhook
 
+__**IMPORTANT : Due to missing webhook events, webhook based scaling is not avaliable for enterprise level RunnerDeployments. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470).**__
+
 > This feature is an ADVANCED feature which may require more work to set up.
 > Please get prepared to put some time and effort to learn and leverage this feature!
 
@@ -444,7 +454,7 @@ In contrast, the standard autoscaling requires you to wait next sync period to a
 insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
 But doing so eventually result in the controller not functional due to GitHub API rate limit.
 
-> You can learn the implementation details in #282
+> You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
 To enable this feature, you firstly need to install the webhook server.
 
@@ -581,6 +591,19 @@ spec:
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       # If set to false, there are no privileged container and you cannot use docker.
       dockerEnabled: false
+      # Optional Docker containers network MTU
+      # If your network card MTU is smaller than Docker's default 1500, you might encounter Docker networking issues.
+      # To fix these issues, you should setup Docker MTU smaller than or equal to that on the outgoing network card.
+      # More information:
+      # - https://mlohr.com/docker-mtu/
+      dockerMTU: 1500
+      # Optional Docker registry mirror
+      # Docker Hub has enabled rate-limiting for free plans.
+      # To avoid disruptions in your CI/CD pipelines, you might want to setup an external or on-premises Docker registry mirror.
+      # More information:
+      # - https://docs.docker.com/docker-hub/download-rate-limit/
+      # - https://cloud.google.com/container-registry/docs/pulling-cached-images
+      dockerRegistryMirror: https://mirror.gcr.io/
       # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
       # true = No docker sidecar container is deployed in the runner pod but docker can be used within teh runner container instead. The image summerwind/actions-runner-dind is used by default.
       dockerdWithinRunnerContainer: true
@@ -657,7 +680,7 @@ Note that if you specify `self-hosted` in your workflow, then this will run your
 
 ### Runner Groups
 
-Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an organization level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
 To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
 
@@ -681,8 +704,7 @@ spec:
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
 
-Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses
-the IAM-role enabled service account.
+Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that uses the IAM-role enabled service account.
 
 For `RunnerDeployment`, you can set those two fields under the runner spec at `RunnerDeployment.Spec.Template`:
 
@@ -697,14 +719,18 @@ spec:
       repository: USER/REO
       serviceAccountName: my-service-account
       securityContext:
-        fsGroup: 1447
+        fsGroup: 1000
 ```
 
 ### Software installed in the runner image
 
-The GitHub hosted runners include a large amount of pre-installed software packages. For Ubuntu 18.04, this list can be found at <https://github.com/actions/virtual-environments/blob/master/images/linux/Ubuntu1804-README.md>
+**Cloud Tooling**<br />
+The project supports being deployed on the various cloud Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
 
-The container image is based on Ubuntu 18.04, but it does not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
+**Bundled Software**<br />
+The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintain a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
+
+This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
 - git (2.26)
@@ -748,7 +774,9 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documeneted flags
 
-# Developing
+# Contributing
+
+For more details about any requirements or process, please check out [Getting Started with Contributing](CONTRIBUTING.md).
 
 **The Controller**<br />
 If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running
@@ -758,12 +786,12 @@ the acceptance test:
 # This sets `VERSION` envvar to some appropriate value
 . hack/make-env.sh
 
-NAME=$DOCKER_USER/actions-runner-controller \
+DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \
   INSTALLATION_ID=*** \
-  make docker-build acceptance
+  make acceptance
 ```
 
 Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
@@ -778,7 +806,7 @@ If you prefer to test in a non-kind cluster, you can instead run:
 
 ```shell script
 KUBECONFIG=path/to/kubeconfig \
-NAME=$DOCKER_USER/actions-runner-controller \
+  DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
   APP_ID=*** \
   PRIVATE_KEY_FILE_PATH=path/to/pem/file \

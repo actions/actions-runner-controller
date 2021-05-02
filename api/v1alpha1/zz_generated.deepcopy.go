@@ -706,12 +706,22 @@ func (in *RunnerSpec) DeepCopyInto(out *RunnerSpec) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.DockerRegistryMirror != nil {
+		in, out := &in.DockerRegistryMirror, &out.DockerRegistryMirror
+		*out = new(string)
+		**out = **in
+	}
 	if in.HostAliases != nil {
 		in, out := &in.HostAliases, &out.HostAliases
 		*out = make([]v1.HostAlias, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.VolumeSizeLimit != nil {
+		in, out := &in.VolumeSizeLimit, &out.VolumeSizeLimit
+		x := (*in).DeepCopy()
+		*out = &x
 	}
 }
 
