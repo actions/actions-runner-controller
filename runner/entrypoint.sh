@@ -56,6 +56,37 @@ cd /runner
   --labels "${RUNNER_LABELS}" \
   --work "${RUNNER_WORKDIR}"
 
+if [ -f /runner/.runner ]; then
+  echo Runner has successfully been configured with the following data.
+  cat /runner/.runner
+  # Note: the `.runner` file's content should be something like the below:
+  #
+  # $ cat /runner/.runner
+  # {
+  # "agentId": 117, #=> corresponds to the ID of the runner
+  # "agentName": "THE_RUNNER_POD_NAME",
+  # "poolId": 1,
+  # "poolName": "Default",
+  # "serverUrl": "https://pipelines.actions.githubusercontent.com/SOME_RANDOM_ID",
+  # "gitHubUrl": "https://github.com/USER/REPO",
+  # "workFolder": "/some/work/dir" #=> corresponds to Runner.Spec.WorkDir
+  # }
+  #
+  # Especially `agentId` is important, as other than listing all the runners in the repo,
+  # this is the only change we could get the exact runnner ID which can be useful for further
+  # GitHub API call like the below. Note that 171 is the agentId seen above.
+  #   curl \
+  #     -H "Accept: application/vnd.github.v3+json" \
+  #     -H "Authorization: bearer ${GITHUB_TOKEN}"
+  #     https://api.github.com/repos/USER/REPO/actions/runners/171
+fi
+
+if [ -n "${RUNNER_REGISTRATION_ONLY}" ]; then
+  echo
+  echo "This runner is configured to be registration-only. Existing without starting the runner service..."
+  exit 0
+fi
+
 mkdir ./externals
 # Hack due to the DinD volumes
 mv ./externalstmp/* ./externals/

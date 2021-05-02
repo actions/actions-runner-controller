@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"net/http/httptest"
 	"time"
@@ -262,8 +263,36 @@ var _ = Context("Inside of a new namespace", func() {
 
 				Eventually(
 					func() int {
-						err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name))
-						if err != nil {
+						selector, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						})
+						Expect(err).ToNot(HaveOccurred())
+
+						var regOnly actionsv1alpha1.Runner
+						if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: registrationOnlyRunnerNameFor(name)}, &regOnly); err != nil {
+							logf.Log.Info(fmt.Sprintf("Failed getting registration-only runner in test: %v", err))
+							return -1
+						} else {
+							updated := regOnly.DeepCopy()
+							updated.Status.Phase = "Completed"
+
+							if err := k8sClient.Status().Patch(ctx, updated, client.MergeFrom(&regOnly)); err != nil {
+								logf.Log.Info(fmt.Sprintf("Failed updating registration-only runner in test: %v", err))
+								return -1
+							}
+
+							runnersList.Add(&github.Runner{
+								ID:     pointer.Int64Ptr(1001),
+								Name:   pointer.StringPtr(regOnly.Name),
+								OS:     pointer.StringPtr("linux"),
+								Status: pointer.StringPtr("offline"),
+								Busy:   pointer.BoolPtr(false),
+							})
+						}
+
+						if err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 							logf.Log.Error(err, "list runners")
 							return -1
 						}

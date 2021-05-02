@@ -446,9 +446,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				ExpectCreate(ctx, rd, "test RunnerDeployment")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
 			}
 
@@ -554,9 +551,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				ExpectCreate(ctx, rd, "test RunnerDeployment")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
 			}
 
@@ -595,9 +589,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
 			}
 
@@ -606,9 +597,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
 			}
 
@@ -616,9 +604,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			{
 				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 			}
-
-			env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 		})
 
 		It("should create and scale user's repository runners on pull_request event", func() {
@@ -884,9 +871,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				ExpectCreate(ctx, rd, "test RunnerDeployment")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
 			}
 
@@ -930,9 +914,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 			}
 
@@ -941,9 +922,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.SendUserCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 4, "runners after first webhook event")
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(4, "count of fake list runners")
 			}
 
@@ -951,9 +929,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			{
 				env.SendUserCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 5, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
 			}
-
-			env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
 		})
 
 		It("should create and scale user's repository runners only on check_run event", func() {
@@ -1045,9 +1022,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.SendUserCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
-			}
-
-			{
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
 			}
 
@@ -1055,9 +1029,8 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			{
 				env.SendUserCheckRunEvent("test", "valid", "pending", "created")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 			}
-
-			env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 		})
 
 	})

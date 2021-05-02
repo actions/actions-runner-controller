@@ -17,6 +17,7 @@ ToC:
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [Runner Deployments](#runnerdeployments)
+    - [Note on scaling to/from 0](#note-on-scaling-to-from-zero)
     - [Autoscaling](#autoscaling)
       - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
   - [Runner with DinD](#runner-with-dind)
@@ -278,6 +279,22 @@ NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
+
+##### Note on scaling to/from 0
+
+You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
+
+```yaml
+# runnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  replicas: 0
+```
+
+The implication of setting `replicas: 0` instead of deleting the runner depoyment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
 
 #### Autoscaling
 
@@ -816,5 +833,50 @@ KUBECONFIG=path/to/kubeconfig \
        acceptance/tests
 ```
 
+**Development Tips**
+
+If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
+
+```
+NAME=$DOCKER_USER/actions-runner-controller \
+  make docker-build docker-push && \
+  kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
+```
+
+Similary, if you'd like to recreate runner pods with the newer runner image,
+
+```
+NAME=$DOCKER_USER/actions-runner make \
+  -C runner docker-{build,push}-ubuntu && \
+  (kubectl get po -ojsonpath={.items[*].metadata.name} | xargs -n1 kubectl delete po)
+```
+
 **Runner Tests**<br />
 A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
+
+**Running Ginkgo Tests**
+
+You can run the integration test suite that is written in Ginkgo with:
+
+```bash
+make test-with-deps
+```
+
+This will firstly install a few binaries required to setup the integration test environment and then runs `go test` to start the Ginkgo test.
+
+If you don't want to use `make`, like when you're running tests from your IDE, install required binaries to `/usr/local/kubebuilder/bin`. That's the directory in which controller-runtime's `envtest` framework locates the binaries.
+
+```bash
+sudo mkdir -p /usr/local/kubebuilder/bin
+make kube-apiserver etcd
+sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
+go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
+```
+
+To run Ginkgo tests selectively, set the pattern of target test names to `GINKGO_FOCUS`.
+All the Ginkgo test that matches `GINKGO_FOCUS` will be run.
+
+```bash
+GINKGO_FOCUS='[It] should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0' \
+  go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
+```

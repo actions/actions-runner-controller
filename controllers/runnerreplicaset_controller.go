@@ -68,6 +68,65 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
+	registrationOnlyRunnerNeeded := rs.Spec.Replicas != nil && *rs.Spec.Replicas == 0
+	registrationOnlyRunner := v1alpha1.Runner{}
+	registrationOnlyRunnerNsName := req.NamespacedName
+	registrationOnlyRunnerNsName.Name = registrationOnlyRunnerNameFor(rs.Name)
+
+	registrationOnlyRunnerExists := false
+	if err := r.Get(
+		ctx,
+		registrationOnlyRunnerNsName,
+		&registrationOnlyRunner,
+	); err != nil {
+		if !kerrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+	} else {
+		registrationOnlyRunnerExists = true
+	}
+
+	if registrationOnlyRunnerNeeded {
+		if registrationOnlyRunnerExists {
+			if registrationOnlyRunner.Status.Phase == "" {
+				log.Info("Still waiting for the registration-only runner to be registered")
+
+				return ctrl.Result{}, nil
+			}
+		} else {
+			// A registration-only runner does not exist and is needed, hence create it.
+
+			runnerForScaleFromToZero, err := r.newRunner(rs)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to create runner for scale from/to zero: %v", err)
+			}
+
+			runnerForScaleFromToZero.ObjectMeta.Name = registrationOnlyRunnerNsName.Name
+			runnerForScaleFromToZero.ObjectMeta.GenerateName = ""
+			runnerForScaleFromToZero.ObjectMeta.Labels = nil
+			metav1.SetMetaDataAnnotation(&runnerForScaleFromToZero.ObjectMeta, annotationKeyRegistrationOnly, "true")
+
+			if err := r.Client.Create(ctx, &runnerForScaleFromToZero); err != nil {
+				log.Error(err, "Failed to create runner for scale from/to zero")
+
+				return ctrl.Result{}, err
+			}
+
+			// We can continue to deleting runner pods only after the
+			// registration-only runner gets registered.
+			return ctrl.Result{}, nil
+		}
+	} else {
+		// A registration-only runner exists and is not needed, hence delete it.
+		if registrationOnlyRunnerExists {
+			if err := r.Client.Delete(ctx, &registrationOnlyRunner); err != nil {
+				log.Error(err, "Retrying soon because we failed to delete registration-only runner")
+
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+	}
+
 	selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -95,7 +154,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	for _, r := range allRunners.Items {
 		// This guard is required to avoid the RunnerReplicaSet created by the controller v0.17.0 or before
 		// to not treat all the runners in the namespace as its children.
-		if metav1.IsControlledBy(&r, &rs) {
+		if metav1.IsControlledBy(&r, &rs) && !metav1.HasAnnotation(r.ObjectMeta, annotationKeyRegistrationOnly) {
 			myRunners = append(myRunners, r)
 
 			available += 1
@@ -264,4 +323,8 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&v1alpha1.Runner{}).
 		Named(name).
 		Complete(r)
+}
+
+func registrationOnlyRunnerNameFor(rsName string) string {
+	return rsName + "-registration-only"
 }

@@ -7,6 +7,10 @@ spec:
   template:
     spec:
       repository: ${TEST_REPO}
+
+      #
+      # Custom runner image
+      #
       image: ${RUNNER_NAME}:${VERSION}
       imagePullPolicy: IfNotPresent
 
@@ -21,3 +25,13 @@ spec:
       # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
       #
       #dockerMTU: 1450
+
+      #Runner group
+      # labels:
+      # - "mylabel 1"
+      # - "mylabel 2"
+
+      #
+      # Non-standard working directory
+      #
+      # workDir: "/"

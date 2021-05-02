@@ -48,6 +48,9 @@ const (
 	LabelKeyPodTemplateHash = "pod-template-hash"
 
 	retryDelayOnGitHubAPIRateLimitError = 30 * time.Second
+
+	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
+	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -145,6 +148,34 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
+	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
+	if registrationOnly && runner.Status.Phase != "" {
+		// At this point we are sure that the registration-only runner has successfully configured and
+		// is of `offline` status, because we set runner.Status.Phase to that of the runner pod only after
+		// successful registration.
+
+		var pod corev1.Pod
+		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
+
+				return ctrl.Result{Requeue: true}, nil
+			}
+		} else if err := r.Delete(ctx, &pod); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Info(fmt.Sprintf("Retrying soon as we failed to delete registration-only runner pod: %v", err))
+
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+
+		log.Info("Successfully deleted egistration-only runner pod to free node and cluster resource")
+
+		// Return here to not recreate the deleted pod, because recreating it is the waste of cluster and node resource,
+		// and also defeats the original purpose of scale-from/to-zero we're trying to implement by using the registration-only runner.
+		return ctrl.Result{}, nil
+	}
+
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -221,18 +252,31 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		// If pod has ended up succeeded we need to restart it
 		// Happens e.g. when dind is in runner and run completes
-		restart := pod.Status.Phase == corev1.PodSucceeded
+		stopped := pod.Status.Phase == corev1.PodSucceeded
 
-		if pod.Status.Phase == corev1.PodRunning {
-			for _, status := range pod.Status.ContainerStatuses {
-				if status.Name != containerName {
-					continue
-				}
+		if !stopped {
+			if pod.Status.Phase == corev1.PodRunning {
+				for _, status := range pod.Status.ContainerStatuses {
+					if status.Name != containerName {
+						continue
+					}
 
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
-					restart = true
+					if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+						stopped = true
+					}
 				}
 			}
+		}
+
+		restart := stopped
+
+		if registrationOnly && stopped {
+			restart = false
+
+			log.Info(
+				"Observed that registration-only runner for scaling-from-zero has successfully stopped. " +
+					"Unlike other pods, this one will be recreated only when runner spec changes.",
+			)
 		}
 
 		if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
@@ -247,11 +291,21 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
+		if registrationOnly {
+			newPod.Spec.Containers[0].Env = append(
+				newPod.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "RUNNER_REGISTRATION_ONLY",
+					Value: "true",
+				},
+			)
+		}
+
 		var registrationRecheckDelay time.Duration
 
 		// all checks done below only decide whether a restart is needed
 		// if a restart was already decided before, there is no need for the checks
-		// saving API calls and scary{ log messages
+		// saving API calls and scary log messages
 		if !restart {
 			registrationCheckInterval := time.Minute
 			if r.RegistrationRecheckInterval > 0 {
@@ -356,7 +410,14 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 					)
 				}
 			} else if offline {
-				if registrationDidTimeout {
+				if registrationOnly {
+					log.Info(
+						"Observed that registration-only runner for scaling-from-zero has successfully been registered.",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
+				} else if registrationDidTimeout {
 					log.Info(
 						"Already existing GitHub runner still appears offline . "+
 							"Recreating the pod to see if it resolves the issue. "+
@@ -375,7 +436,7 @@ func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				}
 			}
 
-			if (notFound || offline) && !registrationDidTimeout {
+			if (notFound || (offline && !registrationOnly)) && !registrationDidTimeout {
 				registrationRecheckJitter := 10 * time.Second
 				if r.RegistrationRecheckJitter > 0 {
 					registrationRecheckJitter = r.RegistrationRecheckJitter
@@ -564,6 +625,14 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Name:  "RUNNER_WORKDIR",
 			Value: workDir,
 		},
+	}
+
+	if metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly) {
+		env = append(env, corev1.EnvVar{
+			Name:  "RUNNER_REGISTRATION_ONLY",
+			Value: "true",
+		},
+		)
 	}
 
 	env = append(env, runner.Spec.Env...)
