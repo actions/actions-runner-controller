@@ -185,10 +185,50 @@ func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager
 		Complete(r)
 }
 
+func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.Logger, now time.Time, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, *Period, *Period, error) {
+	var minReplicas *int
+	var active, upcoming *Period
+
+	for _, o := range hra.Spec.ScheduledOverrides {
+		a, u, err := MatchSchedule(
+			now, o.StartTime.Time, o.EndTime.Time,
+			RecurrenceRule{
+				Frequency: o.RecurrenceRule.Frequency,
+				UntilTime: o.RecurrenceRule.UntilTime.Time,
+			},
+		)
+		if err != nil {
+			return minReplicas, nil, nil, err
+		}
+
+		// Use the first when there are two or more active scheduled overrides,
+		// as the spec defines that the earlier scheduled override is prioritized higher than later ones.
+		if active == nil {
+			active = a
+
+			if o.MinReplicas != nil {
+				minReplicas = o.MinReplicas
+			}
+		}
+
+		if upcoming == nil || (u != nil && u.StartTime.Before(upcoming.StartTime)) {
+			upcoming = u
+		}
+	}
+
+	return minReplicas, active, upcoming, nil
+}
+
 func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (int, int, *int, error) {
 	minReplicas := defaultReplicas
 	if hra.Spec.MinReplicas != nil && *hra.Spec.MinReplicas >= 0 {
 		minReplicas = *hra.Spec.MinReplicas
+	}
+
+	if m, _, _, err := r.matchScheduledOverrides(log, now, hra); err != nil {
+		return 0, 0, nil, err
+	} else if m != nil {
+		minReplicas = *m
 	}
 
 	var suggestedReplicas int

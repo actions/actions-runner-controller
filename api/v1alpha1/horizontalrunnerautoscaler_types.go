@@ -54,6 +54,12 @@ type HorizontalRunnerAutoscalerSpec struct {
 	ScaleUpTriggers []ScaleUpTrigger `json:"scaleUpTriggers,omitempty"`
 
 	CapacityReservations []CapacityReservation `json:"capacityReservations,omitempty" patchStrategy:"merge" patchMergeKey:"name"`
+
+	// ScheduledOverrides is the list of ScheduledOverride.
+	// It can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
+	// The earlier a scheduled override is, the higher it is prioritized.
+	// +optional
+	ScheduledOverrides []ScheduledOverride `json:"scheduledOverrides,omitempty"`
 }
 
 type ScaleUpTrigger struct {
@@ -142,12 +148,6 @@ type MetricSpec struct {
 	// You can only specify either ScaleDownFactor or ScaleDownAdjustment.
 	// +optional
 	ScaleDownAdjustment int `json:"scaleDownAdjustment,omitempty"`
-
-	// ScheduledOverrides is the list of ScheduledOverride.
-	// It can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
-	// The earlier a scheduled override is, the higher it is prioritized.
-	// +optional
-	ScheduledOverrides []ScheduledOverride `json:"scheduledOverrides,omitempty"`
 }
 
 // ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
