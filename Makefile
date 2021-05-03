@@ -4,8 +4,9 @@ else
 	NAME ?= summerwind/actions-runner-controller
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
-RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 VERSION ?= latest
+RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
+RUNNER_TAG  ?= ${VERSION}
 TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
 SYNC_PERIOD ?= 5m
 
@@ -116,7 +117,7 @@ generate: controller-gen
 # Build the docker image
 docker-build:
 	docker build . -t ${NAME}:${VERSION}
-	docker build runner -t ${RUNNER_NAME}:${VERSION} --build-arg TARGETPLATFORM=$(shell arch)
+	docker build runner -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=$(shell arch)
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -133,7 +134,7 @@ docker-buildx:
 # Push the docker image
 docker-push:
 	docker push ${NAME}:${VERSION}
-	docker push ${RUNNER_NAME}:${VERSION}
+	docker push ${RUNNER_NAME}:${RUNNER_TAG}
 
 # Generate the release manifest file
 release: manifests
@@ -163,7 +164,7 @@ acceptance/kind:
 acceptance/load:
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
-	kind load docker-image ${RUNNER_NAME}:${VERSION} --name acceptance
+	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name acceptance
 	kind load docker-image docker:dind --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
@@ -191,7 +192,7 @@ acceptance/teardown:
 	kind delete cluster --name acceptance
 
 acceptance/deploy:
-	NAME=${NAME} RUNNER_NAME=${RUNNER_NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
+	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
 
 acceptance/tests:
 	acceptance/checks.sh

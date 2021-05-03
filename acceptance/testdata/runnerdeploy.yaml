@@ -11,7 +11,7 @@ spec:
       #
       # Custom runner image
       #
-      image: ${RUNNER_NAME}:${VERSION}
+      image: ${RUNNER_NAME}:${RUNNER_TAG}
       imagePullPolicy: IfNotPresent
 
       #
