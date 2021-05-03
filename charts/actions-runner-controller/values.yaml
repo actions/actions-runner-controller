@@ -26,6 +26,7 @@ image:
   pullPolicy: IfNotPresent
 
 kube_rbac_proxy:
+  enabled: true
   image:
     repository: quay.io/brancz/kube-rbac-proxy
     tag: v0.8.0
