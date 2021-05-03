@@ -869,6 +869,24 @@ KUBECONFIG=path/to/kubeconfig \
 
 **Development Tips**
 
+Rerunnig the whole acceptance test suite from scratch on every little change to the controller, the runner, and the chart would be counter-productive.
+
+To make your developent cycle faster, use the below command to update deploy and update all the three:
+
+```
+# Let assume we have all other envvars like DOCKER_USER, GITHUB_TOKEN already set,
+# The below command will (re)build `actions-runner-controller:controller1` and `actions-runner:runner1`,
+# load those into kind nodes, and then rerun kubectl or helm to install/upgrade the controller,
+# and finally upgrade the runner deployment to use the new runner image.
+#
+# As helm 3 and kubectl is unable to recreate a pod when no tag change,
+# you either need to bump VERSION and RUNNER_TAG on each run,
+# or manually run `kubectl delete pod $POD` on respective pods for changes to actually take effect.
+VERSION=controller1 \
+  RUNNER_TAG=runner1 \
+  make docker-build acceptance/load acceptance/deploy
+```
+
 If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
 
 ```
