@@ -105,6 +105,57 @@ spec:
                     description: ScaleUpThreshold is the percentage of busy runners
                       greater than which will trigger the hpa to scale runners up.
                     type: string
+                  scheduledOverrides:
+                    description: ScheduledOverrides is the list of ScheduledOverride.
+                      It can be used to override a few fields of HorizontalRunnerAutoscalerSpec
+                      on schedule. The earlier a scheduled override is, the higher
+                      it is prioritized.
+                    items:
+                      description: ScheduledOverride can be used to override a few
+                        fields of HorizontalRunnerAutoscalerSpec on schedule. A schedule
+                        can optionally be recurring, so that the correspoding override
+                        happens every day, week, month, or year.
+                      properties:
+                        endTime:
+                          description: EndTime is the time at which the first override
+                            ends.
+                          format: date-time
+                          type: string
+                        minReplicas:
+                          description: MinReplicas is the number of runners while
+                            overriding. If omitted, it doesn't override minReplicas.
+                          minimum: 0
+                          nullable: true
+                          type: integer
+                        recurrenceRule:
+                          properties:
+                            frequency:
+                              description: Frequency is the name of a predefined interval
+                                of each recurrence. The valid values are "Daily",
+                                "Weekly", "Monthly", and "Yearly". If empty, the corresponding
+                                override happens only once.
+                              enum:
+                              - Daily
+                              - Weekly
+                              - Monthly
+                              - Yearly
+                              type: string
+                            untilTime:
+                              description: UntilTime is the time of the final recurrence.
+                                If empty, the schedule recurs forever.
+                              format: date-time
+                              type: string
+                          type: object
+                        startTime:
+                          description: StartTime is the time at which the first override
+                            starts.
+                          format: date-time
+                          type: string
+                      required:
+                      - endTime
+                      - startTime
+                      type: object
+                    type: array
                   type:
                     description: Type is the type of metric to be used for autoscaling.
                       The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns

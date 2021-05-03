@@ -142,6 +142,46 @@ type MetricSpec struct {
 	// You can only specify either ScaleDownFactor or ScaleDownAdjustment.
 	// +optional
 	ScaleDownAdjustment int `json:"scaleDownAdjustment,omitempty"`
+
+	// ScheduledOverrides is the list of ScheduledOverride.
+	// It can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
+	// The earlier a scheduled override is, the higher it is prioritized.
+	// +optional
+	ScheduledOverrides []ScheduledOverride `json:"scheduledOverrides,omitempty"`
+}
+
+// ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
+// A schedule can optionally be recurring, so that the correspoding override happens every day, week, month, or year.
+type ScheduledOverride struct {
+	// StartTime is the time at which the first override starts.
+	StartTime metav1.Time `json:"startTime"`
+
+	// EndTime is the time at which the first override ends.
+	EndTime metav1.Time `json:"endTime"`
+
+	// MinReplicas is the number of runners while overriding.
+	// If omitted, it doesn't override minReplicas.
+	// +optional
+	// +nullable
+	// +kubebuilder:validation:Minimum=0
+	MinReplicas *int `json:"minReplicas,omitempty"`
+
+	// +optional
+	RecurrenceRule RecurrenceRule `json:"recurrenceRule,omitempty"`
+}
+
+type RecurrenceRule struct {
+	// Frequency is the name of a predefined interval of each recurrence.
+	// The valid values are "Daily", "Weekly", "Monthly", and "Yearly".
+	// If empty, the corresponding override happens only once.
+	// +optional
+	// +kubebuilder:validation:Enum=Daily;Weekly;Monthly;Yearly
+	Frequency string `json:"frequency,omitempty"`
+
+	// UntilTime is the time of the final recurrence.
+	// If empty, the schedule recurs forever.
+	// +optional
+	UntilTime metav1.Time `json:"untilTime,omitempty"`
 }
 
 type HorizontalRunnerAutoscalerStatus struct {
