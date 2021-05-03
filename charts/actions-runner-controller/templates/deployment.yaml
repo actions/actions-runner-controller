@@ -31,7 +31,8 @@ spec:
       {{- end }}
       containers:
       - args:
-        - "--metrics-addr=127.0.0.1:8080"
+        {{- $metricsHost := .Values.kube_rbac_proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
+        - "--metrics-addr={{ $metricsHost }}:8080"
         - "--enable-leader-election"
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
@@ -72,6 +73,11 @@ spec:
         - containerPort: 9443
           name: webhook-server
           protocol: TCP
+        {{- if not .Values.kube_rbac_proxy.enabled }}
+        - containerPort: 9443
+          name: https
+          protocol: TCP
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
@@ -85,6 +91,7 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+      {{- if .Values.kube_rbac_proxy.enabled }}
       - args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8080/"
@@ -100,6 +107,7 @@ spec:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
+      {{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
       - name: secret
