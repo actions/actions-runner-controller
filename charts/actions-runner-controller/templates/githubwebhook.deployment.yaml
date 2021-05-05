@@ -32,7 +32,8 @@ spec:
       {{- end }}
       containers:
       - args:
-        - "--metrics-addr=127.0.0.1:8080"
+        {{- $metricsHost := .Values.kube_rbac_proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
+        - "--metrics-addr={{ $metricsHost }}:8080"
         - "--sync-period={{ .Values.githubWebhookServer.syncPeriod }}"
         command:
         - "/github-webhook-server"
@@ -54,10 +55,16 @@ spec:
         - containerPort: 8000
           name: http
           protocol: TCP
+        {{- if not .Values.kube_rbac_proxy.enabled }}
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        {{- end }}
         resources:
           {{- toYaml .Values.githubWebhookServer.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.githubWebhookServer.securityContext | nindent 12 }}
+      {{- if .Values.kube_rbac_proxy.enabled }}
       - args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8080/"
@@ -73,6 +80,7 @@ spec:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
+      {{- end }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.githubWebhookServer.nodeSelector }}
       nodeSelector:
