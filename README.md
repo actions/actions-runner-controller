@@ -21,6 +21,7 @@ ToC:
   - [Autoscaling](#autoscaling)
     - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
+    - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
   - [Additional tweaks](#additional-tweaks)
   - [Runner labels](#runner-labels)
@@ -570,6 +571,76 @@ If and only if HorizontalRunnerAutoscaler is configured to have a secondary metr
 A correctly configured `TotalNumberOfQueuedAndInProgressWorkflowRuns` can return non-zero desired replicas even when there are no runners other than [registration-only runners](#note-on-scaling-tofrom-0), hence the `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns` configuration makes scaling from zero possible.
 
 Similarly, Webhook-based autoscaling works regarless of there are active runners, hence `PercentageRunnersBusy` + Webhook-based autoscaling configuration makes scaling from zero, too.
+
+#### Scheduled Overrides
+
+`Scheduled Overrides` allows you to configure HorizontalRunnerAutosaler so that its Spec gets updated only during a certain period of time.
+
+usually, this feature is used for following scenarios:
+
+- You want to pay for your infrastructure cost running runners only in business hours
+- You want to prepare for scheduled spikes in workloads
+
+For the first scenario, you might consider configuration like the below:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  scheduledOverrides:
+  # Override minReplicas to 0 only between 0am sat to 0am mon
+  - startTime: "2021-05-01T00:00:00+09:00"
+    endTime: "2021-05-03T00:00:00+09:00"
+    recurrenceRule:
+      frequency: Weekly
+      untilTime: "2022-05-01T00:00:00+09:00"
+    minReplicas: 0
+  minReplicas: 1
+```
+
+For the second scenario, you might consider something like the below:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  scheduledOverrides:
+  # Override minReplicas to 100 only between 2021-06-01T00:00:00+09:00 and 2021-06-03T00:00:00+09:00
+  - startTime: "2021-06-01T00:00:00+09:00"
+    endTime: "2021-06-03T00:00:00+09:00"
+    minReplicas: 100
+  minReplicas: 1
+```
+
+The most basic usage of this feature is actually the second scenario mentioned above.
+A scheduled override without `recurrenceRule` is considered a one-off override, that is active between `startTime` and `endTime`. In the second scenario, it overrides `minReplicas` to `100` only between `2021-06-01T00:00:00+09:00` and `2021-06-03T00:00:00+09:00`.
+
+A scheduled override with `recurrenceRule` is consdiered a recurring override. A recurring override is initially active between `startTime` and `endTime`, and then it repeatedly get activated after a certain period of time denoted by `frequency`.
+
+`frequecy` can take one of the following values:
+
+- `Daily`
+- `Weekly`
+- `Monthly`
+- `Yearly`
+
+By default, a scheduled override repeats forever. If you want it to repeat until a specific point in time, define `untilTime`. The controller create the last recurrence of the override until the recurrence's `startTime` is equal or earlier than `untilTime`.
+
+Do note that you have enough slack for `untilTime`, so that a delayed or offline `actions-runner-controller` is much less likely to miss the last recurrence. For example, you might want to set `untilTime` to `M` minutes after the last recurrence's `startTime`, so that `actions-runner-controller` being offline up to `M` minutes doesn't miss the last recurrence.
+
+**Combining Multiple Scheduled Overrides**:
+
+In case you have a more complex scenarios, try writing two or more entries under `scheduledOverrides`.
+
+The earlier entry is prioritized higher than later entries. So you usually define one-time overrides in the top of your list, then yearly, monthly, weekly, and lastly daily overrides.
 
 ### Runner with DinD
 
