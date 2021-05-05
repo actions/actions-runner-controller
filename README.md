@@ -284,6 +284,11 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ##### Note on scaling to/from 0
 
+> This is a documentation about a unreleased version of actions-runner-controller.
+>
+> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
+> developers by reporting any bugs :smile:
+
 You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
 
 ```yaml
@@ -554,6 +559,11 @@ See ["activity types"](https://docs.github.com/en/actions/reference/events-that-
 
 #### Autoscaling to/from 0
 
+> This is a documentation about a unreleased version of actions-runner-controller.
+>
+> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
+> developers by reporting any bugs :smile:
+
 Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
 
 To automate the process of scaling to/from 0, you can use `HorizontalRunerAutoscaler` with a caveat.
@@ -573,6 +583,11 @@ A correctly configured `TotalNumberOfQueuedAndInProgressWorkflowRuns` can return
 Similarly, Webhook-based autoscaling works regarless of there are active runners, hence `PercentageRunnersBusy` + Webhook-based autoscaling configuration makes scaling from zero, too.
 
 #### Scheduled Overrides
+
+> This is a documentation about a unreleased version of actions-runner-controller.
+>
+> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
+> developers by reporting any bugs :smile:
 
 `Scheduled Overrides` allows you to configure HorizontalRunnerAutosaler so that its Spec gets updated only during a certain period of time.
 
