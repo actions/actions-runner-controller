@@ -17,9 +17,10 @@ ToC:
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [Runner Deployments](#runnerdeployments)
-    - [Note on scaling to/from 0](#note-on-scaling-to-from-zero)
-    - [Autoscaling](#autoscaling)
-      - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
+    - [Note on scaling to/from 0](#note-on-scaling-tofrom-0)
+  - [Autoscaling](#autoscaling)
+    - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
+    - [Autoscaling to/from 0](#autoscaling-tofrom-0)
   - [Runner with DinD](#runner-with-dind)
   - [Additional tweaks](#additional-tweaks)
   - [Runner labels](#runner-labels)
@@ -296,7 +297,12 @@ spec:
 
 The implication of setting `replicas: 0` instead of deleting the runner depoyment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
 
-#### Autoscaling
+Also note that the controller creates a "registration-only" runner per RunnerReplicaSet on it's being scaled to zero,
+and retains it until there are one or more runners available.
+
+This, in combination with a correctly configured HorizontalRunnerAutoscaler, allows you to automatically [scale to/from 0](#autoscaling-tofrom-0)
+
+### Autoscaling
 
 __**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
 
@@ -543,6 +549,27 @@ spec:
 ```
 
 See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
+
+
+#### Autoscaling to/from 0
+
+Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
+
+To automate the process of scaling to/from 0, you can use `HorizontalRunerAutoscaler` with a caveat.
+
+That is, you need to choose one of the following configuration for metrigs and triggers:
+
+- `TotalNumberOfQueuedAndInProgressWorkflowRuns`
+- `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns`
+- `PercentageRunnersBusy` + Webhook-based autoscaling
+
+This is due to that `PercentageRunnersBusy`, by its definition, needs one or more GitHub runners that can become `busy`, which cannot happen at all when you have 0 active runners.
+
+If and only if HorizontalRunnerAutoscaler is configured to have a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` and the controller sees the primary metric of `PercentageRunnersBusy` returned 0 desired replicas, it uses the secondary metric for calculating the desired replicas once agian.
+
+A correctly configured `TotalNumberOfQueuedAndInProgressWorkflowRuns` can return non-zero desired replicas even when there are no runners other than [registration-only runners](#note-on-scaling-tofrom-0), hence the `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns` configuration makes scaling from zero possible.
+
+Similarly, Webhook-based autoscaling works regarless of there are active runners, hence `PercentageRunnersBusy` + Webhook-based autoscaling configuration makes scaling from zero, too.
 
 ### Runner with DinD
 

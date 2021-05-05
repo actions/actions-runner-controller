@@ -71,25 +71,68 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(rd v1alpha
 	}
 
 	metrics := hra.Spec.Metrics
-	if len(metrics) == 0 {
+	numMetrics := len(metrics)
+	if numMetrics == 0 {
 		if len(hra.Spec.ScaleUpTriggers) == 0 {
-			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
+			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra, nil)
 		}
 
 		return nil, nil
-	} else if metrics[0].Type == v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
-		return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra)
-	} else if metrics[0].Type == v1alpha1.AutoscalingMetricTypePercentageRunnersBusy {
-		return r.suggestReplicasByPercentageRunnersBusy(rd, hra)
-	} else {
-		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q", metrics[0].Type)
+	} else if numMetrics > 2 {
+		return nil, fmt.Errorf("Too many autoscaling metrics configured: It must be 0 to 2, but got %d", numMetrics)
 	}
+
+	primaryMetric := metrics[0]
+	primaryMetricType := primaryMetric.Type
+
+	var (
+		suggested *int
+		err       error
+	)
+
+	switch primaryMetricType {
+	case v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns:
+		suggested, err = r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra, &primaryMetric)
+	case v1alpha1.AutoscalingMetricTypePercentageRunnersBusy:
+		suggested, err = r.suggestReplicasByPercentageRunnersBusy(rd, hra, primaryMetric)
+	default:
+		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q", primaryMetric)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if suggested != nil && *suggested > 0 {
+		return suggested, nil
+	}
+
+	if len(metrics) == 1 {
+		// This is never supposed to happen but anyway-
+		// Fall-back to `minReplicas + capacityReservedThroughWebhook`.
+		return nil, nil
+	}
+
+	// At this point, we are sure that there are exactly 2 Metrics entries.
+
+	fallbackMetric := metrics[1]
+	fallbackMetricType := fallbackMetric.Type
+
+	if primaryMetricType != v1alpha1.AutoscalingMetricTypePercentageRunnersBusy ||
+		fallbackMetricType != v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns {
+
+		return nil, fmt.Errorf(
+			"invalid HRA Spec: Metrics[0] of %s cannot be combined with Metrics[1] of %s: The only allowed combination is 0=PercentageRunnersBusy and 1=TotalNumberOfQueuedAndInProgressWorkflowRuns",
+			primaryMetricType, fallbackMetricType,
+		)
+	}
+
+	return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra, &fallbackMetric)
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler, metrics *v1alpha1.MetricSpec) (*int, error) {
 
 	var repos [][]string
-	metrics := hra.Spec.Metrics
 	repoID := rd.Spec.Template.Spec.Repository
 	if repoID == "" {
 		orgName := rd.Spec.Template.Spec.Organization
@@ -100,15 +143,15 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 		// In case it's an organizational runners deployment without any scaling metrics defined,
 		// we assume that the desired replicas should always be `minReplicas + capacityReservedThroughWebhook`.
 		// See https://github.com/summerwind/actions-runner-controller/issues/377#issuecomment-793372693
-		if len(metrics) == 0 {
+		if metrics == nil {
 			return nil, nil
 		}
 
-		if len(metrics[0].RepositoryNames) == 0 {
+		if len(metrics.RepositoryNames) == 0 {
 			return nil, errors.New("validating autoscaling metrics: spec.autoscaling.metrics[].repositoryNames is required and must have one more more entries for organizational runner deployment")
 		}
 
-		for _, repoName := range metrics[0].RepositoryNames {
+		for _, repoName := range metrics.RepositoryNames {
 			repos = append(repos, []string{orgName, repoName})
 		}
 	} else {
@@ -194,9 +237,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	return &necessaryReplicas, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec) (*int, error) {
 	ctx := context.Background()
-	metrics := hra.Spec.Metrics[0]
 	scaleUpThreshold := defaultScaleUpThreshold
 	scaleDownThreshold := defaultScaleDownThreshold
 	scaleUpFactor := defaultScaleUpFactor
