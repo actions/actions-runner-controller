@@ -2,10 +2,11 @@ package fake
 
 import (
 	"encoding/json"
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+
+	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 
 	"github.com/google/go-github/v33/github"
 	"github.com/gorilla/mux"
@@ -74,6 +75,18 @@ func (r *RunnersList) Sync(runners []v1alpha1.Runner) {
 			Name:   github.String(want.Name),
 			OS:     github.String("linux"),
 			Status: github.String("online"),
+			Busy:   github.Bool(false),
+		})
+	}
+}
+
+func (r *RunnersList) AddOffline(runners []v1alpha1.Runner) {
+	for i, want := range runners {
+		r.Add(&github.Runner{
+			ID:     github.Int64(int64(1000 + i)),
+			Name:   github.String(want.Name),
+			OS:     github.String("linux"),
+			Status: github.String("offline"),
 			Busy:   github.Bool(false),
 		})
 	}
