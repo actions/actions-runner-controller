@@ -32,7 +32,8 @@ spec:
       containers:
       - args:
         {{- $metricsHost := .Values.kube_rbac_proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
-        - "--metrics-addr={{ $metricsHost }}:8080"
+        {{- $metricsPort := .Values.kube_rbac_proxy.enabled | ternary "8080" "8443" }}
+          - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
         - "--enable-leader-election"
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
@@ -74,7 +75,7 @@ spec:
           name: webhook-server
           protocol: TCP
         {{- if not .Values.kube_rbac_proxy.enabled }}
-        - containerPort: 8080
+        - containerPort: 8443
           name: {{ .Values.metrics.port }}
           protocol: TCP
         {{- end }}
