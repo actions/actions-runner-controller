@@ -68,65 +68,6 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		return ctrl.Result{}, nil
 	}
 
-	registrationOnlyRunnerNeeded := rs.Spec.Replicas != nil && *rs.Spec.Replicas == 0
-	registrationOnlyRunner := v1alpha1.Runner{}
-	registrationOnlyRunnerNsName := req.NamespacedName
-	registrationOnlyRunnerNsName.Name = registrationOnlyRunnerNameFor(rs.Name)
-
-	registrationOnlyRunnerExists := false
-	if err := r.Get(
-		ctx,
-		registrationOnlyRunnerNsName,
-		&registrationOnlyRunner,
-	); err != nil {
-		if !kerrors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-	} else {
-		registrationOnlyRunnerExists = true
-	}
-
-	if registrationOnlyRunnerNeeded {
-		if registrationOnlyRunnerExists {
-			if registrationOnlyRunner.Status.Phase == "" {
-				log.Info("Still waiting for the registration-only runner to be registered")
-
-				return ctrl.Result{}, nil
-			}
-		} else {
-			// A registration-only runner does not exist and is needed, hence create it.
-
-			runnerForScaleFromToZero, err := r.newRunner(rs)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to create runner for scale from/to zero: %v", err)
-			}
-
-			runnerForScaleFromToZero.ObjectMeta.Name = registrationOnlyRunnerNsName.Name
-			runnerForScaleFromToZero.ObjectMeta.GenerateName = ""
-			runnerForScaleFromToZero.ObjectMeta.Labels = nil
-			metav1.SetMetaDataAnnotation(&runnerForScaleFromToZero.ObjectMeta, annotationKeyRegistrationOnly, "true")
-
-			if err := r.Client.Create(ctx, &runnerForScaleFromToZero); err != nil {
-				log.Error(err, "Failed to create runner for scale from/to zero")
-
-				return ctrl.Result{}, err
-			}
-
-			// We can continue to deleting runner pods only after the
-			// registration-only runner gets registered.
-			return ctrl.Result{}, nil
-		}
-	} else {
-		// A registration-only runner exists and is not needed, hence delete it.
-		if registrationOnlyRunnerExists {
-			if err := r.Client.Delete(ctx, &registrationOnlyRunner); err != nil {
-				log.Error(err, "Retrying soon because we failed to delete registration-only runner")
-
-				return ctrl.Result{Requeue: true}, nil
-			}
-		}
-	}
-
 	selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -171,6 +112,71 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		desired = *rs.Spec.Replicas
 	} else {
 		desired = 1
+	}
+
+	registrationOnlyRunnerNsName := req.NamespacedName
+	registrationOnlyRunnerNsName.Name = registrationOnlyRunnerNameFor(rs.Name)
+	registrationOnlyRunner := v1alpha1.Runner{}
+	registrationOnlyRunnerExists := false
+	if err := r.Get(
+		ctx,
+		registrationOnlyRunnerNsName,
+		&registrationOnlyRunner,
+	); err != nil {
+		if !kerrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+	} else {
+		registrationOnlyRunnerExists = true
+	}
+
+	// On scale to zero, we must have fully registered registration-only runner before we start deleting other runners, hence `desired == 0`
+	// On scale from zero, we must retain the registratoin-only runner until one or more other runners get registered, hence `registrationOnlyRunnerExists && available == 0`.
+	// On RunnerReplicaSet creation, it have always 0 replics and no registration-only runner.
+	// In this case We don't need to bother creating a registration-only runner which gets deleted soon after we have 1 or more available repolicas,
+	// hence it's not `available == 0`, but `registrationOnlyRunnerExists && available == 0`.
+	// See https://github.com/actions-runner-controller/actions-runner-controller/issues/516
+	registrationOnlyRunnerNeeded := desired == 0 || (registrationOnlyRunnerExists && available == 0)
+
+	if registrationOnlyRunnerNeeded {
+		if registrationOnlyRunnerExists {
+			if registrationOnlyRunner.Status.Phase == "" {
+				log.Info("Still waiting for the registration-only runner to be registered")
+
+				return ctrl.Result{}, nil
+			}
+		} else {
+			// A registration-only runner does not exist and is needed, hence create it.
+
+			runnerForScaleFromToZero, err := r.newRunner(rs)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to create runner for scale from/to zero: %v", err)
+			}
+
+			runnerForScaleFromToZero.ObjectMeta.Name = registrationOnlyRunnerNsName.Name
+			runnerForScaleFromToZero.ObjectMeta.GenerateName = ""
+			runnerForScaleFromToZero.ObjectMeta.Labels = nil
+			metav1.SetMetaDataAnnotation(&runnerForScaleFromToZero.ObjectMeta, annotationKeyRegistrationOnly, "true")
+
+			if err := r.Client.Create(ctx, &runnerForScaleFromToZero); err != nil {
+				log.Error(err, "Failed to create runner for scale from/to zero")
+
+				return ctrl.Result{}, err
+			}
+
+			// We can continue to deleting runner pods only after the
+			// registration-only runner gets registered.
+			return ctrl.Result{}, nil
+		}
+	} else {
+		// A registration-only runner exists and is not needed, hence delete it.
+		if registrationOnlyRunnerExists {
+			if err := r.Client.Delete(ctx, &registrationOnlyRunner); err != nil {
+				log.Error(err, "Retrying soon because we failed to delete registration-only runner")
+
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
 	}
 
 	if available > desired {
@@ -243,6 +249,8 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		if len(deletionCandidates) < n {
 			n = len(deletionCandidates)
 		}
+
+		log.V(0).Info(fmt.Sprintf("Deleting %d runner(s)", n), "desired", desired, "available", available, "ready", ready)
 
 		for i := 0; i < n; i++ {
 			if err := r.Client.Delete(ctx, &deletionCandidates[i]); client.IgnoreNotFound(err) != nil {

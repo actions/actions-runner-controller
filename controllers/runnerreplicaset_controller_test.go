@@ -7,11 +7,9 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/google/go-github/v33/github"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -170,15 +168,7 @@ var _ = Context("Inside of a new namespace", func() {
 							return -1
 						}
 
-						for i, runner := range runners.Items {
-							runnersList.Add(&github.Runner{
-								ID:     pointer.Int64Ptr(int64(i) + 1),
-								Name:   pointer.StringPtr(runner.Name),
-								OS:     pointer.StringPtr("linux"),
-								Status: pointer.StringPtr("online"),
-								Busy:   pointer.BoolPtr(false),
-							})
-						}
+						runnersList.Sync(runners.Items)
 
 						return len(runners.Items)
 					},
@@ -227,15 +217,7 @@ var _ = Context("Inside of a new namespace", func() {
 							logf.Log.Error(err, "list runners")
 						}
 
-						for i, runner := range runners.Items {
-							runnersList.Add(&github.Runner{
-								ID:     pointer.Int64Ptr(int64(i) + 1),
-								Name:   pointer.StringPtr(runner.Name),
-								OS:     pointer.StringPtr("linux"),
-								Status: pointer.StringPtr("online"),
-								Busy:   pointer.BoolPtr(false),
-							})
-						}
+						runnersList.Sync(runners.Items)
 
 						return len(runners.Items)
 					},
@@ -283,13 +265,7 @@ var _ = Context("Inside of a new namespace", func() {
 								return -1
 							}
 
-							runnersList.Add(&github.Runner{
-								ID:     pointer.Int64Ptr(1001),
-								Name:   pointer.StringPtr(regOnly.Name),
-								OS:     pointer.StringPtr("linux"),
-								Status: pointer.StringPtr("offline"),
-								Busy:   pointer.BoolPtr(false),
-							})
+							runnersList.AddOffline([]actionsv1alpha1.Runner{*updated})
 						}
 
 						if err := k8sClient.List(ctx, &runners, client.InNamespace(ns.Name), client.MatchingLabelsSelector{Selector: selector}); err != nil {
@@ -297,15 +273,7 @@ var _ = Context("Inside of a new namespace", func() {
 							return -1
 						}
 
-						for i, runner := range runners.Items {
-							runnersList.Add(&github.Runner{
-								ID:     pointer.Int64Ptr(int64(i) + 1),
-								Name:   pointer.StringPtr(runner.Name),
-								OS:     pointer.StringPtr("linux"),
-								Status: pointer.StringPtr("online"),
-								Busy:   pointer.BoolPtr(false),
-							})
-						}
+						runnersList.Sync(runners.Items)
 
 						return len(runners.Items)
 					},
