@@ -56,8 +56,8 @@ spec:
           name: http
           protocol: TCP
         {{- if not .Values.kube_rbac_proxy.enabled }}
-        - containerPort: 8443
-          name: https
+        - containerPort: 8080
+          name: {{ .Values.metrics.port }}
           protocol: TCP
         {{- end }}
         resources:
@@ -75,7 +75,7 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 8443
-          name: https
+          name: {{ .Values.metrics.port }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:

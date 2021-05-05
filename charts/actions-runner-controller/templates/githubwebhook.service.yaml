@@ -12,6 +12,11 @@ spec:
     {{ range $_, $port := .Values.githubWebhookServer.service.ports -}}
     - {{ $port | toYaml | nindent 6 }}
     {{- end }}
+    {{- if .Values.metrics.serviceMonitor }}
+    - name: {{ .Values.metrics.port }}
+      port: 8443
+      targetPort: {{ .Values.metrics.port}}
+    {{- end }}
   selector:
     {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}
 {{- end }}

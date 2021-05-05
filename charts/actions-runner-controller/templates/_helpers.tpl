@@ -92,8 +92,12 @@ Create the name of the service account to use
 {{- include "actions-runner-controller.fullname" . | trunc 55 }}-webhook
 {{- end }}
 
-{{- define "actions-runner-controller.authProxyServiceName" -}}
+{{- define "actions-runner-controller.metricsServiceName" -}}
 {{- include "actions-runner-controller.fullname" . | trunc 47 }}-metrics-service
+{{- end }}
+
+{{- define "actions-runner-controller.serviceMonitorName" -}}
+{{- include "actions-runner-controller.fullname" . | trunc 47 }}-service-monitor
 {{- end }}
 
 {{- define "actions-runner-controller.selfsignedIssuerName" -}}
