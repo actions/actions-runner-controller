@@ -33,7 +33,7 @@ spec:
       - args:
         {{- $metricsHost := .Values.kube_rbac_proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
         {{- $metricsPort := .Values.kube_rbac_proxy.enabled | ternary "8080" "8443" }}
-          - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
+        - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
         - "--enable-leader-election"
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
