@@ -14,7 +14,7 @@ spec:
     {{- end }}
     {{- if .Values.metrics.serviceMonitor }}
     - name: {{ .Values.metrics.port }}
-      port: 8443
+      port: {{ .Values.metrics.portNumber }}
       targetPort: {{ .Values.metrics.port}}
     {{- end }}
   selector:

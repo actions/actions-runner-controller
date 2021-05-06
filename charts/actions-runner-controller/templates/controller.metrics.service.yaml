@@ -8,7 +8,7 @@ metadata:
 spec:
   ports:
   - name: {{ .Values.metrics.port }}
-    port: 8443
+    port: {{ .Values.metrics.portNumber }}
     targetPort: {{ .Values.metrics.port}}
   selector:
     {{- include "actions-runner-controller.selectorLabels" . | nindent 4 }}
