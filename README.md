@@ -64,7 +64,7 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deplying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+If you are deploying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
 
 When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
 
@@ -301,7 +301,7 @@ spec:
   replicas: 0
 ```
 
-The implication of setting `replicas: 0` instead of deleting the runner depoyment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
+The implication of setting `replicas: 0` instead of deleting the runner deployment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
 
 Also note that the controller creates a "registration-only" runner per RunnerReplicaSet on it's being scaled to zero,
 and retains it until there are one or more runners available.
@@ -454,7 +454,7 @@ __**IMPORTANT : Due to missing webhook events, webhook based scaling is not aval
 
 Today, the Webhook server can be configured to respond GitHub `check_run`, `pull_request`, and `push` events
 by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within
-`HorizontalRunerAutoscaler's` `Spec`.
+`HorizontalRunnerAutoscaler's` `Spec`.
 
 More concretely, you can configure the targeted GitHub event types and the `N` in
 `scaleUpTriggers`:
@@ -566,7 +566,7 @@ See ["activity types"](https://docs.github.com/en/actions/reference/events-that-
 
 Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
 
-To automate the process of scaling to/from 0, you can use `HorizontalRunerAutoscaler` with a caveat.
+To automate the process of scaling to/from 0, you can use `HorizontalRunnerAutoscaler` with a caveat.
 
 That is, you need to choose one of the following configuration for metrigs and triggers:
 
@@ -589,7 +589,7 @@ Similarly, Webhook-based autoscaling works regarless of there are active runners
 > It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
 > developers by reporting any bugs :smile:
 
-`Scheduled Overrides` allows you to configure HorizontalRunnerAutosaler so that its Spec gets updated only during a certain period of time.
+`Scheduled Overrides` allows you to configure HorizontalRunnerAutoscaler so that its Spec gets updated only during a certain period of time.
 
 usually, this feature is used for following scenarios:
 
@@ -982,9 +982,9 @@ KUBECONFIG=path/to/kubeconfig \
 
 **Development Tips**
 
-Rerunnig the whole acceptance test suite from scratch on every little change to the controller, the runner, and the chart would be counter-productive.
+Rerunning the whole acceptance test suite from scratch on every little change to the controller, the runner, and the chart would be counter-productive.
 
-To make your developent cycle faster, use the below command to update deploy and update all the three:
+To make your development cycle faster, use the below command to update deploy and update all the three:
 
 ```
 # Let assume we have all other envvars like DOCKER_USER, GITHUB_TOKEN already set,
