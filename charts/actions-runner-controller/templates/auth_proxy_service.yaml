@@ -7,8 +7,14 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   ports:
+  {{- if .Values.kube_rbac_proxy.enabled }}
   - name: https
     port: 8443
     targetPort: https
+  {{- else }}
+  - name: http
+    port: 8080
+    targetPort: http
+  {{- end }}
   selector:
     {{- include "actions-runner-controller.selectorLabels" . | nindent 4 }}

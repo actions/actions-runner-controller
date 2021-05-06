@@ -74,8 +74,8 @@ spec:
           name: webhook-server
           protocol: TCP
         {{- if not .Values.kube_rbac_proxy.enabled }}
-        - containerPort: 9443
-          name: https
+        - containerPort: 8080
+          name: http
           protocol: TCP
         {{- end }}
         resources:
