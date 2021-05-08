@@ -40,6 +40,7 @@ RUN apt update -y \
     wget \
     zip \
     zstd \
+    && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
