@@ -8,7 +8,7 @@ metadata:
 spec:
   endpoints:
     - path: /metrics
-      port: {{ .Values.metrics.port }}
+      port: metrics-port
   selector:
     matchLabels:
       {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 6 }}

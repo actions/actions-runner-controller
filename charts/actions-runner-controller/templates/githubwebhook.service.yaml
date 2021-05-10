@@ -13,9 +13,9 @@ spec:
     - {{ $port | toYaml | nindent 6 }}
     {{- end }}
     {{- if .Values.metrics.serviceMonitor }}
-    - name: {{ .Values.metrics.port }}
-      port: {{ .Values.metrics.portNumber }}
-      targetPort: {{ .Values.metrics.port}}
+    - name: metrics-port
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics-port
     {{- end }}
   selector:
     {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}

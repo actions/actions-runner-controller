@@ -59,8 +59,7 @@ service:
 
 metrics:
   serviceMonitor: false
-  port: metrics-port
-  portNumber: 8443
+  port: 8443
   proxy:
     enabled: true
     image:

@@ -32,7 +32,7 @@ spec:
       containers:
       - args:
         {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
-        {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.portNumber }}
+        {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
         - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
         - "--enable-leader-election"
         - "--sync-period={{ .Values.syncPeriod }}"
@@ -75,8 +75,8 @@ spec:
           name: webhook-server
           protocol: TCP
         {{- if not .Values.metrics.proxy.enabled }}
-        - containerPort: {{ .Values.metrics.portNumber }}
-          name: {{ .Values.metrics.port }}
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
           protocol: TCP
         {{- end }}
         resources:
@@ -94,7 +94,7 @@ spec:
           readOnly: true
       {{- if .Values.metrics.proxy.enabled }}
       - args:
-        - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.portNumber }}"
+        - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.port }}"
         - "--upstream=http://127.0.0.1:8080/"
         - "--logtostderr=true"
         - "--v=10"
@@ -102,8 +102,8 @@ spec:
         name: kube-rbac-proxy
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-        - containerPort: {{ .Values.metrics.portNumber }}
-          name: {{ .Values.metrics.port }}
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
