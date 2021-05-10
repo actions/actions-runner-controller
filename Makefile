@@ -192,7 +192,7 @@ acceptance/teardown:
 	kind delete cluster --name acceptance
 
 acceptance/deploy:
-	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
+	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} SYNC_PERIOD=${SYNC_PERIOD} acceptance/deploy.sh
 
 acceptance/tests:
 	acceptance/checks.sh
