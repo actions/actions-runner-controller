@@ -20,12 +20,13 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"net/http"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strings"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
 	gogithub "github.com/google/go-github/v33/github"
@@ -330,6 +331,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 		return nil, err
 	}
 
+	autoscaler.Log.V(1).Info(fmt.Sprintf("Found %d HRAs by key", len(hras)), "key", name)
+
 	targets := autoscaler.searchScaleTargets(hras, f)
 
 	n := len(targets)
@@ -362,14 +365,16 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 	repositoryRunnerKey := owner + "/" + repo
 
 	if target, err := autoscaler.getScaleTarget(ctx, repositoryRunnerKey, f); err != nil {
-		autoscaler.Log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
+		log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
 		return nil, err
 	} else if target != nil {
-		autoscaler.Log.Info("scale up target is repository-wide runners", "repository", repo)
+		log.Info("scale up target is repository-wide runners", "repository", repo)
 		return target, nil
 	}
 
 	if ownerType == "User" {
+		log.V(1).Info("no repository runner found", "organization", owner)
+
 		return nil, nil
 	}
 
@@ -379,6 +384,11 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 	} else if target != nil {
 		log.Info("scale up target is organizational runners", "organization", owner)
 		return target, nil
+	} else {
+		log.V(1).Info("no repository runner or organizational runner found",
+			"repository", repositoryRunnerKey,
+			"organization", owner,
+		)
 	}
 
 	return nil, nil
