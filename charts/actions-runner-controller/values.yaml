@@ -8,6 +8,11 @@ replicaCount: 1
 
 syncPeriod: 10m
 
+# The controller tries its best not to repeat the duplicate GitHub API call
+# within this duration.
+# Defaults to syncPeriod - 10s.
+#githubAPICacheDuration: 30s
+
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:
