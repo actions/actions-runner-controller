@@ -158,6 +158,20 @@ func main() {
 		gitHubAPICacheDuration = syncPeriod - 10*time.Second
 	}
 
+	if gitHubAPICacheDuration < 0 {
+		gitHubAPICacheDuration = 0
+	}
+
+	log.Info(
+		"Initializing actions-runner-controller",
+		"github-api-cahce-duration", gitHubAPICacheDuration,
+		"sync-period", syncPeriod,
+		"runner-image", runnerImage,
+		"docker-image", dockerImage,
+		"common-runnner-labels", commonRunnerLabels,
+		"watch-namespace", namespace,
+	)
+
 	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
 		Client:        mgr.GetClient(),
 		Log:           log.WithName("horizontalrunnerautoscaler"),
