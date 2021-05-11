@@ -39,6 +39,9 @@ spec:
         {{- if .Values.scope.singleNamespace }}
         - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
         {{- end }}
+        {{- if .Values.githubAPICacheDuration }}
+        - "--github-api-cache-duration={{ .Values.githubAPICacheDuration }}"
+        {{- end }}
         command:
         - "/manager"
         env:
