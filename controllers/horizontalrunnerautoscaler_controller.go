@@ -190,6 +190,15 @@ func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.
 	var active, upcoming *Period
 
 	for _, o := range hra.Spec.ScheduledOverrides {
+		log.V(1).Info(
+			"Checking scheduled override",
+			"now", now,
+			"startTime", o.StartTime,
+			"endTime", o.EndTime,
+			"frequency", o.RecurrenceRule.Frequency,
+			"untilTime", o.RecurrenceRule.UntilTime,
+		)
+
 		a, u, err := MatchSchedule(
 			now, o.StartTime.Time, o.EndTime.Time,
 			RecurrenceRule{
@@ -203,16 +212,30 @@ func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.
 
 		// Use the first when there are two or more active scheduled overrides,
 		// as the spec defines that the earlier scheduled override is prioritized higher than later ones.
-		if active == nil {
+		if a != nil && active == nil {
 			active = a
 
 			if o.MinReplicas != nil {
 				minReplicas = o.MinReplicas
+
+				log.V(1).Info(
+					"Found active scheduled override",
+					"activeStartTime", a.StartTime,
+					"activeEndTime", a.EndTime,
+					"activeMinReplicas", minReplicas,
+				)
 			}
 		}
 
-		if upcoming == nil || (u != nil && u.StartTime.Before(upcoming.StartTime)) {
+		if u != nil && (upcoming == nil || u.StartTime.Before(upcoming.StartTime)) {
 			upcoming = u
+
+			log.V(1).Info(
+				"Found upcoming scheduled override",
+				"upcomingStartTime", u.StartTime,
+				"upcomingEndTime", u.EndTime,
+				"upcomingMinReplicas", o.MinReplicas,
+			)
 		}
 	}
 
