@@ -57,7 +57,7 @@ if [ -n "${TEST_ORG}" ]; then
   cat acceptance/testdata/org.runnerdeploy.yaml | envsubst | kubectl apply -f -
 
   if [ -n "${TEST_ORG_REPO}" ]; then
-    cat acceptance/testdata/org.hra.yaml | kubectl apply -f -
+    cat acceptance/testdata/org.hra.yaml | envsubst | kubectl apply -f -
   else
     echo 'Skipped deploying organizational hra. Set TEST_ORG_REPO to "yourorg/yourrepo" to deploy.'
   fi

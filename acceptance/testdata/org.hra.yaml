@@ -12,6 +12,16 @@ spec:
         status: "queued"
     amount: 1
     duration: "1m"
+  scheduledOverrides:
+  - startTime: "2021-05-11T16:05:00+09:00"
+    endTime: "2021-05-11T16:40:00+09:00"
+    minReplicas: 2
+  - startTime: "2021-05-01T00:00:00+09:00"
+    endTime: "2021-05-03T00:00:00+09:00"
+    recurrenceRule:
+      frequency: Weekly
+      untilTime: "2022-05-01T00:00:00+09:00"
+    minReplicas: 0
   minReplicas: 0
   maxReplicas: 5
   metrics:
