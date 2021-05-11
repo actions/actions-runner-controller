@@ -27,6 +27,7 @@ import (
 
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
+	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/exec"
@@ -40,6 +41,13 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+)
+
+const (
+	logLevelDebug = "debug"
+	logLevelInfo  = "info"
+	logLevelWarn  = "warn"
+	logLevelError = "error"
 )
 
 func init() {
@@ -63,6 +71,7 @@ func main() {
 
 		enableLeaderElection bool
 		syncPeriod           time.Duration
+		logLevel             string
 	)
 
 	webhookSecretToken = os.Getenv("GITHUB_WEBHOOK_SECRET_TOKEN")
@@ -73,6 +82,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
+	flag.StringVar(&logLevel, "log-level", logLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.Parse()
 
 	if webhookSecretToken == "" {
@@ -86,7 +96,19 @@ func main() {
 	}
 
 	logger := zap.New(func(o *zap.Options) {
-		o.Development = true
+		switch logLevel {
+		case logLevelDebug:
+			o.Development = true
+		case logLevelInfo:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
+			o.Level = &lvl
+		case logLevelWarn:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.WarnLevel)
+			o.Level = &lvl
+		case logLevelError:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.ErrorLevel)
+			o.Level = &lvl
+		}
 	})
 
 	ctrl.SetLogger(logger)
