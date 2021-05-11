@@ -34,6 +34,9 @@ spec:
       - args:
         - "--metrics-addr=127.0.0.1:8080"
         - "--sync-period={{ .Values.githubWebhookServer.syncPeriod }}"
+        {{- if .Values.githubWebhookServer.logLevel }}
+        - "--log-level={{ .Values.githubWebhookServer.logLevel }}"
+        {{- end }}
         command:
         - "/github-webhook-server"
         env:

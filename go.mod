@@ -15,10 +15,10 @@ require (
 	github.com/prometheus/client_golang v0.9.2
 	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/teambition/rrule-go v1.6.2
+	go.uber.org/zap v1.9.1
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f
 	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655
 	k8s.io/client-go v0.0.0-20190918160344-1fbdaa4c8d90
-	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
 	sigs.k8s.io/controller-runtime v0.4.0
 )

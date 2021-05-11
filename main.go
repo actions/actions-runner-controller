@@ -27,6 +27,7 @@ import (
 	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
 	"github.com/summerwind/actions-runner-controller/controllers"
 	"github.com/summerwind/actions-runner-controller/github"
+	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -38,6 +39,11 @@ import (
 const (
 	defaultRunnerImage = "summerwind/actions-runner:latest"
 	defaultDockerImage = "docker:dind"
+
+	logLevelDebug = "debug"
+	logLevelInfo  = "info"
+	logLevelWarn  = "warn"
+	logLevelError = "error"
 )
 
 var (
@@ -66,6 +72,7 @@ func main() {
 		runnerImage string
 		dockerImage string
 		namespace   string
+		logLevel    string
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
@@ -89,10 +96,23 @@ func main() {
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change. . If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak github-api-cache-duration, too")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/summerwind/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
+	flag.StringVar(&logLevel, "log-level", logLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.Parse()
 
 	logger := zap.New(func(o *zap.Options) {
-		o.Development = true
+		switch logLevel {
+		case logLevelDebug:
+			o.Development = true
+		case logLevelInfo:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
+			o.Level = &lvl
+		case logLevelWarn:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.WarnLevel)
+			o.Level = &lvl
+		case logLevelError:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.ErrorLevel)
+			o.Level = &lvl
+		}
 	})
 
 	ghClient, err = c.NewClient()
