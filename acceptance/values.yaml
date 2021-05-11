@@ -1,0 +1,20 @@
+# Set actions-runner-controller settings for testing
+githubAPICacheDuration: 10s
+githubWebhookServer:
+  enabled: true
+  labels: {}
+  replicaCount: 1
+  syncPeriod: 10m
+  secret:
+    create: true
+    name: "github-webhook-server"
+    ### GitHub Webhook Configuration
+    #github_webhook_secret_token: ""
+  service:
+    type: NodePort
+    ports:
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        nodePort: 31000

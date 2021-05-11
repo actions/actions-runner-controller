@@ -1,0 +1,37 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: org-runnerdeploy
+spec:
+#  replicas: 1
+  template:
+    spec:
+      organization: ${TEST_ORG}
+
+      #
+      # Custom runner image
+      #
+      image: ${RUNNER_NAME}:${RUNNER_TAG}
+      imagePullPolicy: IfNotPresent
+
+      #
+      # dockerd within runner container
+      #
+      ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
+      #dockerdWithinRunnerContainer: true
+      #image: mumoshu/actions-runner-dind:dev
+
+      #
+      # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
+      #
+      #dockerMTU: 1450
+
+      #Runner group
+      # labels:
+      # - "mylabel 1"
+      # - "mylabel 2"
+
+      #
+      # Non-standard working directory
+      #
+      # workDir: "/"
