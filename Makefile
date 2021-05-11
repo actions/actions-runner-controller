@@ -8,6 +8,8 @@ VERSION ?= latest
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
 TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
+TEST_ORG ?=
+TEST_ORG_REPO ?=
 SYNC_PERIOD ?= 5m
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
@@ -156,7 +158,7 @@ acceptance: release/clean acceptance/pull docker-build release
 acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
 
 acceptance/kind:
-	kind create cluster --name acceptance
+	kind create cluster --name acceptance --config acceptance/kind.yaml
 
 # Set TMPDIR to somewhere under $HOME when you use docker installed with Ubuntu snap
 # Otherwise `load docker-image` fail while running `docker save`.
@@ -192,7 +194,9 @@ acceptance/teardown:
 	kind delete cluster --name acceptance
 
 acceptance/deploy:
-	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} acceptance/deploy.sh
+	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
+	TEST_ORG=${TEST_ORG} TEST_ORG_REPO=${TEST_ORG_REPO} \
+	acceptance/deploy.sh
 
 acceptance/tests:
 	acceptance/checks.sh
