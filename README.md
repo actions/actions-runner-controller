@@ -269,7 +269,7 @@ spec:
 Apply the manifest file to your cluster:
 
 ```shell
-$ kubectl apply -f runner.yaml
+$ kubectl apply -f runnerdeployment.yaml
 runnerdeployment.actions.summerwind.dev/example-runnerdeploy created
 ```
 
