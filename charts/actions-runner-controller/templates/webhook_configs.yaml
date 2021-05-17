@@ -26,6 +26,7 @@ webhooks:
     - UPDATE
     resources:
     - runners
+  sideEffects: None
 - clientConfig:
     caBundle: Cg==
     service:
@@ -44,6 +45,7 @@ webhooks:
     - UPDATE
     resources:
     - runnerdeployments
+  sideEffects: None
 - clientConfig:
     caBundle: Cg==
     service:
@@ -62,7 +64,7 @@ webhooks:
     - UPDATE
     resources:
     - runnerreplicasets
-
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
@@ -90,6 +92,7 @@ webhooks:
     - UPDATE
     resources:
     - runners
+  sideEffects: None
 - clientConfig:
     caBundle: Cg==
     service:
@@ -108,6 +111,7 @@ webhooks:
     - UPDATE
     resources:
     - runnerdeployments
+  sideEffects: None
 - clientConfig:
     caBundle: Cg==
     service:
@@ -126,3 +130,4 @@ webhooks:
     - UPDATE
     resources:
     - runnerreplicasets
+  sideEffects: None
