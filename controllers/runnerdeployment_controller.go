@@ -190,7 +190,10 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 	// Do we have old runner replica sets that should eventually deleted?
 	if len(oldSets) > 0 {
-		readyReplicas := newestSet.Status.ReadyReplicas
+		var readyReplicas int
+		if newestSet.Status.ReadyReplicas != nil {
+			readyReplicas = *newestSet.Status.ReadyReplicas
+		}
 
 		oldSetsCount := len(oldSets)
 
@@ -231,14 +234,49 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 	}
 
-	if rd.Spec.Replicas == nil && desiredRS.Spec.Replicas != nil {
+	var replicaSets []v1alpha1.RunnerReplicaSet
+
+	replicaSets = append(replicaSets, *newestSet)
+	replicaSets = append(replicaSets, oldSets...)
+
+	var totalCurrentReplicas, totalStatusAvailableReplicas, updatedReplicas int
+
+	for _, rs := range replicaSets {
+		var current, available int
+
+		if rs.Status.Replicas != nil {
+			current = *rs.Status.Replicas
+		}
+
+		if rs.Status.AvailableReplicas != nil {
+			available = *rs.Status.AvailableReplicas
+		}
+
+		totalCurrentReplicas += current
+		totalStatusAvailableReplicas += available
+	}
+
+	if newestSet.Status.Replicas != nil {
+		updatedReplicas = *newestSet.Status.Replicas
+	}
+
+	var status v1alpha1.RunnerDeploymentStatus
+
+	status.AvailableReplicas = &totalStatusAvailableReplicas
+	status.ReadyReplicas = &totalStatusAvailableReplicas
+	status.DesiredReplicas = &newDesiredReplicas
+	status.Replicas = &totalCurrentReplicas
+	status.UpdatedReplicas = &updatedReplicas
+
+	if !reflect.DeepEqual(rd.Status, status) {
 		updated := rd.DeepCopy()
-		updated.Status.Replicas = desiredRS.Spec.Replicas
+		updated.Status = status
 
-		if err := r.Status().Update(ctx, updated); err != nil {
-			log.Error(err, "Failed to update runnerdeployment status")
-
-			return ctrl.Result{}, err
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(&rd)); err != nil {
+			log.Info("Failed to patch runnerdeployment status. Retrying immediately", "error", err.Error())
+			return ctrl.Result{
+				Requeue: true,
+			}, nil
 		}
 	}
 

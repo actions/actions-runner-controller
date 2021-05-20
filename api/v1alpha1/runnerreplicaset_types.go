@@ -33,8 +33,19 @@ type RunnerReplicaSetSpec struct {
 }
 
 type RunnerReplicaSetStatus struct {
-	AvailableReplicas int `json:"availableReplicas"`
-	ReadyReplicas     int `json:"readyReplicas"`
+	// See K8s replicaset controller code for reference
+	// https://github.com/kubernetes/kubernetes/blob/ea0764452222146c47ec826977f49d7001b0ea8c/pkg/controller/replicaset/replica_set_utils.go#L101-L106
+
+	// Replicas is the number of runners that are created and still being managed by this runner replica set.
+	// +optional
+	Replicas *int `json:"replicas"`
+
+	// ReadyReplicas is the number of runners that are created and Runnning.
+	ReadyReplicas *int `json:"readyReplicas"`
+
+	// AvailableReplicas is the number of runners that are created and Runnning.
+	// This is currently same as ReadyReplicas but perserved for future use.
+	AvailableReplicas *int `json:"availableReplicas"`
 }
 
 type RunnerTemplate struct {
@@ -46,8 +57,9 @@ type RunnerTemplate struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name=Desired,type=number
-// +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Current,type=number
+// +kubebuilder:printcolumn:JSONPath=".status.replicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name=Ready,type=number
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // RunnerReplicaSet is the Schema for the runnerreplicasets API
 type RunnerReplicaSet struct {
