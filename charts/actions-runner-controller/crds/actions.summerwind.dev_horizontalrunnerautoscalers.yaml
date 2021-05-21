@@ -18,6 +18,9 @@ spec:
   - JSONPath: .status.desiredReplicas
     name: Desired
     type: number
+  - JSONPath: .status.scheduledOverridesSummary
+    name: Schedule
+    type: string
   group: actions.summerwind.dev
   names:
     kind: HorizontalRunnerAutoscaler
@@ -265,6 +268,11 @@ spec:
                 which is updated on mutation by the API Server.
               format: int64
               type: integer
+            scheduledOverridesSummary:
+              description: ScheduledOverridesSummary is the summary of active and
+                upcoming scheduled overrides to be shown in e.g. a column of a `kubectl
+                get hra` output for observability.
+              type: string
           type: object
       type: object
   version: v1alpha1
