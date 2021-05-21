@@ -201,6 +201,11 @@ type HorizontalRunnerAutoscalerStatus struct {
 
 	// +optional
 	CacheEntries []CacheEntry `json:"cacheEntries,omitempty"`
+
+	// ScheduledOverridesSummary is the summary of active and upcoming scheduled overrides to be shown in e.g. a column of a `kubectl get hra` output
+	// for observability.
+	// +optional
+	ScheduledOverridesSummary *string `json:"scheduledOverridesSummary,omitempty"`
 }
 
 const CacheEntryKeyDesiredReplicas = "desiredReplicas"
@@ -216,6 +221,7 @@ type CacheEntry struct {
 // +kubebuilder:printcolumn:JSONPath=".spec.minReplicas",name=Min,type=number
 // +kubebuilder:printcolumn:JSONPath=".spec.maxReplicas",name=Max,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.desiredReplicas",name=Desired,type=number
+// +kubebuilder:printcolumn:JSONPath=".status.scheduledOverridesSummary",name=Schedule,type=string
 
 // HorizontalRunnerAutoscaler is the Schema for the horizontalrunnerautoscaler API
 type HorizontalRunnerAutoscaler struct {

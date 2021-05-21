@@ -209,7 +209,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 					Replicas: tc.fixed,
 				},
 				Status: v1alpha1.RunnerDeploymentStatus{
-					Replicas: tc.sReplicas,
+					DesiredReplicas: tc.sReplicas,
 				},
 			}
 
@@ -224,7 +224,12 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				},
 			}
 
-			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra)
+			minReplicas, _, _, err := h.getMinReplicas(log, metav1Now.Time, hra)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -459,7 +464,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 					Replicas: tc.fixed,
 				},
 				Status: v1alpha1.RunnerDeploymentStatus{
-					Replicas: tc.sReplicas,
+					DesiredReplicas: tc.sReplicas,
 				},
 			}
 
@@ -483,7 +488,12 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				},
 			}
 
-			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra)
+			minReplicas, _, _, err := h.getMinReplicas(log, metav1Now.Time, hra)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)

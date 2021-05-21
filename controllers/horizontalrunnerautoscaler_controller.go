@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -91,7 +92,14 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 
 	now := time.Now()
 
-	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, rd, hra)
+	minReplicas, active, upcoming, err := r.getMinReplicas(log, now, hra)
+	if err != nil {
+		log.Error(err, "Could not compute min replicas")
+
+		return ctrl.Result{}, err
+	}
+
+	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, rd, hra, minReplicas)
 	if err != nil {
 		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -112,11 +120,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		}
 	}
 
-	var updated *v1alpha1.HorizontalRunnerAutoscaler
+	updated := hra.DeepCopy()
 
 	if hra.Status.DesiredReplicas == nil || *hra.Status.DesiredReplicas != newDesiredReplicas {
-		updated = hra.DeepCopy()
-
 		if (hra.Status.DesiredReplicas == nil && newDesiredReplicas > 1) ||
 			(hra.Status.DesiredReplicas != nil && newDesiredReplicas > *hra.Status.DesiredReplicas) {
 
@@ -127,10 +133,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 	}
 
 	if computedReplicasFromCache == nil {
-		if updated == nil {
-			updated = hra.DeepCopy()
-		}
-
 		cacheEntries := getValidCacheEntries(updated, now)
 
 		var cacheDuration time.Duration
@@ -148,11 +150,34 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl
 		})
 	}
 
-	if updated != nil {
+	var overridesSummary string
+
+	if (active != nil && upcoming == nil) || (active != nil && upcoming != nil && active.Period.EndTime.Before(upcoming.Period.StartTime)) {
+		after := defaultReplicas
+		if hra.Spec.MinReplicas != nil && *hra.Spec.MinReplicas >= 0 {
+			after = *hra.Spec.MinReplicas
+		}
+
+		overridesSummary = fmt.Sprintf("min=%d time=%s", after, active.Period.EndTime)
+	}
+
+	if active == nil && upcoming != nil || (active != nil && upcoming != nil && active.Period.EndTime.After(upcoming.Period.StartTime)) {
+		if upcoming.ScheduledOverride.MinReplicas != nil {
+			overridesSummary = fmt.Sprintf("min=%d time=%s", *upcoming.ScheduledOverride.MinReplicas, upcoming.Period.StartTime)
+		}
+	}
+
+	if overridesSummary != "" {
+		updated.Status.ScheduledOverridesSummary = &overridesSummary
+	} else {
+		updated.Status.ScheduledOverridesSummary = nil
+	}
+
+	if !reflect.DeepEqual(hra.Status, updated.Status) {
 		metrics.SetHorizontalRunnerAutoscalerStatus(updated.ObjectMeta, updated.Status)
 
 		if err := r.Status().Patch(ctx, updated, client.MergeFrom(&hra)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("patching horizontalrunnerautoscaler status to add cache entry: %w", err)
+			return ctrl.Result{}, fmt.Errorf("patching horizontalrunnerautoscaler status: %w", err)
 		}
 	}
 
@@ -185,9 +210,14 @@ func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager
 		Complete(r)
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.Logger, now time.Time, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, *Period, *Period, error) {
+type Override struct {
+	ScheduledOverride v1alpha1.ScheduledOverride
+	Period            Period
+}
+
+func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.Logger, now time.Time, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, *Override, *Override, error) {
 	var minReplicas *int
-	var active, upcoming *Period
+	var active, upcoming *Override
 
 	for _, o := range hra.Spec.ScheduledOverrides {
 		log.V(1).Info(
@@ -213,7 +243,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.
 		// Use the first when there are two or more active scheduled overrides,
 		// as the spec defines that the earlier scheduled override is prioritized higher than later ones.
 		if a != nil && active == nil {
-			active = a
+			active = &Override{Period: *a, ScheduledOverride: o}
 
 			if o.MinReplicas != nil {
 				minReplicas = o.MinReplicas
@@ -227,8 +257,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.
 			}
 		}
 
-		if u != nil && (upcoming == nil || u.StartTime.Before(upcoming.StartTime)) {
-			upcoming = u
+		if u != nil && (upcoming == nil || u.StartTime.Before(upcoming.Period.StartTime)) {
+			upcoming = &Override{Period: *u, ScheduledOverride: o}
 
 			log.V(1).Info(
 				"Found upcoming scheduled override",
@@ -242,18 +272,23 @@ func (r *HorizontalRunnerAutoscalerReconciler) matchScheduledOverrides(log logr.
 	return minReplicas, active, upcoming, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (int, int, *int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) getMinReplicas(log logr.Logger, now time.Time, hra v1alpha1.HorizontalRunnerAutoscaler) (int, *Override, *Override, error) {
 	minReplicas := defaultReplicas
 	if hra.Spec.MinReplicas != nil && *hra.Spec.MinReplicas >= 0 {
 		minReplicas = *hra.Spec.MinReplicas
 	}
 
-	if m, _, _, err := r.matchScheduledOverrides(log, now, hra); err != nil {
-		return 0, 0, nil, err
+	m, active, upcoming, err := r.matchScheduledOverrides(log, now, hra)
+	if err != nil {
+		return 0, nil, nil, err
 	} else if m != nil {
 		minReplicas = *m
 	}
 
+	return minReplicas, active, upcoming, nil
+}
+
+func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, int, *int, error) {
 	var suggestedReplicas int
 
 	suggestedReplicasFromCache := r.fetchSuggestedReplicasFromCache(hra)
