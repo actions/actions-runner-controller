@@ -41,17 +41,17 @@ type RunnerDeploymentStatus struct {
 	// See K8s deployment controller code for reference
 	// https://github.com/kubernetes/kubernetes/blob/ea0764452222146c47ec826977f49d7001b0ea8c/pkg/controller/deployment/sync.go#L487-L505
 
-	// AvailableReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running.
+	// AvailableReplicas is the total number of available runners which have been successfully registered to GitHub and still running.
 	// This corresponds to the sum of status.availableReplicas of all the runner replica sets.
 	// +optional
 	AvailableReplicas *int `json:"availableReplicas"`
 
-	// ReadyReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running.
+	// ReadyReplicas is the total number of available runners which have been successfully registered to GitHub and still running.
 	// This corresponds to the sum of status.readyReplicas of all the runner replica sets.
 	// +optional
 	ReadyReplicas *int `json:"readyReplicas"`
 
-	// ReadyReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running.
+	// ReadyReplicas is the total number of available runners which have been successfully registered to GitHub and still running.
 	// This corresponds to status.replicas of the runner replica set that has the desired template hash.
 	// +optional
 	UpdatedReplicas *int `json:"updatedReplicas"`
