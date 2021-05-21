@@ -38,20 +38,41 @@ type RunnerDeploymentSpec struct {
 }
 
 type RunnerDeploymentStatus struct {
-	AvailableReplicas int `json:"availableReplicas"`
-	ReadyReplicas     int `json:"readyReplicas"`
+	// See K8s deployment controller code for reference
+	// https://github.com/kubernetes/kubernetes/blob/ea0764452222146c47ec826977f49d7001b0ea8c/pkg/controller/deployment/sync.go#L487-L505
 
-	// Replicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet
+	// AvailableReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running.
+	// This corresponds to the sum of status.availableReplicas of all the runner replica sets.
+	// +optional
+	AvailableReplicas *int `json:"availableReplicas"`
+
+	// ReadyReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running.
+	// This corresponds to the sum of status.readyReplicas of all the runner replica sets.
+	// +optional
+	ReadyReplicas *int `json:"readyReplicas"`
+
+	// ReadyReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running.
+	// This corresponds to status.replicas of the runner replica set that has the desired template hash.
+	// +optional
+	UpdatedReplicas *int `json:"updatedReplicas"`
+
+	// DesiredReplicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet
 	// This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
 	// +optional
-	Replicas *int `json:"desiredReplicas,omitempty"`
+	DesiredReplicas *int `json:"desiredReplicas"`
+
+	// Replicas is the total number of replicas
+	// +optional
+	Replicas *int `json:"replicas"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name=Desired,type=number
-// +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Current,type=number
-// +kubebuilder:printcolumn:JSONPath=".status.readyReplicas",name=Ready,type=number
+// +kubebuilder:printcolumn:JSONPath=".status.replicas",name=Current,type=number
+// +kubebuilder:printcolumn:JSONPath=".status.updatedReplicas",name=Up-To-Date,type=number
+// +kubebuilder:printcolumn:JSONPath=".status.availableReplicas",name=Available,type=number
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // RunnerDeployment is the Schema for the runnerdeployments API
 type RunnerDeployment struct {

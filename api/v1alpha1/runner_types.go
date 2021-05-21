@@ -164,6 +164,7 @@ type RunnerStatusRegistration struct {
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Runner is the Schema for the runners API
 type Runner struct {

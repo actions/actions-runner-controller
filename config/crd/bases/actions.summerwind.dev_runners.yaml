@@ -22,6 +22,9 @@ spec:
     - JSONPath: .status.phase
       name: Status
       type: string
+    - JSONPath: .metadata.creationTimestamp
+      name: Age
+      type: date
   group: actions.summerwind.dev
   names:
     kind: Runner

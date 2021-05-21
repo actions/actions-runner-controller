@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	gogithub "github.com/google/go-github/v33/github"
@@ -88,8 +89,9 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	var myRunners []v1alpha1.Runner
 
 	var (
-		available int
+		current   int
 		ready     int
+		available int
 	)
 
 	for _, r := range allRunners.Items {
@@ -98,10 +100,12 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		if metav1.IsControlledBy(&r, &rs) && !metav1.HasAnnotation(r.ObjectMeta, annotationKeyRegistrationOnly) {
 			myRunners = append(myRunners, r)
 
-			available += 1
+			current += 1
 
 			if r.Status.Phase == string(corev1.PodRunning) {
 				ready += 1
+				// available is currently the same as ready, as we don't yet have minReadySeconds for runners
+				available += 1
 			}
 		}
 	}
@@ -136,7 +140,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 	// In this case We don't need to bother creating a registration-only runner which gets deleted soon after we have 1 or more available repolicas,
 	// hence it's not `available == 0`, but `registrationOnlyRunnerExists && available == 0`.
 	// See https://github.com/actions-runner-controller/actions-runner-controller/issues/516
-	registrationOnlyRunnerNeeded := desired == 0 || (registrationOnlyRunnerExists && available == 0)
+	registrationOnlyRunnerNeeded := desired == 0 || (registrationOnlyRunnerExists && current == 0)
 
 	if registrationOnlyRunnerNeeded {
 		if registrationOnlyRunnerExists {
@@ -179,10 +183,10 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 	}
 
-	if available > desired {
-		n := available - desired
+	if current > desired {
+		n := current - desired
 
-		log.V(0).Info(fmt.Sprintf("Deleting %d runners", n), "desired", desired, "available", available, "ready", ready)
+		log.V(0).Info(fmt.Sprintf("Deleting %d runners", n), "desired", desired, "current", current, "ready", ready)
 
 		// get runners that are currently offline/not busy/timed-out to register
 		var deletionCandidates []v1alpha1.Runner
@@ -250,7 +254,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			n = len(deletionCandidates)
 		}
 
-		log.V(0).Info(fmt.Sprintf("Deleting %d runner(s)", n), "desired", desired, "available", available, "ready", ready)
+		log.V(0).Info(fmt.Sprintf("Deleting %d runner(s)", n), "desired", desired, "current", current, "ready", ready)
 
 		for i := 0; i < n; i++ {
 			if err := r.Client.Delete(ctx, &deletionCandidates[i]); client.IgnoreNotFound(err) != nil {
@@ -262,10 +266,10 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 			r.Recorder.Event(&rs, corev1.EventTypeNormal, "RunnerDeleted", fmt.Sprintf("Deleted runner '%s'", deletionCandidates[i].Name))
 			log.Info("Deleted runner")
 		}
-	} else if desired > available {
-		n := desired - available
+	} else if desired > current {
+		n := desired - current
 
-		log.V(0).Info(fmt.Sprintf("Creating %d runner(s)", n), "desired", desired, "available", available, "ready", ready)
+		log.V(0).Info(fmt.Sprintf("Creating %d runner(s)", n), "desired", desired, "available", current, "ready", ready)
 
 		for i := 0; i < n; i++ {
 			newRunner, err := r.newRunner(rs)
@@ -283,13 +287,18 @@ func (r *RunnerReplicaSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		}
 	}
 
-	if rs.Status.AvailableReplicas != available || rs.Status.ReadyReplicas != ready {
-		updated := rs.DeepCopy()
-		updated.Status.AvailableReplicas = available
-		updated.Status.ReadyReplicas = ready
+	var status v1alpha1.RunnerReplicaSetStatus
 
-		if err := r.Status().Update(ctx, updated); err != nil {
-			log.Info("Failed to update status. Retrying immediately", "error", err.Error())
+	status.Replicas = &current
+	status.AvailableReplicas = &available
+	status.ReadyReplicas = &ready
+
+	if !reflect.DeepEqual(rs.Status, status) {
+		updated := rs.DeepCopy()
+		updated.Status = status
+
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(&rs)); err != nil {
+			log.Info("Failed to update runnerreplicaset status. Retrying immediately", "error", err.Error())
 			return ctrl.Result{
 				Requeue: true,
 			}, nil

@@ -10,12 +10,15 @@ spec:
     - JSONPath: .spec.replicas
       name: Desired
       type: number
-    - JSONPath: .status.availableReplicas
+    - JSONPath: .status.replicas
       name: Current
       type: number
     - JSONPath: .status.readyReplicas
       name: Ready
       type: number
+    - JSONPath: .metadata.creationTimestamp
+      name: Age
+      type: date
   group: actions.summerwind.dev
   names:
     kind: RunnerReplicaSet
@@ -1631,8 +1634,13 @@ spec:
         status:
           properties:
             availableReplicas:
+              description: AvailableReplicas is the number of runners that are created and Runnning. This is currently same as ReadyReplicas but perserved for future use.
               type: integer
             readyReplicas:
+              description: ReadyReplicas is the number of runners that are created and Runnning.
+              type: integer
+            replicas:
+              description: Replicas is the number of runners that are created and still being managed by this runner replica set.
               type: integer
           required:
             - availableReplicas

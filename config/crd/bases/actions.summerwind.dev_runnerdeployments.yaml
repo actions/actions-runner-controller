@@ -10,12 +10,18 @@ spec:
     - JSONPath: .spec.replicas
       name: Desired
       type: number
-    - JSONPath: .status.availableReplicas
+    - JSONPath: .status.replicas
       name: Current
       type: number
-    - JSONPath: .status.readyReplicas
-      name: Ready
+    - JSONPath: .status.updatedReplicas
+      name: Up-To-Date
       type: number
+    - JSONPath: .status.availableReplicas
+      name: Available
+      type: number
+    - JSONPath: .metadata.creationTimestamp
+      name: Age
+      type: date
   group: actions.summerwind.dev
   names:
     kind: RunnerDeployment
@@ -1631,15 +1637,20 @@ spec:
         status:
           properties:
             availableReplicas:
+              description: AvailableReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running. This corresponds to the sum of status.availableReplicas of all the runner replica sets.
               type: integer
             desiredReplicas:
-              description: Replicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
+              description: DesiredReplicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
               type: integer
             readyReplicas:
+              description: ReadyReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running. This corresponds to the sum of status.readyReplicas of all the runner replica sets.
               type: integer
-          required:
-            - availableReplicas
-            - readyReplicas
+            replicas:
+              description: Replicas is the total number of replicas
+              type: integer
+            updatedReplicas:
+              description: ReadyReplicas is the total number of available runners which have been sucessfully registered to GitHub and still running. This corresponds to status.replicas of the runner replica set that has the desired template hash.
+              type: integer
           type: object
       type: object
   version: v1alpha1
