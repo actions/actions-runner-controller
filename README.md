@@ -72,7 +72,7 @@ When deploying the solution for a Github Enterprise Server environment you need 
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-__**NOTE : The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+__**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
 ## Setting up authentication with GitHub API
 
@@ -89,9 +89,13 @@ If you are deploying the solution for a GitHub Enterprise Server environment you
 
 You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
+_Note: The permissions are already set in the query string of the provided link:_
+
 - [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
+
+_Note: The permissions are already set in the query string of the provided link:_
 
 - [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
 
