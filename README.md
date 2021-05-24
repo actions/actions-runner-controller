@@ -873,7 +873,7 @@ The GitHub hosted runners include a large amount of pre-installed software packa
 This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
-- git (2.26)
+- git
 - docker
 - build-essentials
 
