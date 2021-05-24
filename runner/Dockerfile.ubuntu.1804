@@ -26,6 +26,7 @@ RUN apt update -y \
     netcat \
     openssh-client \
     parallel \
+    python3-pip \
     rsync \
     shellcheck \
     sudo \
@@ -37,7 +38,6 @@ RUN apt update -y \
     wget \
     zip \
     zstd \
-    python3-pip \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
