@@ -6,7 +6,6 @@ RUN apt update -y \
     && add-apt-repository -y ppa:git-core/ppa \
     && apt update -y \
     && apt install -y --no-install-recommends \
-    software-properties-common \
     build-essential \
     curl \
     ca-certificates \
@@ -15,6 +14,7 @@ RUN apt update -y \
     git \
     iproute2 \
     iputils-ping \
+    iptables \
     jq \
     libunwind8 \
     locales \
@@ -23,6 +23,8 @@ RUN apt update -y \
     parallel \
     rsync \
     shellcheck \
+    supervisor \
+    software-properties-common \
     sudo \
     telnet \
     time \
@@ -32,8 +34,6 @@ RUN apt update -y \
     wget \
     zip \
     zstd \
-    iptables \
-    supervisor \
     python3-pip \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
