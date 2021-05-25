@@ -107,7 +107,6 @@ scope:
 
 githubWebhookServer:
   enabled: false
-  labels: {}
   replicaCount: 1
   secret:
     create: true
