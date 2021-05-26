@@ -32,7 +32,9 @@ spec:
       {{- end }}
       containers:
       - args:
-        - "--metrics-addr=127.0.0.1:8080"
+        {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
+        {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
+        - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
         - "--sync-period={{ .Values.githubWebhookServer.syncPeriod }}"
         {{- if .Values.githubWebhookServer.logLevel }}
         - "--log-level={{ .Values.githubWebhookServer.logLevel }}"
@@ -57,25 +59,32 @@ spec:
         - containerPort: 8000
           name: http
           protocol: TCP
+        {{- if not .Values.metrics.proxy.enabled }}
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
+          protocol: TCP
+        {{- end }}
         resources:
           {{- toYaml .Values.githubWebhookServer.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.githubWebhookServer.securityContext | nindent 12 }}
+      {{- if .Values.metrics.proxy.enabled }}
       - args:
-        - "--secure-listen-address=0.0.0.0:8443"
+        - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.port }}"
         - "--upstream=http://127.0.0.1:8080/"
         - "--logtostderr=true"
         - "--v=10"
-        image: "{{ .Values.kube_rbac_proxy.image.repository }}:{{ .Values.kube_rbac_proxy.image.tag }}"
+        image: "{{ .Values.metrics.proxy.image.repository }}:{{ .Values.metrics.proxy.image.tag }}"
         name: kube-rbac-proxy
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-        - containerPort: 8443
-          name: https
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
+      {{- end }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.githubWebhookServer.nodeSelector }}
       nodeSelector:

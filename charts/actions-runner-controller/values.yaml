@@ -30,12 +30,6 @@ image:
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 
-kube_rbac_proxy:
-  enabled: true
-  image:
-    repository: quay.io/brancz/kube-rbac-proxy
-    tag: v0.8.0
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -67,6 +61,15 @@ securityContext:
 service:
   type: ClusterIP
   port: 443
+
+metrics:
+  serviceMonitor: false
+  port: 8443
+  proxy:
+    enabled: true
+    image:
+      repository: quay.io/brancz/kube-rbac-proxy
+      tag: v0.8.0
 
 resources:
   {}

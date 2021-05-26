@@ -3,12 +3,12 @@ kind: Service
 metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
-  name: {{ include "actions-runner-controller.authProxyServiceName" . }}
+  name: {{ include "actions-runner-controller.metricsServiceName" . }}
   namespace: {{ .Release.Namespace }}
 spec:
   ports:
-  - name: https
-    port: 8443
-    targetPort: https
+  - name: metrics-port
+    port: {{ .Values.metrics.port }}
+    targetPort: metrics-port
   selector:
     {{- include "actions-runner-controller.selectorLabels" . | nindent 4 }}
