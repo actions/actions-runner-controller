@@ -107,6 +107,8 @@ type RunnerSpec struct {
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 	// +optional
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
+	// +optional
+	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 }
 
 // ValidateRepository validates repository field.
