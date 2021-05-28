@@ -45,6 +45,8 @@ serviceAccount:
 
 podAnnotations: {}
 
+podLabels: {}
+
 podSecurityContext:
   {}
   # fsGroup: 2000
@@ -128,6 +130,7 @@ githubWebhookServer:
     # If not set and create is true, a name is generated using the fullname template
     name: ""
   podAnnotations: {}
+  podLabels: {}
   podSecurityContext: {}
   # fsGroup: 2000
   securityContext: {}
