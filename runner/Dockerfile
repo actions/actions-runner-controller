@@ -89,9 +89,8 @@ RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > .env \
 COPY entrypoint.sh /
 COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
-# Add the Python "User Site Directory" and "User Script Directory" to the PATH
-# The "User Site Directory" is python version specific so it will need changing with Python bumps
-ENV PATH="${PATH}:${HOME}/.local/bin:${HOME}/.local/lib/python3.8/site-packages"
+# Add the Python "User Script Directory" to the PATH
+ENV PATH="${PATH}:${HOME}/.local/bin"
 
 USER runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
