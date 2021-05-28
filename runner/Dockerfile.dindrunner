@@ -46,6 +46,8 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
+ENV HOME=/home/runner
+
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.278.0
 ARG DOCKER_CHANNEL=stable

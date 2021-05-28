@@ -62,6 +62,7 @@ RUN set -vx; \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
+ENV HOME=/home/runner
 
 # Runner download supports amd64 as x64. Externalstmp is needed for making mount points work inside DinD.
 #
