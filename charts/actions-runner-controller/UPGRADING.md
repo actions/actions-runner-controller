@@ -26,6 +26,8 @@ kubectl delete horizontalrunnerautoscaler %HRA_NAME%
 If your `Runner` kinds get stuck you may need to remove the finalizers (this can happen if you delete the pods directly instead of the projects CRD kinds):
 
 ```shell
+# Check if any runners are stuck after the uninstall
+kubectl get runner
 # Remove the finalizers from the spec and merge the change
 kubectl patch runner %RUNNER_NAME% -p '{"metadata":{"finalizers":null}}' --type=merge
 ```
