@@ -62,6 +62,7 @@ RUN set -vx; \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
+ENV HOME=/home/runner
 
 # Runner download supports amd64 as x64. Externalstmp is needed for making mount points work inside DinD.
 #
@@ -87,6 +88,10 @@ RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > .env \
 
 COPY entrypoint.sh /
 COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
+
+# Add the Python "User Site Directory" and "User Script Directory" to the PATH
+# The "User Site Directory" is python version specific so it will need changing with Python bumps
+ENV PATH="${PATH}:${HOME}/.local/bin:${HOME}/.local/lib/python3.8/site-packages"
 
 USER runner
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
