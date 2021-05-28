@@ -3,7 +3,9 @@
 This project makes extensive use of CRDs to provide much of its functionality. Helm unfortunately does not support [managing](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/) CRDs by design:
 
 ```
-There is no support at this time for upgrading or deleting CRDs using Helm. This was an explicit decision after much community discussion due to the danger for unintentional data loss. Furthermore, there is currently no community consensus around how to handle CRDs and their lifecycle. As this evolves, Helm will add support for those use cases.
+There is no support at this time for upgrading or deleting CRDs using Helm. This was an explicit decision after much 
+community discussion due to the danger for unintentional data loss. Furthermore, there is currently no community 
+consensus around how to handle CRDs and their lifecycle. As this evolves, Helm will add support for those use cases.
 ```
 
 Helm will do an initial install of CRDs but it will not touch them afterwards (update or delete).
