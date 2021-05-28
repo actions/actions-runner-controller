@@ -16,26 +16,8 @@ Due to the above you can't just do a `helm upgrade` to release the latest versio
 
 ## Steps
 
-1. Uninstall your runners, if you are doing this manually ensure you delete your `RunnerDeployment`, `Runner` and `HorizontalRunnerAutoscaler` setup first:
-
-```shell
-# Delete your runners
-kubectl delete runner %RUNNER_NAME%
-kubectl delete runnerdeployment %RUNNER_DEPLOYMENT_NAME%
-kubectl delete horizontalrunnerautoscaler %HRA_NAME%
-```
-
-If your `Runner` kinds get stuck you may need to remove the finalizers (this can happen if you delete the pods directly instead of the projects CRD kinds):
-
-```shell
-# Check if any runners are stuck after the uninstall
-kubectl get runner
-# Remove the finalizers from the spec and merge the change
-kubectl patch runner %RUNNER_NAME% -p '{"metadata":{"finalizers":null}}' --type=merge
-```
-
-2. Uninstall the chart
-3. Manually delete the CRDs:
+1. Uninstall the chart
+2. Manually delete the CRDs:
 
 ```shell
 # Delete the CRDs
@@ -44,4 +26,4 @@ kubectl get crds | grep actions.summerwind. | awk '{print $1}' | xargs kubectl d
 kubectl get crds | grep actions.summerwind.
 ```
 
-4. Install the chart following the documentation
+3. Install the chart following the documentation
