@@ -22,4 +22,4 @@
 *.tmproj
 .vscode/
 # Docs
-UPGRADING.md
+docs/
