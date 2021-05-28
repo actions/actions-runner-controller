@@ -76,6 +76,7 @@ jobs:
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
 
   latest-tags:
+    if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     name: Build ${{ matrix.name }}-latest
     strategy:
