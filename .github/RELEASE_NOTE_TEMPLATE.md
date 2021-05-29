@@ -21,7 +21,7 @@ v{{ .Version }}: {{ .TitlesOfImportantChanges }}
 **Body**:
 
 ```
-**CAUTION:** If you're using the Helm chart, beware to review changes to CRDs and do manually upgrade CRDs! Helm installs CRDs only on installing a chart. It doesn't automatically upgrade CRDs. Otherwise you end up with troubles like #427, #467, and #468
+**CAUTION:** If you're using the Helm chart, beware to review changes to CRDs and do manually upgrade CRDs! Helm installs CRDs only on installing a chart. It doesn't automatically upgrade CRDs. Otherwise you end up with troubles like #427, #467, and #468. Please refer to the [UPGRADING](charts/actions-runner-controller/docs/UPGRADING.md) docs for the latest process.
 
 This release includes the following changes from contributors. Thank you!
 

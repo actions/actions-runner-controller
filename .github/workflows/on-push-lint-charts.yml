@@ -5,6 +5,7 @@ on:
     paths:
       - 'charts/**'
       - '.github/**'
+      - '!.github/*.md'
   workflow_dispatch:
 
 env:
