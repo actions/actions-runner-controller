@@ -16,6 +16,7 @@ syncPeriod: 10m
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:
+  enabled: true
   create: true
   name: "controller-manager"
   ### GitHub Apps Configuration
@@ -100,6 +101,11 @@ env:
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
+
+extraEnv:
+  []
+  # - name: foo
+  #   value: bar
 
 scope:
   # If true, the controller will only watch custom resources in a single namespace

@@ -49,6 +49,7 @@ spec:
         command:
         - "/manager"
         env:
+        {{- if .Values.authSecret.enabled }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
@@ -69,6 +70,10 @@ spec:
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           value: /etc/actions-runner-controller/github_app_private_key
+        {{- end }}
+        {{- with .Values.extraEnv }}
+        {{- toYaml .Values.extraEnv }}
+        {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}
           value: {{ $val | quote }}
