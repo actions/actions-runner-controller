@@ -87,9 +87,9 @@ If you are deploying the solution for a GitHub Enterprise Server environment you
 
 ### Deploying using GitHub App Authentication
 
-You can create a GitHub App for either your account or any organization, below are the app permissions required for each supported type of runner:
+You can create a GitHub App for either your user account or any organization, below are the app permissions required for each supported type of runner:
 
-_Note: Links are provided further down for GitHub app creation with the permissions set in the query string for all runner types_
+_Note: Links are provided further down to create an app for your logged in user account or an organisation with the permissions for all runner types set in each link's query string_
 
 **Permissions for a Repository Runners**<br />
 **Repository Permissions**
