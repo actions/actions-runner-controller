@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ -z "${STARTUP_DELAY}" ]; then
+if [ ! -z "${STARTUP_DELAY}" ]; then
   echo "Delaying startup by ${STARTUP_DELAY} seconds" 1>&2
   sleep ${STARTUP_DELAY}
 fi
