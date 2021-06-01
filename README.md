@@ -107,9 +107,9 @@ _Note: Links are provided further down to create an app for your logged in user 
 **Organization Permissions**
 * Self-hosted runners (read / write)
 
-_Note: all API routes mapped to their permission can be found here if you wish to review https://docs.github.com/en/rest/reference/permissions-required-for-github-apps_
+_Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
 
---
+---
 
 **Setup Steps**
 
