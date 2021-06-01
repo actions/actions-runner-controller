@@ -89,7 +89,7 @@ If you are deploying the solution for a GitHub Enterprise Server environment you
 
 You can create a GitHub App for either your account or any organization, below are the app permissions required for each supported type of runner:
 
-_Note: Creation links are provided further down with the permissions for all runner types set in the query string for easy creation_
+_Note: Links are provided further down for GitHub app creation with the permissions set in the query string for all runner types_
 
 **Permissions for a Repository Runners**<br />
 **Repository Permissions**
