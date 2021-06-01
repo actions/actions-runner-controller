@@ -78,7 +78,7 @@ __**Note: The repository maintainers do not have an enterprise environment (clou
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using a GitHub App (not supported for enterprise level runners due to lack of support by GitHub)
+1. Using a GitHub App (not supported for enterprise level runners due to lack of support from GitHub)
 2. Using a PAT
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
