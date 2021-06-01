@@ -109,7 +109,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 _Note: all API routes mapped to their permission can be found here if you wish to review https://docs.github.com/en/rest/reference/permissions-required-for-github-apps_
 
---
+---
 
 **Setup Steps**
 
