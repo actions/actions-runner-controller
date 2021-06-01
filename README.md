@@ -9,9 +9,9 @@ ToC:
 - [Motivation](#motivation)
 - [Installation](#installation)
   - [GitHub Enterprise Support](#github-enterprise-support)
-- [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
-  - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
-  - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
+- [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
+  - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
+  - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
@@ -23,13 +23,15 @@ ToC:
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
-  - [Additional tweaks](#additional-tweaks)
-  - [Runner labels](#runner-labels)
-  - [Runner groups](#runner-groups)
-  - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
-  - [Software installed in the runner image](#software-installed-in-the-runner-image)
-  - [Common errors](#common-errors)
+  - [Additional Tweaks](#additional-tweaks)
+  - [Runner Labels](#runner-labels)
+  - [Runner Groups](#runner-groups)
+  - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
+  - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
+  - [Common Errors](#common-errors)
 - [Contributing](#contributing)
+
+
 
 ## Motivation
 
@@ -74,28 +76,50 @@ kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC
 
 __**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
-## Setting up authentication with GitHub API
+## Setting Up Authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using a GitHub App (not supported when you need enterprise level runners)
+1. Using a GitHub App (not supported for enterprise level runners due to lack of support from GitHub)
 2. Using a PAT
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
 
 If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limiting settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues, consider deploying the solution using the GitHub App authentication method instead.
 
-### Deploying using GitHub App Authentication
+### Deploying Using GitHub App Authentication
 
-You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
+You can create a GitHub App for either your user account or any organization, below are the app permissions required for each supported type of runner:
 
-_Note: The permissions are already set in the query string of the provided link:_
+_Note: Links are provided further down to create an app for your logged in user account or an organisation with the permissions for all runner types set in each link's query string_
+
+**Required Permissions for Repository Runners**<br />
+**Repository Permissions**
+
+* Actions (read)
+* Administration (read / write)
+* Metadata (read)
+
+**Required Permissions for Organisation Runners**<br />
+**Repository Permissions**
+
+* Actions (read)
+* Metadata (read)
+
+**Organization Permissions**
+* Self-hosted runners (read / write)
+
+_Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
+
+---
+
+**Setup Steps**
+
+If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
 - [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
-
-_Note: The permissions are already set in the query string of the provided link:_
 
 - [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
 
@@ -116,6 +140,7 @@ When the installation is complete, you will be taken to a URL in one of the foll
 - `https://github.com/settings/installations/${INSTALLATION_ID}`
 - `https://github.com/organizations/eventreactor/settings/installations/${INSTALLATION_ID}`
 
+
 Finally, register the App ID (`APP_ID`), Installation ID (`INSTALLATION_ID`), and downloaded private key file (`PRIVATE_KEY_FILE_PATH`) to Kubernetes as Secret.
 
 ```shell
@@ -126,27 +151,27 @@ $ kubectl create secret generic controller-manager \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
 
-### Deploying using PAT Authentication
+### Deploying Using PAT Authentication
 
 Personal Access Tokens can be used to register a self-hosted runner by *actions-runner-controller*.
 
 Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
-**Scopes for a Repository Runners**
+**Required Scopes for Repository Runners**
 
 * repo (Full control)
 
-**Scopes for a Organization Runners**
+**Required Scopes for Organization Runners**
 
 * repo (Full control)
 * admin:org (Full control)
-* admin:public_key - read:public_key
-* admin:repo_hook - read:repo_hook
-* admin:org_hook
-* notifications
-* workflow
+* admin:public_key (read:public_key)
+* admin:repo_hook (read:repo_hook)
+* admin:org_hook (Full control)
+* notifications (Full control)
+* workflow (Full control)
 
-**Scopes for Enterprise Runners**
+**Required Scopes for Enterprise Runners**
 
 * enterprise:admin (Full control)
 
@@ -684,7 +709,7 @@ spec:
 
 This also helps with resources, as you don't need to give resources separately to docker and runner.
 
-### Additional tweaks
+### Additional Tweaks
 
 You can pass details through the spec selector. Here's an eg. of what you may like to do:
 
@@ -780,7 +805,7 @@ spec:
           name: docker-extra
 ```
 
-### Runner labels
+### Runner Labels
 
 To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:
 
@@ -819,9 +844,7 @@ Note that if you specify `self-hosted` in your workflow, then this will run your
 
 ### Runner Groups
 
-_Runner groups must be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced_
-
-Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level.
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an organization level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
 To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
 
@@ -838,9 +861,9 @@ spec:
       group: NewGroup
 ```
 
-### Using EKS IAM role for service accounts
+### Using IRSA (IAM Roles for Service Accounts) in EKS
 
-`actions-runner-controller` v0.15.0 or later has support for EKS IAM role for service accounts.
+`actions-runner-controller` v0.15.0 or later has support for IRSA in EKS.
 
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
@@ -863,7 +886,7 @@ spec:
         fsGroup: 1000
 ```
 
-### Software installed in the runner image
+### Software Installed in the Runner Image
 
 **Cloud Tooling**<br />
 The project supports being deployed on the various cloud Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
