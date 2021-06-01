@@ -78,7 +78,7 @@ __**Note: The repository maintainers do not have an enterprise environment (clou
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
-1. Using a GitHub App (not supported when you need enterprise level runners)
+1. Using a GitHub App (not supported for enterprise level runners due to lack of support by GitHub)
 2. Using a PAT
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
@@ -87,15 +87,37 @@ If you are deploying the solution for a GitHub Enterprise Server environment you
 
 ### Deploying using GitHub App Authentication
 
-You can create a GitHub App for either your account or any organization. If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
+You can create a GitHub App for either your account or any organization, below are the app permissions required for each supported type of runner:
 
-_Note: The permissions are already set in the query string of the provided link:_
+_Note: Creation links are provided further down for with the permissions for all runner types in the query string for easy creation_
+
+**Permissions for a Repository Runners**<br />
+**Repository Permissions**
+
+* Actions (read)
+* Administration (read / write)
+* Metadata (read)
+
+**Permissions for a Organisation Runners**<br />
+**Repository Permissions**
+
+* Actions (read)
+* Metadata (read)
+
+**Organization Permissions**
+* Self-hosted runners (read / write)
+
+_Note: all API routes mapped to their permission can be found here if you wish to review https://docs.github.com/en/rest/reference/permissions-required-for-github-apps_
+
+--
+
+**Setup Steps**
+
+If you want to create a GitHub App for your account, open the following link to the creation page, enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page.
 
 - [Create GitHub Apps on your account](https://github.com/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&actions=read)
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
-
-_Note: The permissions are already set in the query string of the provided link:_
 
 - [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
 
@@ -115,6 +137,7 @@ When the installation is complete, you will be taken to a URL in one of the foll
 
 - `https://github.com/settings/installations/${INSTALLATION_ID}`
 - `https://github.com/organizations/eventreactor/settings/installations/${INSTALLATION_ID}`
+
 
 Finally, register the App ID (`APP_ID`), Installation ID (`INSTALLATION_ID`), and downloaded private key file (`PRIVATE_KEY_FILE_PATH`) to Kubernetes as Secret.
 
@@ -140,11 +163,11 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * repo (Full control)
 * admin:org (Full control)
-* admin:public_key - read:public_key
-* admin:repo_hook - read:repo_hook
-* admin:org_hook
-* notifications
-* workflow
+* admin:public_key (read:public_key)
+* admin:repo_hook (read:repo_hook)
+* admin:org_hook (Full control)
+* notifications (Full control)
+* workflow (Full control)
 
 **Scopes for Enterprise Runners**
 
@@ -819,9 +842,7 @@ Note that if you specify `self-hosted` in your workflow, then this will run your
 
 ### Runner Groups
 
-_Runner groups must be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced_
-
-Runner groups can be used to limit which repositories are able to use the GitHub Runner at an Organisation level.
+Runner groups can be used to limit which repositories are able to use the GitHub Runner at an organization level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.
 
 To add the runner to the group `NewGroup`, specify the group in your `Runner` or `RunnerDeployment` spec.
 
@@ -874,7 +895,7 @@ The GitHub hosted runners include a large amount of pre-installed software packa
 This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
-- git
+- git (2.26)
 - docker
 - build-essentials
 
