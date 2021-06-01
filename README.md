@@ -9,9 +9,9 @@ ToC:
 - [Motivation](#motivation)
 - [Installation](#installation)
   - [GitHub Enterprise Support](#github-enterprise-support)
-- [Setting up authentication with GitHub API](#setting-up-authentication-with-github-api)
-  - [Deploying using GitHub App Authentication](#deploying-using-github-app-authentication)
-  - [Deploying using PAT Authentication](#deploying-using-pat-authentication)
+- [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
+  - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
+  - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
@@ -23,13 +23,15 @@ ToC:
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
-  - [Additional tweaks](#additional-tweaks)
-  - [Runner labels](#runner-labels)
-  - [Runner groups](#runner-groups)
-  - [Using EKS IAM role for service accounts](#using-eks-iam-role-for-service-accounts)
-  - [Software installed in the runner image](#software-installed-in-the-runner-image)
-  - [Common errors](#common-errors)
+  - [Additional Tweaks](#additional-tweaks)
+  - [Runner Labels](#runner-labels)
+  - [Runner Groups](#runner-groups)
+  - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
+  - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
+  - [Common Errors](#common-errors)
 - [Contributing](#contributing)
+
+
 
 ## Motivation
 
@@ -74,7 +76,7 @@ kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC
 
 __**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
 
-## Setting up authentication with GitHub API
+## Setting Up Authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
 
@@ -85,7 +87,7 @@ Functionality wise, there isn't much of a difference between the 2 authenticatio
 
 If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limiting settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues, consider deploying the solution using the GitHub App authentication method instead.
 
-### Deploying using GitHub App Authentication
+### Deploying Using GitHub App Authentication
 
 You can create a GitHub App for either your user account or any organization, below are the app permissions required for each supported type of runner:
 
@@ -149,7 +151,7 @@ $ kubectl create secret generic controller-manager \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
 
-### Deploying using PAT Authentication
+### Deploying Using PAT Authentication
 
 Personal Access Tokens can be used to register a self-hosted runner by *actions-runner-controller*.
 
@@ -707,7 +709,7 @@ spec:
 
 This also helps with resources, as you don't need to give resources separately to docker and runner.
 
-### Additional tweaks
+### Additional Tweaks
 
 You can pass details through the spec selector. Here's an eg. of what you may like to do:
 
@@ -803,7 +805,7 @@ spec:
           name: docker-extra
 ```
 
-### Runner labels
+### Runner Labels
 
 To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:
 
@@ -859,9 +861,9 @@ spec:
       group: NewGroup
 ```
 
-### Using EKS IAM role for service accounts
+### Using IRSA (IAM Roles for Service Accounts) in EKS
 
-`actions-runner-controller` v0.15.0 or later has support for EKS IAM role for service accounts.
+`actions-runner-controller` v0.15.0 or later has support for IRSA in EKS.
 
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
@@ -884,7 +886,7 @@ spec:
         fsGroup: 1000
 ```
 
-### Software installed in the runner image
+### Software Installed in the Runner Image
 
 **Cloud Tooling**<br />
 The project supports being deployed on the various cloud Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
