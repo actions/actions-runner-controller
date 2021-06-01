@@ -91,14 +91,14 @@ You can create a GitHub App for either your user account or any organization, be
 
 _Note: Links are provided further down to create an app for your logged in user account or an organisation with the permissions for all runner types set in each link's query string_
 
-**Permissions for a Repository Runners**<br />
+**Required Permissions for Repository Runners**<br />
 **Repository Permissions**
 
 * Actions (read)
 * Administration (read / write)
 * Metadata (read)
 
-**Permissions for a Organisation Runners**<br />
+**Required Permissions for Organisation Runners**<br />
 **Repository Permissions**
 
 * Actions (read)
@@ -155,11 +155,11 @@ Personal Access Tokens can be used to register a self-hosted runner by *actions-
 
 Log-in to a GitHub account that has `admin` privileges for the repository, and [create a personal access token](https://github.com/settings/tokens/new) with the appropriate scopes listed below:
 
-**Scopes for a Repository Runners**
+**Required Scopes for Repository Runners**
 
 * repo (Full control)
 
-**Scopes for a Organization Runners**
+**Required Scopes for Organization Runners**
 
 * repo (Full control)
 * admin:org (Full control)
@@ -169,7 +169,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 * notifications (Full control)
 * workflow (Full control)
 
-**Scopes for Enterprise Runners**
+**Required Scopes for Enterprise Runners**
 
 * enterprise:admin (Full control)
 
