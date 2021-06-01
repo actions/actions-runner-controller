@@ -19,6 +19,9 @@ spec:
       {{- end }}
       labels:
         {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 8 }}
+      {{- with .Values.githubWebhookServer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       {{- with .Values.githubWebhookServer.imagePullSecrets }}
       imagePullSecrets:
