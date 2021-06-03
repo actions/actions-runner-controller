@@ -728,6 +728,16 @@ spec:
     spec:
       nodeSelector:
         node-role.kubernetes.io/test: ""
+      
+      securityContext:
+        #All level/role/type/user values will vary based on your SELinux policies.
+        #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
+        seLinuxOptions: 
+          level: "s0"
+          role: "system_r"
+          type: "super_t"
+          user: "system_u"
+          
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/test
