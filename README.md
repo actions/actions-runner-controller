@@ -957,6 +957,12 @@ This is because the `istio-proxy` has not completed configuring itself when the
 configuration script tries to communicate with the network.
 
 **Solution**<br />
+
+> This feature is experimental and will be dropped once maintainers think that
+> everyone has already migrated to ues Istio's `holdApplicationUntilProxyStarts` ([istio/istio#11130](https://github.com/istio/istio/issues/11130)).
+>
+> Please read the discussion in #592 for more information.
+
 You can add a delay to the entrypoint script by setting the `STARTUP_DELAY` environment
 variable. This will cause the script to sleep `STARTUP_DELAY` seconds.
 
