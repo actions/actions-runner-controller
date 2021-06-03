@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ ! -z "${STARTUP_DELAY}" ]; then
+  echo "Delaying startup by ${STARTUP_DELAY} seconds" 1>&2
+  sleep ${STARTUP_DELAY}
+fi
+
 if [ -z "${GITHUB_URL}" ]; then
   echo "Working with public GitHub" 1>&2
   GITHUB_URL="https://github.com/"

@@ -944,6 +944,61 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documeneted flags
 
+#### Runner coming up before network available
+
+If you're running your action runners on a service mesh like Istio, you might
+have problems with runner configuration accompanied by logs like:
+
+```
+....
+runner Starting Runner listener with startup type: service
+runner Started listener process
+runner An error occurred: Not configured
+runner Runner listener exited with error code 2
+runner Runner listener exit with retryable error, re-launch runner in 5 seconds.
+....
+```
+
+This is because the `istio-proxy` has not completed configuring itself when the
+configuration script tries to communicate with the network.
+
+**Solution**<br />
+
+> This feature is experimental and will be dropped once maintainers think that
+> everyone has already migrated to ues Istio's `holdApplicationUntilProxyStarts` ([istio/istio#11130](https://github.com/istio/istio/issues/11130)).
+>
+> Please read the discussion in #592 for more information.
+
+You can add a delay to the entrypoint script by setting the `STARTUP_DELAY` environment
+variable. This will cause the script to sleep `STARTUP_DELAY` seconds.
+
+*Example `Runner` with a 2 second startup delay:*
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: example-runner-with-sleep
+spec:
+  env:
+    - name: STARTUP_DELAY
+      value: "2" # Remember! env var values must be strings.  
+```
+
+*Example `RunnerDeployment` with a 2 second startup delay:*
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment-with-sleep
+spec:
+  template:
+    spec:
+      env:
+        - name: STARTUP_DELAY
+          value: "2" # Remember! env var values must be strings.
+```
+
+
 # Contributing
 
 For more details about any requirements or process, please check out [Getting Started with Contributing](CONTRIBUTING.md).
