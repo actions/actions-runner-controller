@@ -564,10 +564,10 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
-		privileged      		  bool = true
-		dockerdInRunner 		  bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
-		dockerEnabled  		      bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
-		ephemeral      		      bool = runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
+		privileged                bool = true
+		dockerdInRunner           bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
+		dockerEnabled             bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
+		ephemeral                 bool = runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
 		dockerdInRunnerPrivileged bool = dockerdInRunner
 	)
 
