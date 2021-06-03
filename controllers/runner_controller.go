@@ -674,6 +674,14 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		r.GitHubClient.GithubBaseURL,
 	)
 
+	var seLinuxOptions *corev1.SELinuxOptions
+	if runner.Spec.SecurityContext != nil {
+		seLinuxOptions = runner.Spec.SecurityContext.SELinuxOptions
+		if seLinuxOptions != nil {
+			privileged = false
+		}
+	}
+
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        runner.Name,
@@ -821,7 +829,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 			},
 			SecurityContext: &corev1.SecurityContext{
-				Privileged: &privileged,
+				Privileged:     &privileged,
+				SELinuxOptions: seLinuxOptions,
 			},
 			Resources: runner.Spec.DockerdContainerResources,
 		})
