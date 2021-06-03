@@ -910,6 +910,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.HostAliases = runner.Spec.HostAliases
 	}
 
+	if runner.Spec.RuntimeClassName != nil {
+		pod.Spec.RuntimeClassName = runner.Spec.RuntimeClassName
+	}
+
 	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
 		return pod, err
 	}

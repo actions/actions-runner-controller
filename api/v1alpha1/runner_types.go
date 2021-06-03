@@ -107,6 +107,11 @@ type RunnerSpec struct {
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 	// +optional
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
+
+	// RuntimeClassName is the container runtime configuration that containers should run under.
+	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class
+	// +optional
+	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 }
 
 // ValidateRepository validates repository field.

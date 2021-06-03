@@ -771,7 +771,7 @@ spec:
       # - https://cloud.google.com/container-registry/docs/pulling-cached-images
       dockerRegistryMirror: https://mirror.gcr.io/
       # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
-      # true = No docker sidecar container is deployed in the runner pod but docker can be used within teh runner container instead. The image summerwind/actions-runner-dind is used by default.
+      # true = No docker sidecar container is deployed in the runner pod but docker can be used within the runner container instead. The image summerwind/actions-runner-dind is used by default.
       dockerdWithinRunnerContainer: true
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
@@ -805,6 +805,10 @@ spec:
       dockerVolumeMounts:
         - mountPath: /var/lib/docker
           name: docker-extra
+      # Optional name of the container runtime configuration that should be used for pods.
+      # This must match the name of a RuntimeClass resource available on the cluster.
+      # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
+      runtimeClassName: "runc"
 ```
 
 ### Runner Labels
