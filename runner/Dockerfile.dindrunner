@@ -19,6 +19,7 @@ RUN apt update -y \
     libunwind8 \
     locales \
     netcat \
+    net-tools \
     openssh-client \
     parallel \
     python3-pip \

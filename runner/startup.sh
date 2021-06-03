@@ -60,7 +60,7 @@ for process in "${processes[@]}"; do
 done
 
 if [ -n "${MTU}" ]; then
-  ifconfig docker0 mtu ${MTU} up
+  sudo ifconfig docker0 mtu ${MTU} up
 fi
 
 # Wait processes to be running
