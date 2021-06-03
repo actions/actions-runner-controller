@@ -722,10 +722,12 @@ metadata:
 spec:
   replicas: 2
   template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
     spec:
       nodeSelector:
         node-role.kubernetes.io/test: ""
-
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/test
