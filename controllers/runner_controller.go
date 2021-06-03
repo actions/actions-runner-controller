@@ -564,10 +564,11 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	var (
-		privileged      bool = true
-		dockerdInRunner bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
-		dockerEnabled   bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
-		ephemeral       bool = runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
+		privileged      		  bool = true
+		dockerdInRunner 		  bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
+		dockerEnabled  		      bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
+		ephemeral      		      bool = runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
+		dockerdInRunnerPrivileged bool = dockerdInRunner
 	)
 
 	runnerImage := runner.Spec.Image
@@ -679,6 +680,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		seLinuxOptions = runner.Spec.SecurityContext.SELinuxOptions
 		if seLinuxOptions != nil {
 			privileged = false
+			dockerdInRunnerPrivileged = false
 		}
 	}
 
@@ -700,7 +702,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 					EnvFrom:         runner.Spec.EnvFrom,
 					SecurityContext: &corev1.SecurityContext{
 						// Runner need to run privileged if it contains DinD
-						Privileged: runner.Spec.DockerdWithinRunnerContainer,
+						Privileged: &dockerdInRunnerPrivileged,
 					},
 					Resources: runner.Spec.Resources,
 				},
