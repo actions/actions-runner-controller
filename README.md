@@ -68,13 +68,13 @@ The solution supports both GitHub Enterprise Cloud and Server editions as well a
 
 If you are deploying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
 
-When deploying the solution for a Github Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
+When deploying the solution for a GitHub Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-__**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best endeavors basis. PRs from the community are welcomed to add features and maintain support.**__
+__**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best effort basis. PRs from the community are welcomed to add features and maintain support.**__
 
 ## Setting Up Authentication with GitHub API
 
@@ -175,11 +175,11 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * enterprise:admin (Full control)
 
-_Note: when you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each Github organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+_Note: when you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
 ---
 
-Once you have created the appropriate token, deploy it as a secret to your kubernetes cluster that you are going to deploy the solution on:
+Once you have created the appropriate token, deploy it as a secret to your Kubernetes cluster that you are going to deploy the solution on:
 
 ```shell
 kubectl create secret generic controller-manager \
@@ -358,7 +358,7 @@ The scale out performance is controlled via the manager containers startup `--sy
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
 2. Scales the runner count based on the actual queue depth of the jobs meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
-3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels).
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
@@ -414,7 +414,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 **Benefits of this metric**
 1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
 2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223)
-3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [Github labels](#runner-labels)
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels)
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223) [#315](https://github.com/actions-runner-controller/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
@@ -474,7 +474,7 @@ spec:
 
 #### Faster Autoscaling with GitHub Webhook
 
-__**IMPORTANT : Due to missing webhook events, webhook based scaling is not avaliable for enterprise level RunnerDeployments. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470).**__
+__**IMPORTANT : Due to missing webhook events, webhook based scaling is not available for enterprise level RunnerDeployments. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470).**__
 
 > This feature is an ADVANCED feature which may require more work to set up.
 > Please get prepared to put some time and effort to learn and leverage this feature!
@@ -598,7 +598,7 @@ Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#n
 
 To automate the process of scaling to/from 0, you can use `HorizontalRunnerAutoscaler` with a caveat.
 
-That is, you need to choose one of the following configuration for metrigs and triggers:
+That is, you need to choose one of the following configuration for metrics and triggers:
 
 - `TotalNumberOfQueuedAndInProgressWorkflowRuns`
 - `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns`
@@ -606,11 +606,11 @@ That is, you need to choose one of the following configuration for metrigs and t
 
 This is due to that `PercentageRunnersBusy`, by its definition, needs one or more GitHub runners that can become `busy`, which cannot happen at all when you have 0 active runners.
 
-If and only if HorizontalRunnerAutoscaler is configured to have a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` and the controller sees the primary metric of `PercentageRunnersBusy` returned 0 desired replicas, it uses the secondary metric for calculating the desired replicas once agian.
+If and only if HorizontalRunnerAutoscaler is configured to have a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` and the controller sees the primary metric of `PercentageRunnersBusy` returned 0 desired replicas, it uses the secondary metric for calculating the desired replicas once again.
 
 A correctly configured `TotalNumberOfQueuedAndInProgressWorkflowRuns` can return non-zero desired replicas even when there are no runners other than [registration-only runners](#note-on-scaling-tofrom-0), hence the `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns` configuration makes scaling from zero possible.
 
-Similarly, Webhook-based autoscaling works regarless of there are active runners, hence `PercentageRunnersBusy` + Webhook-based autoscaling configuration makes scaling from zero, too.
+Similarly, Webhook-based autoscaling works regardless of there are active runners, hence `PercentageRunnersBusy` + Webhook-based autoscaling configuration makes scaling from zero, too.
 
 #### Scheduled Overrides
 
@@ -668,7 +668,7 @@ spec:
 The most basic usage of this feature is actually the second scenario mentioned above.
 A scheduled override without `recurrenceRule` is considered a one-off override, that is active between `startTime` and `endTime`. In the second scenario, it overrides `minReplicas` to `100` only between `2021-06-01T00:00:00+09:00` and `2021-06-03T00:00:00+09:00`.
 
-A scheduled override with `recurrenceRule` is consdiered a recurring override. A recurring override is initially active between `startTime` and `endTime`, and then it repeatedly get activated after a certain period of time denoted by `frequency`.
+A scheduled override with `recurrenceRule` is considered a recurring override. A recurring override is initially active between `startTime` and `endTime`, and then it repeatedly get activated after a certain period of time denoted by `frequency`.
 
 `frequecy` can take one of the following values:
 
@@ -952,7 +952,7 @@ spec:
 **Solutions**<br />
 Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
 * `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documeneted flags
+* Create the secret as described in the docs using the shell and documented flags
 
 #### Runner coming up before network available
 
@@ -975,7 +975,7 @@ configuration script tries to communicate with the network.
 **Solution**<br />
 
 > This feature is experimental and will be dropped once maintainers think that
-> everyone has already migrated to ues Istio's `holdApplicationUntilProxyStarts` ([istio/istio#11130](https://github.com/istio/istio/issues/11130)).
+> everyone has already migrated to use Istio's `holdApplicationUntilProxyStarts` ([istio/istio#11130](https://github.com/istio/istio/issues/11130)).
 >
 > Please read the discussion in #592 for more information.
 
@@ -1109,7 +1109,7 @@ NAME=$DOCKER_USER/actions-runner-controller \
   kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
 ```
 
-Similary, if you'd like to recreate runner pods with the newer runner image,
+Similarly, if you'd like to recreate runner pods with the newer runner image,
 
 ```
 NAME=$DOCKER_USER/actions-runner make \
