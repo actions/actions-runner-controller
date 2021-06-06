@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'charts/**'
+      - '!charts/docs/**'
       - '.github/**'
       - '!.github/*.md'
   workflow_dispatch:
