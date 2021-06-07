@@ -18,14 +18,22 @@ Due to the above you can't just do a `helm upgrade` to release the latest versio
 
 ## Steps
 
-1. Uninstall the chart
-2. Manually delete the CRDs:
+1. Upgrade CRDs
 
 ```shell
-# Delete the CRDs
-kubectl get crds | grep actions.summerwind. | awk '{print $1}' | xargs kubectl delete crd
-# Confirm the CRDs are gone
-kubectl get crds | grep actions.summerwind.
+CHART_VERSION=0.11.0
+
+curl -L https://github.com/actions-runner-controller/actions-runner-controller/releases/download/actions-runner-controller-${CHART_VERSION}/actions-runner-controller-${CHART_VERSION}.tgz | tar zxv --strip 1 actions-runner-controller/crds
+
+kubectl apply -f crds/
 ```
 
-3. Install the chart following the documentation
+2. Upgrade the Helm release
+
+```shell
+helm upgrade --install \
+  --namespace actions-runner-system \
+  --version ${CHART_VERSION} \
+  actions-runner-controller/actions-runner-controller \
+  actions-runner-controller
+```
