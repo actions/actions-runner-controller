@@ -7,6 +7,8 @@ on:
       - main # assume that the branch name may change in future
     paths:
       - 'charts/**'
+      - '!charts/actions-runner-controller/docs/**'
+      - '!charts/actions-runner-controller/*.md'
       - '.github/**'
       - '!.github/*.md'
   workflow_dispatch:
