@@ -4,11 +4,11 @@ on:
   push:
     paths:
       - 'charts/**'
-      - '!charts/docs/**'
+      - '!charts/actions-runner-controller/docs/**'
+      - '!charts/actions-runner-controller/*.md'
       - '.github/**'
       - '!.github/*.md'
   workflow_dispatch:
-
 env:
   KUBE_SCORE_VERSION: 1.10.0
   HELM_VERSION: v3.4.1
