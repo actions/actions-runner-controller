@@ -165,7 +165,7 @@ acceptance/kind:
 # See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
 acceptance/load:
 	kind load docker-image ${NAME}:${VERSION} --name acceptance
-	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.8.0 --name acceptance
+	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name acceptance
 	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name acceptance
 	kind load docker-image docker:dind --name acceptance
 	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
@@ -175,7 +175,7 @@ acceptance/load:
 
 # Pull the docker images for acceptance
 acceptance/pull:
-	docker pull quay.io/brancz/kube-rbac-proxy:v0.8.0
+	docker pull quay.io/brancz/kube-rbac-proxy:v0.10.0
 	docker pull docker:dind
 	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
 	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
