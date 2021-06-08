@@ -4,7 +4,7 @@ on:
       - master
     paths-ignore:
       - "runner/**"
-      - "*.md"
+      - "**.md"
       - ".gitignore"
 
 jobs:
