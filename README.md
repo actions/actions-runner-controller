@@ -31,8 +31,6 @@ ToC:
   - [Common Errors](#common-errors)
 - [Contributing](#contributing)
 
-
-
 ## Motivation
 
 [GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
@@ -47,14 +45,16 @@ actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/insta
 
 Install the custom resource and actions-runner-controller with `kubectl` or `helm`. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
-`kubectl`:
+**Kubectl Deployment:**
 
 ```shell
 # REPLACE "v0.18.2" with the version you wish to deploy
 kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
 ```
 
-`helm`:
+**Helm Deployment:**
+
+__**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -93,14 +93,14 @@ You can create a GitHub App for either your user account or any organization, be
 
 _Note: Links are provided further down to create an app for your logged in user account or an organisation with the permissions for all runner types set in each link's query string_
 
-**Required Permissions for Repository Runners**<br />
+**Required Permissions for Repository Runners:**<br />
 **Repository Permissions**
 
 * Actions (read)
 * Administration (read / write)
 * Metadata (read)
 
-**Required Permissions for Organisation Runners**<br />
+**Required Permissions for Organisation Runners:**<br />
 **Repository Permissions**
 
 * Actions (read)
@@ -143,6 +143,8 @@ When the installation is complete, you will be taken to a URL in one of the foll
 
 Finally, register the App ID (`APP_ID`), Installation ID (`INSTALLATION_ID`), and downloaded private key file (`PRIVATE_KEY_FILE_PATH`) to Kubernetes as Secret.
 
+**Kubectl Deployment:**
+
 ```shell
 $ kubectl create secret generic controller-manager \
     -n actions-runner-system \
@@ -150,6 +152,10 @@ $ kubectl create secret generic controller-manager \
     --from-literal=github_app_installation_id=${INSTALLATION_ID} \
     --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH}
 ```
+
+**Helm Deployment:**
+
+Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for deploying the secret via Helm
 
 ### Deploying Using PAT Authentication
 
@@ -175,17 +181,23 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * enterprise:admin (Full control)
 
-_Note: when you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+_Note: When you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
 ---
 
 Once you have created the appropriate token, deploy it as a secret to your Kubernetes cluster that you are going to deploy the solution on:
+
+**Kubectl Deployment:**
 
 ```shell
 kubectl create secret generic controller-manager \
     -n actions-runner-system \
     --from-literal=github_token=${GITHUB_TOKEN}
 ```
+
+**Helm Deployment:**
+
+Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for deploying the secret via Helm
 
 ## Usage
 
@@ -353,7 +365,6 @@ With this scaling metric we are required to define a list of repositories within
 The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API.
 
 **Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
-**Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
@@ -409,7 +420,6 @@ spec:
 The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
 
 **Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
-**Helm Config :** `syncPeriod`
 
 **Benefits of this metric**
 1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
