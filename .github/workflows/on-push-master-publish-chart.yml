@@ -8,9 +8,8 @@ on:
     paths:
       - 'charts/**'
       - '!charts/actions-runner-controller/docs/**'
-      - '!charts/actions-runner-controller/*.md'
       - '.github/**'
-      - '!.github/*.md'
+      - '!**.md'
   workflow_dispatch:
 
 env:
