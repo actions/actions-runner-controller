@@ -9,7 +9,6 @@ metadata:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
 webhooks:
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -28,7 +27,6 @@ webhooks:
     - runners
   sideEffects: None
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -47,7 +45,6 @@ webhooks:
     - runnerdeployments
   sideEffects: None
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -75,7 +72,6 @@ metadata:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
 webhooks:
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -94,7 +90,6 @@ webhooks:
     - runners
   sideEffects: None
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -113,7 +108,6 @@ webhooks:
     - runnerdeployments
   sideEffects: None
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
