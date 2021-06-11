@@ -9,6 +9,9 @@ spec:
   endpoints:
     - path: /metrics
       port: metrics-port
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
   selector:
     matchLabels:
       {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
