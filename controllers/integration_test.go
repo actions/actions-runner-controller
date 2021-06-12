@@ -214,11 +214,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Organization: "test",
-								Image:        "bar",
-								Group:        "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Organization: "test",
+									Image:        "bar",
+									Group:        "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -301,11 +305,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -432,11 +440,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -537,11 +549,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -631,11 +647,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -764,11 +784,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -857,11 +881,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -956,11 +984,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},

@@ -128,10 +128,14 @@ var _ = Context("Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},

@@ -203,7 +203,9 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				Spec: v1alpha1.RunnerDeploymentSpec{
 					Template: v1alpha1.RunnerTemplate{
 						Spec: v1alpha1.RunnerSpec{
-							Repository: tc.repo,
+							RunnerConfig: v1alpha1.RunnerConfig{
+								Repository: tc.repo,
+							},
 						},
 					},
 					Replicas: tc.fixed,
@@ -458,7 +460,9 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 							},
 						},
 						Spec: v1alpha1.RunnerSpec{
-							Organization: tc.org,
+							RunnerConfig: v1alpha1.RunnerConfig{
+								Organization: tc.org,
+							},
 						},
 					},
 					Replicas: tc.fixed,

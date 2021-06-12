@@ -11,13 +11,17 @@ TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
 TEST_ORG ?=
 TEST_ORG_REPO ?=
 SYNC_PERIOD ?= 5m
+USE_RUNNERSET ?=
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
-YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
+
+# If you encounter errors like the below, you are very likely to update this to follow e.g. CRD version change:
+#   CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: spec.preserveUnknownFields: Invalid value: true: must be false in order to use defaults in the schema
+YAML_DROP_PREFIX=spec.versions[0].schema.openAPIV3Schema.properties.spec.properties
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+CRD_OPTIONS ?= "crd:trivialVersions=true,generateEmbeddedObjectMeta=true"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -196,6 +200,7 @@ acceptance/teardown:
 acceptance/deploy:
 	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
 	TEST_ORG=${TEST_ORG} TEST_ORG_REPO=${TEST_ORG_REPO} SYNC_PERIOD=${SYNC_PERIOD} \
+	USE_RUNNERSET=${USE_RUNNERSET} \
 	acceptance/deploy.sh
 
 acceptance/tests:
@@ -205,8 +210,14 @@ acceptance/tests:
 github-release: release
 	ghr ${VERSION} release/
 
-# find or download controller-gen
-# download controller-gen if necessary
+# Find or download controller-gen
+#
+# Note that controller-gen newer than 0.4.1 is needed for https://github.com/kubernetes-sigs/controller-tools/issues/444#issuecomment-680168439
+# Otherwise we get errors like the below:
+#   Error: failed to install CRD crds/actions.summerwind.dev_runnersets.yaml: CustomResourceDefinition.apiextensions.k8s.io "runnersets.actions.summerwind.dev" is invalid: [spec.validation.openAPIV3Schema.properties[spec].properties[template].properties[spec].properties[containers].items.properties[ports].items.properties[protocol].default: Required value: this property is in x-kubernetes-list-map-keys, so it must have a default or be a required property, spec.validation.openAPIV3Schema.properties[spec].properties[template].properties[spec].properties[initContainers].items.properties[ports].items.properties[protocol].default: Required value: this property is in x-kubernetes-list-map-keys, so it must have a default or be a required property]
+#
+# Note that controller-gen newer than 0.6.0 is needed due to https://github.com/kubernetes-sigs/controller-tools/issues/448
+# Otherwise ObjectMeta embedded in Spec results in empty on the storage.
 controller-gen:
 ifeq (, $(shell which controller-gen))
 ifeq (, $(wildcard $(GOBIN)/controller-gen))
@@ -215,7 +226,7 @@ ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 endif
