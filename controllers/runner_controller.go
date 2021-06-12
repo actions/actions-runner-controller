@@ -622,6 +622,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	template.Spec.SecurityContext = runner.Spec.SecurityContext
+	template.Spec.EnableServiceLinks = runner.Spec.EnableServiceLinks
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
 
