@@ -894,16 +894,6 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		},
 	)
 
-	if runnerContainerIndex == -1 {
-		pod.Spec.Containers = append([]corev1.Container{*runnerContainer}, pod.Spec.Containers...)
-
-		if dockerdContainerIndex != -1 {
-			dockerdContainerIndex++
-		}
-	} else {
-		pod.Spec.Containers[runnerContainerIndex] = *runnerContainer
-	}
-
 	if !dockerdInRunner && dockerEnabled {
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
@@ -1000,7 +990,19 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				fmt.Sprintf("--registry-mirror=%s", *runnerSpec.DockerRegistryMirror),
 			)
 		}
+	}
 
+	if runnerContainerIndex == -1 {
+		pod.Spec.Containers = append([]corev1.Container{*runnerContainer}, pod.Spec.Containers...)
+
+		if dockerdContainerIndex != -1 {
+			dockerdContainerIndex++
+		}
+	} else {
+		pod.Spec.Containers[runnerContainerIndex] = *runnerContainer
+	}
+
+	if !dockerdInRunner && dockerEnabled {
 		if dockerdContainerIndex == -1 {
 			pod.Spec.Containers = append(pod.Spec.Containers, *dockerdContainer)
 		} else {
