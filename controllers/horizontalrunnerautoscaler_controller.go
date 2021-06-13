@@ -63,8 +63,7 @@ const defaultReplicas = 1
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
-func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("horizontalrunnerautoscaler", req.NamespacedName)
 
 	var hra v1alpha1.HorizontalRunnerAutoscaler

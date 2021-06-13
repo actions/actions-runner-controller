@@ -63,8 +63,7 @@ type RunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
-func (r *RunnerSetReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runnerset", req.NamespacedName)
 
 	runnerSet := &v1alpha1.RunnerSet{}

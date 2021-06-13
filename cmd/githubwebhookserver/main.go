@@ -150,7 +150,7 @@ func main() {
 		defer wg.Done()
 
 		setupLog.Info("starting webhook server")
-		if err := mgr.Start(ctx.Done()); err != nil {
+		if err := mgr.Start(ctx); err != nil {
 			setupLog.Error(err, "problem running manager")
 			os.Exit(1)
 		}
@@ -183,7 +183,7 @@ func main() {
 	}()
 
 	go func() {
-		<-ctrl.SetupSignalHandler()
+		<-ctrl.SetupSignalHandler().Done()
 		cancel()
 	}()
 
