@@ -247,11 +247,6 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, l)
 	}
 
-	templateHash := ComputeHash(&runnerSetWithOverrides)
-
-	// Add template hash label to selector.
-	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
-
 	// This label selector is used by default when rd.Spec.Selector is empty.
 	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
 
@@ -275,6 +270,11 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 	//   :\"85d7578bd6\", \"runnerset-name\":\"example-runnerset\"}: `selector` does not match template `labels`, spec.
 	//   template.spec.restartPolicy: Unsupported value: \"OnFailure\": supported values: \"Always\"]
 	runnerSetWithOverrides.StatefulSetSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
+
+	templateHash := ComputeHash(pod.Spec)
+
+	// Add template hash label to selector.
+	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
 
 	selector := getRunnerSetSelector(runnerSet)
 	selector = CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
