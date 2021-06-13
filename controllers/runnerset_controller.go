@@ -215,6 +215,9 @@ func getRunnerSetSelector(runnerSet *v1alpha1.RunnerSet) *metav1.LabelSelector {
 	return selector
 }
 
+var LabelKeyPodMutation = "actions-runner-controller/inject-registration-token"
+var LabelValuePodMutation = "true"
+
 func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
 	runnerSetWithOverrides := *runnerSet.Spec.DeepCopy()
 
@@ -229,6 +232,8 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 
 	// This label selector is used by default when rd.Spec.Selector is empty.
 	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
+
+	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
 
 	template := corev1.Pod{
 		ObjectMeta: runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta,
@@ -252,6 +257,7 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 	selector := getRunnerSetSelector(runnerSet)
 	selector = CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
 	selector = CloneSelectorAndAddLabel(selector, LabelKeyRunnerSetName, runnerSet.Name)
+	selector = CloneSelectorAndAddLabel(selector, LabelKeyPodMutation, LabelValuePodMutation)
 
 	runnerSetWithOverrides.StatefulSetSpec.Selector = selector
 
