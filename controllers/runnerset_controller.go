@@ -128,8 +128,30 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if liveTemplateHash != desiredTemplateHash {
-		if err := r.Client.Patch(ctx, desiredStatefulSet, client.MergeFrom(liveStatefulSet)); err != nil {
-			log.Error(err, "Failed to patch statefulset")
+		copy := liveStatefulSet.DeepCopy()
+		copy.Spec = desiredStatefulSet.Spec
+
+		if err := r.Client.Patch(ctx, copy, client.MergeFrom(liveStatefulSet)); err != nil {
+			log.Error(err, "Failed to patch statefulset", "reason", errors.ReasonForError(err))
+
+			if errors.IsInvalid(err) {
+				// NOTE: This might not be ideal but deal the forbidden error by recreating the statefulset
+				// Probably we'd better create a registration-only runner to prevent queued jobs from immediately failing.
+				//
+				// 2021-06-13T07:19:52.760Z        ERROR   actions-runner-controller.runnerset     Failed to patch statefulset
+				// {"runnerset": "default/example-runnerset", "error": "StatefulSet.apps \"example-runnerset\" is invalid: s
+				// pec: Forbidden: updates to statefulset spec for fields other than 'replicas', 'template', and 'updateStrategy'
+				// are forbidden"}
+				//
+				// Even though the error message includes "Forbidden", this error's reason is "Invalid".
+				// That's why we're using errors.IsInvalid above.
+
+				if err := r.Client.Delete(ctx, liveStatefulSet); err != nil {
+					log.Error(err, "Failed to delete statefulset for force-update")
+					return ctrl.Result{}, err
+				}
+				log.Info("Deleted statefulset for force-update")
+			}
 
 			return ctrl.Result{}, err
 		}
