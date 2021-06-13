@@ -62,6 +62,10 @@ type RunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
+
+// Note that coordination.k8s.io/leases permission must be added to any of the controllers to avoid the following error:
+//   E0613 07:02:08.004278       1 leaderelection.go:325] error retrieving resource lock actions-runner-system/actions-runner-controller: leases.coordination.k8s.io "actions-runner-controller" is forbidden: User "system:serviceaccount:actions-runner-system:actions-runner-controller" cannot get resource "leases" in API group "coordination.k8s.io" in the namespace "actions-runner-system"
 
 func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runnerset", req.NamespacedName)

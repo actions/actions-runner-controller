@@ -127,6 +127,7 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "actions-runner-controller",
 		Port:               9443,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
