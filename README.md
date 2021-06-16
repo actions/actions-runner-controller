@@ -58,7 +58,7 @@ __**Note: For all configuration options for the Helm chart see the chart's [READ
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
-helm upgrade --install --namespace actions-runner-system --create-namespace \ 
+helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
@@ -738,16 +738,16 @@ spec:
     spec:
       nodeSelector:
         node-role.kubernetes.io/test: ""
-      
+
       securityContext:
         #All level/role/type/user values will vary based on your SELinux policies.
         #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
+        seLinuxOptions:
           level: "s0"
           role: "system_r"
           type: "super_t"
           user: "system_u"
-          
+
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/test
@@ -772,7 +772,7 @@ spec:
       # true (default) = The runner restarts after running jobs, to ensure a clean and reproducible build environment
       # false = The runner is persistent across jobs and doesn't automatically restart
       # This directly controls the behaviour of `--once` flag provided to the github runner
-      ephemeral: false 
+      ephemeral: false
       # true (default) = A privileged docker sidecar container is included in the runner pod.
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       # If set to false, there are no privileged container and you cannot use docker.
@@ -822,9 +822,19 @@ spec:
           hostPath:
             path: /mnt/docker-extra
             type: DirectoryOrCreate
+        - name: repo
+          hostPath:
+            path: /mnt/repo
+            type: DirectoryOrCreate
       dockerVolumeMounts:
         - mountPath: /var/lib/docker
           name: docker-extra
+      # You can mount some of the shared volumes to the runner container using volumeMounts.
+      # NOTE: Do not try to mount the volume onto the runner workdir itself as it will not work. You could mount it however on a sub directory in the runner workdir
+      # Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/630#issuecomment-862087323 for more information.
+      volumeMounts:
+        - mountPath: /home/runner/work/repo
+          name: repo
       # Optional name of the container runtime configuration that should be used for pods.
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
@@ -1001,7 +1011,7 @@ metadata:
 spec:
   env:
     - name: STARTUP_DELAY
-      value: "2" # Remember! env var values must be strings.  
+      value: "2" # Remember! env var values must be strings.
 ```
 
 *Example `RunnerDeployment` with a 2 second startup delay:*
