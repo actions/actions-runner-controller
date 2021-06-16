@@ -831,6 +831,7 @@ spec:
           name: docker-extra
       # You can mount some of the shared volumes to the runner container using volumeMounts.
       # NOTE: Do not try to mount the volume onto the runner workdir itself as it will not work. You could mount it however on a sub directory in the runner workdir
+      # Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/630#issuecomment-862087323 for more information.
       volumeMounts:
         - mountPath: /home/runner/work/repo
           name: repo
