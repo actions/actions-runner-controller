@@ -754,6 +754,9 @@ spec:
         operator: Exists
 
       repository: mumoshu/actions-runner-controller-ci
+      # The default "summerwind/actions-runner" images are available at DockerHub:
+      #  https://hub.docker.com/r/summerwind/actions-runner
+      # You can also build your own and specify it like the below:
       image: custom-image/actions-runner:latest
       imagePullPolicy: Always
       resources:
