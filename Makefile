@@ -12,6 +12,8 @@ TEST_ORG ?=
 TEST_ORG_REPO ?=
 SYNC_PERIOD ?= 5m
 USE_RUNNERSET ?=
+KUBECONTEXT ?= kind-acceptance
+CLUSTER ?= acceptance
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
@@ -162,20 +164,20 @@ acceptance: release/clean acceptance/pull docker-build release
 acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
 
 acceptance/kind:
-	kind create cluster --name acceptance --config acceptance/kind.yaml
+	kind create cluster --name ${CLUSTER} --config acceptance/kind.yaml
 
 # Set TMPDIR to somewhere under $HOME when you use docker installed with Ubuntu snap
 # Otherwise `load docker-image` fail while running `docker save`.
 # See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
 acceptance/load:
-	kind load docker-image ${NAME}:${VERSION} --name acceptance
-	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name acceptance
-	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name acceptance
-	kind load docker-image docker:dind --name acceptance
-	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
-	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
-	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name acceptance
-	kubectl cluster-info --context kind-acceptance
+	kind load docker-image ${NAME}:${VERSION} --name ${CLUSTER}
+	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name ${CLUSTER}
+	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name ${CLUSTER}
+	kind load docker-image docker:dind --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name ${CLUSTER}
+	kubectl cluster-info --context ${KUBECONTEXT}
 
 # Pull the docker images for acceptance
 acceptance/pull:
@@ -195,7 +197,7 @@ acceptance/setup:
 	sleep 5
 
 acceptance/teardown:
-	kind delete cluster --name acceptance
+	kind delete cluster --name ${CLUSTER}
 
 acceptance/deploy:
 	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
