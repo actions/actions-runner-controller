@@ -1,3 +1,4 @@
+# Deploy Assets
 release
 
 # Binaries for programs and plugins
@@ -15,7 +16,6 @@ bin
 *.out
 
 # Kubernetes Generated files - skip generated files, except for vendored files
-
 !vendor/**/zz_generated.*
 
 # editor and IDE paraphernalia
@@ -25,6 +25,7 @@ bin
 *~
 
 .envrc
+.env
 *.pem
 
 # OS
