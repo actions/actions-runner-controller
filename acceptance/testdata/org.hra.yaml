@@ -2,7 +2,6 @@ apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
   name: org
-  namespace: actions-runner-system
 spec:
   scaleTargetRef:
     name: org-runnerdeploy

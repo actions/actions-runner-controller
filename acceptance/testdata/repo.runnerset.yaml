@@ -2,7 +2,6 @@ apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
   name: example-runnerset
-  namespace: actions-runner-system
 spec:
   # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
   #   missing required field "selector" in dev.summerwind.actions.v1alpha1.RunnerSet.spec
