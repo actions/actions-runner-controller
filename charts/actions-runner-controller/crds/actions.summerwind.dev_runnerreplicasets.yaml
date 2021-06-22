@@ -629,6 +629,8 @@ spec:
                           type: object
                         dockerdWithinRunnerContainer:
                           type: boolean
+                        enableServiceLinks:
+                          type: boolean
                         enterprise:
                           pattern: ^[^/]+$
                           type: string

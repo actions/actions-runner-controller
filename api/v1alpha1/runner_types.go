@@ -101,6 +101,9 @@ type RunnerPodSpec struct {
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
 	// +optional
+	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
+
+	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
 
 	// +optional
