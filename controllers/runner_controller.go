@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/actions-runner-controller/actions-runner-controller/hash"
 	gogithub "github.com/google/go-github/v33/github"
-	"github.com/summerwind/actions-runner-controller/hash"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/go-logr/logr"
@@ -37,8 +37,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 const (
@@ -395,7 +395,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 						"Runner failed to register itself to GitHub in timely manner. "+
 							"Recreating the pod to see if it resolves the issue. "+
 							"CAUTION: If you see this a lot, you should investigate the root cause. "+
-							"See https://github.com/summerwind/actions-runner-controller/issues/288",
+							"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
 						"podCreationTimestamp", pod.CreationTimestamp,
 						"currentTime", currentTime,
 						"configuredRegistrationTimeout", registrationTimeout,
@@ -588,7 +588,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	//     A registered runner's session and the a registration token seem to have two different and independent
 	//     lifecycles.
 	//
-	//     See https://github.com/summerwind/actions-runner-controller/issues/143 for more context.
+	//     See https://github.com/actions-runner-controller/actions-runner-controller/issues/143 for more context.
 	labels[LabelKeyPodTemplateHash] = hash.FNVHashStringObjects(
 		filterLabels(runner.ObjectMeta.Labels, LabelKeyRunnerTemplateHash),
 		runner.ObjectMeta.Annotations,
@@ -937,7 +937,7 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		}...)
 
 		// Determine the volume mounts assigned to the docker sidecar. In case extra mounts are included in the RunnerSpec, append them to the standard
-		// set of mounts. See https://github.com/summerwind/actions-runner-controller/issues/435 for context.
+		// set of mounts. See https://github.com/actions-runner-controller/actions-runner-controller/issues/435 for context.
 		dockerVolumeMounts := []corev1.VolumeMount{
 			{
 				Name:      "work",

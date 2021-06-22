@@ -26,7 +26,7 @@ authSecret:
   #github_token: ""
 
 image:
-  repository: summerwind/actions-runner-controller
+  repository: actions-runner-controller/actions-runner-controller
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 

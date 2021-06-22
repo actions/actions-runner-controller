@@ -222,7 +222,7 @@ kind: Runner
 metadata:
   name: example-runner
 spec:
-  repository: summerwind/actions-runner-controller
+  repository: actions-runner-controller/actions-runner-controller
   env: []
 ```
 
@@ -238,7 +238,7 @@ You can see that the Runner resource has been created.
 ```shell
 $ kubectl get runners
 NAME             REPOSITORY                             STATUS
-example-runner   summerwind/actions-runner-controller   Running
+example-runner   actions-runner-controller/actions-runner-controller   Running
 ```
 
 You can also see that the runner pod has been running.
@@ -390,7 +390,7 @@ metadata:
 spec:
   template:
     spec:
-      repository: summerwind/actions-runner-controller
+      repository: actions-runner-controller/actions-runner-controller
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
@@ -404,7 +404,7 @@ spec:
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
-    - summerwind/actions-runner-controller
+    - actions-runner-controller/actions-runner-controller
 ```
 
 Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
@@ -866,7 +866,7 @@ spec:
   replicas: 1
   template:
     spec:
-      repository: summerwind/actions-runner-controller
+      repository: actions-runner-controller/actions-runner-controller
       labels:
         - custom-runner
 ```
@@ -971,7 +971,7 @@ kind: Runner
 metadata:
   name: custom-runner
 spec:
-  repository: summerwind/actions-runner-controller
+  repository: actions-runner-controller/actions-runner-controller
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
@@ -1170,7 +1170,7 @@ If you don't want to use `make`, like when you're running tests from your IDE, i
 sudo mkdir -p /usr/local/kubebuilder/bin
 make kube-apiserver etcd
 sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
-go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
+go test -v -run TestAPIs github.com/actions-runner-controller/actions-runner-controller/controllers
 ```
 
 To run Ginkgo tests selectively, set the pattern of target test names to `GINKGO_FOCUS`.
@@ -1178,5 +1178,5 @@ All the Ginkgo test that matches `GINKGO_FOCUS` will be run.
 
 ```bash
 GINKGO_FOCUS='[It] should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0' \
-  go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
+  go test -v -run TestAPIs github.com/actions-runner-controller/actions-runner-controller/controllers
 ```

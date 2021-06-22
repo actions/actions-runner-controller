@@ -26,7 +26,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -142,7 +142,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 
 		// In case it's an organizational runners deployment without any scaling metrics defined,
 		// we assume that the desired replicas should always be `minReplicas + capacityReservedThroughWebhook`.
-		// See https://github.com/summerwind/actions-runner-controller/issues/377#issuecomment-793372693
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/377#issuecomment-793372693
 		if metrics == nil {
 			return nil, nil
 		}

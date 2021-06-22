@@ -43,7 +43,7 @@ if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
   RUNNER_GROUPS=${RUNNER_GROUP}
 fi
 
-# Hack due to https://github.com/summerwind/actions-runner-controller/issues/252#issuecomment-758338483
+# Hack due to https://github.com/actions-runner-controller/actions-runner-controller/issues/252#issuecomment-758338483
 if [ ! -d /runner ]; then
   echo "/runner should be an emptyDir mount. Please fix the pod spec." 1>&2
   exit 1

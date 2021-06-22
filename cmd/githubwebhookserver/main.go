@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/controllers"
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers"
 	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
