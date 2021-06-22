@@ -74,8 +74,7 @@ type RunnerReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
-func (r *RunnerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runner", req.NamespacedName)
 
 	var runner v1alpha1.Runner
@@ -563,89 +562,11 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 }
 
 func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
-	var (
-		privileged                bool = true
-		dockerdInRunner           bool = runner.Spec.DockerdWithinRunnerContainer != nil && *runner.Spec.DockerdWithinRunnerContainer
-		dockerEnabled             bool = runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled
-		ephemeral                 bool = runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
-		dockerdInRunnerPrivileged bool = dockerdInRunner
-	)
-
-	runnerImage := runner.Spec.Image
-	if runnerImage == "" {
-		runnerImage = r.RunnerImage
-	}
-
-	workDir := runner.Spec.WorkDir
-	if workDir == "" {
-		workDir = "/runner/_work"
-	}
-
-	runnerImagePullPolicy := runner.Spec.ImagePullPolicy
-	if runnerImagePullPolicy == "" {
-		runnerImagePullPolicy = corev1.PullAlways
-	}
-
-	env := []corev1.EnvVar{
-		{
-			Name:  "RUNNER_NAME",
-			Value: runner.Name,
-		},
-		{
-			Name:  "RUNNER_ORG",
-			Value: runner.Spec.Organization,
-		},
-		{
-			Name:  "RUNNER_REPO",
-			Value: runner.Spec.Repository,
-		},
-		{
-			Name:  "RUNNER_ENTERPRISE",
-			Value: runner.Spec.Enterprise,
-		},
-		{
-			Name:  "RUNNER_LABELS",
-			Value: strings.Join(runner.Spec.Labels, ","),
-		},
-		{
-			Name:  "RUNNER_GROUP",
-			Value: runner.Spec.Group,
-		},
-		{
-			Name:  "RUNNER_TOKEN",
-			Value: runner.Status.Registration.Token,
-		},
-		{
-			Name:  "DOCKERD_IN_RUNNER",
-			Value: fmt.Sprintf("%v", dockerdInRunner),
-		},
-		{
-			Name:  "GITHUB_URL",
-			Value: r.GitHubClient.GithubBaseURL,
-		},
-		{
-			Name:  "RUNNER_WORKDIR",
-			Value: workDir,
-		},
-		{
-			Name:  "RUNNER_EPHEMERAL",
-			Value: fmt.Sprintf("%v", ephemeral),
-		},
-	}
-
-	if metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly) {
-		env = append(env, corev1.EnvVar{
-			Name:  "RUNNER_REGISTRATION_ONLY",
-			Value: "true",
-		},
-		)
-	}
-
-	env = append(env, runner.Spec.Env...)
+	var template corev1.Pod
 
 	labels := map[string]string{}
 
-	for k, v := range runner.Labels {
+	for k, v := range runner.ObjectMeta.Labels {
 		labels[k] = v
 	}
 
@@ -669,61 +590,275 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	//
 	//     See https://github.com/summerwind/actions-runner-controller/issues/143 for more context.
 	labels[LabelKeyPodTemplateHash] = hash.FNVHashStringObjects(
-		filterLabels(runner.Labels, LabelKeyRunnerTemplateHash),
-		runner.Annotations,
+		filterLabels(runner.ObjectMeta.Labels, LabelKeyRunnerTemplateHash),
+		runner.ObjectMeta.Annotations,
 		runner.Spec,
 		r.GitHubClient.GithubBaseURL,
 	)
 
+	objectMeta := metav1.ObjectMeta{
+		Name:        runner.ObjectMeta.Name,
+		Namespace:   runner.ObjectMeta.Namespace,
+		Labels:      labels,
+		Annotations: runner.ObjectMeta.Annotations,
+	}
+
+	template.ObjectMeta = objectMeta
+
+	if len(runner.Spec.Containers) == 0 {
+		template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
+			Name:            "runner",
+			ImagePullPolicy: runner.Spec.ImagePullPolicy,
+			EnvFrom:         runner.Spec.EnvFrom,
+			Env:             runner.Spec.Env,
+			Resources:       runner.Spec.Resources,
+		}, corev1.Container{
+			Name:         "docker",
+			VolumeMounts: runner.Spec.DockerVolumeMounts,
+			Resources:    runner.Spec.DockerdContainerResources,
+		})
+	} else {
+		template.Spec.Containers = runner.Spec.Containers
+	}
+
+	template.Spec.SecurityContext = runner.Spec.SecurityContext
+
+	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
+
+	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.GitHubClient.GithubBaseURL, registrationOnly)
+	if err != nil {
+		return pod, err
+	}
+
+	// Customize the pod spec according to the runner spec
+	runnerSpec := runner.Spec
+
+	if len(runnerSpec.VolumeMounts) != 0 {
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runnerSpec.VolumeMounts...)
+	}
+
+	if len(runnerSpec.Volumes) != 0 {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
+	}
+	if len(runnerSpec.InitContainers) != 0 {
+		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runnerSpec.InitContainers...)
+	}
+
+	if runnerSpec.NodeSelector != nil {
+		pod.Spec.NodeSelector = runnerSpec.NodeSelector
+	}
+	if runnerSpec.ServiceAccountName != "" {
+		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
+	}
+	if runnerSpec.AutomountServiceAccountToken != nil {
+		pod.Spec.AutomountServiceAccountToken = runnerSpec.AutomountServiceAccountToken
+	}
+
+	if len(runnerSpec.SidecarContainers) != 0 {
+		pod.Spec.Containers = append(pod.Spec.Containers, runnerSpec.SidecarContainers...)
+	}
+
+	if len(runnerSpec.ImagePullSecrets) != 0 {
+		pod.Spec.ImagePullSecrets = runnerSpec.ImagePullSecrets
+	}
+
+	if runnerSpec.Affinity != nil {
+		pod.Spec.Affinity = runnerSpec.Affinity
+	}
+
+	if len(runnerSpec.Tolerations) != 0 {
+		pod.Spec.Tolerations = runnerSpec.Tolerations
+	}
+
+	if len(runnerSpec.EphemeralContainers) != 0 {
+		pod.Spec.EphemeralContainers = runnerSpec.EphemeralContainers
+	}
+
+	if runnerSpec.TerminationGracePeriodSeconds != nil {
+		pod.Spec.TerminationGracePeriodSeconds = runnerSpec.TerminationGracePeriodSeconds
+	}
+
+	if len(runnerSpec.HostAliases) != 0 {
+		pod.Spec.HostAliases = runnerSpec.HostAliases
+	}
+
+	if runnerSpec.RuntimeClassName != nil {
+		pod.Spec.RuntimeClassName = runnerSpec.RuntimeClassName
+	}
+
+	pod.ObjectMeta.Name = runner.ObjectMeta.Name
+
+	// Inject the registration token and the runner name
+	updated := mutatePod(&pod, runner.Status.Registration.Token)
+
+	if err := ctrl.SetControllerReference(&runner, updated, r.Scheme); err != nil {
+		return pod, err
+	}
+
+	return *updated, nil
+}
+
+func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
+	updated := pod.DeepCopy()
+
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "runner" {
+			updated.Spec.Containers[i].Env = append(updated.Spec.Containers[i].Env,
+				corev1.EnvVar{
+					Name:  "RUNNER_NAME",
+					Value: pod.ObjectMeta.Name,
+				},
+				corev1.EnvVar{
+					Name:  "RUNNER_TOKEN",
+					Value: token,
+				},
+			)
+		}
+	}
+
+	return updated
+}
+
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage, defaultDockerImage, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+	var (
+		privileged                bool = true
+		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
+		dockerEnabled             bool = runnerSpec.DockerEnabled == nil || *runnerSpec.DockerEnabled
+		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
+		dockerdInRunnerPrivileged bool = dockerdInRunner
+	)
+
+	runnerImage := runnerSpec.Image
+	if runnerImage == "" {
+		runnerImage = defaultRunnerImage
+	}
+
+	workDir := runnerSpec.WorkDir
+	if workDir == "" {
+		workDir = "/runner/_work"
+	}
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "RUNNER_ORG",
+			Value: runnerSpec.Organization,
+		},
+		{
+			Name:  "RUNNER_REPO",
+			Value: runnerSpec.Repository,
+		},
+		{
+			Name:  "RUNNER_ENTERPRISE",
+			Value: runnerSpec.Enterprise,
+		},
+		{
+			Name:  "RUNNER_LABELS",
+			Value: strings.Join(runnerSpec.Labels, ","),
+		},
+		{
+			Name:  "RUNNER_GROUP",
+			Value: runnerSpec.Group,
+		},
+		{
+			Name:  "DOCKERD_IN_RUNNER",
+			Value: fmt.Sprintf("%v", dockerdInRunner),
+		},
+		{
+			Name:  "GITHUB_URL",
+			Value: githubBaseURL,
+		},
+		{
+			Name:  "RUNNER_WORKDIR",
+			Value: workDir,
+		},
+		{
+			Name:  "RUNNER_EPHEMERAL",
+			Value: fmt.Sprintf("%v", ephemeral),
+		},
+	}
+
+	if registrationOnly {
+		env = append(env, corev1.EnvVar{
+			Name:  "RUNNER_REGISTRATION_ONLY",
+			Value: "true",
+		},
+		)
+	}
+
 	var seLinuxOptions *corev1.SELinuxOptions
-	if runner.Spec.SecurityContext != nil {
-		seLinuxOptions = runner.Spec.SecurityContext.SELinuxOptions
+	if template.Spec.SecurityContext != nil {
+		seLinuxOptions = template.Spec.SecurityContext.SELinuxOptions
 		if seLinuxOptions != nil {
 			privileged = false
 			dockerdInRunnerPrivileged = false
 		}
 	}
 
-	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        runner.Name,
-			Namespace:   runner.Namespace,
-			Labels:      labels,
-			Annotations: runner.Annotations,
-		},
-		Spec: corev1.PodSpec{
-			RestartPolicy: "OnFailure",
-			Containers: []corev1.Container{
-				{
-					Name:            containerName,
-					Image:           runnerImage,
-					ImagePullPolicy: runnerImagePullPolicy,
-					Env:             env,
-					EnvFrom:         runner.Spec.EnvFrom,
-					SecurityContext: &corev1.SecurityContext{
-						// Runner need to run privileged if it contains DinD
-						Privileged: &dockerdInRunnerPrivileged,
-					},
-					Resources: runner.Spec.Resources,
-				},
-			},
-		},
+	var runnerContainerIndex, dockerdContainerIndex int
+	var runnerContainer, dockerdContainer *corev1.Container
+
+	for i := range template.Spec.Containers {
+		c := template.Spec.Containers[i]
+		if c.Name == containerName {
+			runnerContainerIndex = i
+			runnerContainer = &c
+		} else if c.Name == "docker" {
+			dockerdContainerIndex = i
+			dockerdContainer = &c
+		}
 	}
 
-	if mtu := runner.Spec.DockerMTU; mtu != nil && dockerdInRunner {
-		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, []corev1.EnvVar{
+	if runnerContainer == nil {
+		runnerContainerIndex = -1
+		runnerContainer = &corev1.Container{
+			Name: containerName,
+			SecurityContext: &corev1.SecurityContext{
+				// Runner need to run privileged if it contains DinD
+				Privileged: &dockerdInRunnerPrivileged,
+			},
+		}
+	}
+
+	if dockerdContainer == nil {
+		dockerdContainerIndex = -1
+		dockerdContainer = &corev1.Container{
+			Name: "docker",
+		}
+	}
+
+	runnerContainer.Image = runnerImage
+	if runnerContainer.ImagePullPolicy == "" {
+		runnerContainer.ImagePullPolicy = corev1.PullAlways
+	}
+
+	runnerContainer.Env = append(runnerContainer.Env, env...)
+
+	if runnerContainer.SecurityContext == nil {
+		runnerContainer.SecurityContext = &corev1.SecurityContext{}
+	}
+	// Runner need to run privileged if it contains DinD
+	runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+
+	pod := template.DeepCopy()
+
+	if pod.Spec.RestartPolicy == "" {
+		pod.Spec.RestartPolicy = "OnFailure"
+	}
+
+	if mtu := runnerSpec.DockerMTU; mtu != nil && dockerdInRunner {
+		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
 			{
 				Name:  "MTU",
-				Value: fmt.Sprintf("%d", *runner.Spec.DockerMTU),
+				Value: fmt.Sprintf("%d", *runnerSpec.DockerMTU),
 			},
 		}...)
 	}
 
-	if mirror := runner.Spec.DockerRegistryMirror; mirror != nil && dockerdInRunner {
-		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, []corev1.EnvVar{
+	if mirror := runnerSpec.DockerRegistryMirror; mirror != nil && dockerdInRunner {
+		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
 			{
 				Name:  "DOCKER_REGISTRY_MIRROR",
-				Value: *runner.Spec.DockerRegistryMirror,
+				Value: *runnerSpec.DockerRegistryMirror,
 			},
 		}...)
 	}
@@ -739,8 +874,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	runnerVolumeMountPath := "/runner"
 	runnerVolumeEmptyDir := &corev1.EmptyDirVolumeSource{}
 
-	if runner.Spec.VolumeSizeLimit != nil {
-		runnerVolumeEmptyDir.SizeLimit = runner.Spec.VolumeSizeLimit
+	if runnerSpec.VolumeSizeLimit != nil {
+		runnerVolumeEmptyDir.SizeLimit = runnerSpec.VolumeSizeLimit
 	}
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes,
@@ -752,7 +887,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		},
 	)
 
-	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+	runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
 		corev1.VolumeMount{
 			Name:      runnerVolumeName,
 			MountPath: runnerVolumeMountPath,
@@ -774,7 +909,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				},
 			},
 		)
-		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
 			corev1.VolumeMount{
 				Name:      "work",
 				MountPath: workDir,
@@ -785,7 +920,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				ReadOnly:  true,
 			},
 		)
-		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, []corev1.EnvVar{
+		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
 			{
 				Name:  "DOCKER_HOST",
 				Value: "tcp://localhost:2376",
@@ -816,120 +951,66 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				MountPath: "/certs/client",
 			},
 		}
-		if extraDockerVolumeMounts := runner.Spec.DockerVolumeMounts; extraDockerVolumeMounts != nil {
-			dockerVolumeMounts = append(dockerVolumeMounts, extraDockerVolumeMounts...)
+
+		if dockerdContainer.Image == "" {
+			dockerdContainer.Image = defaultDockerImage
 		}
 
-		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
-			Name:         "docker",
-			Image:        r.DockerImage,
-			VolumeMounts: dockerVolumeMounts,
-			Env: []corev1.EnvVar{
-				{
-					Name:  "DOCKER_TLS_CERTDIR",
-					Value: "/certs",
-				},
-			},
-			SecurityContext: &corev1.SecurityContext{
-				Privileged:     &privileged,
-				SELinuxOptions: seLinuxOptions,
-			},
-			Resources: runner.Spec.DockerdContainerResources,
+		dockerdContainer.Env = append(dockerdContainer.Env, corev1.EnvVar{
+			Name:  "DOCKER_TLS_CERTDIR",
+			Value: "/certs",
 		})
 
-		if mtu := runner.Spec.DockerMTU; mtu != nil {
-			pod.Spec.Containers[1].Env = append(pod.Spec.Containers[1].Env, []corev1.EnvVar{
+		if dockerdContainer.SecurityContext == nil {
+			dockerdContainer.SecurityContext = &corev1.SecurityContext{
+				Privileged:     &privileged,
+				SELinuxOptions: seLinuxOptions,
+			}
+		}
+
+		dockerdContainer.VolumeMounts = append(dockerdContainer.VolumeMounts, dockerVolumeMounts...)
+
+		if mtu := runnerSpec.DockerMTU; mtu != nil {
+			dockerdContainer.Env = append(dockerdContainer.Env, []corev1.EnvVar{
 				// See https://docs.docker.com/engine/security/rootless/
 				{
 					Name:  "DOCKERD_ROOTLESS_ROOTLESSKIT_MTU",
-					Value: fmt.Sprintf("%d", *runner.Spec.DockerMTU),
+					Value: fmt.Sprintf("%d", *runnerSpec.DockerMTU),
 				},
 			}...)
 
-			pod.Spec.Containers[1].Args = append(pod.Spec.Containers[1].Args,
+			dockerdContainer.Args = append(dockerdContainer.Args,
 				"--mtu",
-				fmt.Sprintf("%d", *runner.Spec.DockerMTU),
+				fmt.Sprintf("%d", *runnerSpec.DockerMTU),
 			)
 		}
 
-		if mirror := runner.Spec.DockerRegistryMirror; mirror != nil {
-			pod.Spec.Containers[1].Args = append(pod.Spec.Containers[1].Args,
-				fmt.Sprintf("--registry-mirror=%s", *runner.Spec.DockerRegistryMirror),
+		if mirror := runnerSpec.DockerRegistryMirror; mirror != nil {
+			dockerdContainer.Args = append(dockerdContainer.Args,
+				fmt.Sprintf("--registry-mirror=%s", *runnerSpec.DockerRegistryMirror),
 			)
 		}
 	}
 
-	if len(runner.Spec.Containers) != 0 {
-		pod.Spec.Containers = runner.Spec.Containers
-		for i := 0; i < len(pod.Spec.Containers); i++ {
-			if pod.Spec.Containers[i].Name == containerName {
-				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, env...)
-			}
+	if runnerContainerIndex == -1 {
+		pod.Spec.Containers = append([]corev1.Container{*runnerContainer}, pod.Spec.Containers...)
+
+		if dockerdContainerIndex != -1 {
+			dockerdContainerIndex++
+		}
+	} else {
+		pod.Spec.Containers[runnerContainerIndex] = *runnerContainer
+	}
+
+	if !dockerdInRunner && dockerEnabled {
+		if dockerdContainerIndex == -1 {
+			pod.Spec.Containers = append(pod.Spec.Containers, *dockerdContainer)
+		} else {
+			pod.Spec.Containers[dockerdContainerIndex] = *dockerdContainer
 		}
 	}
 
-	if len(runner.Spec.VolumeMounts) != 0 {
-		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runner.Spec.VolumeMounts...)
-	}
-
-	if len(runner.Spec.Volumes) != 0 {
-		pod.Spec.Volumes = append(pod.Spec.Volumes, runner.Spec.Volumes...)
-	}
-	if len(runner.Spec.InitContainers) != 0 {
-		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runner.Spec.InitContainers...)
-	}
-
-	if runner.Spec.NodeSelector != nil {
-		pod.Spec.NodeSelector = runner.Spec.NodeSelector
-	}
-	if runner.Spec.ServiceAccountName != "" {
-		pod.Spec.ServiceAccountName = runner.Spec.ServiceAccountName
-	}
-	if runner.Spec.AutomountServiceAccountToken != nil {
-		pod.Spec.AutomountServiceAccountToken = runner.Spec.AutomountServiceAccountToken
-	}
-
-	if len(runner.Spec.SidecarContainers) != 0 {
-		pod.Spec.Containers = append(pod.Spec.Containers, runner.Spec.SidecarContainers...)
-	}
-
-	if runner.Spec.SecurityContext != nil {
-		pod.Spec.SecurityContext = runner.Spec.SecurityContext
-	}
-
-	if len(runner.Spec.ImagePullSecrets) != 0 {
-		pod.Spec.ImagePullSecrets = runner.Spec.ImagePullSecrets
-	}
-
-	if runner.Spec.Affinity != nil {
-		pod.Spec.Affinity = runner.Spec.Affinity
-	}
-
-	if len(runner.Spec.Tolerations) != 0 {
-		pod.Spec.Tolerations = runner.Spec.Tolerations
-	}
-
-	if len(runner.Spec.EphemeralContainers) != 0 {
-		pod.Spec.EphemeralContainers = runner.Spec.EphemeralContainers
-	}
-
-	if runner.Spec.TerminationGracePeriodSeconds != nil {
-		pod.Spec.TerminationGracePeriodSeconds = runner.Spec.TerminationGracePeriodSeconds
-	}
-
-	if len(runner.Spec.HostAliases) != 0 {
-		pod.Spec.HostAliases = runner.Spec.HostAliases
-	}
-
-	if runner.Spec.RuntimeClassName != nil {
-		pod.Spec.RuntimeClassName = runner.Spec.RuntimeClassName
-	}
-
-	if err := ctrl.SetControllerReference(&runner, &pod, r.Scheme); err != nil {
-		return pod, err
-	}
-
-	return pod, nil
+	return *pod, nil
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {

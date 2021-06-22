@@ -27,6 +27,11 @@ import (
 
 // RunnerSpec defines the desired state of Runner
 type RunnerSpec struct {
+	RunnerConfig  `json:",inline"`
+	RunnerPodSpec `json:",inline"`
+}
+
+type RunnerConfig struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^[^/]+$`
 	Enterprise string `json:"enterprise,omitempty"`
@@ -49,52 +54,11 @@ type RunnerSpec struct {
 	Ephemeral *bool `json:"ephemeral,omitempty"`
 
 	// +optional
-	Containers []corev1.Container `json:"containers,omitempty"`
-	// +optional
-	DockerdContainerResources corev1.ResourceRequirements `json:"dockerdContainerResources,omitempty"`
-	// +optional
-	DockerVolumeMounts []corev1.VolumeMount `json:"dockerVolumeMounts,omitempty"`
-	// +optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-	// +optional
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
-	// +optional
-	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
-
-	// +optional
 	Image string `json:"image"`
-	// +optional
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-	// +optional
-	Env []corev1.EnvVar `json:"env,omitempty"`
 
-	// +optional
-	Volumes []corev1.Volume `json:"volumes,omitempty"`
 	// +optional
 	WorkDir string `json:"workDir,omitempty"`
 
-	// +optional
-	InitContainers []corev1.Container `json:"initContainers,omitempty"`
-	// +optional
-	SidecarContainers []corev1.Container `json:"sidecarContainers,omitempty"`
-	// +optional
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	// +optional
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
-	// +optional
-	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
-	// +optional
-	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
-	// +optional
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-	// +optional
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-	// +optional
-	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
-	// +optional
-	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 	// +optional
 	DockerdWithinRunnerContainer *bool `json:"dockerdWithinRunnerContainer,omitempty"`
 	// +optional
@@ -104,9 +68,73 @@ type RunnerSpec struct {
 	// +optional
 	DockerRegistryMirror *string `json:"dockerRegistryMirror,omitempty"`
 	// +optional
-	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
-	// +optional
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
+}
+
+// RunnerPodSpec defines the desired pod spec fields of the runner pod
+type RunnerPodSpec struct {
+	// +optional
+	DockerdContainerResources corev1.ResourceRequirements `json:"dockerdContainerResources,omitempty"`
+
+	// +optional
+	DockerVolumeMounts []corev1.VolumeMount `json:"dockerVolumeMounts,omitempty"`
+
+	// +optional
+	Containers []corev1.Container `json:"containers,omitempty"`
+
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// +optional
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// +optional
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
+
+	// +optional
+	SidecarContainers []corev1.Container `json:"sidecarContainers,omitempty"`
+
+	// +optional
+	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// +optional
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// +optional
+	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
+
+	// +optional
+	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 
 	// RuntimeClassName is the container runtime configuration that containers should run under.
 	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class

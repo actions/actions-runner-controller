@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -34,7 +34,7 @@ func (r *RunnerDeployment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment,verbs=create;update,mutating=true,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerdeployments,versions=v1alpha1,name=mutate.runnerdeployment.actions.summerwind.dev
+// +kubebuilder:webhook:path=/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment,verbs=create;update,mutating=true,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerdeployments,versions=v1alpha1,name=mutate.runnerdeployment.actions.summerwind.dev,webhookVersions=v1beta1
 
 var _ webhook.Defaulter = &RunnerDeployment{}
 
@@ -43,7 +43,7 @@ func (r *RunnerDeployment) Default() {
 	// Nothing to do.
 }
 
-// +kubebuilder:webhook:path=/validate-actions-summerwind-dev-v1alpha1-runnerdeployment,verbs=create;update,mutating=false,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerdeployments,versions=v1alpha1,name=validate.runnerdeployment.actions.summerwind.dev
+// +kubebuilder:webhook:path=/validate-actions-summerwind-dev-v1alpha1-runnerdeployment,verbs=create;update,mutating=false,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerdeployments,versions=v1alpha1,name=validate.runnerdeployment.actions.summerwind.dev,webhookVersions=v1beta1
 
 var _ webhook.Validator = &RunnerDeployment{}
 

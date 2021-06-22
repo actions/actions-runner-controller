@@ -127,6 +127,7 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "actions-runner-controller",
 		Port:               9443,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
@@ -150,14 +151,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerSetReconciler := &controllers.RunnerReplicaSetReconciler{
+	runnerReplicaSetReconciler := &controllers.RunnerReplicaSetReconciler{
 		Client:       mgr.GetClient(),
 		Log:          log.WithName("runnerreplicaset"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: ghClient,
 	}
 
-	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+	if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
 		os.Exit(1)
 	}
@@ -174,6 +175,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	runnerSetReconciler := &controllers.RunnerSetReconciler{
+		Client:             mgr.GetClient(),
+		Log:                log.WithName("runnerset"),
+		Scheme:             mgr.GetScheme(),
+		CommonRunnerLabels: commonRunnerLabels,
+		RunnerImage:        runnerImage,
+		DockerImage:        dockerImage,
+		GitHubBaseURL:      ghClient.GithubBaseURL,
+	}
+
+	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerSet")
+		os.Exit(1)
+	}
 	if gitHubAPICacheDuration == 0 {
 		gitHubAPICacheDuration = syncPeriod - 10*time.Second
 	}
@@ -218,6 +233,16 @@ func main() {
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
+
+	injector := &controllers.PodRunnerTokenInjector{
+		Client:       mgr.GetClient(),
+		GitHubClient: ghClient,
+		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
+	}
+	if err = injector.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
+		os.Exit(1)
+	}
 
 	log.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

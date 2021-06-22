@@ -11,13 +11,20 @@ TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
 TEST_ORG ?=
 TEST_ORG_REPO ?=
 SYNC_PERIOD ?= 5m
+USE_RUNNERSET ?=
+KUBECONTEXT ?= kind-acceptance
+CLUSTER ?= acceptance
+CERT_MANAGER_VERSION ?= v1.1.1
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
-YAML_DROP_PREFIX=spec.validation.openAPIV3Schema.properties.spec.properties
+
+# If you encounter errors like the below, you are very likely to update this to follow e.g. CRD version change:
+#   CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: spec.preserveUnknownFields: Invalid value: true: must be false in order to use defaults in the schema
+YAML_DROP_PREFIX=spec.versions[0].schema.openAPIV3Schema.properties.spec.properties
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+CRD_OPTIONS ?= "crd:trivialVersions=true,generateEmbeddedObjectMeta=true"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -158,31 +165,31 @@ acceptance: release/clean acceptance/pull docker-build release
 acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
 
 acceptance/kind:
-	kind create cluster --name acceptance --config acceptance/kind.yaml
+	kind create cluster --name ${CLUSTER} --config acceptance/kind.yaml
 
 # Set TMPDIR to somewhere under $HOME when you use docker installed with Ubuntu snap
 # Otherwise `load docker-image` fail while running `docker save`.
 # See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
 acceptance/load:
-	kind load docker-image ${NAME}:${VERSION} --name acceptance
-	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name acceptance
-	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name acceptance
-	kind load docker-image docker:dind --name acceptance
-	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name acceptance
-	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name acceptance
-	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name acceptance
-	kubectl cluster-info --context kind-acceptance
+	kind load docker-image ${NAME}:${VERSION} --name ${CLUSTER}
+	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name ${CLUSTER}
+	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name ${CLUSTER}
+	kind load docker-image docker:dind --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-webhook:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
+	kubectl cluster-info --context ${KUBECONTEXT}
 
 # Pull the docker images for acceptance
 acceptance/pull:
 	docker pull quay.io/brancz/kube-rbac-proxy:v0.10.0
 	docker pull docker:dind
-	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
-	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
-	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION)
+	docker pull quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION)
+	docker pull quay.io/jetstack/cert-manager-webhook:$(CERT_MANAGER_VERSION)
 
 acceptance/setup:
-	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
+	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml	#kubectl create namespace actions-runner-system
 	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 90s
 	kubectl -n cert-manager wait deploy/cert-manager-webhook --for condition=available --timeout 60s
 	kubectl -n cert-manager wait deploy/cert-manager --for condition=available --timeout 60s
@@ -191,11 +198,12 @@ acceptance/setup:
 	sleep 5
 
 acceptance/teardown:
-	kind delete cluster --name acceptance
+	kind delete cluster --name ${CLUSTER}
 
 acceptance/deploy:
 	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
 	TEST_ORG=${TEST_ORG} TEST_ORG_REPO=${TEST_ORG_REPO} SYNC_PERIOD=${SYNC_PERIOD} \
+	USE_RUNNERSET=${USE_RUNNERSET} \
 	acceptance/deploy.sh
 
 acceptance/tests:
@@ -205,8 +213,14 @@ acceptance/tests:
 github-release: release
 	ghr ${VERSION} release/
 
-# find or download controller-gen
-# download controller-gen if necessary
+# Find or download controller-gen
+#
+# Note that controller-gen newer than 0.4.1 is needed for https://github.com/kubernetes-sigs/controller-tools/issues/444#issuecomment-680168439
+# Otherwise we get errors like the below:
+#   Error: failed to install CRD crds/actions.summerwind.dev_runnersets.yaml: CustomResourceDefinition.apiextensions.k8s.io "runnersets.actions.summerwind.dev" is invalid: [spec.validation.openAPIV3Schema.properties[spec].properties[template].properties[spec].properties[containers].items.properties[ports].items.properties[protocol].default: Required value: this property is in x-kubernetes-list-map-keys, so it must have a default or be a required property, spec.validation.openAPIV3Schema.properties[spec].properties[template].properties[spec].properties[initContainers].items.properties[ports].items.properties[protocol].default: Required value: this property is in x-kubernetes-list-map-keys, so it must have a default or be a required property]
+#
+# Note that controller-gen newer than 0.6.0 is needed due to https://github.com/kubernetes-sigs/controller-tools/issues/448
+# Otherwise ObjectMeta embedded in Spec results in empty on the storage.
 controller-gen:
 ifeq (, $(shell which controller-gen))
 ifeq (, $(wildcard $(GOBIN)/controller-gen))
@@ -215,7 +229,7 @@ ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 endif

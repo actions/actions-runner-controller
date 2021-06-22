@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/go-github/v33/github"
 	github2 "github.com/summerwind/actions-runner-controller/github"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/summerwind/actions-runner-controller/github/fake"
 
@@ -52,8 +51,9 @@ var (
 // * starting all the reconcilers
 // * stopping all the reconcilers after the test ends
 // Call this function at the start of each of your tests.
-func SetupIntegrationTest(ctx context.Context) *testEnvironment {
-	var stopCh chan struct{}
+func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
+	var ctx context.Context
+	var cancel func()
 	ns := &corev1.Namespace{}
 
 	env := &testEnvironment{
@@ -63,7 +63,7 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 	}
 
 	BeforeEach(func() {
-		stopCh = make(chan struct{})
+		ctx, cancel = context.WithCancel(ctx2)
 		*ns = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "testns-" + randStringRunes(5)},
 		}
@@ -166,13 +166,13 @@ func SetupIntegrationTest(ctx context.Context) *testEnvironment {
 		go func() {
 			defer GinkgoRecover()
 
-			err := mgr.Start(stopCh)
+			err := mgr.Start(ctx)
 			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
 		}()
 	})
 
 	AfterEach(func() {
-		close(stopCh)
+		defer cancel()
 
 		env.fakeGithubServer.Close()
 		env.webhookServer.Close()
@@ -214,11 +214,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Organization: "test",
-								Image:        "bar",
-								Group:        "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Organization: "test",
+									Image:        "bar",
+									Group:        "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -301,11 +305,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -432,11 +440,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -537,11 +549,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -631,11 +647,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -764,11 +784,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -857,11 +881,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -956,11 +984,15 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Group:      "baz",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -1175,7 +1207,7 @@ func (env *testEnvironment) SyncRunnerRegistrations() {
 	env.fakeRunnerList.Sync(runnerList.Items)
 }
 
-func ExpectCreate(ctx context.Context, rd runtime.Object, s string) {
+func ExpectCreate(ctx context.Context, rd client.Object, s string) {
 	err := k8sClient.Create(ctx, rd)
 
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), fmt.Sprintf("failed to create %s resource", s))

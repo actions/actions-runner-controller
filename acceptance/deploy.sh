@@ -35,6 +35,7 @@ if [ "${tool}" == "helm" ]; then
     --set image.repository=${NAME} \
     --set image.tag=${VERSION} \
     -f ${VALUES_FILE}
+  kubectl apply -f charts/actions-runner-controller/crds
   kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
 else
   kubectl apply \
@@ -47,8 +48,13 @@ fi
 sleep 20
 
 if [ -n "${TEST_REPO}" ]; then
-  cat acceptance/testdata/runnerdeploy.yaml | envsubst | kubectl apply -f -
-  cat acceptance/testdata/hra.yaml | envsubst | kubectl apply -f -
+  if [ -n "USE_RUNNERSET" ]; then
+      cat acceptance/testdata/repo.runnerset.yaml | envsubst | kubectl apply -f -
+  else
+    echo 'Deploying runnerdeployment and hra. Set USE_RUNNERSET if you want to deploy runnerset instead.'
+    cat acceptance/testdata/repo.runnerdeploy.yaml | envsubst | kubectl apply -f -
+    cat acceptance/testdata/repo.hra.yaml | envsubst | kubectl apply -f -
+  fi
 else
   echo 'Skipped deploying runnerdeployment and hra. Set TEST_REPO to "yourorg/yourrepo" to deploy.'
 fi

@@ -1,0 +1,51 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example-runnerset
+spec:
+  # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
+  #   missing required field "selector" in dev.summerwind.actions.v1alpha1.RunnerSet.spec
+  selector:
+    matchLabels:
+      app: example-runnerset
+
+  # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
+  # missing required field "serviceName" in dev.summerwind.actions.v1alpha1.RunnerSet.spec]
+  serviceName: example-runnerset
+
+  #replicas: 1
+  ephemeral: false
+
+  repository: ${TEST_REPO}
+  #
+  # Custom runner image
+  #
+  image: ${RUNNER_NAME}:${RUNNER_TAG}
+  #
+  # dockerd within runner container
+  #
+  ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
+  #dockerdWithinRunnerContainer: true
+  #
+  # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
+  #
+  #dockerMTU: 1450
+  #Runner group
+  # labels:
+  # - "mylabel 1"
+  # - "mylabel 2"
+
+  #
+  # Non-standard working directory
+  #
+  # workDir: "/"
+  template:
+    metadata:
+      labels:
+        app: example-runnerset
+    spec:
+      containers:
+      - name: runner
+        imagePullPolicy: IfNotPresent
+      #- name: docker
+      #  #image: mumoshu/actions-runner-dind:dev

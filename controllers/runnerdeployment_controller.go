@@ -65,8 +65,7 @@ type RunnerDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
-func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runnerdeployment", req.NamespacedName)
 
 	var rd v1alpha1.RunnerDeployment
@@ -439,7 +438,7 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.Recorder = mgr.GetEventRecorderFor(name)
 
-	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj client.Object) []string {
 		runnerSet := rawObj.(*v1alpha1.RunnerReplicaSet)
 		owner := metav1.GetControllerOf(runnerSet)
 		if owner == nil {

@@ -50,7 +50,9 @@ func TestNewRunnerReplicaSet(t *testing.T) {
 					},
 				},
 				Spec: actionsv1alpha1.RunnerSpec{
-					Labels: []string{"project1"},
+					RunnerConfig: actionsv1alpha1.RunnerConfig{
+						Labels: []string{"project1"},
+					},
 				},
 			},
 		},
@@ -126,12 +128,13 @@ func TestNewRunnerReplicaSet(t *testing.T) {
 // * starting the 'RunnerDeploymentReconciler'
 // * stopping the 'RunnerDeploymentReconciler" after the test ends
 // Call this function at the start of each of your tests.
-func SetupDeploymentTest(ctx context.Context) *corev1.Namespace {
-	var stopCh chan struct{}
+func SetupDeploymentTest(ctx2 context.Context) *corev1.Namespace {
+	var ctx context.Context
+	var cancel func()
 	ns := &corev1.Namespace{}
 
 	BeforeEach(func() {
-		stopCh = make(chan struct{})
+		ctx, cancel = context.WithCancel(ctx2)
 		*ns = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "testns-" + randStringRunes(5)},
 		}
@@ -157,13 +160,13 @@ func SetupDeploymentTest(ctx context.Context) *corev1.Namespace {
 		go func() {
 			defer GinkgoRecover()
 
-			err := mgr.Start(stopCh)
+			err := mgr.Start(ctx)
 			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
 		}()
 	})
 
 	AfterEach(func() {
-		close(stopCh)
+		defer cancel()
 
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
@@ -201,10 +204,14 @@ var _ = Context("Inside of a new namespace", func() {
 								},
 							},
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -297,10 +304,14 @@ var _ = Context("Inside of a new namespace", func() {
 						Replicas: intPtr(1),
 						Template: actionsv1alpha1.RunnerTemplate{
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
@@ -393,10 +404,14 @@ var _ = Context("Inside of a new namespace", func() {
 						Replicas: intPtr(1),
 						Template: actionsv1alpha1.RunnerTemplate{
 							Spec: actionsv1alpha1.RunnerSpec{
-								Repository: "test/valid",
-								Image:      "bar",
-								Env: []corev1.EnvVar{
-									{Name: "FOO", Value: "FOOVALUE"},
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
 								},
 							},
 						},
