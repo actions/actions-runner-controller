@@ -51,7 +51,7 @@ DOCKER_USER=*** \
 
 If you prefer to test in a non-kind cluster, you can instead run:
 
-```shell script
+```shell
 KUBECONFIG=path/to/kubeconfig \
   DOCKER_USER=*** \
   GITHUB_TOKEN=*** \
