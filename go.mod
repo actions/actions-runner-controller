@@ -1,4 +1,4 @@
-module github.com/summerwind/actions-runner-controller
+module github.com/actions-runner-controller/actions-runner-controller
 
 go 1.15
 

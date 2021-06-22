@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
-	"github.com/summerwind/actions-runner-controller/github"
 	"gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"

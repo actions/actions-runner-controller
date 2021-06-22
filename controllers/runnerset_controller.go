@@ -34,8 +34,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/controllers/metrics"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
 )
 
 const (

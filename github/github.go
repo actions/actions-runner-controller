@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v33/github"
-	"github.com/summerwind/actions-runner-controller/github/metrics"
 	"golang.org/x/oauth2"
 )
 

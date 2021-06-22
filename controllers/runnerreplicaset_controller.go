@@ -35,8 +35,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 // RunnerReplicaSetReconciler reconciles a Runner object
@@ -231,7 +231,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 						"Runner failed to register itself to GitHub in timely manner. "+
 							"Marking the runner for scale down. "+
 							"CAUTION: If you see this a lot, you should investigate the root cause. "+
-							"See https://github.com/summerwind/actions-runner-controller/issues/288",
+							"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
 						"runnerCreationTimestamp", runner.CreationTimestamp,
 						"currentTime", currentTime,
 						"configuredRegistrationTimeout", registrationTimeout,

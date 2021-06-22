@@ -1,11 +1,12 @@
 package controllers
 
 import (
-	"github.com/google/go-cmp/cmp"
-	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 	"time"
+
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/google/go-cmp/cmp"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGetValidCacheEntries(t *testing.T) {

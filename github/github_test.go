@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
 	"github.com/google/go-github/v33/github"
-	"github.com/summerwind/actions-runner-controller/github/fake"
 )
 
 var server *httptest.Server
