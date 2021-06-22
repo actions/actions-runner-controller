@@ -1,0 +1,27 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runnerset
+spec:
+  scaleTargetRef:
+    kind: RunnerSet
+    name: example-runnerset
+  scaleUpTriggers:
+  - githubEvent:
+      checkRun:
+        types: ["created"]
+        status: "queued"
+    amount: 1
+    duration: "1m"
+  # RunnerSet doesn't support scale from/to zero yet
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.3'
+    scaleUpFactor: '2'
+    scaleDownFactor: '0.5'
+  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+    repositoryNames:
+    - ${TEST_REPO}

@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/go-logr/logr"
@@ -77,18 +78,181 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 
 	metrics.SetHorizontalRunnerAutoscalerSpec(hra.ObjectMeta, hra.Spec)
 
-	var rd v1alpha1.RunnerDeployment
-	if err := r.Get(ctx, types.NamespacedName{
-		Namespace: req.Namespace,
-		Name:      hra.Spec.ScaleTargetRef.Name,
-	}, &rd); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	kind := hra.Spec.ScaleTargetRef.Kind
+
+	switch kind {
+	case "", "RunnerDeployment":
+		var rd v1alpha1.RunnerDeployment
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: req.Namespace,
+			Name:      hra.Spec.ScaleTargetRef.Name,
+		}, &rd); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		if !rd.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{}, nil
+		}
+
+		st := r.scaleTargetFromRD(ctx, rd)
+
+		return r.reconcile(ctx, req, log, hra, st, func(newDesiredReplicas int) error {
+			currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
+
+			// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
+			if currentDesiredReplicas != newDesiredReplicas {
+				copy := rd.DeepCopy()
+				copy.Spec.Replicas = &newDesiredReplicas
+
+				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
+					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
+				}
+			}
+			return nil
+		})
+	case "RunnerSet":
+		var rs v1alpha1.RunnerSet
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: req.Namespace,
+			Name:      hra.Spec.ScaleTargetRef.Name,
+		}, &rs); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		if !rs.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{}, nil
+		}
+
+		var replicas *int
+
+		if rs.Spec.Replicas != nil {
+			v := int(*rs.Spec.Replicas)
+			replicas = &v
+		}
+
+		st := scaleTarget{
+			st:         rs.Name,
+			kind:       "runnerset",
+			enterprise: rs.Spec.Enterprise,
+			org:        rs.Spec.Organization,
+			repo:       rs.Spec.Repository,
+			replicas:   replicas,
+			getRunnerMap: func() (map[string]struct{}, error) {
+				// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
+				var runnerPodList corev1.PodList
+
+				var opts []client.ListOption
+
+				opts = append(opts, client.InNamespace(rs.Namespace))
+
+				selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+				if err != nil {
+					return nil, err
+				}
+
+				opts = append(opts, client.MatchingLabelsSelector{Selector: selector})
+
+				r.Log.V(2).Info("Finding runnerset's runner pods with selector", "ns", rs.Namespace)
+
+				if err := r.List(
+					ctx,
+					&runnerPodList,
+					opts...,
+				); err != nil {
+					if !kerrors.IsNotFound(err) {
+						return nil, err
+					}
+				}
+				runnerMap := make(map[string]struct{})
+				for _, items := range runnerPodList.Items {
+					runnerMap[items.Name] = struct{}{}
+				}
+
+				return runnerMap, nil
+			},
+		}
+
+		return r.reconcile(ctx, req, log, hra, st, func(newDesiredReplicas int) error {
+			var replicas *int
+			if rs.Spec.Replicas != nil {
+				v := int(*rs.Spec.Replicas)
+				replicas = &v
+			}
+			currentDesiredReplicas := getIntOrDefault(replicas, defaultReplicas)
+
+			if currentDesiredReplicas != newDesiredReplicas {
+				copy := rs.DeepCopy()
+				v := int32(newDesiredReplicas)
+				copy.Spec.Replicas = &v
+
+				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
+					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
+				}
+			}
+			return nil
+		})
 	}
 
-	if !rd.ObjectMeta.DeletionTimestamp.IsZero() {
-		return ctrl.Result{}, nil
+	log.Info(fmt.Sprintf("Unsupported scale target %s %s: kind %s is not supported. valid kinds are %s and %s", kind, hra.Spec.ScaleTargetRef.Name, kind, "RunnerDeployment", "RunnerSet"))
+
+	return ctrl.Result{}, nil
+}
+
+func (r *HorizontalRunnerAutoscalerReconciler) scaleTargetFromRD(ctx context.Context, rd v1alpha1.RunnerDeployment) scaleTarget {
+	st := scaleTarget{
+		st:         rd.Name,
+		kind:       "runnerdeployment",
+		enterprise: rd.Spec.Template.Spec.Enterprise,
+		org:        rd.Spec.Template.Spec.Organization,
+		repo:       rd.Spec.Template.Spec.Repository,
+		replicas:   rd.Spec.Replicas,
+		getRunnerMap: func() (map[string]struct{}, error) {
+			// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
+			var runnerList v1alpha1.RunnerList
+
+			var opts []client.ListOption
+
+			opts = append(opts, client.InNamespace(rd.Namespace))
+
+			selector, err := metav1.LabelSelectorAsSelector(getSelector(&rd))
+			if err != nil {
+				return nil, err
+			}
+
+			opts = append(opts, client.MatchingLabelsSelector{Selector: selector})
+
+			r.Log.V(2).Info("Finding runners with selector", "ns", rd.Namespace)
+
+			if err := r.List(
+				ctx,
+				&runnerList,
+				opts...,
+			); err != nil {
+				if !kerrors.IsNotFound(err) {
+					return nil, err
+				}
+			}
+			runnerMap := make(map[string]struct{})
+			for _, items := range runnerList.Items {
+				runnerMap[items.Name] = struct{}{}
+			}
+
+			return runnerMap, nil
+		},
 	}
 
+	return st
+}
+
+type scaleTarget struct {
+	st, kind              string
+	enterprise, repo, org string
+	replicas              *int
+
+	getRunnerMap func() (map[string]struct{}, error)
+}
+
+func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, req ctrl.Request, log logr.Logger, hra v1alpha1.HorizontalRunnerAutoscaler, st scaleTarget, updatedDesiredReplicas func(int) error) (ctrl.Result, error) {
 	now := time.Now()
 
 	minReplicas, active, upcoming, err := r.getMinReplicas(log, now, hra)
@@ -98,7 +262,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, err
 	}
 
-	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, rd, hra, minReplicas)
+	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, st, hra, minReplicas)
 	if err != nil {
 		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -107,16 +271,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, err
 	}
 
-	currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
-
-	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
-	if currentDesiredReplicas != newDesiredReplicas {
-		copy := rd.DeepCopy()
-		copy.Spec.Replicas = &newDesiredReplicas
-
-		if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
-		}
+	if err := updatedDesiredReplicas(newDesiredReplicas); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	updated := hra.DeepCopy()
@@ -287,7 +443,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) getMinReplicas(log logr.Logger, n
 	return minReplicas, active, upcoming, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, int, *int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, int, *int, error) {
 	var suggestedReplicas int
 
 	suggestedReplicasFromCache := r.fetchSuggestedReplicasFromCache(hra)
@@ -303,7 +459,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 			suggestedReplicas = *cached
 		}
 	} else {
-		v, err := r.suggestDesiredReplicas(rd, hra)
+		v, err := r.suggestDesiredReplicas(st, hra)
 		if err != nil {
 			return 0, 0, nil, err
 		}

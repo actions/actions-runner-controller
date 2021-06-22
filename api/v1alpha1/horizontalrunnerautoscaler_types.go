@@ -106,6 +106,12 @@ type CapacityReservation struct {
 }
 
 type ScaleTargetRef struct {
+	// Kind is the type of resource being referenced
+	// +optional
+	// +kubebuilder:validation:Enum=RunnerDeployment;RunnerSet
+	Kind string `json:"kind,omitempty"`
+
+	// Name is the name of resource being referenced
 	Name string `json:"name,omitempty"`
 }
 

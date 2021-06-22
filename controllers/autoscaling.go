@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -63,7 +60,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) fetchSuggestedReplicasFromCache(h
 	return nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	if hra.Spec.MinReplicas == nil {
 		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing minReplicas", hra.Namespace, hra.Name)
 	} else if hra.Spec.MaxReplicas == nil {
@@ -74,7 +71,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(rd v1alpha
 	numMetrics := len(metrics)
 	if numMetrics == 0 {
 		if len(hra.Spec.ScaleUpTriggers) == 0 {
-			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra, nil)
+			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, nil)
 		}
 
 		return nil, nil
@@ -92,9 +89,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(rd v1alpha
 
 	switch primaryMetricType {
 	case v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns:
-		suggested, err = r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra, &primaryMetric)
+		suggested, err = r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, &primaryMetric)
 	case v1alpha1.AutoscalingMetricTypePercentageRunnersBusy:
-		suggested, err = r.suggestReplicasByPercentageRunnersBusy(rd, hra, primaryMetric)
+		suggested, err = r.suggestReplicasByPercentageRunnersBusy(st, hra, primaryMetric)
 	default:
 		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q", primaryMetric)
 	}
@@ -127,15 +124,15 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(rd v1alpha
 		)
 	}
 
-	return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(rd, hra, &fallbackMetric)
+	return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, &fallbackMetric)
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler, metrics *v1alpha1.MetricSpec) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics *v1alpha1.MetricSpec) (*int, error) {
 
 	var repos [][]string
-	repoID := rd.Spec.Template.Spec.Repository
+	repoID := st.repo
 	if repoID == "" {
-		orgName := rd.Spec.Template.Spec.Organization
+		orgName := st.org
 		if orgName == "" {
 			return nil, fmt.Errorf("asserting runner deployment spec to detect bug: spec.template.organization should not be empty on this code path")
 		}
@@ -230,14 +227,15 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 		"workflow_runs_queued", queued,
 		"workflow_runs_unknown", unknown,
 		"namespace", hra.Namespace,
-		"runner_deployment", rd.Name,
+		"kind", st.kind,
+		"name", st.st,
 		"horizontal_runner_autoscaler", hra.Name,
 	)
 
 	return &necessaryReplicas, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(rd v1alpha1.RunnerDeployment, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec) (*int, error) {
 	ctx := context.Background()
 	scaleUpThreshold := defaultScaleUpThreshold
 	scaleDownThreshold := defaultScaleDownThreshold
@@ -294,41 +292,15 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		scaleDownFactor = sdf
 	}
 
-	// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
-	var runnerList v1alpha1.RunnerList
-
-	var opts []client.ListOption
-
-	opts = append(opts, client.InNamespace(rd.Namespace))
-
-	selector, err := metav1.LabelSelectorAsSelector(getSelector(&rd))
+	runnerMap, err := st.getRunnerMap()
 	if err != nil {
 		return nil, err
 	}
 
-	opts = append(opts, client.MatchingLabelsSelector{Selector: selector})
-
-	r.Log.V(2).Info("Finding runners with selector", "ns", rd.Namespace)
-
-	if err := r.List(
-		ctx,
-		&runnerList,
-		opts...,
-	); err != nil {
-		if !kerrors.IsNotFound(err) {
-			return nil, err
-		}
-	}
-
-	runnerMap := make(map[string]struct{})
-	for _, items := range runnerList.Items {
-		runnerMap[items.Name] = struct{}{}
-	}
-
 	var (
-		enterprise   = rd.Spec.Template.Spec.Enterprise
-		organization = rd.Spec.Template.Spec.Organization
-		repository   = rd.Spec.Template.Spec.Repository
+		enterprise   = st.enterprise
+		organization = st.org
+		repository   = st.repo
 	)
 
 	// ListRunners will return all runners managed by GitHub - not restricted to ns
@@ -343,7 +315,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 
 	var desiredReplicasBefore int
 
-	if v := rd.Spec.Replicas; v == nil {
+	if v := st.replicas; v == nil {
 		desiredReplicasBefore = 1
 	} else {
 		desiredReplicasBefore = *v
@@ -355,7 +327,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		numRunnersBusy       int
 	)
 
-	numRunners = len(runnerList.Items)
+	numRunners = len(runnerMap)
 
 	for _, runner := range runners {
 		if _, ok := runnerMap[*runner.Name]; ok {
@@ -382,7 +354,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 			desiredReplicas = int(float64(desiredReplicasBefore) * scaleDownFactor)
 		}
 	} else {
-		desiredReplicas = *rd.Spec.Replicas
+		desiredReplicas = *st.replicas
 	}
 
 	// NOTES for operators:
@@ -398,7 +370,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		"num_runners_registered", numRunnersRegistered,
 		"num_runners_busy", numRunnersBusy,
 		"namespace", hra.Namespace,
-		"runner_deployment", rd.Name,
+		"kind", st.kind,
+		"name", st.st,
 		"horizontal_runner_autoscaler", hra.Name,
 		"enterprise", enterprise,
 		"organization", organization,
