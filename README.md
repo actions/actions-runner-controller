@@ -980,11 +980,17 @@ spec:
 #### invalid header field value
 
 ```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	{"controller": "runner", "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9", "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"}
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
+{
+  "controller": "runner",
+  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
+  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
+}
 ```
 
-**Solutions**<br />
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
+**Solution**
+
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documented flags
 
@@ -1042,141 +1048,6 @@ spec:
           value: "2" # Remember! env var values must be strings.
 ```
 
-
 # Contributing
 
-For more details about any requirements or process, please check out [Getting Started with Contributing](CONTRIBUTING.md).
-
-**The Controller**<br />
-If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running
-the acceptance test:
-
-```shell
-# This sets `VERSION` envvar to some appropriate value
-. hack/make-env.sh
-
-DOCKER_USER=*** \
-  GITHUB_TOKEN=*** \
-  APP_ID=*** \
-  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
-  INSTALLATION_ID=*** \
-  make acceptance
-```
-
-> **Notes for Ubuntu 20.04+ users**
->
-> If you're using Ubuntu 20.04 or greater, you might have installed `docker` with `snap`.
->
-> If you want to stick with `snap`-provided `docker`, do not forget to set `TMPDIR` to
-> somewhere under `$HOME`.
-> Otherwise `kind load docker-image` fail while running `docker save`.
-> See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap for more information.
-
-Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
-`GITHUB_TOKEN`, and those in [Using GitHub App](#using-github-app) to obtain `APP_ID`, `INSTALLATION_ID`, and
-`PRIAVTE_KEY_FILE_PATH`.
-
-The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-runner-controller`,
-creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
-controller is able to bring up a runner pod with the actions runner registration token installed.
-
-**Rerunning a failed test**
-
-When one of tests run by `make acceptance` failed, you'd probably like to rerun only the failed one.
-
-It can be done by `make acceptance/run` and by setting the combination of `ACCEPTANCE_TEST_DEPLOYMENT_TOOL` and `ACCEPTANCE_TEST_SECRET_TYPE` values that failed.
-
-In the example below, we rerun the test for the combination `ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token` only:
-
-```
-DOCKER_USER=*** \
-  GITHUB_TOKEN=*** \
-  APP_ID=*** \
-  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
-  INSTALLATION_ID=*** \
-  ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token \
-  make acceptance/run
-```
-
-**Testing in a non-kind cluster**
-
-If you prefer to test in a non-kind cluster, you can instead run:
-
-```shell script
-KUBECONFIG=path/to/kubeconfig \
-  DOCKER_USER=*** \
-  GITHUB_TOKEN=*** \
-  APP_ID=*** \
-  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
-  INSTALLATION_ID=*** \
-  ACCEPTANCE_TEST_SECRET_TYPE=token \
-  make docker-build acceptance/setup \
-       acceptance/deploy \
-       acceptance/tests
-```
-
-**Development Tips**
-
-Rerunning the whole acceptance test suite from scratch on every little change to the controller, the runner, and the chart would be counter-productive.
-
-To make your development cycle faster, use the below command to update deploy and update all the three:
-
-```
-# Let assume we have all other envvars like DOCKER_USER, GITHUB_TOKEN already set,
-# The below command will (re)build `actions-runner-controller:controller1` and `actions-runner:runner1`,
-# load those into kind nodes, and then rerun kubectl or helm to install/upgrade the controller,
-# and finally upgrade the runner deployment to use the new runner image.
-#
-# As helm 3 and kubectl is unable to recreate a pod when no tag change,
-# you either need to bump VERSION and RUNNER_TAG on each run,
-# or manually run `kubectl delete pod $POD` on respective pods for changes to actually take effect.
-VERSION=controller1 \
-  RUNNER_TAG=runner1 \
-  make docker-build acceptance/load acceptance/deploy
-```
-
-If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
-
-```
-NAME=$DOCKER_USER/actions-runner-controller \
-  make docker-build acceptance/load && \
-  kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
-```
-
-Similarly, if you'd like to recreate runner pods with the newer runner image,
-
-```
-NAME=$DOCKER_USER/actions-runner make \
-  -C runner docker-{build,push}-ubuntu && \
-  (kubectl get po -ojsonpath={.items[*].metadata.name} | xargs -n1 kubectl delete po)
-```
-
-**Runner Tests**<br />
-A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
-
-**Running Ginkgo Tests**
-
-You can run the integration test suite that is written in Ginkgo with:
-
-```bash
-make test-with-deps
-```
-
-This will firstly install a few binaries required to setup the integration test environment and then runs `go test` to start the Ginkgo test.
-
-If you don't want to use `make`, like when you're running tests from your IDE, install required binaries to `/usr/local/kubebuilder/bin`. That's the directory in which controller-runtime's `envtest` framework locates the binaries.
-
-```bash
-sudo mkdir -p /usr/local/kubebuilder/bin
-make kube-apiserver etcd
-sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
-go test -v -run TestAPIs github.com/actions-runner-controller/actions-runner-controller/controllers
-```
-
-To run Ginkgo tests selectively, set the pattern of target test names to `GINKGO_FOCUS`.
-All the Ginkgo test that matches `GINKGO_FOCUS` will be run.
-
-```bash
-GINKGO_FOCUS='[It] should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0' \
-  go test -v -run TestAPIs github.com/actions-runner-controller/actions-runner-controller/controllers
-```
+For more details on contributing to the project (including requirements) please check out [Getting Started with Contributing](CONTRIBUTING.md).
