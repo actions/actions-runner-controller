@@ -49,10 +49,11 @@ sleep 20
 
 if [ -n "${TEST_REPO}" ]; then
   if [ -n "USE_RUNNERSET" ]; then
-      cat acceptance/testdata/runnerset.yaml | envsubst | kubectl apply -f -
+      cat acceptance/testdata/repo.runnerset.yaml | envsubst | kubectl apply -f -
   else
-    cat acceptance/testdata/runnerdeploy.yaml | envsubst | kubectl apply -f -
-    cat acceptance/testdata/hra.yaml | envsubst | kubectl apply -f -
+    echo 'Deploying runnerdeployment and hra. Set USE_RUNNERSET if you want to deploy runnerset instead.'
+    cat acceptance/testdata/repo.runnerdeploy.yaml | envsubst | kubectl apply -f -
+    cat acceptance/testdata/repo.hra.yaml | envsubst | kubectl apply -f -
   fi
 else
   echo 'Skipped deploying runnerdeployment and hra. Set TEST_REPO to "yourorg/yourrepo" to deploy.'

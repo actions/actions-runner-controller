@@ -14,6 +14,7 @@ SYNC_PERIOD ?= 5m
 USE_RUNNERSET ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
+CERT_MANAGER_VERSION ?= v1.1.1
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
@@ -174,21 +175,21 @@ acceptance/load:
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name ${CLUSTER}
 	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name ${CLUSTER}
 	kind load docker-image docker:dind --name ${CLUSTER}
-	kind load docker-image quay.io/jetstack/cert-manager-controller:v1.0.4 --name ${CLUSTER}
-	kind load docker-image quay.io/jetstack/cert-manager-cainjector:v1.0.4 --name ${CLUSTER}
-	kind load docker-image quay.io/jetstack/cert-manager-webhook:v1.0.4 --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-webhook:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
 	kubectl cluster-info --context ${KUBECONTEXT}
 
 # Pull the docker images for acceptance
 acceptance/pull:
 	docker pull quay.io/brancz/kube-rbac-proxy:v0.10.0
 	docker pull docker:dind
-	docker pull quay.io/jetstack/cert-manager-controller:v1.0.4
-	docker pull quay.io/jetstack/cert-manager-cainjector:v1.0.4
-	docker pull quay.io/jetstack/cert-manager-webhook:v1.0.4
+	docker pull quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION)
+	docker pull quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION)
+	docker pull quay.io/jetstack/cert-manager-webhook:$(CERT_MANAGER_VERSION)
 
 acceptance/setup:
-	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml	#kubectl create namespace actions-runner-system
+	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml	#kubectl create namespace actions-runner-system
 	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 90s
 	kubectl -n cert-manager wait deploy/cert-manager-webhook --for condition=available --timeout 60s
 	kubectl -n cert-manager wait deploy/cert-manager --for condition=available --timeout 60s
