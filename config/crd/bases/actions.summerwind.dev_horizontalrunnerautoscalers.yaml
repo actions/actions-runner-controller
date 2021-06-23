@@ -129,7 +129,14 @@ spec:
                 description: ScaleTargetRef sis the reference to scaled resource like
                   RunnerDeployment
                 properties:
+                  kind:
+                    description: Kind is the type of resource being referenced
+                    enum:
+                    - RunnerDeployment
+                    - RunnerSet
+                    type: string
                   name:
+                    description: Name is the name of resource being referenced
                     type: string
                 type: object
               scaleUpTriggers:
