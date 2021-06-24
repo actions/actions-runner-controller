@@ -17,6 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+const (
+	AnnotationKeyTokenExpirationDate = "actions-runner-controller/token-expires-at"
+)
+
 // +kubebuilder:webhook:path=/mutate-runner-set-pod,mutating=true,failurePolicy=ignore,groups="",resources=pods,verbs=create,versions=v1,name=mutate-runner-pod.webhook.actions.summerwind.dev,sideEffects=None,admissionReviewVersions=v1beta1
 
 type PodRunnerTokenInjector struct {
@@ -72,7 +76,7 @@ func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Reque
 
 	updated := mutatePod(&pod, *rt.Token)
 
-	updated.Annotations["actions-runner-controller/token-expires-at"] = ts
+	updated.Annotations[AnnotationKeyTokenExpirationDate] = ts
 
 	if pod.Spec.RestartPolicy != corev1.RestartPolicyOnFailure {
 		updated.Spec.RestartPolicy = corev1.RestartPolicyOnFailure

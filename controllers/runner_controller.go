@@ -51,6 +51,10 @@ const (
 
 	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
 	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
+
+	EnvVarOrg        = "RUNNER_ORG"
+	EnvVarRepo       = "RUNNER_REPO"
+	EnvVarEnterprise = "RUNNER_ENTERPRISE"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -89,7 +93,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if runner.ObjectMeta.DeletionTimestamp.IsZero() {
-		finalizers, added := addFinalizer(runner.ObjectMeta.Finalizers)
+		finalizers, added := addFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
 		if added {
 			newRunner := runner.DeepCopy()
@@ -103,7 +107,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 	} else {
-		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers)
+		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
 		if removed {
 			if len(runner.Status.Registration.Token) > 0 {
@@ -741,15 +745,15 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 
 	env := []corev1.EnvVar{
 		{
-			Name:  "RUNNER_ORG",
+			Name:  EnvVarOrg,
 			Value: runnerSpec.Organization,
 		},
 		{
-			Name:  "RUNNER_REPO",
+			Name:  EnvVarRepo,
 			Value: runnerSpec.Repository,
 		},
 		{
-			Name:  "RUNNER_ENTERPRISE",
+			Name:  EnvVarEnterprise,
 			Value: runnerSpec.Enterprise,
 		},
 		{
@@ -1029,7 +1033,7 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func addFinalizer(finalizers []string) ([]string, bool) {
+func addFinalizer(finalizers []string, finalizerName string) ([]string, bool) {
 	exists := false
 	for _, name := range finalizers {
 		if name == finalizerName {
@@ -1044,7 +1048,7 @@ func addFinalizer(finalizers []string) ([]string, bool) {
 	return append(finalizers, finalizerName), true
 }
 
-func removeFinalizer(finalizers []string) ([]string, bool) {
+func removeFinalizer(finalizers []string, finalizerName string) ([]string, bool) {
 	removed := false
 	result := []string{}
 
