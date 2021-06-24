@@ -16,6 +16,8 @@ spec:
   # RunnerSet doesn't support scale from/to zero yet
   minReplicas: 1
   maxReplicas: 5
+  # This should be less than 600(seconds, the default) for faster testing
+  scaleDownDelaySecondsAfterScaleOut: 60
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'

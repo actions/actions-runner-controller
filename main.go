@@ -215,6 +215,18 @@ func main() {
 		CacheDuration: gitHubAPICacheDuration,
 	}
 
+	runnerPodReconciler := &controllers.RunnerPodReconciler{
+		Client:       mgr.GetClient(),
+		Log:          log.WithName("runnerpod"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
+	}
+
+	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPod")
+		os.Exit(1)
+	}
+
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
 		os.Exit(1)

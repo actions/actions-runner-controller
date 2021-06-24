@@ -14,6 +14,10 @@ spec:
   serviceName: example-runnerset
 
   #replicas: 1
+
+  # From my limited testing, `ephemeral: true` is more reliable.
+  # Seomtimes, updating already deployed runners from `ephemeral: false` to `ephemeral: true` seems to
+  # result in queued jobs hanging forever.
   ephemeral: false
 
   repository: ${TEST_REPO}
