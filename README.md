@@ -27,6 +27,7 @@ ToC:
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
+  - [Stateful Runners](#stateful-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Common Errors](#common-errors)
 - [Contributing](#contributing)
@@ -325,10 +326,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ##### Note on scaling to/from 0
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature is available since actions-runner-controller v0.19.0
 
 You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
 
@@ -599,10 +597,7 @@ See ["activity types"](https://docs.github.com/en/actions/reference/events-that-
 
 #### Autoscaling to/from 0
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature is available since actions-runner-controller v0.19.0
 
 Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
 
@@ -624,10 +619,7 @@ Similarly, Webhook-based autoscaling works regardless of there are active runner
 
 #### Scheduled Overrides
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature is available since actions-runner-controller v0.19.0
 
 `Scheduled Overrides` allows you to configure HorizontalRunnerAutoscaler so that its Spec gets updated only during a certain period of time.
 
@@ -935,6 +927,98 @@ Note that there's no official Istio integration in actions-runner-controller. It
 - https://github.com/actions-runner-controller/actions-runner-controller/issues/591
 - https://github.com/actions-runner-controller/actions-runner-controller/pull/592
 - https://github.com/istio/istio/issues/11130
+
+### Stateful Runners
+
+> This is a documentation about a unreleased version of actions-runner-controller.
+>
+> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
+> developers by reporting any bugs :smile:
+
+`actions-runner-controller` supports `RunnerSet` API that let you deploy stateful runners. A stateful runner is designed to be able to store some data persists across GitHub Actions workflow and job runs. You might find it useful, for example, to speed up your docker builds by persisting the docker layer cache.
+
+A basic `RunnerSet` would look like this:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  ephemeral: false
+  replicas: 2
+  repository: mumoshu/actions-runner-controller-ci
+  # Other mandatory fields from StatefulSet
+  selector:
+    matchLabels:
+      app: example
+  serviceName: example
+  template:
+    metadata:
+      labels:
+        app: example
+```
+
+As it is based on `StatefulSet`, `selector` and `template.medatada.labels` needs to be defined and haev the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
+
+Runner-related fields like `ephemeral`, `repository`, `organiåtion`, `enterprise`, and so on should be written directly under `spec`.
+
+Fields like `volumeClaimTemplates` that originates from `StatefulSet` shuold also be written directly under `spec`.
+
+Pod-related fields like security contexts and volumes are written under `spec.template.spec` like `StatefulSet`.
+
+Simillarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a dockerd.
+
+For a more complex example, see the below:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  # NOTE: RunnerSet supports non-ephemeral runners only today
+  ephemeral: false
+  replicas: 2
+  repository: mumoshu/actions-runner-controller-ci
+  dockerdWithinRunnerContainer: true
+  template:
+    spec:
+      securityContext:
+        #All level/role/type/user values will vary based on your SELinux policies.
+        #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
+        seLinuxOptions: 
+          level: "s0"
+          role: "system_r"
+          type: "super_t"
+          user: "system_u"
+      containers:
+      - name: runner
+        env: []
+        resources:
+          limits:
+            cpu: "4.0"
+            memory: "8Gi"
+          requests:
+            cpu: "2.0"
+            memory: "4Gi"
+      - name: docker
+        resources:
+          limits:
+            cpu: "4.0"
+            memory: "8Gi"
+          requests:
+            cpu: "2.0"
+            memory: "4Gi"
+```
+
+You can also read the design and usage documentation written in the original pull request that introduced `RunnerSet` for more information.
+
+https://github.com/actions-runner-controller/actions-runner-controller/pull/629
+
+Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A statefulset is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each statefulset-managed pod gets the same persisntet volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
+
+We envision that `RunnerSet` will eventually replaces `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
 
 ### Software Installed in the Runner Image
 
