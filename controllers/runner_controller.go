@@ -878,6 +878,8 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 	// When you're NOT using dindWithinRunner=true,
 	// it must also be shared with the dind container as it seems like required to run docker steps.
 	//
+	// Setting VolumeSizeLimit to zero will disable /runner emptydir mount
+	//
 
 	runnerVolumeName := "runner"
 	runnerVolumeMountPath := "/runner"
@@ -887,23 +889,32 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		runnerVolumeEmptyDir.SizeLimit = runnerSpec.VolumeSizeLimit
 	}
 
-	pod.Spec.Volumes = append(pod.Spec.Volumes,
-		corev1.Volume{
-			Name: runnerVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: runnerVolumeEmptyDir,
+	if runnerSpec.VolumeSizeLimit == nil || !runnerSpec.VolumeSizeLimit.IsZero() {
+		pod.Spec.Volumes = append(pod.Spec.Volumes,
+			corev1.Volume{
+				Name: runnerVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: runnerVolumeEmptyDir,
+				},
 			},
-		},
-	)
+		)
 
-	runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-		corev1.VolumeMount{
-			Name:      runnerVolumeName,
-			MountPath: runnerVolumeMountPath,
-		},
-	)
+		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+			corev1.VolumeMount{
+				Name:      runnerVolumeName,
+				MountPath: runnerVolumeMountPath,
+			},
+		)
+	}
 
 	if !dockerdInRunner && dockerEnabled {
+		if runnerSpec.VolumeSizeLimit != nil && runnerSpec.VolumeSizeLimit.IsZero() {
+			return *pod, fmt.Errorf(
+				"%s volume can't be disabled because it is required to share the working directory between the runner and the dockerd containers",
+				runnerVolumeName,
+			)
+		}
+
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
 				Name: "work",
