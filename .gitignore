@@ -26,6 +26,7 @@ bin
 
 .envrc
 .env
+.test.env
 *.pem
 
 # OS
