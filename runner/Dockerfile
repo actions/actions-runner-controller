@@ -84,8 +84,8 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > .env \
-    && mkdir /opt/hostedtoolcache \
+ENV AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache
+RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
