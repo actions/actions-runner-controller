@@ -343,7 +343,7 @@ func (k *Cluster) RunKubectlEnsureNS(ctx context.Context, name string, cfg Kubec
 	return nil
 }
 
-func (k *Cluster) RunKubectlGetClusterRoleBinding(ctx context.Context, name string, cfg KubectlConfig) (string, error) {
+func (k *Cluster) GetClusterRoleBinding(ctx context.Context, name string, cfg KubectlConfig) (string, error) {
 	o, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"clusterrolebinding", name}, cfg))
 	if err != nil {
 		return "", err
@@ -351,7 +351,7 @@ func (k *Cluster) RunKubectlGetClusterRoleBinding(ctx context.Context, name stri
 	return o, nil
 }
 
-func (k *Cluster) RunKubectlCreateClusterRoleBindingServiceAccount(ctx context.Context, name string, clusterrole string, sa string, cfg KubectlConfig) error {
+func (k *Cluster) CreateClusterRoleBindingServiceAccount(ctx context.Context, name string, clusterrole string, sa string, cfg KubectlConfig) error {
 	_, err := k.combinedOutput(k.kubectlCmd(ctx, "create", []string{"clusterrolebinding", name, "--clusterrole=" + clusterrole, "--serviceaccount=" + sa}, cfg))
 	if err != nil {
 		return err
@@ -359,7 +359,7 @@ func (k *Cluster) RunKubectlCreateClusterRoleBindingServiceAccount(ctx context.C
 	return nil
 }
 
-func (k *Cluster) RunKubectlGetCMLiterals(ctx context.Context, name string, cfg KubectlConfig) (map[string]string, error) {
+func (k *Cluster) GetCMLiterals(ctx context.Context, name string, cfg KubectlConfig) (map[string]string, error) {
 	o, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"cm", name, "-o=json"}, cfg))
 	if err != nil {
 		return nil, err
@@ -378,7 +378,7 @@ func (k *Cluster) RunKubectlGetCMLiterals(ctx context.Context, name string, cfg 
 	return cm.Data, nil
 }
 
-func (k *Cluster) RunKubectlCreateCMLiterals(ctx context.Context, name string, literals map[string]string, cfg KubectlConfig) error {
+func (k *Cluster) CreateCMLiterals(ctx context.Context, name string, literals map[string]string, cfg KubectlConfig) error {
 	args := []string{"cm", name}
 
 	for k, v := range literals {

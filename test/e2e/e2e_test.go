@@ -13,6 +13,50 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+var (
+	Img = func(repo, tag string) testing.ContainerImage {
+		return testing.ContainerImage{
+			Repo: repo,
+			Tag:  tag,
+		}
+	}
+
+	controllerImageRepo = "actionsrunnercontrollere2e/actions-runner-controller"
+	controllerImageTag  = "e2e"
+	controllerImage     = Img(controllerImageRepo, controllerImageTag)
+	runnerImageRepo     = "actionsrunnercontrollere2e/actions-runner"
+	runnerImageTag      = "e2e"
+	runnerImage         = Img(runnerImageRepo, runnerImageTag)
+
+	prebuildImages = []testing.ContainerImage{
+		controllerImage,
+		runnerImage,
+	}
+
+	builds = []testing.DockerBuild{
+		{
+			Dockerfile: "../../Dockerfile",
+			Args:       []testing.BuildArg{},
+			Image:      controllerImage,
+		},
+		{
+			Dockerfile: "../../runner/Dockerfile",
+			Args:       []testing.BuildArg{},
+			Image:      runnerImage,
+		},
+	}
+
+	certManagerVersion = "v1.1.1"
+
+	images = []testing.ContainerImage{
+		Img("docker", "dind"),
+		Img("quay.io/brancz/kube-rbac-proxy", "v0.10.0"),
+		Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
+		Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
+		Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
+	}
+)
+
 // If you're willing to run this test via VS Code "run test" or "debug test",
 // almost certainly you'd want to make the default go test timeout from 30s to longer and enough value.
 // Press Cmd + Shift + P, type "Workspace Settings" and open it, and type "go test timeout" and set e.g. 600s there.
@@ -26,48 +70,6 @@ import (
 func TestE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipped as -short is set")
-	}
-
-	Img := func(repo, tag string) testing.ContainerImage {
-		return testing.ContainerImage{
-			Repo: repo,
-			Tag:  tag,
-		}
-	}
-
-	controllerImageRepo := "actionsrunnercontrollere2e/actions-runner-controller"
-	controllerImageTag := "e2e"
-	controllerImage := Img(controllerImageRepo, controllerImageTag)
-	runnerImageRepo := "actionsrunnercontrollere2e/actions-runner"
-	runnerImageTag := "e2e"
-	runnerImage := Img(runnerImageRepo, runnerImageTag)
-
-	prebuildImages := []testing.ContainerImage{
-		controllerImage,
-		runnerImage,
-	}
-
-	builds := []testing.DockerBuild{
-		{
-			Dockerfile: "../../Dockerfile",
-			Args:       []testing.BuildArg{},
-			Image:      controllerImage,
-		},
-		{
-			Dockerfile: "../../runner/Dockerfile",
-			Args:       []testing.BuildArg{},
-			Image:      runnerImage,
-		},
-	}
-
-	certManagerVersion := "v1.1.1"
-
-	images := []testing.ContainerImage{
-		Img("docker", "dind"),
-		Img("quay.io/brancz/kube-rbac-proxy", "v0.10.0"),
-		Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
-		Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
-		Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
 	}
 
 	k := testing.Start(t, testing.Cluster{}, testing.Preload(images...))
@@ -92,27 +94,27 @@ func TestE2E(t *testing.T) {
 	}
 
 	t.Run("install cert-manager", func(t *testing.T) {
-		certmanagerVersion := "v1.1.1"
+		applyCfg := testing.KubectlConfig{NoValidate: true, Env: kubectlEnv}
 
-		if err := k.Apply(ctx, fmt.Sprintf("https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml", certmanagerVersion), testing.KubectlConfig{NoValidate: true}); err != nil {
+		if err := k.Apply(ctx, fmt.Sprintf("https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml", certManagerVersion), applyCfg); err != nil {
 			t.Fatal(err)
 		}
 
-		certmanagerKubectlCfg := testing.KubectlConfig{
+		waitCfg := testing.KubectlConfig{
 			Env:       kubectlEnv,
 			Namespace: "cert-manager",
 			Timeout:   90 * time.Second,
 		}
 
-		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager-cainjector", certmanagerKubectlCfg); err != nil {
+		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager-cainjector", waitCfg); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager-webhook", certmanagerKubectlCfg.WithTimeout(60*time.Second)); err != nil {
+		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager-webhook", waitCfg.WithTimeout(60*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager", certmanagerKubectlCfg.WithTimeout(60*time.Second)); err != nil {
+		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager", waitCfg.WithTimeout(60*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -124,8 +126,8 @@ func TestE2E(t *testing.T) {
 	t.Run("make default serviceaccount cluster-admin", func(t *testing.T) {
 		cfg := testing.KubectlConfig{Env: kubectlEnv}
 		bindingName := "default-admin"
-		if _, err := k.RunKubectlGetClusterRoleBinding(ctx, bindingName, cfg); err != nil {
-			if err := k.RunKubectlCreateClusterRoleBindingServiceAccount(ctx, bindingName, "cluster-admin", "default:default", cfg); err != nil {
+		if _, err := k.GetClusterRoleBinding(ctx, bindingName, cfg); err != nil {
+			if err := k.CreateClusterRoleBindingServiceAccount(ctx, bindingName, "cluster-admin", "default:default", cfg); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -136,13 +138,13 @@ func TestE2E(t *testing.T) {
 	}
 	testInfoName := "test-info"
 
-	m, _ := k.RunKubectlGetCMLiterals(ctx, testInfoName, cmCfg)
+	m, _ := k.GetCMLiterals(ctx, testInfoName, cmCfg)
 
 	t.Run("Save test ID", func(t *testing.T) {
 		if m == nil {
 			id := RandStringBytesRmndr(10)
 			m = map[string]string{"id": id}
-			if err := k.RunKubectlCreateCMLiterals(ctx, testInfoName, m, cmCfg); err != nil {
+			if err := k.CreateCMLiterals(ctx, testInfoName, m, cmCfg); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -274,7 +276,7 @@ kubectl create cm %s --from-literal=status=ok
 
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		gomega.NewGomegaWithT(t).Eventually(func() (string, error) {
-			m, err := k.RunKubectlGetCMLiterals(ctx, testResultCMName, cmCfg)
+			m, err := k.GetCMLiterals(ctx, testResultCMName, cmCfg)
 			if err != nil {
 				return "", err
 			}
