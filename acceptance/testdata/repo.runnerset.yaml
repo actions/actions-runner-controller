@@ -38,7 +38,8 @@ spec:
   # labels:
   # - "mylabel 1"
   # - "mylabel 2"
-
+  labels:
+  - "${RUNNER_LABEL}"
   #
   # Non-standard working directory
   #

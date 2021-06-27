@@ -211,6 +211,11 @@ acceptance/deploy:
 acceptance/tests:
 	acceptance/checks.sh
 
+.PHONY: e2e
+e2e:
+	go clean -testcache
+	go test -v -timeout 600s -run '^TestE2E$$' ./test/e2e
+
 # Upload release file to GitHub.
 github-release: release
 	ghr ${VERSION} release/

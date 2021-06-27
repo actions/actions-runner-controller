@@ -2,6 +2,7 @@ package testing
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -337,6 +338,55 @@ func (k *Cluster) RunKubectlEnsureNS(ctx context.Context, name string, cfg Kubec
 		if _, err := k.combinedOutput(k.kubectlCmd(ctx, "create", []string{"ns", name}, cfg)); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (k *Cluster) GetClusterRoleBinding(ctx context.Context, name string, cfg KubectlConfig) (string, error) {
+	o, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"clusterrolebinding", name}, cfg))
+	if err != nil {
+		return "", err
+	}
+	return o, nil
+}
+
+func (k *Cluster) CreateClusterRoleBindingServiceAccount(ctx context.Context, name string, clusterrole string, sa string, cfg KubectlConfig) error {
+	_, err := k.combinedOutput(k.kubectlCmd(ctx, "create", []string{"clusterrolebinding", name, "--clusterrole=" + clusterrole, "--serviceaccount=" + sa}, cfg))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (k *Cluster) GetCMLiterals(ctx context.Context, name string, cfg KubectlConfig) (map[string]string, error) {
+	o, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"cm", name, "-o=json"}, cfg))
+	if err != nil {
+		return nil, err
+	}
+
+	var cm struct {
+		Data map[string]string `json:"data"`
+	}
+
+	if err := json.Unmarshal([]byte(o), &cm); err != nil {
+		k.errorf("Failed unmarshalling this data to JSON:\n%s\n", o)
+
+		return nil, fmt.Errorf("unmarshalling json: %w", err)
+	}
+
+	return cm.Data, nil
+}
+
+func (k *Cluster) CreateCMLiterals(ctx context.Context, name string, literals map[string]string, cfg KubectlConfig) error {
+	args := []string{"cm", name}
+
+	for k, v := range literals {
+		args = append(args, fmt.Sprintf("--from-literal=%s=%s", k, v))
+	}
+
+	if _, err := k.combinedOutput(k.kubectlCmd(ctx, "create", args, cfg)); err != nil {
+		return err
 	}
 
 	return nil
