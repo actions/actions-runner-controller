@@ -195,6 +195,10 @@ func TestE2E(t *testing.T) {
 		"RUNNER_LABEL=" + runnerLabel,
 	}
 
+	if t.Failed() {
+		return
+	}
+
 	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
 		if err := k.RunScript(ctx, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv}); err != nil {
 			t.Fatal(err)
@@ -202,6 +206,10 @@ func TestE2E(t *testing.T) {
 	})
 
 	testResultCMName := fmt.Sprintf("test-result-%s", id)
+
+	if t.Failed() {
+		return
+	}
 
 	t.Run("Install workflow", func(t *testing.T) {
 		wfName := "E2E " + testID
@@ -260,6 +268,10 @@ kubectl create cm %s --from-literal=status=ok
 		}
 	})
 
+	if t.Failed() {
+		return
+	}
+
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		gomega.NewGomegaWithT(t).Eventually(func() (string, error) {
 			m, err := k.RunKubectlGetCMLiterals(ctx, testResultCMName, cmCfg)
@@ -271,10 +283,6 @@ kubectl create cm %s --from-literal=status=ok
 
 			return result, nil
 		}, 60*time.Second, 10*time.Second).Should(gomega.Equal("ok"))
-
-		// if result != "ok" {
-		// 	t.Fatalf("unxpected result: want %s, got %s", "ok", result)
-		// }
 	})
 }
 
