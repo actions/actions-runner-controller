@@ -52,6 +52,10 @@ spec:
         command:
         - "/manager"
         env:
+        {{- if .Values.githubEnterpriseServerURL  }}
+        - name: GITHUB_ENTERPRISE_URL
+          value: {{ .Values.githubEnterpriseServerURL }}
+        {{- end }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
