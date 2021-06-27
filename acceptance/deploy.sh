@@ -47,6 +47,8 @@ fi
 # Adhocly wait for some time until actions-runner-controller's admission webhook gets ready
 sleep 20
 
+RUNNER_LABEL=${RUNNER_LABEL:-self-hosted}
+
 if [ -n "${TEST_REPO}" ]; then
   if [ -n "USE_RUNNERSET" ]; then
       cat acceptance/testdata/repo.runnerset.yaml | envsubst | kubectl apply -f -

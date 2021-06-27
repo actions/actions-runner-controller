@@ -3,10 +3,14 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
+	"github.com/onsi/gomega"
+	"sigs.k8s.io/yaml"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -117,11 +121,61 @@ func TestE2E(t *testing.T) {
 		}
 	})
 
+	t.Run("make default serviceaccount cluster-admin", func(t *testing.T) {
+		cfg := testing.KubectlConfig{Env: kubectlEnv}
+		bindingName := "default-admin"
+		if _, err := k.RunKubectlGetClusterRoleBinding(ctx, bindingName, cfg); err != nil {
+			if err := k.RunKubectlCreateClusterRoleBindingServiceAccount(ctx, bindingName, "cluster-admin", "default:default", cfg); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	cmCfg := testing.KubectlConfig{
+		Env: kubectlEnv,
+	}
+	testInfoName := "test-info"
+
+	m, _ := k.RunKubectlGetCMLiterals(ctx, testInfoName, cmCfg)
+
+	t.Run("Save test ID", func(t *testing.T) {
+		if m == nil {
+			id := RandStringBytesRmndr(10)
+			m = map[string]string{"id": id}
+			if err := k.RunKubectlCreateCMLiterals(ctx, testInfoName, m, cmCfg); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	id := m["id"]
+
+	runnerLabel := "test-" + id
+
+	testID := t.Name() + " " + id
+
+	t.Logf("Using test id %s", testID)
+
 	// If you're using VS Code and wanting to run this test locally,
 	// Browse "Workspace Settings" and search for "go test env file" and put e.g. "${workspaceFolder}/.test.env" there
 	githubToken := os.Getenv("GITHUB_TOKEN")
 	if githubToken == "" {
 		t.Fatal("GITHUB_TOKEN must be set")
+	}
+
+	testRepo := os.Getenv("TEST_REPO")
+	if testRepo == "" {
+		t.Fatal("TEST_REPO must be set")
+	}
+
+	testOrg := os.Getenv("TEST_ORG")
+	if testOrg == "" {
+		t.Fatal("TEST_ORG must be set")
+	}
+
+	testOrgRepo := os.Getenv("TEST_ORG_REPO")
+	if testOrgRepo == "" {
+		t.Fatal("TEST_ORG_REPO must be set")
 	}
 
 	scriptEnv := []string{
@@ -130,19 +184,111 @@ func TestE2E(t *testing.T) {
 		"VERSION=" + controllerImageTag,
 		"RUNNER_NAME=" + runnerImageRepo,
 		"RUNNER_TAG=" + runnerImageTag,
-		"TEST_REPO=" + "actions-runner-controller/mumoshu-actions-test",
-		"TEST_ORG=" + "actions-runner-controller",
-		"TEST_ORG_REPO=" + "actions-runner-controller/mumoshu-actions-test-org-runners",
+		"TEST_REPO=" + testRepo,
+		"TEST_ORG=" + testOrg,
+		"TEST_ORG_REPO=" + testOrgRepo,
 		"SYNC_PERIOD=" + "10s",
 		"USE_RUNNERSET=" + "1",
 		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
 		"ACCEPTANCE_TEST_SECRET_TYPE=token",
 		"GITHUB_TOKEN=" + githubToken,
+		"RUNNER_LABEL=" + runnerLabel,
 	}
 
-	t.Run("install actions-runner-controller", func(t *testing.T) {
+	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
 		if err := k.RunScript(ctx, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv}); err != nil {
 			t.Fatal(err)
 		}
 	})
+
+	testResultCMName := fmt.Sprintf("test-result-%s", id)
+
+	t.Run("Install workflow", func(t *testing.T) {
+		wfName := "E2E " + testID
+		wf := testing.Workflow{
+			Name: wfName,
+			On: testing.On{
+				Push: &testing.Push{
+					Branches: []string{"main"},
+				},
+			},
+			Jobs: map[string]testing.Job{
+				"test": {
+					RunsOn: runnerLabel,
+					Steps: []testing.Step{
+						{
+							Uses: testing.ActionsCheckoutV2,
+						},
+						{
+							Uses: "azure/setup-kubectl@v1",
+							With: &testing.With{
+								Version: "v1.20.2",
+							},
+						},
+						{
+							Run: "./test.sh",
+						},
+					},
+				},
+			},
+		}
+
+		wfContent, err := yaml.Marshal(wf)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		script := []byte(fmt.Sprintf(`#!/usr/bin/env bash
+set -vx
+echo hello from %s
+kubectl delete cm %s || true
+kubectl create cm %s --from-literal=status=ok
+`, testID, testResultCMName, testResultCMName))
+
+		g := testing.GitRepo{
+			Dir:           filepath.Join(t.TempDir(), "gitrepo"),
+			Name:          testRepo,
+			CommitMessage: wfName,
+			Contents: map[string][]byte{
+				".github/workflows/workflow.yaml": wfContent,
+				"test.sh":                         script,
+			},
+		}
+
+		if err := g.Sync(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Verify workflow run result", func(t *testing.T) {
+		gomega.NewGomegaWithT(t).Eventually(func() (string, error) {
+			m, err := k.RunKubectlGetCMLiterals(ctx, testResultCMName, cmCfg)
+			if err != nil {
+				return "", err
+			}
+
+			result := m["status"]
+
+			return result, nil
+		}, 60*time.Second, 10*time.Second).Should(gomega.Equal("ok"))
+
+		// if result != "ok" {
+		// 	t.Fatalf("unxpected result: want %s, got %s", "ok", result)
+		// }
+	})
+}
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyz"
+
+// Copied from https://stackoverflow.com/a/31832326 with thanks
+func RandStringBytesRmndr(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	}
+	return string(b)
 }

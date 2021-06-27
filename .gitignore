@@ -19,6 +19,7 @@ bin
 !vendor/**/zz_generated.*
 
 # editor and IDE paraphernalia
+.vscode
 .idea
 *.swp
 *.swo
@@ -31,3 +32,5 @@ bin
 
 # OS
 .DS_STORE
+
+/test-assets
