@@ -67,6 +67,10 @@ var (
 // To always enable logging, do not forget to pass `-test.v` to `go test`.
 // If you're using VS Code, open `Workspace Settings` and search for `go test flags`, edit the `settings.json` and put the below:
 //   "go.testFlags": ["-v"]
+//
+// This function requires a few environment variables to be set to provide some test data.
+// If you're using VS Code and wanting to run this test locally,
+// Browse "Workspace Settings" and search for "go test env file" and put e.g. "${workspaceFolder}/.test.env" there.
 func TestE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipped as -short is set")
@@ -158,50 +162,33 @@ func TestE2E(t *testing.T) {
 
 	t.Logf("Using test id %s", testID)
 
-	// If you're using VS Code and wanting to run this test locally,
-	// Browse "Workspace Settings" and search for "go test env file" and put e.g. "${workspaceFolder}/.test.env" there
-	githubToken := os.Getenv("GITHUB_TOKEN")
-	if githubToken == "" {
-		t.Fatal("GITHUB_TOKEN must be set")
-	}
-
-	testRepo := os.Getenv("TEST_REPO")
-	if testRepo == "" {
-		t.Fatal("TEST_REPO must be set")
-	}
-
-	testOrg := os.Getenv("TEST_ORG")
-	if testOrg == "" {
-		t.Fatal("TEST_ORG must be set")
-	}
-
-	testOrgRepo := os.Getenv("TEST_ORG_REPO")
-	if testOrgRepo == "" {
-		t.Fatal("TEST_ORG_REPO must be set")
-	}
-
-	scriptEnv := []string{
-		"KUBECONFIG=" + k.Kubeconfig(),
-		"NAME=" + controllerImageRepo,
-		"VERSION=" + controllerImageTag,
-		"RUNNER_NAME=" + runnerImageRepo,
-		"RUNNER_TAG=" + runnerImageTag,
-		"TEST_REPO=" + testRepo,
-		"TEST_ORG=" + testOrg,
-		"TEST_ORG_REPO=" + testOrgRepo,
-		"SYNC_PERIOD=" + "10s",
-		"USE_RUNNERSET=" + "1",
-		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
-		"ACCEPTANCE_TEST_SECRET_TYPE=token",
-		"GITHUB_TOKEN=" + githubToken,
-		"RUNNER_LABEL=" + runnerLabel,
-	}
+	githubToken := getenv(t, "GITHUB_TOKEN")
+	testRepo := getenv(t, "TEST_REPO")
+	testOrg := getenv(t, "TEST_ORG")
+	testOrgRepo := getenv(t, "TEST_ORG_REPO")
 
 	if t.Failed() {
 		return
 	}
 
 	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
+		scriptEnv := []string{
+			"KUBECONFIG=" + k.Kubeconfig(),
+			"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
+			"ACCEPTANCE_TEST_SECRET_TYPE=token",
+			"NAME=" + controllerImageRepo,
+			"VERSION=" + controllerImageTag,
+			"RUNNER_NAME=" + runnerImageRepo,
+			"RUNNER_TAG=" + runnerImageTag,
+			"TEST_REPO=" + testRepo,
+			"TEST_ORG=" + testOrg,
+			"TEST_ORG_REPO=" + testOrgRepo,
+			"SYNC_PERIOD=" + "10s",
+			"USE_RUNNERSET=" + "1",
+			"GITHUB_TOKEN=" + githubToken,
+			"RUNNER_LABEL=" + runnerLabel,
+		}
+
 		if err := k.RunScript(ctx, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv}); err != nil {
 			t.Fatal(err)
 		}
@@ -286,6 +273,16 @@ kubectl create cm %s --from-literal=status=ok
 			return result, nil
 		}, 60*time.Second, 10*time.Second).Should(gomega.Equal("ok"))
 	})
+}
+
+func getenv(t *testing.T, name string) string {
+	t.Helper()
+
+	v := os.Getenv(name)
+	if v == "" {
+		t.Fatal(name + " must be set")
+	}
+	return v
 }
 
 func init() {
