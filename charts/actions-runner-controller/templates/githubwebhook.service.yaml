@@ -7,8 +7,7 @@ metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
 {{- if .Values.githubWebhookServer.service.annotations }}
-  annotations:
-{{ toYaml .Values.githubWebhookServer.service.annotations | nindent 4 }}
+  annotations: {{ toYaml .Values.githubWebhookServer.service.annotations | nindent 4 }}
 {{- end }}
 spec:
   type: {{ .Values.githubWebhookServer.service.type }}
