@@ -13,6 +13,9 @@ syncPeriod: 10m
 # Defaults to syncPeriod - 10s.
 #githubAPICacheDuration: 30s
 
+# The URL of your GitHub Enterprise server, if you're using one.
+#githubEnterpriseServerURL: https://github.example.com
+
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:

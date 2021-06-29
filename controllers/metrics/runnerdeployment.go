@@ -1,8 +1,8 @@
 package metrics
 
 import (
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
 const (

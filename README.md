@@ -27,6 +27,7 @@ ToC:
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
+  - [Stateful Runners](#stateful-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Common Errors](#common-errors)
 - [Contributing](#contributing)
@@ -58,7 +59,7 @@ __**Note: For all configuration options for the Helm chart see the chart's [READ
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
-helm upgrade --install --namespace actions-runner-system --create-namespace \ 
+helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
@@ -222,7 +223,7 @@ kind: Runner
 metadata:
   name: example-runner
 spec:
-  repository: summerwind/actions-runner-controller
+  repository: actions-runner-controller/actions-runner-controller
   env: []
 ```
 
@@ -238,7 +239,7 @@ You can see that the Runner resource has been created.
 ```shell
 $ kubectl get runners
 NAME             REPOSITORY                             STATUS
-example-runner   summerwind/actions-runner-controller   Running
+example-runner   actions-runner-controller/actions-runner-controller   Running
 ```
 
 You can also see that the runner pod has been running.
@@ -325,10 +326,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ##### Note on scaling to/from 0
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature is available since actions-runner-controller v0.19.0
 
 You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
 
@@ -390,7 +388,7 @@ metadata:
 spec:
   template:
     spec:
-      repository: summerwind/actions-runner-controller
+      repository: actions-runner-controller/actions-runner-controller
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
@@ -404,7 +402,7 @@ spec:
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
-    - summerwind/actions-runner-controller
+    - actions-runner-controller/actions-runner-controller
 ```
 
 Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
@@ -599,10 +597,7 @@ See ["activity types"](https://docs.github.com/en/actions/reference/events-that-
 
 #### Autoscaling to/from 0
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature is available since actions-runner-controller v0.19.0
 
 Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
 
@@ -624,10 +619,7 @@ Similarly, Webhook-based autoscaling works regardless of there are active runner
 
 #### Scheduled Overrides
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature is available since actions-runner-controller v0.19.0
 
 `Scheduled Overrides` allows you to configure HorizontalRunnerAutoscaler so that its Spec gets updated only during a certain period of time.
 
@@ -738,22 +730,25 @@ spec:
     spec:
       nodeSelector:
         node-role.kubernetes.io/test: ""
-      
+
       securityContext:
         #All level/role/type/user values will vary based on your SELinux policies.
         #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
+        seLinuxOptions:
           level: "s0"
           role: "system_r"
           type: "super_t"
           user: "system_u"
-          
+
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/test
         operator: Exists
 
       repository: mumoshu/actions-runner-controller-ci
+      # The default "summerwind/actions-runner" images are available at DockerHub:
+      #  https://hub.docker.com/r/summerwind/actions-runner
+      # You can also build your own and specify it like the below:
       image: custom-image/actions-runner:latest
       imagePullPolicy: Always
       resources:
@@ -772,7 +767,7 @@ spec:
       # true (default) = The runner restarts after running jobs, to ensure a clean and reproducible build environment
       # false = The runner is persistent across jobs and doesn't automatically restart
       # This directly controls the behaviour of `--once` flag provided to the github runner
-      ephemeral: false 
+      ephemeral: false
       # true (default) = A privileged docker sidecar container is included in the runner pod.
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
       # If set to false, there are no privileged container and you cannot use docker.
@@ -822,9 +817,19 @@ spec:
           hostPath:
             path: /mnt/docker-extra
             type: DirectoryOrCreate
+        - name: repo
+          hostPath:
+            path: /mnt/repo
+            type: DirectoryOrCreate
       dockerVolumeMounts:
         - mountPath: /var/lib/docker
           name: docker-extra
+      # You can mount some of the shared volumes to the runner container using volumeMounts.
+      # NOTE: Do not try to mount the volume onto the runner workdir itself as it will not work. You could mount it however on a sub directory in the runner workdir
+      # Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/630#issuecomment-862087323 for more information.
+      volumeMounts:
+        - mountPath: /home/runner/work/repo
+          name: repo
       # Optional name of the container runtime configuration that should be used for pods.
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
@@ -853,7 +858,7 @@ spec:
   replicas: 1
   template:
     spec:
-      repository: summerwind/actions-runner-controller
+      repository: actions-runner-controller/actions-runner-controller
       labels:
         - custom-runner
 ```
@@ -912,6 +917,109 @@ spec:
         fsGroup: 1000
 ```
 
+
+### Use with Istio
+
+Istio 1.7.0 or greater has `holdApplicationUntilProxyStarts` added in https://github.com/istio/istio/pull/24737, which enables you to delay the `runner` container startup until the injected `istio-proxy` container finish starting. Try using it if you need to use Istio. Otherwise the runner is unlikely to work, because it fails to call any GitHub API to register itself due to `istio-proxy` being not up and running yet.
+
+Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test(contribution is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
+
+- https://github.com/actions-runner-controller/actions-runner-controller/issues/591
+- https://github.com/actions-runner-controller/actions-runner-controller/pull/592
+- https://github.com/istio/istio/issues/11130
+
+### Stateful Runners
+
+> This is a documentation about a unreleased version of actions-runner-controller.
+>
+> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
+> developers by reporting any bugs :smile:
+
+`actions-runner-controller` supports `RunnerSet` API that let you deploy stateful runners. A stateful runner is designed to be able to store some data persists across GitHub Actions workflow and job runs. You might find it useful, for example, to speed up your docker builds by persisting the docker layer cache.
+
+A basic `RunnerSet` would look like this:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  ephemeral: false
+  replicas: 2
+  repository: mumoshu/actions-runner-controller-ci
+  # Other mandatory fields from StatefulSet
+  selector:
+    matchLabels:
+      app: example
+  serviceName: example
+  template:
+    metadata:
+      labels:
+        app: example
+```
+
+As it is based on `StatefulSet`, `selector` and `template.medatada.labels` needs to be defined and haev the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
+
+Runner-related fields like `ephemeral`, `repository`, `organiåtion`, `enterprise`, and so on should be written directly under `spec`.
+
+Fields like `volumeClaimTemplates` that originates from `StatefulSet` shuold also be written directly under `spec`.
+
+Pod-related fields like security contexts and volumes are written under `spec.template.spec` like `StatefulSet`.
+
+Simillarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a dockerd.
+
+For a more complex example, see the below:
+
+```
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  # NOTE: RunnerSet supports non-ephemeral runners only today
+  ephemeral: false
+  replicas: 2
+  repository: mumoshu/actions-runner-controller-ci
+  dockerdWithinRunnerContainer: true
+  template:
+    spec:
+      securityContext:
+        #All level/role/type/user values will vary based on your SELinux policies.
+        #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
+        seLinuxOptions: 
+          level: "s0"
+          role: "system_r"
+          type: "super_t"
+          user: "system_u"
+      containers:
+      - name: runner
+        env: []
+        resources:
+          limits:
+            cpu: "4.0"
+            memory: "8Gi"
+          requests:
+            cpu: "2.0"
+            memory: "4Gi"
+      - name: docker
+        resources:
+          limits:
+            cpu: "4.0"
+            memory: "8Gi"
+          requests:
+            cpu: "2.0"
+            memory: "4Gi"
+```
+
+You can also read the design and usage documentation written in the original pull request that introduced `RunnerSet` for more information.
+
+https://github.com/actions-runner-controller/actions-runner-controller/pull/629
+
+Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A statefulset is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each statefulset-managed pod gets the same persisntet volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
+
+We envision that `RunnerSet` will eventually replaces `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
+
 ### Software Installed in the Runner Image
 
 **Cloud Tooling**<br />
@@ -947,7 +1055,7 @@ kind: Runner
 metadata:
   name: custom-runner
 spec:
-  repository: summerwind/actions-runner-controller
+  repository: actions-runner-controller/actions-runner-controller
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
@@ -956,11 +1064,17 @@ spec:
 #### invalid header field value
 
 ```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	{"controller": "runner", "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9", "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"}
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
+{
+  "controller": "runner",
+  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
+  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
+}
 ```
 
-**Solutions**<br />
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added
+**Solution**
+
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documented flags
 
@@ -1001,7 +1115,7 @@ metadata:
 spec:
   env:
     - name: STARTUP_DELAY
-      value: "2" # Remember! env var values must be strings.  
+      value: "2" # Remember! env var values must be strings.
 ```
 
 *Example `RunnerDeployment` with a 2 second startup delay:*
@@ -1018,141 +1132,6 @@ spec:
           value: "2" # Remember! env var values must be strings.
 ```
 
-
 # Contributing
 
-For more details about any requirements or process, please check out [Getting Started with Contributing](CONTRIBUTING.md).
-
-**The Controller**<br />
-If you'd like to modify the controller to fork or contribute, I'd suggest using the following snippet for running
-the acceptance test:
-
-```shell
-# This sets `VERSION` envvar to some appropriate value
-. hack/make-env.sh
-
-DOCKER_USER=*** \
-  GITHUB_TOKEN=*** \
-  APP_ID=*** \
-  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
-  INSTALLATION_ID=*** \
-  make acceptance
-```
-
-> **Notes for Ubuntu 20.04+ users**
->
-> If you're using Ubuntu 20.04 or greater, you might have installed `docker` with `snap`.
->
-> If you want to stick with `snap`-provided `docker`, do not forget to set `TMPDIR` to
-> somewhere under `$HOME`.
-> Otherwise `kind load docker-image` fail while running `docker save`.
-> See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap for more information.
-
-Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
-`GITHUB_TOKEN`, and those in [Using GitHub App](#using-github-app) to obtain `APP_ID`, `INSTALLATION_ID`, and
-`PRIAVTE_KEY_FILE_PATH`.
-
-The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-runner-controller`,
-creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
-controller is able to bring up a runner pod with the actions runner registration token installed.
-
-**Rerunning a failed test**
-
-When one of tests run by `make acceptance` failed, you'd probably like to rerun only the failed one.
-
-It can be done by `make acceptance/run` and by setting the combination of `ACCEPTANCE_TEST_DEPLOYMENT_TOOL` and `ACCEPTANCE_TEST_SECRET_TYPE` values that failed.
-
-In the example below, we rerun the test for the combination `ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token` only:
-
-```
-DOCKER_USER=*** \
-  GITHUB_TOKEN=*** \
-  APP_ID=*** \
-  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
-  INSTALLATION_ID=*** \
-  ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token \
-  make acceptance/run
-```
-
-**Testing in a non-kind cluster**
-
-If you prefer to test in a non-kind cluster, you can instead run:
-
-```shell script
-KUBECONFIG=path/to/kubeconfig \
-  DOCKER_USER=*** \
-  GITHUB_TOKEN=*** \
-  APP_ID=*** \
-  PRIVATE_KEY_FILE_PATH=path/to/pem/file \
-  INSTALLATION_ID=*** \
-  ACCEPTANCE_TEST_SECRET_TYPE=token \
-  make docker-build acceptance/setup \
-       acceptance/deploy \
-       acceptance/tests
-```
-
-**Development Tips**
-
-Rerunning the whole acceptance test suite from scratch on every little change to the controller, the runner, and the chart would be counter-productive.
-
-To make your development cycle faster, use the below command to update deploy and update all the three:
-
-```
-# Let assume we have all other envvars like DOCKER_USER, GITHUB_TOKEN already set,
-# The below command will (re)build `actions-runner-controller:controller1` and `actions-runner:runner1`,
-# load those into kind nodes, and then rerun kubectl or helm to install/upgrade the controller,
-# and finally upgrade the runner deployment to use the new runner image.
-#
-# As helm 3 and kubectl is unable to recreate a pod when no tag change,
-# you either need to bump VERSION and RUNNER_TAG on each run,
-# or manually run `kubectl delete pod $POD` on respective pods for changes to actually take effect.
-VERSION=controller1 \
-  RUNNER_TAG=runner1 \
-  make docker-build acceptance/load acceptance/deploy
-```
-
-If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
-
-```
-NAME=$DOCKER_USER/actions-runner-controller \
-  make docker-build acceptance/load && \
-  kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
-```
-
-Similarly, if you'd like to recreate runner pods with the newer runner image,
-
-```
-NAME=$DOCKER_USER/actions-runner make \
-  -C runner docker-{build,push}-ubuntu && \
-  (kubectl get po -ojsonpath={.items[*].metadata.name} | xargs -n1 kubectl delete po)
-```
-
-**Runner Tests**<br />
-A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected. When raising a PR please run the relevant suites to prove your change hasn't broken anything.
-
-**Running Ginkgo Tests**
-
-You can run the integration test suite that is written in Ginkgo with:
-
-```bash
-make test-with-deps
-```
-
-This will firstly install a few binaries required to setup the integration test environment and then runs `go test` to start the Ginkgo test.
-
-If you don't want to use `make`, like when you're running tests from your IDE, install required binaries to `/usr/local/kubebuilder/bin`. That's the directory in which controller-runtime's `envtest` framework locates the binaries.
-
-```bash
-sudo mkdir -p /usr/local/kubebuilder/bin
-make kube-apiserver etcd
-sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
-go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
-```
-
-To run Ginkgo tests selectively, set the pattern of target test names to `GINKGO_FOCUS`.
-All the Ginkgo test that matches `GINKGO_FOCUS` will be run.
-
-```bash
-GINKGO_FOCUS='[It] should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0' \
-  go test -v -run TestAPIs github.com/summerwind/actions-runner-controller/controllers
-```
+For more details on contributing to the project (including requirements) please check out [Getting Started with Contributing](CONTRIBUTING.md).

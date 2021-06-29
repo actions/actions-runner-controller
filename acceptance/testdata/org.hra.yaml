@@ -24,6 +24,7 @@ spec:
     minReplicas: 0
   minReplicas: 0
   maxReplicas: 5
+  # Used to test that HRA is working for org runners
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'

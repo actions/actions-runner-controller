@@ -17,11 +17,15 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '^1.16.5'
+    - run: go version
     - name: Install kubebuilder
       run: |
-        curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
-        tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
-        sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+        curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_linux_amd64.tar.gz
+        tar zxvf kubebuilder_2.3.2_linux_amd64.tar.gz
+        sudo mv kubebuilder_2.3.2_linux_amd64 /usr/local/kubebuilder
     - name: Run tests
       run: make test
     - name: Verify manifests are up-to-date

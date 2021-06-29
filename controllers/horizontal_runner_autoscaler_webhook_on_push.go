@@ -1,8 +1,8 @@
 package controllers
 
 import (
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/google/go-github/v33/github"
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
 )
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) MatchPushEvent(event *github.PushEvent) func(scaleUpTrigger v1alpha1.ScaleUpTrigger) bool {

@@ -35,7 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 )
 
 const (
@@ -61,7 +61,7 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	Name      string
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	return ctrl.Result{}, nil
 }
 
@@ -443,7 +443,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 
 	autoscaler.Recorder = mgr.GetEventRecorderFor(name)
 
-	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj runtime.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj client.Object) []string {
 		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
 
 		if hra.Spec.ScaleTargetRef.Name == "" {

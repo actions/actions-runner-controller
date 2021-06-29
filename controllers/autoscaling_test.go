@@ -1,14 +1,15 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/github"
-	"github.com/summerwind/actions-runner-controller/github/fake"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -203,7 +204,9 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				Spec: v1alpha1.RunnerDeploymentSpec{
 					Template: v1alpha1.RunnerTemplate{
 						Spec: v1alpha1.RunnerSpec{
-							Repository: tc.repo,
+							RunnerConfig: v1alpha1.RunnerConfig{
+								Repository: tc.repo,
+							},
 						},
 					},
 					Replicas: tc.fixed,
@@ -229,7 +232,9 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra, minReplicas)
+			st := h.scaleTargetFromRD(context.Background(), rd)
+
+			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -458,7 +463,9 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 							},
 						},
 						Spec: v1alpha1.RunnerSpec{
-							Organization: tc.org,
+							RunnerConfig: v1alpha1.RunnerConfig{
+								Organization: tc.org,
+							},
 						},
 					},
 					Replicas: tc.fixed,
@@ -493,7 +500,9 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, rd, hra, minReplicas)
+			st := h.scaleTargetFromRD(context.Background(), rd)
+
+			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)

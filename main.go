@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/kelseyhightower/envconfig"
-	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/controllers"
-	"github.com/summerwind/actions-runner-controller/github"
 	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -94,7 +94,7 @@ func main() {
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change. . If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak github-api-cache-duration, too")
-	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/summerwind/actions-runner-controller/issues/321 for more information")
+	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&logLevel, "log-level", logLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.Parse()
@@ -127,6 +127,7 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "actions-runner-controller",
 		Port:               9443,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
@@ -150,14 +151,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerSetReconciler := &controllers.RunnerReplicaSetReconciler{
+	runnerReplicaSetReconciler := &controllers.RunnerReplicaSetReconciler{
 		Client:       mgr.GetClient(),
 		Log:          log.WithName("runnerreplicaset"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: ghClient,
 	}
 
-	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+	if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
 		os.Exit(1)
 	}
@@ -174,6 +175,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	runnerSetReconciler := &controllers.RunnerSetReconciler{
+		Client:             mgr.GetClient(),
+		Log:                log.WithName("runnerset"),
+		Scheme:             mgr.GetScheme(),
+		CommonRunnerLabels: commonRunnerLabels,
+		RunnerImage:        runnerImage,
+		DockerImage:        dockerImage,
+		GitHubBaseURL:      ghClient.GithubBaseURL,
+	}
+
+	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerSet")
+		os.Exit(1)
+	}
 	if gitHubAPICacheDuration == 0 {
 		gitHubAPICacheDuration = syncPeriod - 10*time.Second
 	}
@@ -200,6 +215,18 @@ func main() {
 		CacheDuration: gitHubAPICacheDuration,
 	}
 
+	runnerPodReconciler := &controllers.RunnerPodReconciler{
+		Client:       mgr.GetClient(),
+		Log:          log.WithName("runnerpod"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
+	}
+
+	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPod")
+		os.Exit(1)
+	}
+
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
 		os.Exit(1)
@@ -218,6 +245,16 @@ func main() {
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
+
+	injector := &controllers.PodRunnerTokenInjector{
+		Client:       mgr.GetClient(),
+		GitHubClient: ghClient,
+		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
+	}
+	if err = injector.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
+		os.Exit(1)
+	}
 
 	log.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

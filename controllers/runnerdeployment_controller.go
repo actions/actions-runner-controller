@@ -37,8 +37,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/controllers/metrics"
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
 )
 
 const (
@@ -65,8 +65,7 @@ type RunnerDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
-func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runnerdeployment", req.NamespacedName)
 
 	var rd v1alpha1.RunnerDeployment
@@ -155,7 +154,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 		// A selector update change doesn't trigger replicaset replacement,
 		// but we still need to update the existing replicaset with it.
 		// Otherwise selector-based runner query will never work on replicasets created before the controller v0.17.0
-		// See https://github.com/summerwind/actions-runner-controller/pull/355#discussion_r585379259
+		// See https://github.com/actions-runner-controller/actions-runner-controller/pull/355#discussion_r585379259
 		if err := r.Client.Update(ctx, updateSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
 
@@ -439,7 +438,7 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.Recorder = mgr.GetEventRecorderFor(name)
 
-	if err := mgr.GetFieldIndexer().IndexField(&v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj runtime.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj client.Object) []string {
 		runnerSet := rawObj.(*v1alpha1.RunnerReplicaSet)
 		owner := metav1.GetControllerOf(runnerSet)
 		if owner == nil {

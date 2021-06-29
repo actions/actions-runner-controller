@@ -17,19 +17,21 @@ limitations under the License.
 package controllers
 
 import (
-	"github.com/onsi/ginkgo/config"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/onsi/ginkgo/config"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
@@ -45,15 +47,15 @@ var testEnv *envtest.Environment
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	config.GinkgoConfig.FocusString = os.Getenv("GINKGO_FOCUS")
+	config.GinkgoConfig.FocusStrings = append(config.GinkgoConfig.FocusStrings, os.Getenv("GINKGO_FOCUS"))
 
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"Controller Suite",
-		[]Reporter{envtest.NewlineReporter{}})
+		[]Reporter{printer.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
 
 	var apiServerFlags []string
 

@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: mumoshu/actions-runner-controller
-  newTag: dev
+  newTag: controller1

@@ -133,12 +133,77 @@ rules:
   - patch
   - update
 - apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnersets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnersets/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnersets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - "apps"
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - "apps"
+  resources:
+  - statefulsets/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - ""
   resources:
   - events
   verbs:
   - create
   - patch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
 - apiGroups:
   - ""
   resources:

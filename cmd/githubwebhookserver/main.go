@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	actionsv1alpha1 "github.com/summerwind/actions-runner-controller/api/v1alpha1"
-	"github.com/summerwind/actions-runner-controller/controllers"
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers"
 	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -150,7 +150,7 @@ func main() {
 		defer wg.Done()
 
 		setupLog.Info("starting webhook server")
-		if err := mgr.Start(ctx.Done()); err != nil {
+		if err := mgr.Start(ctx); err != nil {
 			setupLog.Error(err, "problem running manager")
 			os.Exit(1)
 		}
@@ -183,7 +183,7 @@ func main() {
 	}()
 
 	go func() {
-		<-ctrl.SetupSignalHandler()
+		<-ctrl.SetupSignalHandler().Done()
 		cancel()
 	}()
 
