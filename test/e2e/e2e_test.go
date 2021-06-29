@@ -121,6 +121,10 @@ func TestE2E(t *testing.T) {
 }
 
 func TestE2ERunnerDeploy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipped as -short is set")
+	}
+
 	env := initTestEnv(t)
 
 	t.Run("build and load images", func(t *testing.T) {
