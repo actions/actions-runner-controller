@@ -194,10 +194,26 @@ func TestE2E(t *testing.T) {
 		}
 	})
 
-	testResultCMName := fmt.Sprintf("test-result-%s", id)
+	testResultCMNamePrefix := "test-result-"
 
 	if t.Failed() {
 		return
+	}
+
+	numJobs := 2
+
+	type job struct {
+		name, testArg, configMapName string
+	}
+
+	var testJobs []job
+
+	for i := 0; i < numJobs; i++ {
+		name := fmt.Sprintf("test%d", i)
+		testArg := fmt.Sprintf("%s%d", id, i)
+		configMapName := testResultCMNamePrefix + testArg
+
+		testJobs = append(testJobs, job{name: name, testArg: testArg, configMapName: configMapName})
 	}
 
 	t.Run("Install workflow", func(t *testing.T) {
@@ -209,25 +225,28 @@ func TestE2E(t *testing.T) {
 					Branches: []string{"main"},
 				},
 			},
-			Jobs: map[string]testing.Job{
-				"test": {
-					RunsOn: runnerLabel,
-					Steps: []testing.Step{
-						{
-							Uses: testing.ActionsCheckoutV2,
-						},
-						{
-							Uses: "azure/setup-kubectl@v1",
-							With: &testing.With{
-								Version: "v1.20.2",
-							},
-						},
-						{
-							Run: "./test.sh",
+			Jobs: map[string]testing.Job{},
+		}
+
+		for i := 0; i < numJobs; i++ {
+			j := testJobs[i]
+			wf.Jobs[j.name] = testing.Job{
+				RunsOn: runnerLabel,
+				Steps: []testing.Step{
+					{
+						Uses: testing.ActionsCheckoutV2,
+					},
+					{
+						Uses: "azure/setup-kubectl@v1",
+						With: &testing.With{
+							Version: "v1.20.2",
 						},
 					},
+					{
+						Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
+					},
 				},
-			},
+			}
 		}
 
 		wfContent, err := yaml.Marshal(wf)
@@ -237,10 +256,12 @@ func TestE2E(t *testing.T) {
 
 		script := []byte(fmt.Sprintf(`#!/usr/bin/env bash
 set -vx
-echo hello from %s
-kubectl delete cm %s || true
-kubectl create cm %s --from-literal=status=ok
-`, testID, testResultCMName, testResultCMName))
+name=$1
+id=$2
+echo hello from $name
+kubectl delete cm %s$id || true
+kubectl create cm %s$id --from-literal=status=ok
+`, testResultCMNamePrefix, testResultCMNamePrefix))
 
 		g := testing.GitRepo{
 			Dir:           filepath.Join(t.TempDir(), "gitrepo"),
@@ -262,16 +283,43 @@ kubectl create cm %s --from-literal=status=ok
 	}
 
 	t.Run("Verify workflow run result", func(t *testing.T) {
-		gomega.NewGomegaWithT(t).Eventually(func() (string, error) {
-			m, err := k.GetCMLiterals(ctx, testResultCMName, cmCfg)
-			if err != nil {
-				return "", err
+		var expected []string
+
+		for i := 0; i < numJobs; i++ {
+			expected = append(expected, "ok")
+		}
+
+		gomega.NewGomegaWithT(t).Eventually(func() ([]string, error) {
+			var results []string
+
+			var errs []error
+
+			for i := 0; i < numJobs; i++ {
+				testResultCMName := testJobs[i].configMapName
+
+				m, err := k.GetCMLiterals(ctx, testResultCMName, cmCfg)
+				if err != nil {
+					errs = append(errs, err)
+				} else {
+					result := m["status"]
+					results = append(results, result)
+				}
 			}
 
-			result := m["status"]
+			var err error
 
-			return result, nil
-		}, 60*time.Second, 10*time.Second).Should(gomega.Equal("ok"))
+			if len(errs) > 0 {
+				var msg string
+
+				for i, e := range errs {
+					msg += fmt.Sprintf("error%d: %v\n", i, e)
+				}
+
+				err = fmt.Errorf("%d errors occurred: %s", len(errs), msg)
+			}
+
+			return results, err
+		}, 60*time.Second, 10*time.Second).Should(gomega.Equal(expected))
 	})
 }
 
