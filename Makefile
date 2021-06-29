@@ -211,10 +211,11 @@ acceptance/deploy:
 acceptance/tests:
 	acceptance/checks.sh
 
+# We use -count=1 instead of `go clean -testcache`
+# See https://terratest.gruntwork.io/docs/testing-best-practices/avoid-test-caching/
 .PHONY: e2e
 e2e:
-	go clean -testcache
-	go test -v -timeout 600s -run '^TestE2E$$' ./test/e2e
+	go test -count=1 -v -timeout 600s -run '^TestE2E$$' ./test/e2e
 
 # Upload release file to GitHub.
 github-release: release
