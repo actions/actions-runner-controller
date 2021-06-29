@@ -30,7 +30,7 @@ authSecret:
 
 image:
   repository: "summerwind/actions-runner-controller"
-  actionsRunner: "summerwind/actions-runner:latest"
+  actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 
