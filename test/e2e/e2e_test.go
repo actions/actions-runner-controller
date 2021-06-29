@@ -3,8 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -14,19 +12,12 @@ import (
 )
 
 var (
-	Img = func(repo, tag string) testing.ContainerImage {
-		return testing.ContainerImage{
-			Repo: repo,
-			Tag:  tag,
-		}
-	}
-
 	controllerImageRepo = "actionsrunnercontrollere2e/actions-runner-controller"
 	controllerImageTag  = "e2e"
-	controllerImage     = Img(controllerImageRepo, controllerImageTag)
+	controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
 	runnerImageRepo     = "actionsrunnercontrollere2e/actions-runner"
 	runnerImageTag      = "e2e"
-	runnerImage         = Img(runnerImageRepo, runnerImageTag)
+	runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
 
 	prebuildImages = []testing.ContainerImage{
 		controllerImage,
@@ -49,12 +40,22 @@ var (
 	certManagerVersion = "v1.1.1"
 
 	images = []testing.ContainerImage{
-		Img("docker", "dind"),
-		Img("quay.io/brancz/kube-rbac-proxy", "v0.10.0"),
-		Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
-		Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
-		Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
+		testing.Img("docker", "dind"),
+		testing.Img("quay.io/brancz/kube-rbac-proxy", "v0.10.0"),
+		testing.Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
+		testing.Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
+		testing.Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
 	}
+
+	commonScriptEnv = []string{
+		"SYNC_PERIOD=" + "10s",
+		"NAME=" + controllerImageRepo,
+		"VERSION=" + controllerImageTag,
+		"RUNNER_NAME=" + runnerImageRepo,
+		"RUNNER_TAG=" + runnerImageTag,
+	}
+
+	testResultCMNamePrefix = "test-result-"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -71,141 +72,208 @@ var (
 // This function requires a few environment variables to be set to provide some test data.
 // If you're using VS Code and wanting to run this test locally,
 // Browse "Workspace Settings" and search for "go test env file" and put e.g. "${workspaceFolder}/.test.env" there.
+//
+// Instead of relying on "stages" to make it possible to rerun individual tests like terratest,
+// you use the "run subtest" feature provided by IDE like VS Code, IDEA, and GoLand.
+// Our `testing` package automatically checks for the running test name and skips the cleanup tasks
+// whenever the whole test failed, so that you can immediately start fixing issues and rerun inidividual tests.
+// See the below link for how terratest handles this:
+// https://terratest.gruntwork.io/docs/testing-best-practices/iterating-locally-using-test-stages/
 func TestE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipped as -short is set")
 	}
 
-	k := testing.Start(t, testing.Cluster{}, testing.Preload(images...))
+	env := initTestEnv(t)
+	env.useRunnerSet = true
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	defer cancel()
-
-	t.Run("build images", func(t *testing.T) {
-		if err := k.BuildImages(ctx, builds); err != nil {
-			t.Fatal(err)
-		}
+	t.Run("build and load images", func(t *testing.T) {
+		env.buildAndLoadImages(t)
 	})
-
-	t.Run("load images", func(t *testing.T) {
-		if err := k.LoadImages(ctx, prebuildImages); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	kubectlEnv := []string{
-		"KUBECONFIG=" + k.Kubeconfig(),
-	}
 
 	t.Run("install cert-manager", func(t *testing.T) {
-		applyCfg := testing.KubectlConfig{NoValidate: true, Env: kubectlEnv}
-
-		if err := k.Apply(ctx, fmt.Sprintf("https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml", certManagerVersion), applyCfg); err != nil {
-			t.Fatal(err)
-		}
-
-		waitCfg := testing.KubectlConfig{
-			Env:       kubectlEnv,
-			Namespace: "cert-manager",
-			Timeout:   90 * time.Second,
-		}
-
-		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager-cainjector", waitCfg); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager-webhook", waitCfg.WithTimeout(60*time.Second)); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := k.WaitUntilDeployAvailable(ctx, "cert-manager", waitCfg.WithTimeout(60*time.Second)); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := k.RunKubectlEnsureNS(ctx, "actions-runner-system", testing.KubectlConfig{Env: kubectlEnv}); err != nil {
-			t.Fatal(err)
-		}
+		env.installCertManager(t)
 	})
-
-	t.Run("make default serviceaccount cluster-admin", func(t *testing.T) {
-		cfg := testing.KubectlConfig{Env: kubectlEnv}
-		bindingName := "default-admin"
-		if _, err := k.GetClusterRoleBinding(ctx, bindingName, cfg); err != nil {
-			if err := k.CreateClusterRoleBindingServiceAccount(ctx, bindingName, "cluster-admin", "default:default", cfg); err != nil {
-				t.Fatal(err)
-			}
-		}
-	})
-
-	cmCfg := testing.KubectlConfig{
-		Env: kubectlEnv,
-	}
-	testInfoName := "test-info"
-
-	m, _ := k.GetCMLiterals(ctx, testInfoName, cmCfg)
-
-	t.Run("Save test ID", func(t *testing.T) {
-		if m == nil {
-			id := RandStringBytesRmndr(10)
-			m = map[string]string{"id": id}
-			if err := k.CreateCMLiterals(ctx, testInfoName, m, cmCfg); err != nil {
-				t.Fatal(err)
-			}
-		}
-	})
-
-	id := m["id"]
-
-	runnerLabel := "test-" + id
-
-	testID := t.Name() + " " + id
-
-	t.Logf("Using test id %s", testID)
-
-	githubToken := getenv(t, "GITHUB_TOKEN")
-	testRepo := getenv(t, "TEST_REPO")
-	testOrg := getenv(t, "TEST_ORG")
-	testOrgRepo := getenv(t, "TEST_ORG_REPO")
 
 	if t.Failed() {
 		return
 	}
 
 	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
-		scriptEnv := []string{
-			"KUBECONFIG=" + k.Kubeconfig(),
-			"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
-			"ACCEPTANCE_TEST_SECRET_TYPE=token",
-			"NAME=" + controllerImageRepo,
-			"VERSION=" + controllerImageTag,
-			"RUNNER_NAME=" + runnerImageRepo,
-			"RUNNER_TAG=" + runnerImageTag,
-			"TEST_REPO=" + testRepo,
-			"TEST_ORG=" + testOrg,
-			"TEST_ORG_REPO=" + testOrgRepo,
-			"SYNC_PERIOD=" + "10s",
-			"USE_RUNNERSET=" + "1",
-			"GITHUB_TOKEN=" + githubToken,
-			"RUNNER_LABEL=" + runnerLabel,
-		}
-
-		if err := k.RunScript(ctx, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv}); err != nil {
-			t.Fatal(err)
-		}
+		env.installActionsRunnerController(t)
 	})
-
-	testResultCMNamePrefix := "test-result-"
 
 	if t.Failed() {
 		return
 	}
 
-	numJobs := 2
+	t.Run("Install workflow", func(t *testing.T) {
+		env.installActionsWorkflow(t)
+	})
 
-	type job struct {
-		name, testArg, configMapName string
+	if t.Failed() {
+		return
 	}
 
+	t.Run("Verify workflow run result", func(t *testing.T) {
+		env.verifyActionsWorkflowRun(t)
+	})
+}
+
+func TestE2ERunnerDeploy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipped as -short is set")
+	}
+
+	env := initTestEnv(t)
+
+	t.Run("build and load images", func(t *testing.T) {
+		env.buildAndLoadImages(t)
+	})
+
+	t.Run("install cert-manager", func(t *testing.T) {
+		env.installCertManager(t)
+	})
+
+	if t.Failed() {
+		return
+	}
+
+	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
+		env.installActionsRunnerController(t)
+	})
+
+	if t.Failed() {
+		return
+	}
+
+	t.Run("Install workflow", func(t *testing.T) {
+		env.installActionsWorkflow(t)
+	})
+
+	if t.Failed() {
+		return
+	}
+
+	t.Run("Verify workflow run result", func(t *testing.T) {
+		env.verifyActionsWorkflowRun(t)
+	})
+}
+
+type env struct {
+	*testing.Env
+
+	useRunnerSet bool
+
+	testID                                                   string
+	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
+	testJobs                                                 []job
+}
+
+func initTestEnv(t *testing.T) *env {
+	t.Helper()
+
+	testingEnv := testing.Start(t, testing.Preload(images...))
+
+	e := &env{Env: testingEnv}
+
+	id := e.ID()
+
+	testID := t.Name() + " " + id
+
+	t.Logf("Using test id %s", testID)
+
+	e.testID = testID
+	e.runnerLabel = "test-" + id
+	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
+	e.testRepo = testing.Getenv(t, "TEST_REPO")
+	e.testOrg = testing.Getenv(t, "TEST_ORG")
+	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO")
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 2)
+
+	return e
+}
+
+func (e *env) f() {
+}
+
+func (e *env) buildAndLoadImages(t *testing.T) {
+	t.Helper()
+
+	e.DockerBuild(t, builds)
+	e.KindLoadImages(t, prebuildImages)
+}
+
+func (e *env) installCertManager(t *testing.T) {
+	t.Helper()
+
+	applyCfg := testing.KubectlConfig{NoValidate: true}
+
+	e.KubectlApply(t, fmt.Sprintf("https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml", certManagerVersion), applyCfg)
+
+	waitCfg := testing.KubectlConfig{
+		Namespace: "cert-manager",
+		Timeout:   90 * time.Second,
+	}
+
+	e.KubectlWaitUntilDeployAvailable(t, "cert-manager-cainjector", waitCfg)
+	e.KubectlWaitUntilDeployAvailable(t, "cert-manager-webhook", waitCfg.WithTimeout(60*time.Second))
+	e.KubectlWaitUntilDeployAvailable(t, "cert-manager", waitCfg.WithTimeout(60*time.Second))
+}
+
+func (e *env) installActionsRunnerController(t *testing.T) {
+	t.Helper()
+
+	e.createControllerNamespaceAndServiceAccount(t)
+
+	scriptEnv := []string{
+		"KUBECONFIG=" + e.Kubeconfig(),
+		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
+		"ACCEPTANCE_TEST_SECRET_TYPE=token",
+	}
+
+	if e.useRunnerSet {
+		scriptEnv = append(scriptEnv, "USE_RUNNERSET=1")
+	}
+
+	varEnv := []string{
+		"TEST_REPO=" + e.testRepo,
+		"TEST_ORG=" + e.testOrg,
+		"TEST_ORG_REPO=" + e.testOrgRepo,
+		"GITHUB_TOKEN=" + e.githubToken,
+		"RUNNER_LABEL=" + e.runnerLabel,
+	}
+
+	scriptEnv = append(scriptEnv, varEnv...)
+	scriptEnv = append(scriptEnv, commonScriptEnv...)
+
+	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
+}
+
+func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
+	t.Helper()
+
+	e.KubectlEnsureNS(t, "actions-runner-system", testing.KubectlConfig{})
+	e.KubectlEnsureClusterRoleBindingServiceAccount(t, "default-admin", "cluster-admin", "default:default", testing.KubectlConfig{})
+}
+
+func (e *env) installActionsWorkflow(t *testing.T) {
+	t.Helper()
+
+	installActionsWorkflow(t, e.testID, e.runnerLabel, testResultCMNamePrefix, e.testRepo, e.testJobs)
+}
+
+func (e *env) verifyActionsWorkflowRun(t *testing.T) {
+	t.Helper()
+
+	verifyActionsWorkflowRun(t, e.Env, e.testJobs)
+}
+
+type job struct {
+	name, testArg, configMapName string
+}
+
+func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 	var testJobs []job
 
 	for i := 0; i < numJobs; i++ {
@@ -216,45 +284,52 @@ func TestE2E(t *testing.T) {
 		testJobs = append(testJobs, job{name: name, testArg: testArg, configMapName: configMapName})
 	}
 
-	t.Run("Install workflow", func(t *testing.T) {
-		wfName := "E2E " + testID
-		wf := testing.Workflow{
-			Name: wfName,
-			On: testing.On{
-				Push: &testing.Push{
-					Branches: []string{"main"},
+	return testJobs
+}
+
+func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	wfName := "E2E " + testID
+	wf := testing.Workflow{
+		Name: wfName,
+		On: testing.On{
+			Push: &testing.Push{
+				Branches: []string{"main"},
+			},
+		},
+		Jobs: map[string]testing.Job{},
+	}
+
+	for _, j := range testJobs {
+		wf.Jobs[j.name] = testing.Job{
+			RunsOn: runnerLabel,
+			Steps: []testing.Step{
+				{
+					Uses: testing.ActionsCheckoutV2,
+				},
+				{
+					Uses: "azure/setup-kubectl@v1",
+					With: &testing.With{
+						Version: "v1.20.2",
+					},
+				},
+				{
+					Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
 				},
 			},
-			Jobs: map[string]testing.Job{},
 		}
+	}
 
-		for i := 0; i < numJobs; i++ {
-			j := testJobs[i]
-			wf.Jobs[j.name] = testing.Job{
-				RunsOn: runnerLabel,
-				Steps: []testing.Step{
-					{
-						Uses: testing.ActionsCheckoutV2,
-					},
-					{
-						Uses: "azure/setup-kubectl@v1",
-						With: &testing.With{
-							Version: "v1.20.2",
-						},
-					},
-					{
-						Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
-					},
-				},
-			}
-		}
+	wfContent, err := yaml.Marshal(wf)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		wfContent, err := yaml.Marshal(wf)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		script := []byte(fmt.Sprintf(`#!/usr/bin/env bash
+	script := []byte(fmt.Sprintf(`#!/usr/bin/env bash
 set -vx
 name=$1
 id=$2
@@ -263,87 +338,70 @@ kubectl delete cm %s$id || true
 kubectl create cm %s$id --from-literal=status=ok
 `, testResultCMNamePrefix, testResultCMNamePrefix))
 
-		g := testing.GitRepo{
-			Dir:           filepath.Join(t.TempDir(), "gitrepo"),
-			Name:          testRepo,
-			CommitMessage: wfName,
-			Contents: map[string][]byte{
-				".github/workflows/workflow.yaml": wfContent,
-				"test.sh":                         script,
-			},
-		}
-
-		if err := g.Sync(ctx); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	if t.Failed() {
-		return
+	g := testing.GitRepo{
+		Dir:           filepath.Join(t.TempDir(), "gitrepo"),
+		Name:          testRepo,
+		CommitMessage: wfName,
+		Contents: map[string][]byte{
+			".github/workflows/workflow.yaml": wfContent,
+			"test.sh":                         script,
+		},
 	}
 
-	t.Run("Verify workflow run result", func(t *testing.T) {
-		var expected []string
-
-		for i := 0; i < numJobs; i++ {
-			expected = append(expected, "ok")
-		}
-
-		gomega.NewGomegaWithT(t).Eventually(func() ([]string, error) {
-			var results []string
-
-			var errs []error
-
-			for i := 0; i < numJobs; i++ {
-				testResultCMName := testJobs[i].configMapName
-
-				m, err := k.GetCMLiterals(ctx, testResultCMName, cmCfg)
-				if err != nil {
-					errs = append(errs, err)
-				} else {
-					result := m["status"]
-					results = append(results, result)
-				}
-			}
-
-			var err error
-
-			if len(errs) > 0 {
-				var msg string
-
-				for i, e := range errs {
-					msg += fmt.Sprintf("error%d: %v\n", i, e)
-				}
-
-				err = fmt.Errorf("%d errors occurred: %s", len(errs), msg)
-			}
-
-			return results, err
-		}, 60*time.Second, 10*time.Second).Should(gomega.Equal(expected))
-	})
+	if err := g.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
 }
 
-func getenv(t *testing.T, name string) string {
+func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job) {
 	t.Helper()
 
-	v := os.Getenv(name)
-	if v == "" {
-		t.Fatal(name + " must be set")
+	var expected []string
+
+	for _ = range testJobs {
+		expected = append(expected, "ok")
 	}
-	return v
-}
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+	gomega.NewGomegaWithT(t).Eventually(func() ([]string, error) {
+		var results []string
 
-const letterBytes = "abcdefghijklmnopqrstuvwxyz"
+		var errs []error
 
-// Copied from https://stackoverflow.com/a/31832326 with thanks
-func RandStringBytesRmndr(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
-	}
-	return string(b)
+		for i := range testJobs {
+			testResultCMName := testJobs[i].configMapName
+
+			kubectlEnv := []string{
+				"KUBECONFIG=" + env.Kubeconfig(),
+			}
+
+			cmCfg := testing.KubectlConfig{
+				Env: kubectlEnv,
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			m, err := env.Kubectl.GetCMLiterals(ctx, testResultCMName, cmCfg)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				result := m["status"]
+				results = append(results, result)
+			}
+		}
+
+		var err error
+
+		if len(errs) > 0 {
+			var msg string
+
+			for i, e := range errs {
+				msg += fmt.Sprintf("error%d: %v\n", i, e)
+			}
+
+			err = fmt.Errorf("%d errors occurred: %s", len(errs), msg)
+		}
+
+		return results, err
+	}, 60*time.Second, 10*time.Second).Should(gomega.Equal(expected))
 }
