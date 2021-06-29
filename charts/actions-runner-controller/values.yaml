@@ -19,7 +19,7 @@ syncPeriod: 10m
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:
-  create: true
+  create: false
   name: "controller-manager"
   ### GitHub Apps Configuration
   #github_app_id: ""
@@ -118,10 +118,10 @@ githubWebhookServer:
   replicaCount: 1
   syncPeriod: 10m
   secret:
-    create: true
+    create: false
     name: "github-webhook-server"
     ### GitHub Webhook Configuration
-    #github_webhook_secret_token: ""
+    github_webhook_secret_token: ""
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""
