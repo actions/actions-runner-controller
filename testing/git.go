@@ -7,7 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+
+	"github.com/actions-runner-controller/actions-runner-controller/testing/runtime"
 )
 
 type GitRepo struct {
@@ -15,6 +16,8 @@ type GitRepo struct {
 	Name          string
 	CommitMessage string
 	Contents      map[string][]byte
+
+	runtime.Cmdr
 }
 
 func (g *GitRepo) Sync(ctx context.Context) error {
@@ -34,7 +37,7 @@ func (g *GitRepo) Sync(ctx context.Context) error {
 		return fmt.Errorf("error getting abs path for %q: %w", g.Dir, err)
 	}
 
-	if _, err := g.combinedOutput(g.gitCloneCmd(ctx, repoURL, dir)); err != nil {
+	if _, err := g.CombinedOutput(g.gitCloneCmd(ctx, repoURL, dir)); err != nil {
 		return err
 	}
 
@@ -45,17 +48,17 @@ func (g *GitRepo) Sync(ctx context.Context) error {
 			return fmt.Errorf("error writing %s: %w", path, err)
 		}
 
-		if _, err := g.combinedOutput(g.gitAddCmd(ctx, dir, path)); err != nil {
+		if _, err := g.CombinedOutput(g.gitAddCmd(ctx, dir, path)); err != nil {
 			return err
 		}
 	}
 
-	if _, err := g.combinedOutput(g.gitDiffCmd(ctx, dir)); err != nil {
-		if _, err := g.combinedOutput(g.gitCommitCmd(ctx, dir, g.CommitMessage)); err != nil {
+	if _, err := g.CombinedOutput(g.gitDiffCmd(ctx, dir)); err != nil {
+		if _, err := g.CombinedOutput(g.gitCommitCmd(ctx, dir, g.CommitMessage)); err != nil {
 			return err
 		}
 
-		if _, err := g.combinedOutput(g.gitPushCmd(ctx, dir)); err != nil {
+		if _, err := g.CombinedOutput(g.gitPushCmd(ctx, dir)); err != nil {
 			return err
 		}
 	}
@@ -89,24 +92,4 @@ func (g *GitRepo) gitPushCmd(ctx context.Context, dir string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", "push", "origin", "main")
 	cmd.Dir = dir
 	return cmd
-}
-
-func (g *GitRepo) combinedOutput(cmd *exec.Cmd) (string, error) {
-	o, err := cmd.CombinedOutput()
-	if err != nil {
-		args := append([]string{}, cmd.Args...)
-		args[0] = cmd.Path
-
-		cs := strings.Join(args, " ")
-		s := string(o)
-		g.errorf("%s failed with output:\n%s", cs, s)
-
-		return s, err
-	}
-
-	return string(o), nil
-}
-
-func (g *GitRepo) errorf(f string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, f+"\n", args...)
 }
