@@ -118,10 +118,10 @@ githubWebhookServer:
   replicaCount: 1
   syncPeriod: 10m
   secret:
-    create: true
+    create: false
     name: "github-webhook-server"
     ### GitHub Webhook Configuration
-    #github_webhook_secret_token: ""
+    github_webhook_secret_token: ""
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""
