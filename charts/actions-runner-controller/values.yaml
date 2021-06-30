@@ -146,6 +146,7 @@ githubWebhookServer:
   priorityClassName: ""
   service:
     type: ClusterIP
+    annotations: {}
     ports:
       - port: 80
         targetPort: http
