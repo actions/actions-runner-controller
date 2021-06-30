@@ -30,6 +30,7 @@ ToC:
   - [Stateful Runners](#stateful-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Common Errors](#common-errors)
+  - [Monitoring](#monitoring)
 - [Contributing](#contributing)
 
 ## Motivation
@@ -1131,6 +1132,36 @@ spec:
         - name: STARTUP_DELAY
           value: "2" # Remember! env var values must be strings.
 ```
+
+# Monitoring
+
+The github actions runner API can be used to external monitor
+if your github actions runner are online.
+The endpoint for an organisation is `https://api.github.com/orgs/<ORG>/actions/runners`,
+where `ORG` is the name of the origanisation.
+Accessing the API requires github token of a github account that has admin access in the organisation (admin:org scope).
+It can be generated here: https://github.com/settings/tokens
+
+The following [telegraf](https://github.com/influxdata/telegraf/) configuration will periodically poll this API endpoint:
+
+```toml
+[inputs.http]
+# file that contains the github token generated above (starts with `gph_`)
+bearer_token = "/var/lib/telegraf/github-token"
+data_format = "json"
+fielddrop = ["labels_*", "id"]
+json_query = "runners"
+json_string_fields = ["status", "busy"]
+tag_keys = ["os", "name"]
+# Replace <ORG> here with the actual github origanisation
+urls = ["https://api.github.com/orgs/<ORG>/actions/runners"]
+```
+
+From telegraf it can be exported to prometheus or influxdb.
+
+The following example alert condition in prometheus checks if there at least two
+online github runner: `count(http_busy{status="online"}) >= 2`
+
 
 # Contributing
 
