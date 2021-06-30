@@ -2,7 +2,6 @@ package testing
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,16 +9,199 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/actions-runner-controller/actions-runner-controller/testing/runtime"
 )
 
 type T = testing.T
 
 var Short = testing.Short
 
-// Cluster is a test cluster backend by a kind cluster and the dockerd powering it.
+func Img(repo, tag string) ContainerImage {
+	return ContainerImage{
+		Repo: repo,
+		Tag:  tag,
+	}
+}
+
+// Env is a testing environment.
+// All of its methods are idempotent so that you can safely call it from within each subtest
+// and you can rerun the individual subtest until it works as you expect.
+type Env struct {
+	kind    *Kind
+	docker  *Docker
+	Kubectl *Kubectl
+	bash    *Bash
+	id      string
+}
+
+func Start(t *testing.T, opts ...Option) *Env {
+	t.Helper()
+
+	k := StartKind(t, opts...)
+
+	var env Env
+
+	env.kind = k
+
+	d := &Docker{}
+
+	env.docker = d
+
+	kctl := &Kubectl{}
+
+	env.Kubectl = kctl
+
+	bash := &Bash{}
+
+	env.bash = bash
+
+	//
+
+	cmKey := "id"
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + k.Kubeconfig(),
+	}
+
+	cmCfg := KubectlConfig{
+		Env: kubectlEnv,
+	}
+	testInfoName := "test-info"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	m, _ := kctl.GetCMLiterals(ctx, testInfoName, cmCfg)
+
+	if m == nil {
+		id := RandStringBytesRmndr(10)
+		m = map[string]string{cmKey: id}
+		if err := kctl.CreateCMLiterals(ctx, testInfoName, m, cmCfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	env.id = m[cmKey]
+
+	return &env
+}
+
+func (e *Env) ID() string {
+	return e.id
+}
+
+func (e *Env) DockerBuild(t *testing.T, builds []DockerBuild) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	if err := e.docker.Build(ctx, builds); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *Env) KindLoadImages(t *testing.T, prebuildImages []ContainerImage) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	if err := e.kind.LoadImages(ctx, prebuildImages); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *Env) KubectlApply(t *testing.T, path string, cfg KubectlConfig) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + e.kind.Kubeconfig(),
+	}
+
+	cfg.Env = append(kubectlEnv, cfg.Env...)
+
+	if err := e.Kubectl.Apply(ctx, path, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *Env) KubectlWaitUntilDeployAvailable(t *testing.T, name string, cfg KubectlConfig) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + e.kind.Kubeconfig(),
+	}
+
+	cfg.Env = append(kubectlEnv, cfg.Env...)
+
+	if err := e.Kubectl.WaitUntilDeployAvailable(ctx, name, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *Env) KubectlEnsureNS(t *testing.T, name string, cfg KubectlConfig) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + e.kind.Kubeconfig(),
+	}
+
+	cfg.Env = append(kubectlEnv, cfg.Env...)
+
+	if err := e.Kubectl.EnsureNS(ctx, name, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *Env) KubectlEnsureClusterRoleBindingServiceAccount(t *testing.T, bindingName string, clusterrole string, serviceaccount string, cfg KubectlConfig) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + e.kind.Kubeconfig(),
+	}
+
+	cfg.Env = append(kubectlEnv, cfg.Env...)
+
+	if _, err := e.Kubectl.GetClusterRoleBinding(ctx, bindingName, cfg); err != nil {
+		if err := e.Kubectl.CreateClusterRoleBindingServiceAccount(ctx, bindingName, clusterrole, serviceaccount, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func (e *Env) Kubeconfig() string {
+	return e.kind.Kubeconfig()
+}
+
+func (e *Env) RunScript(t *testing.T, path string, cfg ScriptConfig) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	if err := e.bash.RunScript(ctx, path, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Kind is a test cluster backend by a kind cluster and the dockerd powering it.
 // It intracts with the kind cluster via the kind command and dockerd via the docker command
 // for various operations that otherwise needs to be automated via shell scripts or makefiles.
-type Cluster struct {
+type Kind struct {
 	// Name is the name of the cluster
 	Name string
 
@@ -29,6 +211,8 @@ type Cluster struct {
 	Dir string
 
 	kubeconfig string
+
+	runtime.Cmdr
 }
 
 type Config struct {
@@ -50,7 +234,7 @@ type ContainerImage struct {
 	Repo, Tag string
 }
 
-func Start(t *testing.T, k Cluster, opts ...Option) *Cluster {
+func StartKind(t *testing.T, opts ...Option) *Kind {
 	t.Helper()
 
 	invalidChars := []string{"/"}
@@ -60,7 +244,7 @@ func Start(t *testing.T, k Cluster, opts ...Option) *Cluster {
 	for _, c := range invalidChars {
 		name = strings.ReplaceAll(name, c, "")
 	}
-
+	var k Kind
 	k.Name = name
 	k.Dir = t.TempDir()
 
@@ -118,12 +302,12 @@ func Start(t *testing.T, k Cluster, opts ...Option) *Cluster {
 	return kk
 }
 
-func (k *Cluster) Kubeconfig() string {
+func (k *Kind) Kubeconfig() string {
 	return k.kubeconfig
 }
 
-func (k *Cluster) Start(ctx context.Context) error {
-	getNodes, err := k.combinedOutput(k.kindGetNodesCmd(ctx, k.Name))
+func (k *Kind) Start(ctx context.Context) error {
+	getNodes, err := k.CombinedOutput(k.kindGetNodesCmd(ctx, k.Name))
 	if err != nil {
 		return err
 	}
@@ -145,7 +329,7 @@ name: %s
 			return err
 		}
 
-		if _, err := k.combinedOutput(k.kindCreateCmd(ctx, k.Name, f.Name())); err != nil {
+		if _, err := k.CombinedOutput(k.kindCreateCmd(ctx, k.Name, f.Name())); err != nil {
 			return err
 		}
 	}
@@ -153,70 +337,15 @@ name: %s
 	return nil
 }
 
-func (k *Cluster) combinedOutput(cmd *exec.Cmd) (string, error) {
-	o, err := cmd.CombinedOutput()
-	if err != nil {
-		args := append([]string{}, cmd.Args...)
-		args[0] = cmd.Path
-
-		cs := strings.Join(args, " ")
-		s := string(o)
-		k.errorf("%s failed with output:\n%s", cs, s)
-
-		return s, err
-	}
-
-	return string(o), nil
-}
-
-func (k *Cluster) errorf(f string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, f+"\n", args...)
-}
-
-func (k *Cluster) kindGetNodesCmd(ctx context.Context, cluster string) *exec.Cmd {
+func (k *Kind) kindGetNodesCmd(ctx context.Context, cluster string) *exec.Cmd {
 	return exec.CommandContext(ctx, "kind", "get", "nodes", "--name", cluster)
 }
 
-func (k *Cluster) kindCreateCmd(ctx context.Context, cluster, configFile string) *exec.Cmd {
+func (k *Kind) kindCreateCmd(ctx context.Context, cluster, configFile string) *exec.Cmd {
 	return exec.CommandContext(ctx, "kind", "create", "cluster", "--name", cluster, "--config", configFile)
 }
 
-type DockerBuild struct {
-	Dockerfile string
-	Args       []BuildArg
-	Image      ContainerImage
-}
-
-type BuildArg struct {
-	Name, Value string
-}
-
-func (k *Cluster) BuildImages(ctx context.Context, builds []DockerBuild) error {
-	for _, build := range builds {
-		var args []string
-		args = append(args, "--build-arg=TARGETPLATFORM="+"linux/amd64")
-		for _, buildArg := range build.Args {
-			args = append(args, "--build-arg="+buildArg.Name+"="+buildArg.Value)
-		}
-		_, err := k.combinedOutput(k.dockerBuildCmd(ctx, build.Dockerfile, build.Image.Repo, build.Image.Tag, args))
-
-		if err != nil {
-			return fmt.Errorf("failed building %v: %w", build, err)
-		}
-	}
-
-	return nil
-}
-
-func (k *Cluster) dockerBuildCmd(ctx context.Context, dockerfile, repo, tag string, args []string) *exec.Cmd {
-	buildContext := filepath.Dir(dockerfile)
-	args = append([]string{"build", "--tag", repo + ":" + tag, "-f", dockerfile, buildContext}, args...)
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	return cmd
-}
-
-func (k *Cluster) LoadImages(ctx context.Context, images []ContainerImage) error {
+func (k *Kind) LoadImages(ctx context.Context, images []ContainerImage) error {
 	for _, img := range images {
 		const maxRetries = 5
 
@@ -236,7 +365,7 @@ func (k *Cluster) LoadImages(ctx context.Context, images []ContainerImage) error
 		}()
 
 		for i := 0; i <= maxRetries; i++ {
-			out, err := k.combinedOutput(k.kindLoadDockerImageCmd(ctx, k.Name, img.Repo, img.Tag, tmpDir))
+			out, err := k.CombinedOutput(k.kindLoadDockerImageCmd(ctx, k.Name, img.Repo, img.Tag, tmpDir))
 
 			out = strings.TrimSpace(out)
 
@@ -256,7 +385,7 @@ func (k *Cluster) LoadImages(ctx context.Context, images []ContainerImage) error
 	return nil
 }
 
-func (k *Cluster) kindLoadDockerImageCmd(ctx context.Context, cluster, repo, tag, tmpDir string) *exec.Cmd {
+func (k *Kind) kindLoadDockerImageCmd(ctx context.Context, cluster, repo, tag, tmpDir string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "kind", "--loglevel=trace", "load", "docker-image", repo+":"+tag, "--name", cluster)
 	cmd.Env = os.Environ()
 	// Set TMPDIR to somewhere under $HOME when you use docker installed with Ubuntu snap
@@ -271,9 +400,9 @@ func (k *Cluster) kindLoadDockerImageCmd(ctx context.Context, cluster, repo, tag
 	return cmd
 }
 
-func (k *Cluster) PullImages(ctx context.Context, images []ContainerImage) error {
+func (k *Kind) PullImages(ctx context.Context, images []ContainerImage) error {
 	for _, img := range images {
-		_, err := k.combinedOutput(k.dockerPullCmd(ctx, img.Repo, img.Tag))
+		_, err := k.CombinedOutput(k.dockerPullCmd(ctx, img.Repo, img.Tag))
 		if err != nil {
 			return err
 		}
@@ -282,11 +411,11 @@ func (k *Cluster) PullImages(ctx context.Context, images []ContainerImage) error
 	return nil
 }
 
-func (k *Cluster) dockerPullCmd(ctx context.Context, repo, tag string) *exec.Cmd {
+func (k *Kind) dockerPullCmd(ctx context.Context, repo, tag string) *exec.Cmd {
 	return exec.CommandContext(ctx, "docker", "pull", repo+":"+tag)
 }
 
-func (k *Cluster) Stop(ctx context.Context) error {
+func (k *Kind) Stop(ctx context.Context) error {
 	if err := k.kindDeleteCmd(ctx, k.Name).Run(); err != nil {
 		return err
 	}
@@ -294,11 +423,11 @@ func (k *Cluster) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (k *Cluster) kindDeleteCmd(ctx context.Context, cluster string) *exec.Cmd {
+func (k *Kind) kindDeleteCmd(ctx context.Context, cluster string) *exec.Cmd {
 	return exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", cluster)
 }
 
-func (k *Cluster) writeKubeconfig(ctx context.Context) error {
+func (k *Kind) writeKubeconfig(ctx context.Context) error {
 	var err error
 
 	k.kubeconfig, err = filepath.Abs(filepath.Join(k.Dir, "kubeconfig"))
@@ -313,147 +442,10 @@ func (k *Cluster) writeKubeconfig(ctx context.Context) error {
 	return nil
 }
 
-func (k *Cluster) kindExportKubeconfigCmd(ctx context.Context, cluster, path string) *exec.Cmd {
+func (k *Kind) kindExportKubeconfigCmd(ctx context.Context, cluster, path string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "kind", "export", "kubeconfig", "--name", cluster)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "KUBECONFIG="+path)
-
-	return cmd
-}
-
-type KubectlConfig struct {
-	Env        []string
-	NoValidate bool
-	Timeout    time.Duration
-	Namespace  string
-}
-
-func (k KubectlConfig) WithTimeout(o time.Duration) KubectlConfig {
-	k.Timeout = o
-	return k
-}
-
-func (k *Cluster) RunKubectlEnsureNS(ctx context.Context, name string, cfg KubectlConfig) error {
-	if _, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"ns", name}, cfg)); err != nil {
-		if _, err := k.combinedOutput(k.kubectlCmd(ctx, "create", []string{"ns", name}, cfg)); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (k *Cluster) GetClusterRoleBinding(ctx context.Context, name string, cfg KubectlConfig) (string, error) {
-	o, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"clusterrolebinding", name}, cfg))
-	if err != nil {
-		return "", err
-	}
-	return o, nil
-}
-
-func (k *Cluster) CreateClusterRoleBindingServiceAccount(ctx context.Context, name string, clusterrole string, sa string, cfg KubectlConfig) error {
-	_, err := k.combinedOutput(k.kubectlCmd(ctx, "create", []string{"clusterrolebinding", name, "--clusterrole=" + clusterrole, "--serviceaccount=" + sa}, cfg))
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (k *Cluster) GetCMLiterals(ctx context.Context, name string, cfg KubectlConfig) (map[string]string, error) {
-	o, err := k.combinedOutput(k.kubectlCmd(ctx, "get", []string{"cm", name, "-o=json"}, cfg))
-	if err != nil {
-		return nil, err
-	}
-
-	var cm struct {
-		Data map[string]string `json:"data"`
-	}
-
-	if err := json.Unmarshal([]byte(o), &cm); err != nil {
-		k.errorf("Failed unmarshalling this data to JSON:\n%s\n", o)
-
-		return nil, fmt.Errorf("unmarshalling json: %w", err)
-	}
-
-	return cm.Data, nil
-}
-
-func (k *Cluster) CreateCMLiterals(ctx context.Context, name string, literals map[string]string, cfg KubectlConfig) error {
-	args := []string{"cm", name}
-
-	for k, v := range literals {
-		args = append(args, fmt.Sprintf("--from-literal=%s=%s", k, v))
-	}
-
-	if _, err := k.combinedOutput(k.kubectlCmd(ctx, "create", args, cfg)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (k *Cluster) Apply(ctx context.Context, path string, cfg KubectlConfig) error {
-	if _, err := k.combinedOutput(k.kubectlCmd(ctx, "apply", []string{"-f", path}, cfg)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (k *Cluster) WaitUntilDeployAvailable(ctx context.Context, name string, cfg KubectlConfig) error {
-	if _, err := k.combinedOutput(k.kubectlCmd(ctx, "wait", []string{"deploy/" + name, "--for=condition=available"}, cfg)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (k *Cluster) kubectlCmd(ctx context.Context, c string, args []string, cfg KubectlConfig) *exec.Cmd {
-	args = append([]string{c}, args...)
-
-	if cfg.NoValidate {
-		args = append(args, "--validate=false")
-	}
-
-	if cfg.Namespace != "" {
-		args = append(args, "-n="+cfg.Namespace)
-	}
-
-	if cfg.Timeout > 0 {
-		args = append(args, "--timeout="+fmt.Sprintf("%s", cfg.Timeout))
-	}
-
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, cfg.Env...)
-
-	return cmd
-}
-
-type ScriptConfig struct {
-	Env []string
-
-	Dir string
-}
-
-func (k *Cluster) RunScript(ctx context.Context, path string, cfg ScriptConfig) error {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return err
-	}
-
-	if _, err := k.combinedOutput(k.bashRunScriptCmd(ctx, abs, cfg)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (k *Cluster) bashRunScriptCmd(ctx context.Context, path string, cfg ScriptConfig) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "bash", path)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, cfg.Env...)
-	cmd.Dir = cfg.Dir
 
 	return cmd
 }
