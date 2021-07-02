@@ -979,6 +979,8 @@ spec:
                             - type: string
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
+                        volumeStorageMedium:
+                          type: string
                         volumes:
                           items:
                             description: Volume represents a named volume in a pod that may be accessed by any container in the pod.

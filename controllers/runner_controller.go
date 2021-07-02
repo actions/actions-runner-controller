@@ -880,10 +880,16 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 	//
 	// Setting VolumeSizeLimit to zero will disable /runner emptydir mount
 	//
+	// VolumeStorageMedium defines ways that storage can be allocated to a volume: "", "Memory", "HugePages", "HugePages-<size>"
+	//
 
 	runnerVolumeName := "runner"
 	runnerVolumeMountPath := "/runner"
 	runnerVolumeEmptyDir := &corev1.EmptyDirVolumeSource{}
+
+	if runnerSpec.VolumeStorageMedium != nil {
+		runnerVolumeEmptyDir.Medium = corev1.StorageMedium(*runnerSpec.VolumeStorageMedium)
+	}
 
 	if runnerSpec.VolumeSizeLimit != nil {
 		runnerVolumeEmptyDir.SizeLimit = runnerSpec.VolumeSizeLimit
