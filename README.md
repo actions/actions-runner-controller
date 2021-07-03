@@ -1098,25 +1098,14 @@ configuration script tries to communicate with the network.
 
 **Solution**<br />
 
-> This feature is experimental and will be dropped once maintainers think that
-> everyone has already migrated to use Istio's `holdApplicationUntilProxyStarts` ([istio/istio#11130](https://github.com/istio/istio/issues/11130)).
->
-> Please read the discussion in #592 for more information.
+> Added originally to help users with older istio instances.
+> Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
+> Please read the discussion in [#592](https://github.com/actions-runner-controller/actions-runner-controller/pull/592) for more information.
 
-You can add a delay to the entrypoint script by setting the `STARTUP_DELAY` environment
-variable. This will cause the script to sleep `STARTUP_DELAY` seconds.
+_Note: Prior to the runner immutable tag `82d1be7` or the date `2021-07-03` for the mutable tags, the environment variable referenced below was called `STARTUP_DELAY`. This has been deprecated and will be removed from the codebase later (currently we check for both). If you are using this feature please update to using `STARTUP_DELAY_IN_SECONDS` instead when you next upgrade your runner image to a current release._
 
-*Example `Runner` with a 2 second startup delay:*
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
-metadata:
-  name: example-runner-with-sleep
-spec:
-  env:
-    - name: STARTUP_DELAY
-      value: "2" # Remember! env var values must be strings.
-```
+You can add a delay to the runner's entrypoint script by setting the `STARTUP_DELAY_IN_SECONDS` environment
+variable for the runner pod. This will cause the script to sleep X seconds, this works with any runner kind.
 
 *Example `RunnerDeployment` with a 2 second startup delay:*
 ```yaml
@@ -1128,7 +1117,7 @@ spec:
   template:
     spec:
       env:
-        - name: STARTUP_DELAY
+        - name: STARTUP_DELAY_IN_SECONDS
           value: "2" # Remember! env var values must be strings.
 ```
 
