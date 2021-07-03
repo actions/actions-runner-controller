@@ -1,8 +1,13 @@
 #!/bin/bash
 
+# TODO: Remove `STARTUP_DELAY` entirely. `STARTUP_DELAY` is deprecated
+# Issue #673, PR #678
 if [ ! -z "${STARTUP_DELAY}" ]; then
   echo "Delaying startup by ${STARTUP_DELAY} seconds" 1>&2
   sleep ${STARTUP_DELAY}
+elif [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
+  echo "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds" 1>&2
+  sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
 
 if [ -z "${GITHUB_URL}" ]; then
