@@ -5,7 +5,7 @@
 if [ ! -z "${STARTUP_DELAY}" ]; then
   echo "Delaying startup by ${STARTUP_DELAY} seconds" 1>&2
   sleep ${STARTUP_DELAY}
-elif  [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
+elif [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   echo "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds" 1>&2
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
