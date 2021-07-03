@@ -70,6 +70,7 @@ service:
 
 metrics:
   serviceMonitor: false
+  serviceMonitorLabels: {}
   port: 8443
   proxy:
     enabled: true
