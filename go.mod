@@ -23,3 +23,5 @@ require (
 	sigs.k8s.io/controller-runtime v0.9.0
 	sigs.k8s.io/yaml v1.2.0
 )
+
+replace github.com/google/go-github/v36 => ../go-github
