@@ -8,7 +8,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 
-	"github.com/google/go-github/v33/github"
+	"github.com/google/go-github/v36/github"
 	"github.com/gorilla/mux"
 )
 
