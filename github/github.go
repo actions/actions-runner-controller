@@ -12,7 +12,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
 	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/google/go-github/v33/github"
+	"github.com/google/go-github/v36/github"
 	"golang.org/x/oauth2"
 )
 
