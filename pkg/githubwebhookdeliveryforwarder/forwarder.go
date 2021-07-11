@@ -18,11 +18,18 @@ type Forwarder struct {
 	Repo   string
 	Target string
 
+	PollingDelay time.Duration
+
 	Client *github.Client
 	logger
 }
 
 func (f *Forwarder) Run(ctx context.Context) error {
+	pollingDelay := 10 * time.Second
+	if f.PollingDelay > 0 {
+		pollingDelay = f.PollingDelay
+	}
+
 	segments := strings.Split(f.Repo, "/")
 
 	if len(segments) != 2 {
@@ -72,7 +79,16 @@ func (f *Forwarder) Run(ctx context.Context) error {
 			}
 		}
 
-		time.Sleep(10 * time.Second)
+		t := time.NewTimer(pollingDelay)
+
+		select {
+		case <-t.C:
+			t.Stop()
+		case <-ctx.Done():
+			t.Stop()
+
+			return ctx.Err()
+		}
 	}
 }
 
