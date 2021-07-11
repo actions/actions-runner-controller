@@ -2,12 +2,13 @@ package githubwebhookdeliveryforwarder
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
+	gogithub "github.com/google/go-github/v36/github"
 )
 
 type MultiForwarder struct {
@@ -18,46 +19,42 @@ type MultiForwarder struct {
 	logger
 }
 
+type RuleConfig struct {
+	Repo   []string      `json:"from"`
+	Target string        `json:"to"`
+	Hook   gogithub.Hook `json:"hook"`
+}
+
 type Rule struct {
 	Repo   string
 	Target string
+	Hook   gogithub.Hook
 }
 
 func New(client *github.Client, rules []string) (*MultiForwarder, error) {
 	var srv MultiForwarder
 
-	for i, r := range rules {
-		segments := strings.SplitN(r, " ", 2)
+	for _, r := range rules {
+		var rule RuleConfig
 
-		if len(segments) != 2 {
-			return nil, fmt.Errorf("invalid rule at %d: it must be in a form of REPO=TARGET, but was %q", i, r)
+		if err := json.Unmarshal([]byte(r), &rule); err != nil {
+			return nil, fmt.Errorf("failed unmarshalling %s: %w", r, err)
 		}
 
-		var (
-			repos  []string
-			target string
-		)
-
-		for _, s := range segments {
-			if strings.HasPrefix(s, "from=") {
-				s = strings.TrimPrefix(s, "from=")
-				repos = strings.Split(s, ",")
-			} else if strings.HasPrefix(s, "to=") {
-				s = strings.TrimPrefix(s, "to=")
-				target = s
-			}
-		}
-
-		if len(repos) == 0 {
+		if len(rule.Repo) == 0 {
 			return nil, fmt.Errorf("there must be one or more sources configured via `--repo \"from=SOURCE1,SOURCE2,... to=DEST1,DEST2,...\". got %q", r)
 		}
 
-		if target == "" {
+		if rule.Target == "" {
 			return nil, fmt.Errorf("there must be one destination configured via `--repo \"from=SOURCE to=DEST1,DEST2,...\". got %q", r)
 		}
 
-		for _, repo := range repos {
-			srv.Rules = append(srv.Rules, Rule{Repo: repo, Target: target})
+		for _, repo := range rule.Repo {
+			srv.Rules = append(srv.Rules, Rule{
+				Repo:   repo,
+				Target: rule.Target,
+				Hook:   rule.Hook,
+			})
 		}
 	}
 
@@ -92,7 +89,7 @@ func (f *MultiForwarder) Run(ctx context.Context) error {
 }
 
 func (f *MultiForwarder) run(ctx context.Context, rule Rule) error {
-	i := &Forwarder{Repo: rule.Repo, Target: rule.Target, Client: f.client}
+	i := &Forwarder{Repo: rule.Repo, Target: rule.Target, Hook: rule.Hook, Client: f.client}
 
 	return i.Run(ctx)
 }

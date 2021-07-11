@@ -18,10 +18,20 @@ type Forwarder struct {
 	Repo   string
 	Target string
 
+	Hook gogithub.Hook
+
 	PollingDelay time.Duration
 
 	Client *github.Client
 	logger
+}
+
+type persistentError struct {
+	Err error
+}
+
+func (e persistentError) Error() string {
+	return fmt.Sprintf("%v", e.Err)
 }
 
 func (f *Forwarder) Run(ctx context.Context) error {
@@ -51,6 +61,41 @@ func (f *Forwarder) Run(ctx context.Context) error {
 		hook = hooks[i]
 		break
 	}
+
+	if hook == nil {
+		hookConfig := &f.Hook
+
+		if _, ok := hookConfig.Config["url"]; !ok {
+			return persistentError{Err: fmt.Errorf("config.url is missing in the hook config")}
+		}
+
+		if _, ok := hookConfig.Config["content_type"]; !ok {
+			hookConfig.Config["content_type"] = "json"
+		}
+
+		if _, ok := hookConfig.Config["insecure_ssl"]; !ok {
+			hookConfig.Config["insecure_ssl"] = 0
+		}
+
+		if len(hookConfig.Events) == 0 {
+			hookConfig.Events = []string{"check_run", "push"}
+		}
+
+		if hookConfig.Active == nil {
+			hookConfig.Active = gogithub.Bool(true)
+		}
+
+		h, _, err := f.Client.Repositories.CreateHook(ctx, owner, repo, hookConfig)
+		if err != nil {
+			f.Errorf("Failed creating hook: %v", err)
+
+			return persistentError{Err: err}
+		}
+
+		hook = h
+	}
+
+	f.Logf("Using this hook for receiving deliveries to be forwarded: %+v", *hook)
 
 	cur := &cursor{}
 
