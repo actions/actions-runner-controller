@@ -89,7 +89,7 @@ func (f *Forwarder) Run(ctx context.Context) error {
 		}
 
 		if _, ok := hookConfig.Config["secret"]; !ok {
-			hookConfig.Config["secret"] = os.Getenv("HOOK_SECRET")
+			hookConfig.Config["secret"] = os.Getenv("GITHUB_HOOK_SECRET")
 		}
 
 		if len(hookConfig.Events) == 0 {
