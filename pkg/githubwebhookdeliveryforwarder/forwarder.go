@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -83,6 +84,10 @@ func (f *Forwarder) Run(ctx context.Context) error {
 
 		if _, ok := hookConfig.Config["insecure_ssl"]; !ok {
 			hookConfig.Config["insecure_ssl"] = 0
+		}
+
+		if _, ok := hookConfig.Config["secret"]; !ok {
+			hookConfig.Config["secret"] = os.Getenv("HOOK_SECRET")
 		}
 
 		if len(hookConfig.Events) == 0 {
