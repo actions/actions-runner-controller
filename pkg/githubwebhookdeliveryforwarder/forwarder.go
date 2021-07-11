@@ -48,7 +48,15 @@ func (f *Forwarder) Run(ctx context.Context) error {
 
 	owner, repo := segments[0], segments[1]
 
-	hooks, _, err := f.Client.Repositories.ListHooks(ctx, owner, repo, nil)
+	var hooksAPI *hooksAPI
+
+	if repo != "" {
+		hooksAPI = repoHooksAPI(f.Client.Repositories, owner, repo)
+	} else {
+		hooksAPI = orgHooksAPI(f.Client.Organizations, owner)
+	}
+
+	hooks, _, err := hooksAPI.ListHooks(ctx, nil)
 	if err != nil {
 		f.Errorf("Failed listing hooks: %v", err)
 
@@ -85,7 +93,7 @@ func (f *Forwarder) Run(ctx context.Context) error {
 			hookConfig.Active = gogithub.Bool(true)
 		}
 
-		h, _, err := f.Client.Repositories.CreateHook(ctx, owner, repo, hookConfig)
+		h, _, err := hooksAPI.CreateHook(ctx, hookConfig)
 		if err != nil {
 			f.Errorf("Failed creating hook: %v", err)
 
@@ -97,6 +105,14 @@ func (f *Forwarder) Run(ctx context.Context) error {
 
 	f.Logf("Using this hook for receiving deliveries to be forwarded: %+v", *hook)
 
+	var readerAPI *hookDeliveriesAPI
+
+	if repo != "" {
+		readerAPI = repoHookDeliveriesAPI(f.Client.Repositories, owner, repo, hook.GetID())
+	} else {
+		readerAPI = orgHookDeliveriesAPI(f.Client.Organizations, owner, hook.GetID())
+	}
+
 	cur := &cursor{}
 
 	cur.deliveredAt = time.Now()
@@ -107,7 +123,7 @@ func (f *Forwarder) Run(ctx context.Context) error {
 			payloads [][]byte
 		)
 
-		payloads, cur, err = f.getUnprocessedDeliveries(ctx, owner, repo, hook.GetID(), *cur)
+		payloads, cur, err = f.getUnprocessedDeliveries(ctx, readerAPI, *cur)
 		if err != nil {
 			f.Errorf("failed getting unprocessed deliveries: %v", err)
 
@@ -137,12 +153,86 @@ func (f *Forwarder) Run(ctx context.Context) error {
 	}
 }
 
+type hookWriterAPI struct {
+	CreateHook func(ctx context.Context, hook *gogithub.Hook) (*gogithub.Hook, *gogithub.Response, error)
+}
+
+func repoHookWriterAPI(svc *gogithub.RepositoriesService, org, repo string, hook *gogithub.Hook) *hookWriterAPI {
+	return &hookWriterAPI{
+		CreateHook: func(ctx context.Context, hook *gogithub.Hook) (*gogithub.Hook, *gogithub.Response, error) {
+			return svc.CreateHook(ctx, org, repo, hook)
+		},
+	}
+}
+
+func orgHookWriterAPI(svc *gogithub.OrganizationsService, org string, hook *gogithub.Hook) *hookWriterAPI {
+	return &hookWriterAPI{
+		CreateHook: func(ctx context.Context, hook *gogithub.Hook) (*gogithub.Hook, *gogithub.Response, error) {
+			return svc.CreateHook(ctx, org, hook)
+		},
+	}
+}
+
+type hooksAPI struct {
+	ListHooks  func(ctx context.Context, opts *gogithub.ListOptions) ([]*gogithub.Hook, *gogithub.Response, error)
+	CreateHook func(ctx context.Context, hook *gogithub.Hook) (*gogithub.Hook, *gogithub.Response, error)
+}
+
+func repoHooksAPI(svc *gogithub.RepositoriesService, org, repo string) *hooksAPI {
+	return &hooksAPI{
+		ListHooks: func(ctx context.Context, opts *gogithub.ListOptions) ([]*gogithub.Hook, *gogithub.Response, error) {
+			return svc.ListHooks(ctx, org, repo, opts)
+		},
+		CreateHook: func(ctx context.Context, hook *gogithub.Hook) (*gogithub.Hook, *gogithub.Response, error) {
+			return svc.CreateHook(ctx, org, repo, hook)
+		},
+	}
+}
+
+func orgHooksAPI(svc *gogithub.OrganizationsService, org string) *hooksAPI {
+	return &hooksAPI{
+		ListHooks: func(ctx context.Context, opts *gogithub.ListOptions) ([]*gogithub.Hook, *gogithub.Response, error) {
+			return svc.ListHooks(ctx, org, opts)
+		},
+		CreateHook: func(ctx context.Context, hook *gogithub.Hook) (*gogithub.Hook, *gogithub.Response, error) {
+			return svc.CreateHook(ctx, org, hook)
+		},
+	}
+}
+
+type hookDeliveriesAPI struct {
+	GetHookDelivery    func(ctx context.Context, id int64) (*gogithub.HookDelivery, *gogithub.Response, error)
+	ListHookDeliveries func(ctx context.Context, opts *gogithub.ListCursorOptions) ([]*gogithub.HookDelivery, *gogithub.Response, error)
+}
+
+func repoHookDeliveriesAPI(svc *gogithub.RepositoriesService, org, repo string, hookID int64) *hookDeliveriesAPI {
+	return &hookDeliveriesAPI{
+		GetHookDelivery: func(ctx context.Context, id int64) (*gogithub.HookDelivery, *gogithub.Response, error) {
+			return svc.GetHookDelivery(ctx, org, repo, hookID, id)
+		},
+		ListHookDeliveries: func(ctx context.Context, opts *gogithub.ListCursorOptions) ([]*gogithub.HookDelivery, *gogithub.Response, error) {
+			return svc.ListHookDeliveries(ctx, org, repo, hookID, opts)
+		},
+	}
+}
+
+func orgHookDeliveriesAPI(svc *gogithub.OrganizationsService, org string, hookID int64) *hookDeliveriesAPI {
+	return &hookDeliveriesAPI{
+		GetHookDelivery: func(ctx context.Context, id int64) (*gogithub.HookDelivery, *gogithub.Response, error) {
+			return svc.GetHookDelivery(ctx, org, hookID, id)
+		},
+		ListHookDeliveries: func(ctx context.Context, opts *gogithub.ListCursorOptions) ([]*gogithub.HookDelivery, *gogithub.Response, error) {
+			return svc.ListHookDeliveries(ctx, org, hookID, opts)
+		},
+	}
+}
+
 type cursor struct {
 	deliveredAt time.Time
 	id          int64
 }
 
-func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, owner, repo string, hookID int64, pos cursor) ([][]byte, *cursor, error) {
+func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, api *hookDeliveriesAPI, pos cursor) ([][]byte, *cursor, error) {
 	var (
 		opts gogithub.ListCursorOptions
 	)
@@ -153,7 +243,7 @@ func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, owner, repo st
 
 OUTER:
 	for {
-		ds, resp, err := f.Client.Repositories.ListHookDeliveries(ctx, owner, repo, hookID, &opts)
+		ds, resp, err := api.ListHookDeliveries(ctx, &opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -161,7 +251,7 @@ OUTER:
 		opts.Cursor = resp.Cursor
 
 		for _, d := range ds {
-			d, _, err := f.Client.Repositories.GetHookDelivery(ctx, owner, repo, hookID, d.GetID())
+			d, _, err := api.GetHookDelivery(ctx, d.GetID())
 			if err != nil {
 				return nil, nil, err
 			}
