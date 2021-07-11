@@ -43,11 +43,13 @@ func (f *Forwarder) Run(ctx context.Context) error {
 
 	segments := strings.Split(f.Repo, "/")
 
-	if len(segments) != 2 {
-		return fmt.Errorf("repository must be in a form of OWNER/REPO: got %q", f.Repo)
-	}
+	owner := segments[0]
 
-	owner, repo := segments[0], segments[1]
+	var repo string
+
+	if len(segments) > 1 {
+		repo = segments[1]
+	}
 
 	var hooksAPI *hooksAPI
 
