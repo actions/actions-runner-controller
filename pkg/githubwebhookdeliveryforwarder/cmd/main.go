@@ -18,9 +18,8 @@ import (
 
 func main() {
 	var (
+		rules       stringSlice
 		metricsAddr string
-		target      string
-		repo        string
 	)
 
 	var c github.Config
@@ -30,8 +29,7 @@ func main() {
 	}
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8000", "The address the metric endpoint binds to.")
-	flag.StringVar(&repo, "repo", "", "The owner/name of the repository that has the target hook. If specified, the forwarder will use the first hook configured on the repository as the source.")
-	flag.StringVar(&target, "target", "", "The URL of the forwarding target that receives all the forwarded webhooks.")
+	flag.Var(&rules, "rule", "The rule denotes from where webhook deliveries forwarded and to where they are forwarded. Must be formatted REPO=TARGET where REPO can be just the organization name for a repostory hook or \"owner/repo\" for a repository hook.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
 	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
@@ -48,8 +46,11 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	fwd := githubwebhookdeliveryforwarder.New(ghClient, target)
-	fwd.Repo = repo
+	fwd, err := githubwebhookdeliveryforwarder.New(ghClient, []string(rules))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem initializing forwarder: %v\n", err)
+		os.Exit(1)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/readyz", fwd.HandleReadyz)
@@ -93,6 +94,21 @@ func main() {
 	}()
 
 	wg.Wait()
+}
+
+type stringSlice []string
+
+func (s *stringSlice) String() string {
+	if s == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%+v", []string(*s))
+}
+
+func (s *stringSlice) Set(value string) error {
+	*s = append(*s, value)
+	return nil
 }
 
 /*

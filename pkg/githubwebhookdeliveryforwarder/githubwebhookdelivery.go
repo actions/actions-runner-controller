@@ -1,160 +1,103 @@
 package githubwebhookdeliveryforwarder
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"sort"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
-	gogithub "github.com/google/go-github/v36/github"
 )
 
-type server struct {
-	target string
-	Repo   string
+type MultiForwarder struct {
 	client *github.Client
+
+	Rules []Rule
+
+	logger
 }
 
-func New(client *github.Client, target string) *server {
-	var srv server
-
-	srv.target = target
-	srv.client = client
-
-	return &srv
+type Rule struct {
+	Repo   string
+	Target string
 }
 
-func (s *server) Run(ctx context.Context) error {
-	segments := strings.Split(s.Repo, "/")
+func New(client *github.Client, rules []string) (*MultiForwarder, error) {
+	var srv MultiForwarder
 
-	if len(segments) != 2 {
-		return fmt.Errorf("repository must be in a form of OWNER/REPO: got %q", s.Repo)
-	}
+	for i, r := range rules {
+		segments := strings.SplitN(r, " ", 2)
 
-	owner, repo := segments[0], segments[1]
+		if len(segments) != 2 {
+			return nil, fmt.Errorf("invalid rule at %d: it must be in a form of REPO=TARGET, but was %q", i, r)
+		}
 
-	hooks, _, err := s.client.Repositories.ListHooks(ctx, owner, repo, nil)
-	if err != nil {
-		s.Errorf("Failed listing hooks: %v", err)
-
-		return err
-	}
-
-	var hook *gogithub.Hook
-
-	for i := range hooks {
-		hook = hooks[i]
-		break
-	}
-
-	cur := &cursor{}
-
-	cur.deliveredAt = time.Now()
-
-	for {
 		var (
-			err      error
-			payloads [][]byte
+			repos  []string
+			target string
 		)
 
-		payloads, cur, err = s.getUnprocessedDeliveries(ctx, owner, repo, hook.GetID(), *cur)
-		if err != nil {
-			s.Errorf("failed getting unprocessed deliveries: %v", err)
-		}
-
-		for _, p := range payloads {
-			if _, err := http.Post(s.target, "application/json", bytes.NewReader(p)); err != nil {
-				s.Errorf("failed forwarding delivery: %v", err)
+		for _, s := range segments {
+			if strings.HasPrefix(s, "from=") {
+				s = strings.TrimPrefix(s, "from=")
+				repos = strings.Split(s, ",")
+			} else if strings.HasPrefix(s, "to=") {
+				s = strings.TrimPrefix(s, "to=")
+				target = s
 			}
 		}
 
-		time.Sleep(10 * time.Second)
+		if len(repos) == 0 {
+			return nil, fmt.Errorf("there must be one or more sources configured via `--repo \"from=SOURCE1,SOURCE2,... to=DEST1,DEST2,...\". got %q", r)
+		}
+
+		if target == "" {
+			return nil, fmt.Errorf("there must be one destination configured via `--repo \"from=SOURCE to=DEST1,DEST2,...\". got %q", r)
+		}
+
+		for _, repo := range repos {
+			srv.Rules = append(srv.Rules, Rule{Repo: repo, Target: target})
+		}
+	}
+
+	srv.client = client
+
+	return &srv, nil
+}
+
+func (f *MultiForwarder) Run(ctx context.Context) error {
+	var wg sync.WaitGroup
+
+	errs := make(chan error, len(f.Rules))
+
+	for _, r := range f.Rules {
+		r := r
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			errs <- f.run(ctx, r)
+		}()
+	}
+
+	wg.Wait()
+
+	select {
+	case err := <-errs:
+		return err
+	default:
+		return nil
 	}
 }
 
-type cursor struct {
-	deliveredAt time.Time
-	id          int64
+func (f *MultiForwarder) run(ctx context.Context, rule Rule) error {
+	i := &Forwarder{Repo: rule.Repo, Target: rule.Target, Client: f.client}
+
+	return i.Run(ctx)
 }
 
-func (s *server) getUnprocessedDeliveries(ctx context.Context, owner, repo string, hookID int64, pos cursor) ([][]byte, *cursor, error) {
-	var (
-		opts gogithub.ListCursorOptions
-	)
-
-	opts.PerPage = 2
-
-	var deliveries []*gogithub.HookDelivery
-
-OUTER:
-	for {
-		ds, resp, err := s.client.Repositories.ListHookDeliveries(ctx, owner, repo, hookID, &opts)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		opts.Cursor = resp.Cursor
-
-		for _, d := range ds {
-			d, _, err := s.client.Repositories.GetHookDelivery(ctx, owner, repo, hookID, d.GetID())
-			if err != nil {
-				return nil, nil, err
-			}
-
-			payload, err := d.ParseRequestPayload()
-			if err != nil {
-				return nil, nil, err
-			}
-
-			id := d.GetID()
-			deliveredAt := d.GetDeliveredAt()
-
-			if !pos.deliveredAt.IsZero() && deliveredAt.Before(pos.deliveredAt) {
-				s.Logf("%s is before %s so skipping all the remaining deliveries", deliveredAt, pos.deliveredAt)
-				break OUTER
-			}
-
-			if pos.id != 0 && id <= pos.id {
-				break OUTER
-			}
-
-			s.Logf("Received %T at %s: %v", payload, deliveredAt, payload)
-
-			if deliveredAt.After(pos.deliveredAt) {
-				pos.deliveredAt = deliveredAt
-			}
-
-			if id > pos.id {
-				pos.id = id
-			}
-		}
-
-		if opts.Cursor == "" {
-			break
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-	sort.Slice(deliveries, func(a, b int) bool {
-		return deliveries[b].GetDeliveredAt().After(deliveries[a].GetDeliveredAt())
-	})
-
-	var payloads [][]byte
-
-	for _, d := range deliveries {
-		payloads = append(payloads, *d.Request.RawPayload)
-	}
-
-	return payloads, &pos, nil
-}
-
-func (s *server) HandleReadyz(w http.ResponseWriter, r *http.Request) {
+func (f *MultiForwarder) HandleReadyz(w http.ResponseWriter, r *http.Request) {
 	var (
 		ok bool
 
@@ -168,7 +111,7 @@ func (s *server) HandleReadyz(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				msg := err.Error()
 				if _, err := w.Write([]byte(msg)); err != nil {
-					s.Errorf("failed writing http error response: %v", err)
+					f.Errorf("failed writing http error response: %v", err)
 				}
 			}
 		}
@@ -189,14 +132,6 @@ func (s *server) HandleReadyz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := w.Write([]byte("ok")); err != nil {
-		s.Errorf("failed writing http response: %v", err)
+		f.Errorf("failed writing http response: %v", err)
 	}
-}
-
-func (s *server) Logf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stdout, format+"\n", args...)
-}
-
-func (s *server) Errorf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }
