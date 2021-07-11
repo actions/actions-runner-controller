@@ -469,8 +469,8 @@ spec:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
     scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
-    ScaleUpAdjustment: '2'      # The scale up runner count added to desired count
-    ScaleDownAdjustment: '1'    # The scale down runner count subtracted from the desired count
+    scaleUpAdjustment: 2        # The scale up runner count added to desired count
+    scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
 ```
 
 Like the previous metric, the scale down factor respects the anti-flapping configuration is applied to the `HorizontalRunnerAutoscaler` as mentioned previously:
