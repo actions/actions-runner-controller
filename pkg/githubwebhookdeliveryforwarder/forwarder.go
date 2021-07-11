@@ -24,7 +24,37 @@ type Forwarder struct {
 	PollingDelay time.Duration
 
 	Client *github.Client
+
+	LogPositionProvider LogPositionProvider
+
 	logger
+}
+
+type LogPositionProvider interface {
+	GetOrCreate(hookID int64) (*DeliveryLogPosition, error)
+	Update(hookID int64, pos *DeliveryLogPosition) error
+}
+
+type logPositionProvider struct {
+	t  time.Time
+	id int64
+}
+
+func (p *logPositionProvider) GetOrCreate(hookID int64) (*DeliveryLogPosition, error) {
+	return &DeliveryLogPosition{DeliveredAt: p.t}, nil
+}
+
+func (p *logPositionProvider) Update(hookID int64, pos *DeliveryLogPosition) error {
+	p.t = pos.DeliveredAt
+	p.id = pos.ID
+
+	return nil
+}
+
+func NewInMemoryLogPositionProvider() LogPositionProvider {
+	return &logPositionProvider{
+		t: time.Now(),
+	}
 }
 
 type persistentError struct {
@@ -108,9 +138,12 @@ func (f *Forwarder) Run(ctx context.Context) error {
 
 	hookDeliveries := newHookDeliveriesAPI(f.Client.Client, owner, repo, hook.GetID())
 
-	cur := &cursor{}
+	cur, err := f.LogPositionProvider.GetOrCreate(hook.GetID())
+	if err != nil {
+		f.Errorf("Failed to get or create log position: %v", err)
 
-	cur.deliveredAt = time.Now()
+		return persistentError{Err: err}
+	}
 
 	for {
 		var (
@@ -148,12 +181,12 @@ func (f *Forwarder) Run(ctx context.Context) error {
 	}
 }
 
-type cursor struct {
-	deliveredAt time.Time
-	id          int64
+type DeliveryLogPosition struct {
+	DeliveredAt time.Time
+	ID          int64
 }
 
-func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, hookDeliveries *hookDeliveriesAPI, pos cursor) ([][]byte, *cursor, error) {
+func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, hookDeliveries *hookDeliveriesAPI, pos DeliveryLogPosition) ([][]byte, *DeliveryLogPosition, error) {
 	var (
 		opts gogithub.ListCursorOptions
 	)
@@ -185,12 +218,12 @@ OUTER:
 			id := d.GetID()
 			deliveredAt := d.GetDeliveredAt()
 
-			if !pos.deliveredAt.IsZero() && deliveredAt.Before(pos.deliveredAt) {
-				f.Logf("%s is before %s so skipping all the remaining deliveries", deliveredAt, pos.deliveredAt)
+			if !pos.DeliveredAt.IsZero() && deliveredAt.Before(pos.DeliveredAt) {
+				f.Logf("%s is before %s so skipping all the remaining deliveries", deliveredAt, pos.DeliveredAt)
 				break OUTER
 			}
 
-			if pos.id != 0 && id <= pos.id {
+			if pos.ID != 0 && id <= pos.ID {
 				break OUTER
 			}
 
@@ -198,12 +231,12 @@ OUTER:
 
 			f.Logf("Received %T at %s: %v", payload, deliveredAt, payload)
 
-			if deliveredAt.After(pos.deliveredAt) {
-				pos.deliveredAt = deliveredAt.Time
+			if deliveredAt.After(pos.DeliveredAt) {
+				pos.DeliveredAt = deliveredAt.Time
 			}
 
-			if id > pos.id {
-				pos.id = id
+			if id > pos.ID {
+				pos.ID = id
 			}
 		}
 

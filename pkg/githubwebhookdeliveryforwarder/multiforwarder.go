@@ -16,6 +16,8 @@ type MultiForwarder struct {
 
 	Rules []Rule
 
+	LogPositionProvider LogPositionProvider
+
 	logger
 }
 
@@ -59,6 +61,7 @@ func New(client *github.Client, rules []string) (*MultiForwarder, error) {
 	}
 
 	srv.client = client
+	srv.LogPositionProvider = NewInMemoryLogPositionProvider()
 
 	return &srv, nil
 }
@@ -89,7 +92,13 @@ func (f *MultiForwarder) Run(ctx context.Context) error {
 }
 
 func (f *MultiForwarder) run(ctx context.Context, rule Rule) error {
-	i := &Forwarder{Repo: rule.Repo, Target: rule.Target, Hook: rule.Hook, Client: f.client}
+	i := &Forwarder{
+		Repo:                rule.Repo,
+		Target:              rule.Target,
+		Hook:                rule.Hook,
+		Client:              f.client,
+		LogPositionProvider: f.LogPositionProvider,
+	}
 
 	return i.Run(ctx)
 }

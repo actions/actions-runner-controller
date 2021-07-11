@@ -14,9 +14,10 @@ import (
 )
 
 type Config struct {
-	Rules        StringSlice
-	MetricsAddr  string
-	GitHubConfig github.Config
+	Rules               StringSlice
+	MetricsAddr         string
+	GitHubConfig        github.Config
+	LogPositionProvider LogPositionProvider
 }
 
 func (config *Config) InitFlags(fs *flag.FlagSet) {
@@ -49,6 +50,10 @@ func Run(config *Config) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "problem initializing forwarder: %v\n", err)
 		os.Exit(1)
+	}
+
+	if config.LogPositionProvider != nil {
+		fwd.LogPositionProvider = config.LogPositionProvider
 	}
 
 	mux := http.NewServeMux()

@@ -7,7 +7,11 @@ import (
 )
 
 func main() {
-	config := &githubwebhookdeliveryforwarder.Config{}
+	config := &githubwebhookdeliveryforwarder.Config{
+		// TODO: Set to something that is backed by a CRD so that
+		// restarting the forwarder doesn't result in missing deliveries.
+		LogPositionProvider: nil,
+	}
 
 	config.InitFlags((flag.CommandLine))
 
