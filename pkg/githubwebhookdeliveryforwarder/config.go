@@ -33,7 +33,7 @@ func (config *Config) InitFlags(fs *flag.FlagSet) {
 	flag.StringVar(&config.GitHubConfig.AppPrivateKey, "github-app-private-key", config.GitHubConfig.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 }
 
-func Run(config *Config) {
+func Run(ctx context.Context, config *Config) {
 	c := config.GitHubConfig
 
 	ghClient, err := c.NewClient()
@@ -44,7 +44,7 @@ func Run(config *Config) {
 
 	var wg sync.WaitGroup
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 
 	fwd, err := New(ghClient, []string(config.Rules))
 	if err != nil {
@@ -93,7 +93,7 @@ func Run(config *Config) {
 	}()
 
 	go func() {
-		<-SetupSignalHandler().Done()
+		<-ctx.Done()
 		cancel()
 	}()
 

@@ -145,6 +145,7 @@ func (f *Forwarder) Run(ctx context.Context) error {
 		return persistentError{Err: err}
 	}
 
+LOOP:
 	for {
 		var (
 			err      error
@@ -163,9 +164,27 @@ func (f *Forwarder) Run(ctx context.Context) error {
 		for _, p := range payloads {
 			if _, err := http.Post(f.Target, "application/json", bytes.NewReader(p)); err != nil {
 				f.Errorf("failed forwarding delivery: %v", err)
+
+				retryDelay := 5 * time.Second
+				t := time.NewTimer(retryDelay)
+
+				select {
+				case <-t.C:
+					t.Stop()
+				case <-ctx.Done():
+					t.Stop()
+
+					return ctx.Err()
+				}
+
+				continue LOOP
 			} else {
 				f.Logf("Successfully POSTed the payload to %s", f.Target)
 			}
+		}
+
+		if err := f.LogPositionProvider.Update(hook.GetID(), cur); err != nil {
+			return fmt.Errorf("failed updating checkpoint: %w", err)
 		}
 
 		t := time.NewTimer(pollingDelay)
