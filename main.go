@@ -199,7 +199,7 @@ func main() {
 
 	log.Info(
 		"Initializing actions-runner-controller",
-		"github-api-cahce-duration", gitHubAPICacheDuration,
+		"github-api-cache-duration", gitHubAPICacheDuration,
 		"sync-period", syncPeriod,
 		"runner-image", runnerImage,
 		"docker-image", dockerImage,
