@@ -25,36 +25,9 @@ type Forwarder struct {
 
 	Client *github.Client
 
-	LogPositionProvider LogPositionProvider
+	Checkpointer Checkpointer
 
 	logger
-}
-
-type LogPositionProvider interface {
-	GetOrCreate(hookID int64) (*DeliveryLogPosition, error)
-	Update(hookID int64, pos *DeliveryLogPosition) error
-}
-
-type logPositionProvider struct {
-	t  time.Time
-	id int64
-}
-
-func (p *logPositionProvider) GetOrCreate(hookID int64) (*DeliveryLogPosition, error) {
-	return &DeliveryLogPosition{DeliveredAt: p.t}, nil
-}
-
-func (p *logPositionProvider) Update(hookID int64, pos *DeliveryLogPosition) error {
-	p.t = pos.DeliveredAt
-	p.id = pos.ID
-
-	return nil
-}
-
-func NewInMemoryLogPositionProvider() LogPositionProvider {
-	return &logPositionProvider{
-		t: time.Now(),
-	}
 }
 
 type persistentError struct {
@@ -138,7 +111,7 @@ func (f *Forwarder) Run(ctx context.Context) error {
 
 	hookDeliveries := newHookDeliveriesAPI(f.Client.Client, owner, repo, hook.GetID())
 
-	cur, err := f.LogPositionProvider.GetOrCreate(hook.GetID())
+	cur, err := f.Checkpointer.GetOrCreate(hook.GetID())
 	if err != nil {
 		f.Errorf("Failed to get or create log position: %v", err)
 
@@ -183,7 +156,7 @@ LOOP:
 			}
 		}
 
-		if err := f.LogPositionProvider.Update(hook.GetID(), cur); err != nil {
+		if err := f.Checkpointer.Update(hook.GetID(), cur); err != nil {
 			return fmt.Errorf("failed updating checkpoint: %w", err)
 		}
 
@@ -200,12 +173,12 @@ LOOP:
 	}
 }
 
-type DeliveryLogPosition struct {
+type State struct {
 	DeliveredAt time.Time
 	ID          int64
 }
 
-func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, hookDeliveries *hookDeliveriesAPI, pos DeliveryLogPosition) ([][]byte, *DeliveryLogPosition, error) {
+func (f *Forwarder) getUnprocessedDeliveries(ctx context.Context, hookDeliveries *hookDeliveriesAPI, pos State) ([][]byte, *State, error) {
 	var (
 		opts gogithub.ListCursorOptions
 	)

@@ -14,10 +14,10 @@ import (
 )
 
 type Config struct {
-	Rules               StringSlice
-	MetricsAddr         string
-	GitHubConfig        github.Config
-	LogPositionProvider LogPositionProvider
+	Rules        StringSlice
+	MetricsAddr  string
+	GitHubConfig github.Config
+	Checkpointer Checkpointer
 }
 
 func (config *Config) InitFlags(fs *flag.FlagSet) {
@@ -52,8 +52,8 @@ func Run(ctx context.Context, config *Config) {
 		os.Exit(1)
 	}
 
-	if config.LogPositionProvider != nil {
-		fwd.LogPositionProvider = config.LogPositionProvider
+	if config.Checkpointer != nil {
+		fwd.Checkpointer = config.Checkpointer
 	}
 
 	mux := http.NewServeMux()
