@@ -7,6 +7,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/pkg/hookdeliveryforwarder"
 	"github.com/actions-runner-controller/actions-runner-controller/pkg/hookdeliveryforwarder/configmap"
+	"github.com/go-logr/logr"
 	zaplib "go.uber.org/zap"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,21 +49,7 @@ func main() {
 
 	flag.Parse()
 
-	logger := zap.New(func(o *zap.Options) {
-		switch logLevel {
-		case logLevelDebug:
-			o.Development = true
-		case logLevelInfo:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
-			o.Level = &lvl
-		case logLevelWarn:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.WarnLevel)
-			o.Level = &lvl
-		case logLevelError:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.ErrorLevel)
-			o.Level = &lvl
-		}
-	})
+	logger := newZapLogger(logLevel)
 
 	checkpointerConfig.Scheme = scheme
 	checkpointerConfig.Logger = logger
@@ -87,4 +74,22 @@ func main() {
 	}()
 
 	hookdeliveryforwarder.Run(ctx, config)
+}
+
+func newZapLogger(logLevel string) logr.Logger {
+	return zap.New(func(o *zap.Options) {
+		switch logLevel {
+		case logLevelDebug:
+			o.Development = true
+		case logLevelInfo:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
+			o.Level = &lvl
+		case logLevelWarn:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.WarnLevel)
+			o.Level = &lvl
+		case logLevelError:
+			lvl := zaplib.NewAtomicLevelAt(zaplib.ErrorLevel)
+			o.Level = &lvl
+		}
+	})
 }
