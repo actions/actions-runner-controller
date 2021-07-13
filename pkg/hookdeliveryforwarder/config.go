@@ -1,4 +1,4 @@
-package githubwebhookdeliveryforwarder
+package hookdeliveryforwarder
 
 import (
 	"context"

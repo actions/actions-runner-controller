@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/pkg/githubwebhookdeliveryforwarder"
+	"github.com/actions-runner-controller/actions-runner-controller/pkg/hookdeliveryforwarder"
 	zaplib "go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,7 +32,7 @@ type posData struct {
 	ID          int64     `json:"id"`
 }
 
-func (p *logPositionProvider) GetOrCreate(hookID int64) (*githubwebhookdeliveryforwarder.DeliveryLogPosition, error) {
+func (p *logPositionProvider) GetOrCreate(hookID int64) (*hookdeliveryforwarder.DeliveryLogPosition, error) {
 	var cm corev1.ConfigMap
 
 	if err := p.client.Get(context.Background(), types.NamespacedName{Namespace: p.ns, Name: p.name}, &cm); err != nil {
@@ -60,7 +60,7 @@ func (p *logPositionProvider) GetOrCreate(hookID int64) (*githubwebhookdeliveryf
 		}
 	}
 
-	pos := &githubwebhookdeliveryforwarder.DeliveryLogPosition{
+	pos := &hookdeliveryforwarder.DeliveryLogPosition{
 		DeliveredAt: unmarshalled.DeliveredAt,
 		ID:          unmarshalled.ID,
 	}
@@ -72,7 +72,7 @@ func (p *logPositionProvider) GetOrCreate(hookID int64) (*githubwebhookdeliveryf
 	return pos, nil
 }
 
-func (p *logPositionProvider) Update(hookID int64, pos *githubwebhookdeliveryforwarder.DeliveryLogPosition) error {
+func (p *logPositionProvider) Update(hookID int64, pos *hookdeliveryforwarder.DeliveryLogPosition) error {
 	var cm corev1.ConfigMap
 
 	if err := p.client.Get(context.Background(), types.NamespacedName{Namespace: p.ns, Name: p.name}, &cm); err != nil {
@@ -150,7 +150,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:           scheme,
-		LeaderElectionID: "githubwebhookdeliveryforwarder",
+		LeaderElectionID: "hookdeliveryforwarder",
 		Port:             9443,
 	})
 	if err != nil {
@@ -158,13 +158,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	config := &githubwebhookdeliveryforwarder.Config{}
+	config := &hookdeliveryforwarder.Config{}
 
 	config.InitFlags((flag.CommandLine))
 
 	flag.Parse()
 
-	var p githubwebhookdeliveryforwarder.LogPositionProvider = &logPositionProvider{
+	var p hookdeliveryforwarder.LogPositionProvider = &logPositionProvider{
 		client: mgr.GetClient(),
 		name:   "gh-webhook-forwarder",
 		ns:     namespace,
@@ -174,7 +174,7 @@ func main() {
 	// restarting the forwarder doesn't result in missing deliveries.
 	config.LogPositionProvider = p
 
-	ctx := githubwebhookdeliveryforwarder.SetupSignalHandler()
+	ctx := hookdeliveryforwarder.SetupSignalHandler()
 
 	go func() {
 		if err := mgr.Start(ctx); err != nil {
@@ -183,5 +183,5 @@ func main() {
 		}
 	}()
 
-	githubwebhookdeliveryforwarder.Run(ctx, config)
+	hookdeliveryforwarder.Run(ctx, config)
 }
