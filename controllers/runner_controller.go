@@ -616,11 +616,15 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			EnvFrom:         runner.Spec.EnvFrom,
 			Env:             runner.Spec.Env,
 			Resources:       runner.Spec.Resources,
-		}, corev1.Container{
-			Name:         "docker",
-			VolumeMounts: runner.Spec.DockerVolumeMounts,
-			Resources:    runner.Spec.DockerdContainerResources,
 		})
+
+		if runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer {
+			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
+				Name:         "docker",
+				VolumeMounts: runner.Spec.DockerVolumeMounts,
+				Resources:    runner.Spec.DockerdContainerResources,
+			})
+		}
 	} else {
 		template.Spec.Containers = runner.Spec.Containers
 	}
