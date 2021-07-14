@@ -223,6 +223,7 @@ type CacheEntry struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=hra
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.minReplicas",name=Min,type=number
 // +kubebuilder:printcolumn:JSONPath=".spec.maxReplicas",name=Max,type=number
