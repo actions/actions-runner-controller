@@ -69,6 +69,8 @@ type RunnerConfig struct {
 	DockerRegistryMirror *string `json:"dockerRegistryMirror,omitempty"`
 	// +optional
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
+	// +optional
+	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
 }
 
 // RunnerPodSpec defines the desired pod spec fields of the runner pod

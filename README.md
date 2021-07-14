@@ -961,13 +961,13 @@ spec:
 
 As it is based on `StatefulSet`, `selector` and `template.medatada.labels` needs to be defined and haev the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
 
-Runner-related fields like `ephemeral`, `repository`, `organiåtion`, `enterprise`, and so on should be written directly under `spec`.
+Runner-related fields like `ephemeral`, `repository`, `organization`, `enterprise`, and so on should be written directly under `spec`.
 
-Fields like `volumeClaimTemplates` that originates from `StatefulSet` shuold also be written directly under `spec`.
+Fields like `volumeClaimTemplates` that originates from `StatefulSet` should also be written directly under `spec`.
 
 Pod-related fields like security contexts and volumes are written under `spec.template.spec` like `StatefulSet`.
 
-Simillarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a dockerd.
+Similarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a dockerd.
 
 For a more complex example, see the below:
 
@@ -1018,7 +1018,7 @@ https://github.com/actions-runner-controller/actions-runner-controller/pull/629
 
 Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A statefulset is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each statefulset-managed pod gets the same persisntet volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
 
-We envision that `RunnerSet` will eventually replaces `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
+We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
 
 ### Software Installed in the Runner Image
 
