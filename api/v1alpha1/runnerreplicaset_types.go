@@ -55,6 +55,7 @@ type RunnerTemplate struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=rrs
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name=Desired,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.replicas",name=Current,type=number

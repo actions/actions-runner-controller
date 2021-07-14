@@ -11,6 +11,8 @@ spec:
     kind: RunnerDeployment
     listKind: RunnerDeploymentList
     plural: runnerdeployments
+    shortNames:
+      - rdeploy
     singular: runnerdeployment
   scope: Namespaced
   versions:

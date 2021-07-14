@@ -11,6 +11,8 @@ spec:
     kind: RunnerReplicaSet
     listKind: RunnerReplicaSetList
     plural: runnerreplicasets
+    shortNames:
+      - rrs
     singular: runnerreplicaset
   scope: Namespaced
   versions:

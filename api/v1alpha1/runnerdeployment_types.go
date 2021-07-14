@@ -67,6 +67,7 @@ type RunnerDeploymentStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=rdeploy
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name=Desired,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.replicas",name=Current,type=number
