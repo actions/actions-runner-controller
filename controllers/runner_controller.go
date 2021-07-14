@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/hash"
-	gogithub "github.com/google/go-github/v36/github"
+	gogithub "github.com/google/go-github/v37/github"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/go-logr/logr"
