@@ -66,6 +66,7 @@ type RunnerReconciler struct {
 	GitHubClient                *github.Client
 	RunnerImage                 string
 	DockerImage                 string
+	DockerRegistryMirror        string
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
@@ -634,7 +635,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
 
-	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.GitHubClient.GithubBaseURL, registrationOnly)
+	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
 	if err != nil {
 		return pod, err
 	}
@@ -728,7 +729,7 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage, defaultDockerImage, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -745,6 +746,13 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 	workDir := runnerSpec.WorkDir
 	if workDir == "" {
 		workDir = "/runner/_work"
+	}
+
+	var dockerRegistryMirror string
+	if runnerSpec.DockerRegistryMirror == nil {
+		dockerRegistryMirror = defaultDockerRegistryMirror
+	} else {
+		dockerRegistryMirror = *runnerSpec.DockerRegistryMirror
 	}
 
 	env := []corev1.EnvVar{
@@ -863,11 +871,11 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		}...)
 	}
 
-	if mirror := runnerSpec.DockerRegistryMirror; mirror != nil && dockerdInRunner {
+	if dockerRegistryMirror != "" && dockerdInRunner {
 		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
 			{
 				Name:  "DOCKER_REGISTRY_MIRROR",
-				Value: *runnerSpec.DockerRegistryMirror,
+				Value: dockerRegistryMirror,
 			},
 		}...)
 	}
@@ -994,9 +1002,9 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			)
 		}
 
-		if mirror := runnerSpec.DockerRegistryMirror; mirror != nil {
+		if dockerRegistryMirror != "" {
 			dockerdContainer.Args = append(dockerdContainer.Args,
-				fmt.Sprintf("--registry-mirror=%s", *runnerSpec.DockerRegistryMirror),
+				fmt.Sprintf("--registry-mirror=%s", dockerRegistryMirror),
 			)
 		}
 	}

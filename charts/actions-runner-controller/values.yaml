@@ -28,6 +28,7 @@ authSecret:
   ### GitHub PAT Configuration
   #github_token: ""
 
+dockerRegistryMirror: ""
 image:
   repository: "summerwind/actions-runner-controller"
   actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
