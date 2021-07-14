@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
-	gogithub "github.com/google/go-github/v36/github"
+	gogithub "github.com/google/go-github/v37/github"
 )
 
 type Forwarder struct {
