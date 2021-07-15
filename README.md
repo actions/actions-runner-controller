@@ -830,6 +830,18 @@ spec:
       volumeMounts:
         - mountPath: /home/runner/work/repo
           name: repo
+      # Optional storage medium type of runner volume mount.
+      # More info: https://kubernetes.io/docs/concepts/storage/volumes/#emptydir
+      # "" (default) = Node's default medium
+      # Memory = RAM-backed filesystem (tmpfs)
+      # NOTE: Using RAM-backed filesystem gives you fastest possible storage on your host nodes.
+      volumeStorageMedium: ""
+      # Total amount of local storage resources required for runner volume mount.
+      # The default limit is undefined.
+      # NOTE: You can make sure that nodes' resources are never exceeded by limiting used storage size per runner pod.
+      # You can even disable the runner mount completely by setting limit to zero if dockerdWithinRunnerContainer = true.
+      # Please see https://github.com/actions-runner-controller/actions-runner-controller/pull/674 for more information.
+      volumeSizeLimit: 4Gi
       # Optional name of the container runtime configuration that should be used for pods.
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
