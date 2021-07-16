@@ -12,6 +12,12 @@ spec:
   endpoints:
     - path: /metrics
       port: metrics-port
+      {{- if .Values.metrics.proxy.enabled }}
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      {{- end }}
   selector:
     matchLabels:
       {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 6 }}
