@@ -183,6 +183,30 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				"action", e.GetAction(),
 			)
 		}
+	case *gogithub.WorkflowJobEvent:
+		if e.GetAction() == "queued" {
+			if workflowJob := e.GetWorkflowJob(); workflowJob != nil {
+				log = log.WithValues(
+					"workflowJob.status", workflowJob.GetStatus(),
+					"workflowJob.labels", workflowJob.Labels,
+					"repository.name", e.Repo.GetName(),
+					"repository.owner.login", e.Repo.Owner.GetLogin(),
+					"repository.owner.type", e.Repo.Owner.GetType(),
+					"action", e.GetAction(),
+				)
+			}
+
+			labels := e.WorkflowJob.Labels
+
+			target, err = autoscaler.getJobScaleUpTarget(
+				context.TODO(),
+				log,
+				e.Repo.GetName(),
+				e.Repo.Owner.GetLogin(),
+				e.Repo.Owner.GetType(),
+				labels,
+			)
+		}
 	case *gogithub.PingEvent:
 		ok = true
 
@@ -389,6 +413,114 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 			"repository", repositoryRunnerKey,
 			"organization", owner,
 		)
+	}
+
+	return nil, nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType string, labels []string) (*ScaleTarget, error) {
+	repositoryRunnerKey := owner + "/" + repo
+
+	if target, err := autoscaler.getJobScaleTarget(ctx, repositoryRunnerKey, labels); err != nil {
+		log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
+		return nil, err
+	} else if target != nil {
+		log.Info("job scale up target is repository-wide runners", "repository", repo)
+		return target, nil
+	}
+
+	if ownerType == "User" {
+		log.V(1).Info("no repository runner found", "organization", owner)
+
+		return nil, nil
+	}
+
+	if target, err := autoscaler.getJobScaleTarget(ctx, owner, labels); err != nil {
+		log.Info("finding organizational runner", "organization", owner)
+		return nil, err
+	} else if target != nil {
+		log.Info("job scale up target is organizational runners", "organization", owner)
+		return target, nil
+	} else {
+		log.V(1).Info("no repository runner or organizational runner found",
+			"repository", repositoryRunnerKey,
+			"organization", owner,
+		)
+	}
+
+	return nil, nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleTarget(ctx context.Context, name string, labels []string) (*ScaleTarget, error) {
+	hras, err := autoscaler.findHRAsByKey(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	autoscaler.Log.V(1).Info(fmt.Sprintf("Found %d HRAs by key", len(hras)), "key", name)
+
+HRA:
+	for _, hra := range hras {
+		if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		switch hra.Spec.ScaleTargetRef.Kind {
+		case "RunnerSet":
+			var rs v1alpha1.RunnerSet
+
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+				return nil, err
+			}
+
+			if len(labels) == 1 && labels[0] == "self-hosted" {
+				return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+			}
+
+			for _, l := range labels {
+				var matched bool
+				for _, l2 := range rs.Spec.Labels {
+					if l == l2 {
+						matched = true
+						break
+					}
+				}
+
+				if !matched {
+					continue HRA
+				}
+			}
+
+			return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+		case "RunnerDeployment", "":
+			var rd v1alpha1.RunnerDeployment
+
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+				return nil, err
+			}
+
+			if len(labels) == 1 && labels[0] == "self-hosted" {
+				return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+			}
+
+			for _, l := range labels {
+				var matched bool
+				for _, l2 := range rd.Spec.Template.Labels {
+					if l == l2 {
+						matched = true
+						break
+					}
+				}
+
+				if !matched {
+					continue HRA
+				}
+			}
+
+			return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+		default:
+			return nil, fmt.Errorf("unsupported scaleTargetRef.kind: %v", hra.Spec.ScaleTargetRef.Kind)
+		}
 	}
 
 	return nil, nil

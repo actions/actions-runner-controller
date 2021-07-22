@@ -109,7 +109,7 @@ done
 
 args=()
 if [ "${RUNNER_EPHEMERAL}" != "false" ]; then
-  args+=(--once)
+  args+=(--ephemeral)
 fi
 
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
