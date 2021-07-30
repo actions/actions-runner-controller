@@ -1114,7 +1114,7 @@ configuration script tries to communicate with the network.
 > Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
 > Please read the discussion in [#592](https://github.com/actions-runner-controller/actions-runner-controller/pull/592) for more information.
 
-_Note: Prior to the runner immutable tag `82d1be7` or the date `2021-07-03` for the mutable tags, the environment variable referenced below was called `STARTUP_DELAY`. This has been deprecated and will be removed from the codebase later (currently we check for both). If you are using this feature please update to using `STARTUP_DELAY_IN_SECONDS` instead when you next upgrade your runner image to a current release._
+_Note: Prior to the runner version v2.279.0, the environment variable referenced below was called `STARTUP_DELAY`._
 
 You can add a delay to the runner's entrypoint script by setting the `STARTUP_DELAY_IN_SECONDS` environment
 variable for the runner pod. This will cause the script to sleep X seconds, this works with any runner kind.
