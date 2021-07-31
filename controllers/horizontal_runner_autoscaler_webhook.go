@@ -184,20 +184,21 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			)
 		}
 	case *gogithub.WorkflowJobEvent:
-		if e.GetAction() == "queued" {
-			if workflowJob := e.GetWorkflowJob(); workflowJob != nil {
-				log = log.WithValues(
-					"workflowJob.status", workflowJob.GetStatus(),
-					"workflowJob.labels", workflowJob.Labels,
-					"repository.name", e.Repo.GetName(),
-					"repository.owner.login", e.Repo.Owner.GetLogin(),
-					"repository.owner.type", e.Repo.Owner.GetType(),
-					"action", e.GetAction(),
-				)
-			}
+		if workflowJob := e.GetWorkflowJob(); workflowJob != nil {
+			log = log.WithValues(
+				"workflowJob.status", workflowJob.GetStatus(),
+				"workflowJob.labels", workflowJob.Labels,
+				"repository.name", e.Repo.GetName(),
+				"repository.owner.login", e.Repo.Owner.GetLogin(),
+				"repository.owner.type", e.Repo.Owner.GetType(),
+				"action", e.GetAction(),
+			)
+		}
 
-			labels := e.WorkflowJob.Labels
+		labels := e.WorkflowJob.Labels
 
+		switch e.GetAction() {
+		case "queued", "completed":
 			target, err = autoscaler.getJobScaleUpTarget(
 				context.TODO(),
 				log,
@@ -206,6 +207,20 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				e.Repo.Owner.GetType(),
 				labels,
 			)
+
+			if target.Amount == 0 {
+				if e.GetAction() == "queued" {
+					target.Amount = 1
+				} else if e.GetAction() == "completed" {
+					// A nagative amount is processed in the tryScale func as a scale-down request,
+					// that erasese the oldest CapacityReservation with the same amount.
+					// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
+					// so that the resulting desired replicas decreases by 1.
+					target.Amount = -1
+				}
+			}
+		default:
+
 		}
 	case *gogithub.PingEvent:
 		ok = true
@@ -251,7 +266,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		return
 	}
 
-	if err := autoscaler.tryScaleUp(context.TODO(), target); err != nil {
+	if err := autoscaler.tryScale(context.TODO(), target); err != nil {
 		log.Error(err, "could not scale up")
 
 		return
@@ -477,6 +492,7 @@ HRA:
 				return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
 			}
 
+			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
 				var matched bool
 				for _, l2 := range rs.Spec.Labels {
@@ -503,6 +519,7 @@ HRA:
 				return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
 			}
 
+			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
 				var matched bool
 				for _, l2 := range rd.Spec.Template.Labels {
@@ -526,7 +543,7 @@ HRA:
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx context.Context, target *ScaleTarget) error {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.Context, target *ScaleTarget) error {
 	if target == nil {
 		return nil
 	}
@@ -535,16 +552,32 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 
 	amount := 1
 
-	if target.ScaleUpTrigger.Amount > 0 {
+	if target.ScaleUpTrigger.Amount != 0 {
 		amount = target.ScaleUpTrigger.Amount
 	}
 
 	capacityReservations := getValidCapacityReservations(copy)
 
-	copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-		ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
-		Replicas:       amount,
-	})
+	if amount > 0 {
+		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
+			ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
+			Replicas:       amount,
+		})
+	} else if amount < 0 {
+		var reservations []v1alpha1.CapacityReservation
+
+		var found bool
+
+		for _, r := range capacityReservations {
+			if !found && r.Replicas+amount == 0 {
+				found = true
+			} else {
+				reservations = append(reservations, r)
+			}
+		}
+
+		copy.Spec.CapacityReservations = reservations
+	}
 
 	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
 		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
