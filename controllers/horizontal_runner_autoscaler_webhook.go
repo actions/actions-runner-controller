@@ -199,7 +199,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 		switch e.GetAction() {
 		case "queued", "completed":
-			target, err = autoscaler.getJobScaleUpTarget(
+			target, err = autoscaler.getJobScaleUpTargetForRepoOrOrg(
 				context.TODO(),
 				log,
 				e.Repo.GetName(),
@@ -433,7 +433,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType string, labels []string) (*ScaleTarget, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(ctx context.Context, log logr.Logger, repo, owner, ownerType string, labels []string) (*ScaleTarget, error) {
 	repositoryRunnerKey := owner + "/" + repo
 
 	if target, err := autoscaler.getJobScaleTarget(ctx, repositoryRunnerKey, labels); err != nil {
@@ -480,6 +480,20 @@ HRA:
 			continue
 		}
 
+		var duration metav1.Duration
+
+		if len(hra.Spec.ScaleUpTriggers) > 0 {
+			duration = hra.Spec.ScaleUpTriggers[0].Duration
+		}
+
+		if duration.Duration <= 0 {
+			// Try to release the reserved capacity after at least 10 minutes by default,
+			// we won't end up in the reserved capacity remained forever in case GitHub somehow stopped sending us "completed" workflow_job events.
+			// GitHub usually send us those but nothing is 100% guaranteed, e.g. in case of something went wrong on GitHub :)
+			// Probably we'd better make this configurable via custom resources in the future?
+			duration.Duration = 10 * time.Minute
+		}
+
 		switch hra.Spec.ScaleTargetRef.Kind {
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
@@ -516,7 +530,7 @@ HRA:
 			}
 
 			if len(labels) == 1 && labels[0] == "self-hosted" {
-				return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+				return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
 			}
 
 			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
@@ -534,7 +548,7 @@ HRA:
 				}
 			}
 
-			return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+			return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
 		default:
 			return nil, fmt.Errorf("unsupported scaleTargetRef.kind: %v", hra.Spec.ScaleTargetRef.Kind)
 		}
