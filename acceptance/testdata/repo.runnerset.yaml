@@ -18,7 +18,7 @@ spec:
   # From my limited testing, `ephemeral: true` is more reliable.
   # Seomtimes, updating already deployed runners from `ephemeral: false` to `ephemeral: true` seems to
   # result in queued jobs hanging forever.
-  ephemeral: false
+  ephemeral: ${TEST_EPHEMERAL}
 
   repository: ${TEST_REPO}
   #

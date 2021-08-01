@@ -208,7 +208,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				labels,
 			)
 
-			if target.Amount == 0 {
+			if target != nil {
 				if e.GetAction() == "queued" {
 					target.Amount = 1
 				} else if e.GetAction() == "completed" {
@@ -276,7 +276,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 	w.WriteHeader(http.StatusOK)
 
-	msg := fmt.Sprintf("scaled %s by 1", target.Name)
+	msg := fmt.Sprintf("scaled %s by %d", target.Name, target.Amount)
 
 	autoscaler.Log.Info(msg)
 
@@ -503,7 +503,7 @@ HRA:
 			}
 
 			if len(labels) == 1 && labels[0] == "self-hosted" {
-				return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+				return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
 			}
 
 			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
@@ -521,7 +521,7 @@ HRA:
 				}
 			}
 
-			return &ScaleTarget{HorizontalRunnerAutoscaler: hra}, nil
+			return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
 		case "RunnerDeployment", "":
 			var rd v1alpha1.RunnerDeployment
 
@@ -593,6 +593,12 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 		copy.Spec.CapacityReservations = reservations
 	}
 
+	autoscaler.Log.Info(
+		"Patching hra for capacityReservations update",
+		"before", target.HorizontalRunnerAutoscaler.Spec.CapacityReservations,
+		"after", copy.Spec.CapacityReservations,
+	)
+
 	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
 		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
 	}
@@ -629,13 +635,26 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			return nil
 		}
 
-		var rd v1alpha1.RunnerDeployment
+		switch hra.Spec.ScaleTargetRef.Kind {
+		case "", "RunnerDeployment":
+			var rd v1alpha1.RunnerDeployment
 
-		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
-			return nil
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+				return nil
+			}
+
+			return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+		case "RunnerSet":
+			var rs v1alpha1.RunnerSet
+
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+				return nil
+			}
+
+			return []string{rs.Spec.Repository, rs.Spec.Organization}
 		}
 
-		return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+		return nil
 	}); err != nil {
 		return err
 	}
