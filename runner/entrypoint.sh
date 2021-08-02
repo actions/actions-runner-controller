@@ -64,13 +64,13 @@ if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
 fi
 
 # Hack due to https://github.com/actions-runner-controller/actions-runner-controller/issues/252#issuecomment-758338483
-if [ ! -d ${RUNNER_HOME} ]; then
+if [ ! -d "${RUNNER_HOME}" ]; then
   error "${RUNNER_HOME} should be an emptyDir mount. Please fix the pod spec."
   exit 1
 fi
 
 # if this is not a testing environment
-if [ -z "$UNITTEST" ]; then
+if [ -z "${UNITTEST:-}" ]; then
   sudo chown -R runner:docker ${RUNNER_HOME}
   mv /runnertmp/* ${RUNNER_HOME}/
 fi
@@ -138,7 +138,7 @@ if [ -n "${RUNNER_REGISTRATION_ONLY}" ]; then
   exit 0
 fi
 
-if [ -z "$UNITTEST" ]; then
+if [ -z "${UNITTEST:-}" ]; then
   mkdir ./externals
   # Hack due to the DinD volumes
   mv ./externalstmp/* ./externals/

@@ -1,0 +1,21 @@
+name: Unit tests for entrypoint
+
+on:
+  pull_request:
+    branches:
+      - '**'
+    paths:
+      - 'runner/**'
+      - 'test/entrypoint/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test entrypoint
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Run unit tests for entrypoint.sh
+      run: |
+        cd test/entrypoint
+        bash entrypoint_unittest.sh
