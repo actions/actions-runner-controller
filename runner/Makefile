@@ -23,8 +23,8 @@ else
 endif
 
 docker-build-ubuntu:
-	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
-	docker build --build-arg TARGETPLATFORM=amd64 --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
+	docker build --build-arg TARGETPLATFORM=$(shell arch) --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
+	docker build --build-arg TARGETPLATFORM=$(shell arch) --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
 
 docker-push-ubuntu:
 	docker push ${NAME}:${TAG}
