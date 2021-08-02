@@ -1,26 +1,29 @@
 #!/bin/bash
 
+RUNNER_HOME=${RUNNER_HOME:-/runner}
+
 LIGHTGREEN="\e[0;32m"
 LIGHTRED="\e[0;31m"
 WHITE="\e[0;97m"
 RESET="\e[0m"
 
 log(){
-  echo -e "${WHITE}${@}${RESET}" 1>&2
+  printf "${WHITE}${@}${RESET}\n" 1>&2
 }
 
 success(){
-  echo -e "${LIGHTGREEN}${@}${RESET}" 1>&2
+  printf "${LIGHTGREEN}${@}${RESET}\n" 1>&2
 }
 
 error(){
-  echo -e "${LIGHTRED}${@}${RESET}" 1>&2
+  printf "${LIGHTRED}${@}${RESET}\n" 1>&2
 }
 
 if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   log "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds"
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
+
 
 if [ -z "${GITHUB_URL}" ]; then
   log "Working with public GitHub"
@@ -61,15 +64,19 @@ if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
 fi
 
 # Hack due to https://github.com/actions-runner-controller/actions-runner-controller/issues/252#issuecomment-758338483
-if [ ! -d /runner ]; then
-  error "/runner should be an emptyDir mount. Please fix the pod spec."
+if [ ! -d ${RUNNER_HOME} ]; then
+  error "${RUNNER_HOME} should be an emptyDir mount. Please fix the pod spec."
   exit 1
 fi
 
-sudo chown -R runner:docker /runner
-cp -r /runnertmp/* /runner/
+# if this is not a testing environment
+if [ -z "$UNITTEST" ]; then
+  sudo chown -R runner:docker ${RUNNER_HOME}
+  mv /runnertmp/* ${RUNNER_HOME}/
+fi
 
-cd /runner
+cd ${RUNNER_HOME}
+# past that point, it's all relative pathes from /runner
 
 config_args=()
 if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
@@ -88,16 +95,17 @@ while [[ ${retries_left} -gt 0 ]]; do
     --labels "${RUNNER_LABELS}" \
     --work "${RUNNER_WORKDIR}" "${config_args[@]}"
 
-  if [ -f /runner/.runner ]; then
+  if [ -f .runner ]; then
     success "Runner successfully configured."
     break
   fi
 
+  error "Configuration failed. Retrying"
   retries_left=$((retries_left - 1))
   sleep 1
 done
 
-if [ ! -f /runner/.runner ]; then
+if [ ! -f .runner ]; then
   # we couldn't configure and register the runner; no point continuing
   error "Configuration failed!"
   exit 2
@@ -130,15 +138,17 @@ if [ -n "${RUNNER_REGISTRATION_ONLY}" ]; then
   exit 0
 fi
 
-mkdir ./externals
-# Hack due to the DinD volumes
-mv ./externalstmp/* ./externals/
+if [ -z "$UNITTEST" ]; then
+  mkdir ./externals
+  # Hack due to the DinD volumes
+  mv ./externalstmp/* ./externals/
 
-for f in runsvc.sh RunnerService.js; do
-  diff {bin,patched}/${f} || :
-  sudo mv bin/${f}{,.bak}
-  sudo mv {patched,bin}/${f}
-done
+  for f in runsvc.sh RunnerService.js; do
+    diff {bin,patched}/${f} || :
+    sudo mv bin/${f}{,.bak}
+    sudo mv {patched,bin}/${f}
+  done
+fi
 
 args=()
 if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
