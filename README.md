@@ -594,6 +594,34 @@ spec:
 
 See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
 
+###### Example 3: Scale on each `workflow_job` event
+
+> This feature depends on an unreleased GitHub feature
+
+```yaml
+kind: RunnerDeployment:
+metadata:
+   name: myrunners
+spec:
+  repository: example/myrepo
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTriggers:
+  - githubEvent: {}
+    duration: "30m"
+```
+
+You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
+
+Each kind has a `status` of `queued`, `in_progress` and `completed`.
+With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`.
+
+Beware that a scale-down after a scale-up is deferred until `scaleDownDelaySecondsAfterScaleOut` elapses. Let's say you had configured `scaleDownDelaySecondsAfterScaleOut` of 60 seconds, 2 consequtive workflow jobs will result in immediately adding 2 runners. The 2 runners are removed only after 60 seconds. This basically gives you 60 seconds of a "grace period" that makes it possible for self-hosted runners to immediately run additional workflow jobs enqueued in that 60 seconds.
+
+You must not include `spec.metrics` like `PercentageRunnersBusy` when using this feature, as it is unnecessary. That is, if you've configured the webhook for `workflow_job`, it should be enough for all the scale-out need.
 
 #### Autoscaling to/from 0
 
