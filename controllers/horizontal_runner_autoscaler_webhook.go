@@ -480,6 +480,12 @@ HRA:
 			continue
 		}
 
+		if len(hra.Spec.ScaleUpTriggers) > 1 {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has too many ScaleUpTriggers to be used in workflow_job based scaling", "hra", hra.Name)
+
+			continue
+		}
+
 		var duration metav1.Duration
 
 		if len(hra.Spec.ScaleUpTriggers) > 0 {
