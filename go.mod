@@ -25,5 +25,3 @@ require (
 )
 
 replace github.com/google/go-github/v37 => github.com/mumoshu/go-github/v37 v37.0.100
-// replace github.com/google/go-github/v37 => github.com/google/go-github/v37 v37.0.1-0.20210713230028-465df60a8ec3
-// replace github.com/google/go-github/v37 => ../go-github
