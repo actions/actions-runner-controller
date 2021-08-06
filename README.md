@@ -519,7 +519,7 @@ immediately add "resource slack" for future GitHub Actions job runs.
 
 In contrast, the standard autoscaling requires you to wait next sync period to add
 insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
-But doing so eventually result in the controller not functional due to GitHub API rate limit.
+But doing so eventually results in the controller not being functional due to it being rated limited by the GitHub API.
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
