@@ -86,7 +86,7 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
 
-If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limiting issues, consider deploying the solution using the GitHub App authentication method instead.
+If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying Using GitHub App Authentication
 
@@ -372,7 +372,7 @@ The scale out performance is controlled via the manager containers startup `--sy
 **Drawbacks of this metric**
 1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
 2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
-3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limiting issues depending on the size of your environment and how aggressive your sync period configuration is
+3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is
 4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
 
 
@@ -779,7 +779,7 @@ spec:
       # - https://mlohr.com/docker-mtu/
       dockerMTU: 1500
       # Optional Docker registry mirror
-      # Docker Hub has enabled rate-limiting for free plans.
+      # Docker Hub has an aggressive rate-limit configuration for free plans.
       # To avoid disruptions in your CI/CD pipelines, you might want to setup an external or on-premises Docker registry mirror.
       # More information:
       # - https://docs.docker.com/docker-hub/download-rate-limit/
