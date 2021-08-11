@@ -1,5 +1,13 @@
 FROM ubuntu:20.04
 
+ARG TARGETPLATFORM
+ARG RUNNER_VERSION=2.279.0
+ARG DOCKER_CHANNEL=stable
+ARG DOCKER_VERSION=19.03.13
+ARG DUMB_INIT_VERSION=1.2.5
+
+RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
     && apt install -y software-properties-common \
@@ -47,14 +55,7 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.279.0
-ARG DOCKER_CHANNEL=stable
-ARG DOCKER_VERSION=19.03.13
-ARG DEBUG=false
-
-RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
-
+# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 # Docker download supports arm64 as aarch64 & amd64 / i386 as x86_64
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
@@ -108,7 +109,7 @@ RUN chmod +x /usr/local/bin/startup.sh /usr/local/bin/entrypoint.sh /usr/local/b
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_${ARCH} \
+    && curl -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/local/bin/dumb-init
 
 VOLUME /var/lib/docker
