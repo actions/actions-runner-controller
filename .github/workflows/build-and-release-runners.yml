@@ -18,6 +18,11 @@ on:
       - runner/entrypoint.sh
       - .github/workflows/build-and-release-runners.yml
 
+env:
+  RUNNER_VERSION: 2.279.0
+  DOCKER_VERSION: 19.03.12
+  DOCKERHUB_USERNAME: summerwind
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,10 +39,7 @@ jobs:
           - name: actions-runner-dind
             os-version: 20.04
             dockerfile: Dockerfile.dindrunner
-    env:
-      RUNNER_VERSION: 2.279.0
-      DOCKER_VERSION: 19.03.12
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+
     steps:
       - name: Set outputs
         id: vars
@@ -86,12 +88,8 @@ jobs:
             dockerfile: Dockerfile
           - name: actions-runner-dind
             dockerfile: Dockerfile.dindrunner
-    env:
-      RUNNER_VERSION: 2.277.1
-      DOCKER_VERSION: 19.03.12
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
-    steps:
 
+    steps:
       - name: Checkout
         uses: actions/checkout@v2
 
