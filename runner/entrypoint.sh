@@ -53,13 +53,20 @@ sudo chown -R runner:docker /runner
 mv /runnertmp/* /runner/
 
 cd /runner
+
+config_args=()
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+  config_args+=(--ephemeral)
+  echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
+fi
+
 ./config.sh --unattended --replace \
   --name "${RUNNER_NAME}" \
   --url "${GITHUB_URL}${ATTACH}" \
   --token "${RUNNER_TOKEN}" \
   --runnergroup "${RUNNER_GROUPS}" \
   --labels "${RUNNER_LABELS}" \
-  --work "${RUNNER_WORKDIR}"
+  --work "${RUNNER_WORKDIR}" "${config_args[@]}"
 
 if [ -f /runner/.runner ]; then
   echo Runner has successfully been configured with the following data.
@@ -103,8 +110,9 @@ for f in runsvc.sh RunnerService.js; do
 done
 
 args=()
-if [ "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
   args+=(--once)
+  echo "Passing --once to runsvc.sh to enable the legacy ephemeral runner."
 fi
 
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN

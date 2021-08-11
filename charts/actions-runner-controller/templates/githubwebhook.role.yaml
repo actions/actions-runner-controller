@@ -38,6 +38,14 @@ rules:
 - apiGroups:
   - actions.summerwind.dev
   resources:
+  - runnersets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
   - runnerdeployments
   verbs:
   - create

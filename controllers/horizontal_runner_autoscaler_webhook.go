@@ -183,6 +183,45 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				"action", e.GetAction(),
 			)
 		}
+	case *gogithub.WorkflowJobEvent:
+		if workflowJob := e.GetWorkflowJob(); workflowJob != nil {
+			log = log.WithValues(
+				"workflowJob.status", workflowJob.GetStatus(),
+				"workflowJob.labels", workflowJob.Labels,
+				"repository.name", e.Repo.GetName(),
+				"repository.owner.login", e.Repo.Owner.GetLogin(),
+				"repository.owner.type", e.Repo.Owner.GetType(),
+				"action", e.GetAction(),
+			)
+		}
+
+		labels := e.WorkflowJob.Labels
+
+		switch e.GetAction() {
+		case "queued", "completed":
+			target, err = autoscaler.getJobScaleUpTargetForRepoOrOrg(
+				context.TODO(),
+				log,
+				e.Repo.GetName(),
+				e.Repo.Owner.GetLogin(),
+				e.Repo.Owner.GetType(),
+				labels,
+			)
+
+			if target != nil {
+				if e.GetAction() == "queued" {
+					target.Amount = 1
+				} else if e.GetAction() == "completed" {
+					// A nagative amount is processed in the tryScale func as a scale-down request,
+					// that erasese the oldest CapacityReservation with the same amount.
+					// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
+					// so that the resulting desired replicas decreases by 1.
+					target.Amount = -1
+				}
+			}
+		default:
+
+		}
 	case *gogithub.PingEvent:
 		ok = true
 
@@ -227,7 +266,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		return
 	}
 
-	if err := autoscaler.tryScaleUp(context.TODO(), target); err != nil {
+	if err := autoscaler.tryScale(context.TODO(), target); err != nil {
 		log.Error(err, "could not scale up")
 
 		return
@@ -237,7 +276,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 	w.WriteHeader(http.StatusOK)
 
-	msg := fmt.Sprintf("scaled %s by 1", target.Name)
+	msg := fmt.Sprintf("scaled %s by %d", target.Name, target.Amount)
 
 	autoscaler.Log.Info(msg)
 
@@ -394,7 +433,137 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx context.Context, target *ScaleTarget) error {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(ctx context.Context, log logr.Logger, repo, owner, ownerType string, labels []string) (*ScaleTarget, error) {
+	repositoryRunnerKey := owner + "/" + repo
+
+	if target, err := autoscaler.getJobScaleTarget(ctx, repositoryRunnerKey, labels); err != nil {
+		log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
+		return nil, err
+	} else if target != nil {
+		log.Info("job scale up target is repository-wide runners", "repository", repo)
+		return target, nil
+	}
+
+	if ownerType == "User" {
+		log.V(1).Info("no repository runner found", "organization", owner)
+
+		return nil, nil
+	}
+
+	if target, err := autoscaler.getJobScaleTarget(ctx, owner, labels); err != nil {
+		log.Info("finding organizational runner", "organization", owner)
+		return nil, err
+	} else if target != nil {
+		log.Info("job scale up target is organizational runners", "organization", owner)
+		return target, nil
+	} else {
+		log.V(1).Info("no repository runner or organizational runner found",
+			"repository", repositoryRunnerKey,
+			"organization", owner,
+		)
+	}
+
+	return nil, nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleTarget(ctx context.Context, name string, labels []string) (*ScaleTarget, error) {
+	hras, err := autoscaler.findHRAsByKey(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	autoscaler.Log.V(1).Info(fmt.Sprintf("Found %d HRAs by key", len(hras)), "key", name)
+
+HRA:
+	for _, hra := range hras {
+		if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		if len(hra.Spec.ScaleUpTriggers) > 1 {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has too many ScaleUpTriggers to be used in workflow_job based scaling", "hra", hra.Name)
+
+			continue
+		}
+
+		var duration metav1.Duration
+
+		if len(hra.Spec.ScaleUpTriggers) > 0 {
+			duration = hra.Spec.ScaleUpTriggers[0].Duration
+		}
+
+		if duration.Duration <= 0 {
+			// Try to release the reserved capacity after at least 10 minutes by default,
+			// we won't end up in the reserved capacity remained forever in case GitHub somehow stopped sending us "completed" workflow_job events.
+			// GitHub usually send us those but nothing is 100% guaranteed, e.g. in case of something went wrong on GitHub :)
+			// Probably we'd better make this configurable via custom resources in the future?
+			duration.Duration = 10 * time.Minute
+		}
+
+		switch hra.Spec.ScaleTargetRef.Kind {
+		case "RunnerSet":
+			var rs v1alpha1.RunnerSet
+
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+				return nil, err
+			}
+
+			if len(labels) == 1 && labels[0] == "self-hosted" {
+				return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
+			}
+
+			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
+			for _, l := range labels {
+				var matched bool
+				for _, l2 := range rs.Spec.Labels {
+					if l == l2 {
+						matched = true
+						break
+					}
+				}
+
+				if !matched {
+					continue HRA
+				}
+			}
+
+			return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
+		case "RunnerDeployment", "":
+			var rd v1alpha1.RunnerDeployment
+
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+				return nil, err
+			}
+
+			if len(labels) == 1 && labels[0] == "self-hosted" {
+				return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
+			}
+
+			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
+			for _, l := range labels {
+				var matched bool
+				for _, l2 := range rd.Spec.Template.Labels {
+					if l == l2 {
+						matched = true
+						break
+					}
+				}
+
+				if !matched {
+					continue HRA
+				}
+			}
+
+			return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
+		default:
+			return nil, fmt.Errorf("unsupported scaleTargetRef.kind: %v", hra.Spec.ScaleTargetRef.Kind)
+		}
+	}
+
+	return nil, nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.Context, target *ScaleTarget) error {
 	if target == nil {
 		return nil
 	}
@@ -403,16 +572,38 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScaleUp(ctx contex
 
 	amount := 1
 
-	if target.ScaleUpTrigger.Amount > 0 {
+	if target.ScaleUpTrigger.Amount != 0 {
 		amount = target.ScaleUpTrigger.Amount
 	}
 
 	capacityReservations := getValidCapacityReservations(copy)
 
-	copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-		ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
-		Replicas:       amount,
-	})
+	if amount > 0 {
+		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
+			ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
+			Replicas:       amount,
+		})
+	} else if amount < 0 {
+		var reservations []v1alpha1.CapacityReservation
+
+		var found bool
+
+		for _, r := range capacityReservations {
+			if !found && r.Replicas+amount == 0 {
+				found = true
+			} else {
+				reservations = append(reservations, r)
+			}
+		}
+
+		copy.Spec.CapacityReservations = reservations
+	}
+
+	autoscaler.Log.Info(
+		"Patching hra for capacityReservations update",
+		"before", target.HorizontalRunnerAutoscaler.Spec.CapacityReservations,
+		"after", copy.Spec.CapacityReservations,
+	)
 
 	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
 		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
@@ -450,13 +641,26 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			return nil
 		}
 
-		var rd v1alpha1.RunnerDeployment
+		switch hra.Spec.ScaleTargetRef.Kind {
+		case "", "RunnerDeployment":
+			var rd v1alpha1.RunnerDeployment
 
-		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
-			return nil
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+				return nil
+			}
+
+			return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+		case "RunnerSet":
+			var rs v1alpha1.RunnerSet
+
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+				return nil
+			}
+
+			return []string{rs.Spec.Repository, rs.Spec.Organization}
 		}
 
-		return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+		return nil
 	}); err != nil {
 		return err
 	}

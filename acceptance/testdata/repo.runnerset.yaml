@@ -18,7 +18,7 @@ spec:
   # From my limited testing, `ephemeral: true` is more reliable.
   # Seomtimes, updating already deployed runners from `ephemeral: false` to `ephemeral: true` seems to
   # result in queued jobs hanging forever.
-  ephemeral: false
+  ephemeral: ${TEST_EPHEMERAL}
 
   repository: ${TEST_REPO}
   #
@@ -52,5 +52,8 @@ spec:
       containers:
       - name: runner
         imagePullPolicy: IfNotPresent
+        env:
+        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+          value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
       #- name: docker
       #  #image: mumoshu/actions-runner-dind:dev

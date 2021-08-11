@@ -28,6 +28,7 @@ ToC:
   - [Runner Groups](#runner-groups)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
   - [Stateful Runners](#stateful-runners)
+  - [Ephemeral Runners](#ephemeral-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Common Errors](#common-errors)
 - [Contributing](#contributing)
@@ -351,6 +352,8 @@ This, in combination with a correctly configured HorizontalRunnerAutoscaler, all
 
 __**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
 
+__**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**___
+
 A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
 **Scaling Metrics**
@@ -594,6 +597,34 @@ spec:
 
 See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
 
+###### Example 3: Scale on each `workflow_job` event
+
+> This feature depends on an unreleased GitHub feature
+
+```yaml
+kind: RunnerDeployment:
+metadata:
+   name: myrunners
+spec:
+  repository: example/myrepo
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTriggers:
+  - githubEvent: {}
+    duration: "30m"
+```
+
+You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
+
+Each kind has a `status` of `queued`, `in_progress` and `completed`.
+With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`.
+
+Beware that a scale-down after a scale-up is deferred until `scaleDownDelaySecondsAfterScaleOut` elapses. Let's say you had configured `scaleDownDelaySecondsAfterScaleOut` of 60 seconds, 2 consequtive workflow jobs will result in immediately adding 2 runners. The 2 runners are removed only after 60 seconds. This basically gives you 60 seconds of a "grace period" that makes it possible for self-hosted runners to immediately run additional workflow jobs enqueued in that 60 seconds.
+
+You must not include `spec.metrics` like `PercentageRunnersBusy` when using this feature, as it is unnecessary. That is, if you've configured the webhook for `workflow_job`, it should be enough for all the scale-out need.
 
 #### Autoscaling to/from 0
 
@@ -1031,6 +1062,49 @@ https://github.com/actions-runner-controller/actions-runner-controller/pull/629
 Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A statefulset is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each statefulset-managed pod gets the same persistent volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
 
 We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
+
+### Ephemeral Runners
+
+Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
+
+When it is configured, it passes a `--once` flag to every runner.
+
+`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. But it is a known race issue that may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in #466.
+
+> The below feature depends on an unreleased GitHub feature
+
+GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
+
+`actions-runner-controller` has a feature flag to enable usign `--ephemeral` instead of `--once`.
+
+To use it, you need to build your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 in the runner container image, and set the environment variable `RUNNER_FEATURE_FLAG_EPHEMERAL` to `true` on runner containers in your runner pods.
+
+Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
+
+For example, a `RunnerSet` config with the flag enabled looks like:
+
+```
+kind: RunnerSet
+metadata:
+  name: example-runnerset
+spec:
+  # ...
+  template:
+    metadata:
+      labels:
+        app: example-runnerset
+    spec:
+      containers:
+      - name: runner
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+          value: "true"
+```
+
+Note that once https://github.com/actions/runner/pull/660 becomes generally available on GitHub, you no longer need to build a custom runner image to use this feature. Just set `RUNNER_FEATURE_FLAG_EPHEMERAL` and it should use `--ephemeral`.
+
+In the future, `--once` might get removed in `actions/runner`. `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the legacy flag is removed.
 
 ### Software Installed in the Runner Image
 
