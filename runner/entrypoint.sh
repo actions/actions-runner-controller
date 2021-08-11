@@ -50,7 +50,7 @@ if [ ! -d /runner ]; then
 fi
 
 sudo chown -R runner:docker /runner
-mv /runnertmp/* /runner/
+cp -r /runnertmp/* /runner/
 
 cd /runner
 
