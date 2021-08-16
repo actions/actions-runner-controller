@@ -19,7 +19,7 @@ on:
       - .github/workflows/build-and-release-runners.yml
 
 env:
-  RUNNER_VERSION: 2.279.0
+  RUNNER_VERSION: 2.280.1
   DOCKER_VERSION: 19.03.12
   DOCKERHUB_USERNAME: summerwind
 
