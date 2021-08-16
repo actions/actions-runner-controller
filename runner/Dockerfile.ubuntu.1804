@@ -96,7 +96,9 @@ COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
+ENV ImageOS=ubuntu20
 
 USER runner
+
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["/entrypoint.sh"]
