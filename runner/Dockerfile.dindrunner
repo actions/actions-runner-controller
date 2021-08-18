@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.279.0
+ARG RUNNER_VERSION=2.280.2
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=19.03.13
 ARG DUMB_INIT_VERSION=1.2.5
@@ -60,7 +60,7 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-	&& if ! curl -L -o docker.tgz "https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; then \
+	&& if ! curl -f -L -o docker.tgz "https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; then \
 		echo >&2 "error: failed to download 'docker-${DOCKER_VERSION}' from '${DOCKER_CHANNEL}' for '${ARCH}'"; \
 		exit 1; \
 	fi; \
@@ -86,7 +86,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
-    && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
+    && curl -f -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
     && ./bin/installdependencies.sh \
@@ -118,6 +118,7 @@ COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
+ENV ImageOS=ubuntu20
 
 # No group definition, as that makes it harder to run docker.
 USER runner
