@@ -2,7 +2,7 @@ NAME ?= summerwind/actions-runner
 DIND_RUNNER_NAME ?= ${NAME}-dind
 TAG ?= latest
 
-RUNNER_VERSION ?= 2.280.2
+RUNNER_VERSION ?= 2.280.3
 DOCKER_VERSION ?= 20.10.8
 
 # default list of platforms for which multiarch image is built

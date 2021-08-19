@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.280.2
+ARG RUNNER_VERSION=2.280.3
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.8
 ARG DUMB_INIT_VERSION=1.2.5
@@ -76,8 +76,8 @@ ENV HOME=/home/runner
 # - Run `cd $repo/src`
 # - Run `./dev.sh layout Release linux-x64`
 # - Run `./dev.sh package Release linux-x64`
-# - Run cp ../_package/actions-runner-linux-x64-2.280.2.tar.gz ../../actions-runner-controller/runner/
-#   - Beware that `2.280.2` might change across versions
+# - Run cp ../_package/actions-runner-linux-x64-2.280.3.tar.gz ../../actions-runner-controller/runner/
+#   - Beware that `2.280.3` might change across versions
 #
 # See https://github.com/actions/runner/blob/main/.github/workflows/release.yml for more informatino on how you can use dev.sh
 #
@@ -85,7 +85,7 @@ ENV HOME=/home/runner
 #   && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
 # line in the next `RUN` command in this Dockerfile, to avoid overwiding this runner.tar.gz with a remote one.
 
-# COPY actions-runner-linux-x64-2.280.2.tar.gz /runnertmp/runner.tar.gz
+# COPY actions-runner-linux-x64-2.280.3.tar.gz /runnertmp/runner.tar.gz
 
 # Runner download supports amd64 as x64. Externalstmp is needed for making mount points work inside DinD.
 #
