@@ -100,6 +100,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 * Actions (read)
 * Administration (read / write)
+* Checks (read) (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 * Metadata (read)
 
 **Required Permissions for Organisation Runners:**<br />
@@ -110,6 +111,9 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 **Organization Permissions**
 * Self-hosted runners (read / write)
+
+**Subscribe to events**
+* Check run (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
 
