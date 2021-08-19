@@ -1,0 +1,18 @@
+{
+  "extends": ["config:base"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["actions/runner"],
+      "extractVersion": "^v(?<version>.*)$"
+    }
+  ],
+  "regexManagers": [
+    // runner version in https://github.com/actions/runner/releases
+    {
+      "fileMatch": [".github/workflows/build-and-release-runners.yml"],
+      "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
