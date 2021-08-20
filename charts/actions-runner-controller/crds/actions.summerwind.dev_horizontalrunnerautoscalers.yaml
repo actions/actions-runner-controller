@@ -83,16 +83,19 @@ spec:
                       items:
                         type: string
                       type: array
+                      nullable: true
                     scaleDownAdjustment:
                       description: ScaleDownAdjustment is the number of runners removed
                         on scale-down. You can only specify either ScaleDownFactor
                         or ScaleDownAdjustment.
                       type: integer
+                      nullable: true
                     scaleDownFactor:
                       description: ScaleDownFactor is the multiplicative factor applied
                         to the current number of runners used to determine how many
                         pods should be removed.
                       type: string
+                      nullable: true
                     scaleDownThreshold:
                       description: ScaleDownThreshold is the percentage of busy runners
                         less than which will trigger the hpa to scale the runners
@@ -103,15 +106,18 @@ spec:
                         on scale-up. You can only specify either ScaleUpFactor or
                         ScaleUpAdjustment.
                       type: integer
+                      nullable: true
                     scaleUpFactor:
                       description: ScaleUpFactor is the multiplicative factor applied
                         to the current number of runners used to determine how many
                         pods should be added.
                       type: string
+                      nullable: true
                     scaleUpThreshold:
                       description: ScaleUpThreshold is the percentage of busy runners
                         greater than which will trigger the hpa to scale runners up.
                       type: string
+                      nullable: true
                     type:
                       description: Type is the type of metric to be used for autoscaling.
                         The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns
