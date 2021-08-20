@@ -2,13 +2,15 @@
   "extends": ["config:base"],
   "packageRules": [
     {
+      // automatically merge an update of runner
       "matchPackageNames": ["actions/runner"],
-      "extractVersion": "^v(?<version>.*)$"
+      "extractVersion": "^v(?<version>.*)$",
+      "automerge": true
     }
   ],
   "regexManagers": [
-    // runner version in https://github.com/actions/runner/releases
     {
+      // use https://github.com/actions/runner/releases
       "fileMatch": [".github/workflows/build-and-release-runners.yml"],
       "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
