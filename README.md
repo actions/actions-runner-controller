@@ -181,7 +181,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 **Required Scopes for Enterprise Runners**
 
-* enterprise:admin (Full control)
+* admin:enterprise (Full control)
 
 _Note: When you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
