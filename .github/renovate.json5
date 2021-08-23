@@ -1,0 +1,20 @@
+{
+  "extends": ["config:base"],
+  "packageRules": [
+    {
+      // automatically merge an update of runner
+      "matchPackageNames": ["actions/runner"],
+      "extractVersion": "^v(?<version>.*)$",
+      "automerge": true
+    }
+  ],
+  "regexManagers": [
+    {
+      // use https://github.com/actions/runner/releases
+      "fileMatch": [".github/workflows/build-and-release-runners.yml"],
+      "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
