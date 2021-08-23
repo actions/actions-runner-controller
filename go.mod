@@ -24,4 +24,4 @@ require (
 	sigs.k8s.io/yaml v1.2.0
 )
 
-replace github.com/google/go-github/v37 => github.com/mumoshu/go-github/v37 v37.0.100
+replace github.com/google/go-github/v38 => github.com/mumoshu/go-github/v37 v38.0.0
