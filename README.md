@@ -56,7 +56,7 @@ kubectl apply -f https://github.com/actions-runner-controller/actions-runner-con
 
 **Helm Deployment:**
 
-__**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)**__
+**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)**
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
