@@ -580,7 +580,7 @@ spec:
 ###### Example 2: Scale on each `pull_request` event against `develop` or `main` branches
 
 ```yaml
-kind: RunnerDeployment:
+kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
@@ -606,7 +606,7 @@ See ["activity types"](https://docs.github.com/en/actions/reference/events-that-
 > This feature depends on an unreleased GitHub feature
 
 ```yaml
-kind: RunnerDeployment:
+kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
@@ -665,7 +665,7 @@ usually, this feature is used for following scenarios:
 
 For the first scenario, you might consider configuration like the below:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
@@ -686,7 +686,7 @@ spec:
 
 For the second scenario, you might consider something like the below:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
@@ -986,7 +986,7 @@ Note that there's no official Istio integration in actions-runner-controller. It
 
 A basic `RunnerSet` would look like this:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -1018,7 +1018,7 @@ Similarly, container-related fields like resource requests and limits, container
 
 For a more complex example, see the below:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -1094,7 +1094,7 @@ GitHub seems to be adding an another flag called `--ephemeral` that is race-free
 
 For example, a `RunnerSet` config with the flag enabled looks like:
 
-```
+```yaml
 kind: RunnerSet
 metadata:
   name: example-runnerset
