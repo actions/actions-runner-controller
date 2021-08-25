@@ -1067,6 +1067,13 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 
 We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
 
+**Limitations**
+
+A known down-side of `RunnerSet` compared to `RunnerDeployment` is that it is uanble to create [a registration-only pod on scaling-down to zero](https://github.com/actions-runner-controller/actions-runner-controller#note-on-scaling-tofrom-0). To workaround that, you need to create a `RunnerDeployment` with `spec.repliacs` set to `0` with `spec.repository`, `spec.organization`, or `spec.enterprise`, and `spec.labels` and `spec.groups` as same values as your `RunnerSet`, so that you can keep the registration-only runner regardless of the number of `RunnerSet`-managed runners.
+
+A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`.
+A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
+
 ### Ephemeral Runners
 
 Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
@@ -1079,11 +1086,11 @@ When it is configured, it passes a `--once` flag to every runner.
 
 GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
 
-`actions-runner-controller` has a feature flag to enable usign `--ephemeral` instead of `--once`.
+`actions-runner-controller` has a feature flag backend by an environment variable to enable using `--ephemeral` instead of `--once`. The environment variable is `RUNNER_FEATURE_FLAG_EPHEMERAL`. You can se it to `true` on runner containers in your runner pods to enable the feature.
 
-To use it, you need to build your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 in the runner container image, and set the environment variable `RUNNER_FEATURE_FLAG_EPHEMERAL` to `true` on runner containers in your runner pods.
-
-Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
+> At the time of writing this, you need to wait until GitHub rolls out the server-side feature for `--ephemeral`, AND you need to include your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 into the runner container image to test this feature.
+>
+> Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
 
 For example, a `RunnerSet` config with the flag enabled looks like:
 
