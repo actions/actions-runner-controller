@@ -4,5 +4,5 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
-  newName: mumoshu/actions-runner-controller
-  newTag: controller1
+  newName: summerwind/actions-runner-controller
+  newTag: dnsconfig-9fe31ba8
