@@ -56,7 +56,7 @@ kubectl apply -f https://github.com/actions-runner-controller/actions-runner-con
 
 **Helm Deployment:**
 
-__**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)
+**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)**
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -100,6 +100,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 * Actions (read)
 * Administration (read / write)
+* Checks (read) (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 * Metadata (read)
 
 **Required Permissions for Organisation Runners:**<br />
@@ -110,6 +111,9 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 **Organization Permissions**
 * Self-hosted runners (read / write)
+
+**Subscribe to events**
+* Check run (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
 
@@ -352,7 +356,7 @@ This, in combination with a correctly configured HorizontalRunnerAutoscaler, all
 
 __**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
 
-__**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**___
+**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**
 
 A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
