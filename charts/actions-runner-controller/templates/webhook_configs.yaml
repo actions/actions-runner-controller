@@ -8,7 +8,9 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
 webhooks:
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -26,7 +28,9 @@ webhooks:
     resources:
     - runners
   sideEffects: None
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -44,7 +48,9 @@ webhooks:
     resources:
     - runnerdeployments
   sideEffects: None
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -62,7 +68,9 @@ webhooks:
     resources:
     - runnerreplicasets
   sideEffects: None
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -91,7 +99,9 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
 webhooks:
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -109,7 +119,9 @@ webhooks:
     resources:
     - runners
   sideEffects: None
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -127,7 +139,9 @@ webhooks:
     resources:
     - runnerdeployments
   sideEffects: None
-- clientConfig:
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
