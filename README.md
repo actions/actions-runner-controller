@@ -93,7 +93,7 @@ If you are deploying the solution for a GitHub Enterprise Server environment you
 
 You can create a GitHub App for either your user account or any organization, below are the app permissions required for each supported type of runner:
 
-_Note: Links are provided further down to create an app for your logged in user account or an organisation with the permissions for all runner types set in each link's query string_
+_Note: Links are provided further down to create an app for your logged in user account or an organization with the permissions for all runner types set in each link's query string_
 
 **Required Permissions for Repository Runners:**<br />
 **Repository Permissions**
@@ -103,7 +103,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 * Checks (read) (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 * Metadata (read)
 
-**Required Permissions for Organisation Runners:**<br />
+**Required Permissions for Organization Runners:**<br />
 **Repository Permissions**
 
 * Actions (read)
@@ -187,7 +187,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 * admin:enterprise (Full control)
 
-_Note: When you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+_Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
 ---
 
