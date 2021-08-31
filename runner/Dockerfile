@@ -60,8 +60,8 @@ RUN set -vx; \
     && tar zxvf docker.tgz \
     && install -o root -g root -m 755 docker/docker /usr/local/bin/docker \
     && rm -rf docker docker.tgz \
-    && adduser --disabled-password --gecos "" --uid 1000 runner \
-    && groupadd docker \
+    && adduser --disabled-password --gecos "" --uid 1001 runner \
+    && groupadd -g 121 docker \
     && usermod -aG sudo runner \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
