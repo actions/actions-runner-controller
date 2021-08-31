@@ -145,6 +145,9 @@ type RunnerPodSpec struct {
 	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class
 	// +optional
 	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
+
+	// +optional
+	DnsConfig []corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
 }
 
 // ValidateRepository validates repository field.

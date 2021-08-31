@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: summerwind/actions-runner-controller
-  newTag: 272bd6e
+  newTag: latest
