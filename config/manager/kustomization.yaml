@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: summerwind/actions-runner-controller
-  newTag: dnsconfig-9fe31ba8
+  newTag: latest

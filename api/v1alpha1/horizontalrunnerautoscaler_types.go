@@ -84,6 +84,10 @@ type CheckRunSpec struct {
 	// Note that check_run name seem to equal to the job name you've defined in your actions workflow yaml file.
 	// So it is very likely that you can utilize this to trigger depending on the job.
 	Names []string `json:"names,omitempty"`
+
+	// Repositories is a list of GitHub repositories.
+	// Any check_run event whose repository matches one of repositories in the list can trigger autoscaling.
+	Repositories []string `json:"repositories,omitempty"`
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request

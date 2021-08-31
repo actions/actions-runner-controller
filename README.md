@@ -577,6 +577,30 @@ spec:
     duration: "5m"
 ```
 
+To scale up replicas of the runners for `myorg` organization by 1 for 5 minutes on each `check_run`, you write manifests like the below:
+
+```yaml
+kind: RunnerDeployment
+metadata:
+   name: myrunners
+spec:
+  organization: myorg
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTriggers:
+  - githubEvent:
+      checkRun:
+        types: ["created"]
+        status: "queued"
+        # allow only certain repositories within your organization to trigger autoscaling
+        # repositories: ["myrepo", "myanotherrepo"]
+    amount: 1
+    duration: "5m"
+```
+
 ###### Example 2: Scale on each `pull_request` event against `develop` or `main` branches
 
 ```yaml
