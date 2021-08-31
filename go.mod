@@ -16,7 +16,7 @@ require (
 	github.com/teambition/rrule-go v1.6.2
 	go.uber.org/zap v1.19.0
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
-	gomodules.xyz/jsonpatch/v2 v2.2.0
+	gomodules.xyz/jsonpatch/v2/v3 v3.0.1
 	k8s.io/api v0.21.1
 	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v0.21.1
