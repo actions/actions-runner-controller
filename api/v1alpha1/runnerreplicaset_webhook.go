@@ -34,7 +34,7 @@ func (r *RunnerReplicaSet) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset,verbs=create;update,mutating=true,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerreplicasets,versions=v1alpha1,name=mutate.runnerreplicaset.actions.summerwind.dev,sideEffects=None,webhookVersions=v1beta1
+// +kubebuilder:webhook:path=/mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset,verbs=create;update,mutating=true,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerreplicasets,versions=v1alpha1,name=mutate.runnerreplicaset.actions.summerwind.dev,sideEffects=None,admissionReviewVersions=v1beta1
 
 var _ webhook.Defaulter = &RunnerReplicaSet{}
 
@@ -43,7 +43,7 @@ func (r *RunnerReplicaSet) Default() {
 	// Nothing to do.
 }
 
-// +kubebuilder:webhook:path=/validate-actions-summerwind-dev-v1alpha1-runnerreplicaset,verbs=create;update,mutating=false,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerreplicasets,versions=v1alpha1,name=validate.runnerreplicaset.actions.summerwind.dev,sideEffects=None,webhookVersions=v1beta1
+// +kubebuilder:webhook:path=/validate-actions-summerwind-dev-v1alpha1-runnerreplicaset,verbs=create;update,mutating=false,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerreplicasets,versions=v1alpha1,name=validate.runnerreplicaset.actions.summerwind.dev,sideEffects=None,admissionReviewVersions=v1beta1
 
 var _ webhook.Validator = &RunnerReplicaSet{}
 

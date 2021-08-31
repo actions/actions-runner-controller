@@ -173,6 +173,13 @@ spec:
                               items:
                                 type: string
                               type: array
+                            repositories:
+                              description: Repositories is a list of GitHub repositories.
+                                Any check_run event whose repository matches one of
+                                repositories in the list can trigger autoscaling.
+                              items:
+                                type: string
+                              type: array
                             status:
                               type: string
                             types:

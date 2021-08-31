@@ -38,6 +38,16 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) MatchCheckRunEvent(ev
 			return false
 		}
 
+		if len(scaleUpTrigger.GitHubEvent.CheckRun.Repositories) > 0 {
+			for _, repository := range scaleUpTrigger.GitHubEvent.CheckRun.Repositories {
+				if repository == *event.Repo.Name {
+					return true
+				}
+			}
+
+			return false
+		}
+
 		return true
 	}
 }

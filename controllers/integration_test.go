@@ -486,8 +486,9 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 							{
 								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
 									CheckRun: &actionsv1alpha1.CheckRunSpec{
-										Types:  []string{"created"},
-										Status: "pending",
+										Types:        []string{"created"},
+										Status:       "pending",
+										Repositories: []string{"valid", "foo", "bar"},
 									},
 								},
 								Amount:   1,
@@ -517,12 +518,23 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 
 			// Scale-up to 5 replicas on second check_run create webhook event
+			replicasAfterSecondWebhook := 5
 			{
 				env.SendOrgCheckRunEvent("test", "valid", "pending", "created")
-				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 5, "runners after second webhook event")
-				env.ExpectRegisteredNumberCountEventuallyEquals(5, "count of fake list runners")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, replicasAfterSecondWebhook, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(replicasAfterSecondWebhook, "count of fake list runners")
 				env.SyncRunnerRegistrations()
-				ExpectRunnerCountEventuallyEquals(ctx, ns.Name, 5)
+				ExpectRunnerCountEventuallyEquals(ctx, ns.Name, replicasAfterSecondWebhook)
+			}
+
+			// Do not scale-up on third check_run create webhook event
+			// example repo is not in specified in actionsv1alpha1.CheckRunSpec.Repositories
+			{
+				env.SendOrgCheckRunEvent("test", "example", "pending", "created")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, replicasAfterSecondWebhook, "runners after third webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(replicasAfterSecondWebhook, "count of fake list runners")
+				env.SyncRunnerRegistrations()
+				ExpectRunnerCountEventuallyEquals(ctx, ns.Name, replicasAfterSecondWebhook)
 			}
 		})
 

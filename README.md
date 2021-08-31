@@ -56,7 +56,7 @@ kubectl apply -f https://github.com/actions-runner-controller/actions-runner-con
 
 **Helm Deployment:**
 
-__**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)
+**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)**
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -93,16 +93,17 @@ If you are deploying the solution for a GitHub Enterprise Server environment you
 
 You can create a GitHub App for either your user account or any organization, below are the app permissions required for each supported type of runner:
 
-_Note: Links are provided further down to create an app for your logged in user account or an organisation with the permissions for all runner types set in each link's query string_
+_Note: Links are provided further down to create an app for your logged in user account or an organization with the permissions for all runner types set in each link's query string_
 
 **Required Permissions for Repository Runners:**<br />
 **Repository Permissions**
 
 * Actions (read)
 * Administration (read / write)
+* Checks (read) (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 * Metadata (read)
 
-**Required Permissions for Organisation Runners:**<br />
+**Required Permissions for Organization Runners:**<br />
 **Repository Permissions**
 
 * Actions (read)
@@ -110,6 +111,9 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 **Organization Permissions**
 * Self-hosted runners (read / write)
+
+**Subscribe to events**
+* Check run (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
 
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
 
@@ -123,7 +127,7 @@ If you want to create a GitHub App for your account, open the following link to 
 
 If you want to create a GitHub App for your organization, replace the `:org` part of the following URL with your organization name before opening it. Then enter any unique name in the "GitHub App name" field, and hit the "Create GitHub App" button at the bottom of the page to create a GitHub App.
 
-- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read)
+- [Create GitHub Apps on your organization](https://github.com/organizations/:org/settings/apps/new?url=http://github.com/actions-runner-controller/actions-runner-controller&webhook_active=false&public=false&administration=write&organization_self_hosted_runners=write&actions=read&checks=read)
 
 You will see an *App ID* on the page of the GitHub App you created as follows, the value of this App ID will be used later.
 
@@ -181,9 +185,9 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 **Required Scopes for Enterprise Runners**
 
-* enterprise:admin (Full control)
+* admin:enterprise (Full control)
 
-_Note: When you deploy enterprise runners they will get access to organisations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organisation must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+_Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
 ---
 
@@ -352,7 +356,7 @@ This, in combination with a correctly configured HorizontalRunnerAutoscaler, all
 
 __**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
 
-__**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**___
+**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**
 
 A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
@@ -573,10 +577,34 @@ spec:
     duration: "5m"
 ```
 
+To scale up replicas of the runners for `myorg` organization by 1 for 5 minutes on each `check_run`, you write manifests like the below:
+
+```yaml
+kind: RunnerDeployment
+metadata:
+   name: myrunners
+spec:
+  organization: myorg
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: myrunners
+  scaleUpTriggers:
+  - githubEvent:
+      checkRun:
+        types: ["created"]
+        status: "queued"
+        # allow only certain repositories within your organization to trigger autoscaling
+        # repositories: ["myrepo", "myanotherrepo"]
+    amount: 1
+    duration: "5m"
+```
+
 ###### Example 2: Scale on each `pull_request` event against `develop` or `main` branches
 
 ```yaml
-kind: RunnerDeployment:
+kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
@@ -602,7 +630,7 @@ See ["activity types"](https://docs.github.com/en/actions/reference/events-that-
 > This feature depends on an unreleased GitHub feature
 
 ```yaml
-kind: RunnerDeployment:
+kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
@@ -661,7 +689,7 @@ usually, this feature is used for following scenarios:
 
 For the first scenario, you might consider configuration like the below:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
@@ -682,7 +710,7 @@ spec:
 
 For the second scenario, you might consider something like the below:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
@@ -982,7 +1010,7 @@ Note that there's no official Istio integration in actions-runner-controller. It
 
 A basic `RunnerSet` would look like this:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -1014,7 +1042,7 @@ Similarly, container-related fields like resource requests and limits, container
 
 For a more complex example, see the below:
 
-```
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -1063,6 +1091,13 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 
 We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
 
+**Limitations**
+
+A known down-side of `RunnerSet` compared to `RunnerDeployment` is that it is uanble to create [a registration-only pod on scaling-down to zero](https://github.com/actions-runner-controller/actions-runner-controller#note-on-scaling-tofrom-0). To workaround that, you need to create a `RunnerDeployment` with `spec.repliacs` set to `0` with `spec.repository`, `spec.organization`, or `spec.enterprise`, and `spec.labels` and `spec.groups` as same values as your `RunnerSet`, so that you can keep the registration-only runner regardless of the number of `RunnerSet`-managed runners.
+
+A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`.
+A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
+
 ### Ephemeral Runners
 
 Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
@@ -1075,15 +1110,15 @@ When it is configured, it passes a `--once` flag to every runner.
 
 GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
 
-`actions-runner-controller` has a feature flag to enable usign `--ephemeral` instead of `--once`.
+`actions-runner-controller` has a feature flag backend by an environment variable to enable using `--ephemeral` instead of `--once`. The environment variable is `RUNNER_FEATURE_FLAG_EPHEMERAL`. You can se it to `true` on runner containers in your runner pods to enable the feature.
 
-To use it, you need to build your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 in the runner container image, and set the environment variable `RUNNER_FEATURE_FLAG_EPHEMERAL` to `true` on runner containers in your runner pods.
-
-Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
+> At the time of writing this, you need to wait until GitHub rolls out the server-side feature for `--ephemeral`, AND you need to include your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 into the runner container image to test this feature.
+>
+> Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
 
 For example, a `RunnerSet` config with the flag enabled looks like:
 
-```
+```yaml
 kind: RunnerSet
 metadata:
   name: example-runnerset
