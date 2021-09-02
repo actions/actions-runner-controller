@@ -12,6 +12,7 @@ ToC:
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
+- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
@@ -22,7 +23,6 @@ ToC:
     - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
-  - [Deploying Multiple Controllers](#deploying-multiple-controllers)
   - [Runner with DinD](#runner-with-dind)
   - [Additional Tweaks](#additional-tweaks)
   - [Runner Labels](#runner-labels)
@@ -46,7 +46,7 @@ actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/insta
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
-Install the custom resource and actions-runner-controller with `kubectl` or `helm`. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
+Subsequent to this, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 **Kubectl Deployment:**
 
@@ -57,7 +57,7 @@ kubectl apply -f https://github.com/actions-runner-controller/actions-runner-con
 
 **Helm Deployment:**
 
-**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)**
+Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for the values documentation
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -77,7 +77,7 @@ When deploying the solution for a GitHub Enterprise Server environment you need 
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-__**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best effort basis. PRs from the community are welcomed to add features and maintain support.**__
+**_Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best effort basis. PRs from the community are welcomed to add features and maintain support._**
 
 ## Setting Up Authentication with GitHub API
 
@@ -205,6 +205,18 @@ kubectl create secret generic controller-manager \
 **Helm Deployment:**
 
 Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for deploying the secret via Helm
+
+### Deploying Multiple Controllers
+
+> This feature requires controller version => [v0.18.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.18.0)
+
+> **_INFO:_**  Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling.
+
+By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy mutiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
+
+This feature is configured via the `--watch-namespace` flag (see Helm values documentation for configuring with Helm). When a namespace is provided via this flag the controller will only monitor runners in that namespace.
+
+You should install each controller in the same namespace as the runners it is in charge of as defined with the `--watch-namespace` flag.
 
 ## Usage
 
@@ -748,18 +760,6 @@ Do note that you have enough slack for `untilTime`, so that a delayed or offline
 In case you have a more complex scenarios, try writing two or more entries under `scheduledOverrides`.
 
 The earlier entry is prioritized higher than later entries. So you usually define one-time overrides in the top of your list, then yearly, monthly, weekly, and lastly daily overrides.
-
-### Deploying Multiple Controllers
-
-> This feature requires controller version => [v0.18.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.18.0)
-
-> **_INFO:_**  Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling.
-
-By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy mutiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
-
-This feature is configured via the `--watch-namespace` flag (see Helm values documentation for configuring with Helm). When a namespace is provided via this flag the controller will only monitor runners in that namespace.
-
-You should install each controller in the same namespace as the runners it is in charge of as defined with the `--watch-namespace` flag.
 
 ### Runner with DinD
 
