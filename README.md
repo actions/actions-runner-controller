@@ -1,4 +1,4 @@
-# actions-runner-controller
+- [Scheduled Overrides](#scheduled-overrides)# actions-runner-controller
 
 [![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
 
@@ -22,6 +22,7 @@ ToC:
     - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
+  - [Deploying Multiple Controllers](#deploying-multiple-controllers)
   - [Runner with DinD](#runner-with-dind)
   - [Additional Tweaks](#additional-tweaks)
   - [Runner Labels](#runner-labels)
@@ -331,7 +332,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ##### Note on scaling to/from 0
 
-> This feature is available since actions-runner-controller v0.19.0
+> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
 You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
 
@@ -656,7 +657,7 @@ You must not include `spec.metrics` like `PercentageRunnersBusy` when using this
 
 #### Autoscaling to/from 0
 
-> This feature is available since actions-runner-controller v0.19.0
+> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
 Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
 
@@ -678,7 +679,7 @@ Similarly, Webhook-based autoscaling works regardless of there are active runner
 
 #### Scheduled Overrides
 
-> This feature is available since actions-runner-controller v0.19.0
+> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
 `Scheduled Overrides` allows you to configure HorizontalRunnerAutoscaler so that its Spec gets updated only during a certain period of time.
 
@@ -747,6 +748,18 @@ Do note that you have enough slack for `untilTime`, so that a delayed or offline
 In case you have a more complex scenarios, try writing two or more entries under `scheduledOverrides`.
 
 The earlier entry is prioritized higher than later entries. So you usually define one-time overrides in the top of your list, then yearly, monthly, weekly, and lastly daily overrides.
+
+### Deploying Multiple Controllers
+
+> This feature requires controller version => [v0.18.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.18.0)
+
+> **_INFO:_**  Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling.
+
+By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy mutiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
+
+This feature is configured via the `--watch-namespace` flag (see Helm values documentation for configuring with Helm). When a namespace is provided via this flag the controller will only monitor runners in that namespace.
+
+You should install each controller in the same namespace as the runners it is in charge of as defined with the `--watch-namespace` flag.
 
 ### Runner with DinD
 
@@ -965,7 +978,7 @@ spec:
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
-`actions-runner-controller` v0.15.0 or later has support for IRSA in EKS.
+> This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
 
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
