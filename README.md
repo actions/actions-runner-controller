@@ -210,7 +210,7 @@ Configure your values.yaml, see the chart's [README](./charts/actions-runner-con
 
 > This feature requires controller version => [v0.18.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.18.0)
 
-> **_INFO:_** Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling.
+**_Note: Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling._**
 
 By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy multiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
 
@@ -1006,7 +1006,7 @@ spec:
 
 Istio 1.7.0 or greater has `holdApplicationUntilProxyStarts` added in https://github.com/istio/istio/pull/24737, which enables you to delay the `runner` container startup until the injected `istio-proxy` container finish starting. Try using it if you need to use Istio. Otherwise the runner is unlikely to work, because it fails to call any GitHub API to register itself due to `istio-proxy` being not up and running yet.
 
-Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test(contribution is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
+Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test (a contribution to resolve this is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
 
 - https://github.com/actions-runner-controller/actions-runner-controller/issues/591
 - https://github.com/actions-runner-controller/actions-runner-controller/pull/592
