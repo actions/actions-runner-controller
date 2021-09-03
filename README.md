@@ -212,11 +212,11 @@ Configure your values.yaml, see the chart's [README](./charts/actions-runner-con
 
 **_Note: Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling._**
 
-By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy multiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
+By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy multiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or you wish to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
 
 This feature is configured via the controller `--watch-namespace` flag. When a namespace is provided via this flag the controller will only monitor runners in that namespace.
 
-You should install each controller in the same namespace as the runners it is in charge of as defined with the `--watch-namespace` flag.
+If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done via the `fullnameOverride` properties. Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
 
 ## Usage
 
