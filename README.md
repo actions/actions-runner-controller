@@ -12,6 +12,7 @@ ToC:
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
+- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
@@ -45,7 +46,7 @@ actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/insta
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
-Install the custom resource and actions-runner-controller with `kubectl` or `helm`. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
+Subsequent to this, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 **Kubectl Deployment:**
 
@@ -56,7 +57,7 @@ kubectl apply -f https://github.com/actions-runner-controller/actions-runner-con
 
 **Helm Deployment:**
 
-**Note: For all configuration options for the Helm chart see the chart's [README](./charts/actions-runner-controller/README.md)**
+Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for the values documentation
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -76,7 +77,7 @@ When deploying the solution for a GitHub Enterprise Server environment you need 
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
 ```
 
-__**Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best effort basis. PRs from the community are welcomed to add features and maintain support.**__
+**_Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best effort basis. PRs from the community are welcomed to add features and maintain support._**
 
 ## Setting Up Authentication with GitHub API
 
@@ -205,6 +206,18 @@ kubectl create secret generic controller-manager \
 
 Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for deploying the secret via Helm
 
+### Deploying Multiple Controllers
+
+> This feature requires controller version => [v0.18.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.18.0)
+
+**_Note: Be aware when using this feature that CRDs are cluster wide and so you should upgrade all of your controllers (and your CRDs) as the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling._**
+
+By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy multiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or you wish to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
+
+This feature is configured via the controller `--watch-namespace` flag. When a namespace is provided via this flag the controller will only monitor runners in that namespace.
+
+If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done via the `fullnameOverride` properties. Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
+
 ## Usage
 
 [GitHub self-hosted runners can be deployed at various levels in a management hierarchy](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#about-self-hosted-runners):
@@ -331,7 +344,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ##### Note on scaling to/from 0
 
-> This feature is available since actions-runner-controller v0.19.0
+> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
 You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
 
@@ -656,7 +669,7 @@ You must not include `spec.metrics` like `PercentageRunnersBusy` when using this
 
 #### Autoscaling to/from 0
 
-> This feature is available since actions-runner-controller v0.19.0
+> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
 Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
 
@@ -678,7 +691,7 @@ Similarly, Webhook-based autoscaling works regardless of there are active runner
 
 #### Scheduled Overrides
 
-> This feature is available since actions-runner-controller v0.19.0
+> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
 `Scheduled Overrides` allows you to configure HorizontalRunnerAutoscaler so that its Spec gets updated only during a certain period of time.
 
@@ -965,7 +978,7 @@ spec:
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
-`actions-runner-controller` v0.15.0 or later has support for IRSA in EKS.
+> This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
 
 As similar as for regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
@@ -993,7 +1006,7 @@ spec:
 
 Istio 1.7.0 or greater has `holdApplicationUntilProxyStarts` added in https://github.com/istio/istio/pull/24737, which enables you to delay the `runner` container startup until the injected `istio-proxy` container finish starting. Try using it if you need to use Istio. Otherwise the runner is unlikely to work, because it fails to call any GitHub API to register itself due to `istio-proxy` being not up and running yet.
 
-Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test(contribution is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
+Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test (a contribution to resolve this is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
 
 - https://github.com/actions-runner-controller/actions-runner-controller/issues/591
 - https://github.com/actions-runner-controller/actions-runner-controller/pull/592
