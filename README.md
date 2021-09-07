@@ -216,7 +216,7 @@ By default the controller will look for runners in all namespaces, the watch nam
 
 This feature is configured via the controller `--watch-namespace` flag. When a namespace is provided via this flag the controller will only monitor runners in that namespace.
 
-If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done via the `fullnameOverride` properties. Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
+If you plan on installing multiple instances of the controller stack you will need to make the names of the resources are unique for each stack (specifically the cluster scoped roles and controller auth secret however it's easier to just ensure all resources in each install have unique names). In the case of a Helm deployment this can be done via the `fullnameOverride` and `authSecret.name` properties.
 
 ## Usage
 
