@@ -727,6 +727,7 @@ spec:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-preserve-unknown-fields: true
                 group:
                   type: string
                 hostAliases:
@@ -764,6 +765,7 @@ spec:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-preserve-unknown-fields: true
                 labels:
                   items:
                     type: string
@@ -897,6 +899,7 @@ spec:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-preserve-unknown-fields: true
                 terminationGracePeriodSeconds:
                   format: int64
                   type: integer

@@ -106,6 +106,7 @@ type RunnerPodSpec struct {
 	EnableServiceLinks *bool `json:"enableServiceLinks,omitempty"`
 
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
 
 	// +optional
@@ -118,6 +119,7 @@ type RunnerPodSpec struct {
 	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
 
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	SidecarContainers []corev1.Container `json:"sidecarContainers,omitempty"`
 
 	// +optional
@@ -136,6 +138,7 @@ type RunnerPodSpec struct {
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	EphemeralContainers []corev1.EphemeralContainer `json:"ephemeralContainers,omitempty"`
 
 	// +optional
