@@ -134,7 +134,7 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: webhook-server-cert
+          secretName: {{ include "actions-runner-controller.servingCertName" . }}
       - name: tmp
         emptyDir: {}
       {{- with .Values.nodeSelector }}

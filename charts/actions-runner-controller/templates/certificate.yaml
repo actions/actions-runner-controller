@@ -21,4 +21,4 @@ spec:
   issuerRef:
     kind: Issuer
     name: {{ include "actions-runner-controller.selfsignedIssuerName" . }}
-  secretName: webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
+  secretName: {{ include "actions-runner-controller.servingCertName" . }}
