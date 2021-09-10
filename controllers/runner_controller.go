@@ -738,11 +738,6 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		dockerdInRunnerPrivileged bool = dockerdInRunner
 	)
 
-	runnerImage := runnerSpec.Image
-	if runnerImage == "" {
-		runnerImage = defaultRunnerImage
-	}
-
 	workDir := runnerSpec.WorkDir
 	if workDir == "" {
 		workDir = "/runner/_work"
@@ -843,7 +838,13 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		}
 	}
 
-	runnerContainer.Image = runnerImage
+	if runnerSpec.Image != "" {
+		runnerContainer.Image = runnerSpec.Image
+	}
+	if runnerContainer.Image == "" {
+		runnerContainer.Image = defaultRunnerImage
+	}
+
 	if runnerContainer.ImagePullPolicy == "" {
 		runnerContainer.ImagePullPolicy = corev1.PullAlways
 	}
