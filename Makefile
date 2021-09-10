@@ -18,13 +18,6 @@ KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
 
-# From https://github.com/VictoriaMetrics/operator/pull/44
-YAML_DROP=$(YQ) delete --inplace
-
-# If you encounter errors like the below, you are very likely to update this to follow e.g. CRD version change:
-#   CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: spec.preserveUnknownFields: Invalid value: true: must be false in order to use defaults in the schema
-YAML_DROP_PREFIX=spec.versions[0].schema.openAPIV3Schema.properties.spec.properties
-
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,generateEmbeddedObjectMeta=true"
 
@@ -91,9 +84,9 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests: manifests-118 fix118 chart-crds
+manifests: manifests-gen-crds chart-crds
 
-manifests-118: controller-gen
+manifests-gen-crds: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 chart-crds:
@@ -106,22 +99,6 @@ fmt:
 # Run go vet against code
 vet:
 	go vet ./...
-
-# workaround for CRD issue with k8s 1.18 & controller-gen
-# ref: https://github.com/kubernetes/kubernetes/issues/91395
-fix118: yq
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml $(YAML_DROP_PREFIX).template.properties.spec.properties.ephemeralContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).containers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).initContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).sidecarContainers.items.properties
-	$(YAML_DROP) config/crd/bases/actions.summerwind.dev_runners.yaml $(YAML_DROP_PREFIX).ephemeralContainers.items.properties
 
 # Generate code
 generate: controller-gen
@@ -249,23 +226,6 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
-
-# find or download yq
-# download yq if necessary
-# Use always go-version to get consistent line wraps etc.
-yq:
-ifeq (, $(wildcard $(GOBIN)/yq))
-	echo "Downloading yq"
-	@{ \
-	set -e ;\
-	YQ_TMP_DIR=$$(mktemp -d) ;\
-	cd $$YQ_TMP_DIR ;\
-	go mod init tmp ;\
-	go get github.com/mikefarah/yq/v3@3.4.0 ;\
-	rm -rf $$YQ_TMP_DIR ;\
-	}
-endif
-YQ=$(GOBIN)/yq
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 
