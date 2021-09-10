@@ -218,7 +218,7 @@ This feature is configured via the controller `--watch-namespace` flag. When a n
 
 You can either install each controller stack into a single shared namespace (1) or into seperate namespaces (2):
 
-1. If you plan on installing multiple instances of the controller stack into a single namespace you will need to make the names of the resources unique to each stack (specifically the cluster scoped roles and controller auth secret however it's easier to just ensure all resources are uniquely named for each install of the stack). In the case of a Helm deployment this can be achieved via the `fullnameOverride`, `githubWebhookServer.fullNameOveride` and `authSecret.name` properties. Additionally, ensure you give each install a unique Helm release name or they will overwrite each other.
+1. If you plan on installing multiple instances of the controller stack into a single namespace you will need to make the names of the resources unique to each stack. In the case of a Helm deployment this can be achieved via the `fullnameOverride`, `githubWebhookServer.fullNameOveride` and `authSecret.name` properties. Additionally, ensure you give each install a unique Helm release name or they will overwrite each other.
 2. If you plan on installing the controllers into their own isolated namespaces then you will still need to ensure the cluster scoped roles have a unique name, this can be achieved via the `fullnameOverride`, `githubWebhookServer.fullNameOveride` properties. Additionally, ensure you give each install a unique Helm release name or they will overwrite each other.
 
 ## Usage
