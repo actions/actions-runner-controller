@@ -129,8 +129,8 @@ generate: controller-gen
 
 # Build the docker image
 docker-build:
-	docker build . -t ${NAME}:${VERSION}
-	docker build runner -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=$(shell arch)
+	docker build -t ${NAME}:${VERSION} .
+	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=$(shell arch) runner
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
