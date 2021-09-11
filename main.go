@@ -65,6 +65,7 @@ func main() {
 
 		metricsAddr          string
 		enableLeaderElection bool
+		leaderElectionId     string
 		syncPeriod           time.Duration
 
 		gitHubAPICacheDuration time.Duration
@@ -87,6 +88,7 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
 	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
 	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
 	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
@@ -129,7 +131,7 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "actions-runner-controller",
+		LeaderElectionID:   leaderElectionId,
 		Port:               9443,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
