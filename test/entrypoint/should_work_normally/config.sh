@@ -19,6 +19,7 @@ error(){
 
 success "I'm configured normally"
 touch .runner
+echo "$*" > runner_config
 success "created a dummy config file"
 success
 # Adding a counter to see how many times we've gone through the configuration step
