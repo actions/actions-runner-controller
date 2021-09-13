@@ -20,10 +20,12 @@ error(){
   exit 1
 }
 
-echo "$*" > runner_config
-success "I'm pretending the configuration is not successful"
-# increasing a counter to measure how many times we restarted
-count=`cat counter 2>/dev/null|| echo "0"`
-count=$((count + 1))
-echo ${count} > counter
+success ""
+success "Running the service..."
+# test if --once is present as a parameter
+echo "$*" | grep -q 'once' && error "Should not include --once in the parameters"
+success "...successful"
+touch runsvc_ran
+success ""
+
 
