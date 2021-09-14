@@ -8,11 +8,10 @@ replicaCount: 1
 
 syncPeriod: 10m
 
-controller:
-  enableLeaderElection: true
-  # Specifies the controller id for leader election.
-  # Must be unique if more than one controller installed.
-  #leaderElectionId: "actions-runner-controller"
+enableLeaderElection: true
+# Specifies the controller id for leader election.
+# Must be unique if more than one controller installed onto the same namespace.
+#leaderElectionId: "actions-runner-controller"
 
 # The controller tries its best not to repeat the duplicate GitHub API call
 # within this duration.
