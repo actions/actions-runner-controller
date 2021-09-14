@@ -216,7 +216,14 @@ By default the controller will look for runners in all namespaces, the watch nam
 
 This feature is configured via the controller `--watch-namespace` flag. When a namespace is provided via this flag the controller will only monitor runners in that namespace.
 
-If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done via the `fullnameOverride` properties. Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
+If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done by giving each a unique release name, or via the `fullnameOverride` properties.
+
+Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
+
+When you go to the route of sharing the namespace while giving each a unique Helm release name, you must also ensure the following values are configured correctly:
+
+- `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
+- `leaderElectionId` needs to be unique per stack. Otherwise, all the stack tries to race onto the leader election lock and results in only one stack can work concurrently.
 
 ## Usage
 

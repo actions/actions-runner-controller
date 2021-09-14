@@ -37,11 +37,11 @@ spec:
         {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
         {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
         - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
-        {{- if .Values.controller.enableLeaderElection }}
+        {{- if .Values.enableLeaderElection }}
         - "--enable-leader-election"
         {{- end }}
-        {{- if .Values.controller.leaderElectionId }}
-        - "--leader-election-id={{ .Values.controller.leaderElectionId }}"
+        {{- if .Values.leaderElectionId }}
+        - "--leader-election-id={{ .Values.leaderElectionId }}"
         {{- end }}
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
