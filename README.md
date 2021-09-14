@@ -223,7 +223,7 @@ Alternatively, you can install each controller stack into its own unique namespa
 When you go to the route of sharing the namespace while giving each a unique Helm release name, you must also ensure the following values are configured correctly:
 
 - `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
-- `leaderElectionId` needs to be unique per stack. Otherwise, all the stack tries to race onto the leader election lock and results in only one stack can work concurrently.
+- `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock and resulting in only one stack working concurrently.
 
 ## Usage
 
