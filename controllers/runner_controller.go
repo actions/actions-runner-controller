@@ -680,6 +680,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.Tolerations = runnerSpec.Tolerations
 	}
 
+	if len(runnerSpec.TopologySpreadConstraints) != 0 {
+		pod.Spec.TopologySpreadConstraints = runnerSpec.TopologySpreadConstraints
+	}
+
 	if len(runnerSpec.EphemeralContainers) != 0 {
 		pod.Spec.EphemeralContainers = runnerSpec.EphemeralContainers
 	}
