@@ -89,7 +89,7 @@ func (g *GitRepo) gitCommitCmd(ctx context.Context, dir, msg string) *exec.Cmd {
 }
 
 func (g *GitRepo) gitPushCmd(ctx context.Context, dir string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", "push", "origin", "main")
+	cmd := exec.CommandContext(ctx, "git", "push", "origin", "master")
 	cmd.Dir = dir
 	return cmd
 }

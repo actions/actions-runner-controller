@@ -298,7 +298,7 @@ func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNameP
 		Name: wfName,
 		On: testing.On{
 			Push: &testing.Push{
-				Branches: []string{"main"},
+				Branches: []string{"master"},
 			},
 		},
 		Jobs: map[string]testing.Job{},
@@ -403,5 +403,5 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job) {
 		}
 
 		return results, err
-	}, 60*time.Second, 10*time.Second).Should(gomega.Equal(expected))
+	}, 3*60*time.Second, 10*time.Second).Should(gomega.Equal(expected))
 }
