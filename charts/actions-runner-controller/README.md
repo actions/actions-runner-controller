@@ -4,15 +4,17 @@ All additional docs are kept in the `docs/` folder, this README is solely for do
 
 ## Values
 
-_The values are documented as of HEAD_
+**_The values are documented as of HEAD, to review the configuration options for your chart version ensure you view this file at the relevent [tag](https://github.com/actions-runner-controller/actions-runner-controller/tags)_**
 
-_Default values are the defaults set in the charts values.yaml, some properties have default configurations in the code for when the property is omitted or invalid_
+> _Default values are the defaults set in the charts values.yaml, some properties have default configurations in the code for when the property is omitted or invalid_
 
 | Key                                                      | Description                                                                                                                | Default                                                              |
 |----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
 | `labels`                                                 | Set labels to apply to all resources in the chart                                                                          |                                                                      |
 | `replicaCount`                                           | Set the number of controller pods                                                                                          | 1                                                                    |
 | `syncPeriod`                                             | Set the period in which the controler reconciles the desired runners count                                                 | 10m                                                                  |
+| `enableLeaderElection`                                   | Enable election configuration                                                                                              | true                                                                 |
+| `leaderElectionId`                                       | Set the election ID for the controller group                                                                               |                                                                      |
 | `githubAPICacheDuration`                                 | Set the cache period for API calls                                                                                         |                                                                      |
 | `githubEnterpriseServerURL`                              | Set the URL for a self-hosted GitHub Enterprise Server                                                                     |                                                                      |
 | `logLevel`                                               | Set the log level of the controller container                                                                              |                                                                      |
@@ -22,7 +24,7 @@ _Default values are the defaults set in the charts values.yaml, some properties 
 | `authSecret.github_app_installation_id`                  | The ID of your GitHub App installation. **This can't be set at the same time as `authSecret.github_token`**                |                                                                      |
 | `authSecret.github_app_private_key`                      | The multiline string of your GitHub App's private key. **This can't be set at the same time as `authSecret.github_token`** |                                                                      |
 | `authSecret.github_token`                                | Your chosen GitHub PAT token. **This can't be set at the same time as the `authSecret.github_app_*`**                      |                                                                      |
-| `dockerRegistryMirror`                                   | The default Docker Registry Mirror used by runners.                                                                        |
+| `dockerRegistryMirror`                                   | The default Docker Registry Mirror used by runners.                                                                        |                                                                      |
 | `image.repository`                                       | The "repository/image" of the controller container                                                                         | summerwind/actions-runner-controller                                 |
 | `image.tag`                                              | The tag of the controller container                                                                                        |                                                                      |
 | `image.actionsRunnerRepositoryAndTag`                    | The "repository/image" of the actions runner container                                                                     | summerwind/actions-runner:latest                                     |
@@ -33,7 +35,7 @@ _Default values are the defaults set in the charts values.yaml, some properties 
 | `metrics.proxy.enabled`                                  | Deploy kube-rbac-proxy container in controller pod                                                                         | true                                                                 |
 | `metrics.proxy.image.repository`                         | The "repository/image" of the kube-proxy container                                                                         | quay.io/brancz/kube-rbac-proxy                                       |
 | `metrics.proxy.image.tag`                                | The tag of the kube-proxy image to use when pulling the container                                                          | v0.10.0                                                              |
-| `metrics.serviceMonitorLabels`                                 | Set labels to apply to ServiceMonitor resources                                                        |                                                                 |
+| `metrics.serviceMonitorLabels`                           | Set labels to apply to ServiceMonitor resources                                                                            |                                                                      |
 | `imagePullSecrets`                                       | Specifies the secret to be used when pulling the controller pod containers                                                 |                                                                      |
 | `fullNameOverride`                                       | Override the full resource names	                                                                                        |                                                                      |
 | `nameOverride`                                           | Override the resource name prefix	                                                                                        |                                                                      |
