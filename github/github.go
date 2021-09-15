@@ -173,6 +173,8 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 		opts.Page = res.NextPage
 	}
 
+	metrics.SetRunnerStatus(runners, enterprise, org, repo)
+
 	return runners, nil
 }
 
