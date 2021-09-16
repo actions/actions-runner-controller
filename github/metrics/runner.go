@@ -5,6 +5,9 @@
 package metrics
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/google/go-github/v37/github"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -12,62 +15,63 @@ import (
 
 func init() {
 	metrics.Registry.MustRegister(
-		metricRunnerActiveCount,
-		metricRunnerIdleCount,
-		metricRunnerOfflineCount,
+		metricRunnerCount,
 	)
 }
 
+type runnerStatus string
+
+const (
+	active  runnerStatus = "active"
+	idle    runnerStatus = "idle"
+	offline runnerStatus = "offline"
+)
+
 var (
-	metricRunnerActiveCount = prometheus.NewGaugeVec(
+	metricRunnerCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "github_active_runner_count",
-			Help: "Number of currently active runner registered on GitHub",
+			Name: "github_runner_count",
+			Help: "Number of runners currently registered on GitHub",
 		},
-		[]string{"repository", "organization", "enterprise"},
-	)
-	metricRunnerIdleCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "github_idle_runner_count",
-			Help: "Number of idling runner registered on GitHub",
-		},
-		[]string{"repository", "organization", "enterprise"},
-	)
-	metricRunnerOfflineCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "github_offline_runner_count",
-			Help: "Number of offline runner registered on GitHub",
-		},
-		[]string{"repository", "organization", "enterprise"},
+		[]string{"repository", "organization", "enterprise", "labels", "status"},
 	)
 )
 
 func SetRunnerStatus(runners []*github.Runner, enterprise, org, repo string) {
-	var countActive, countIdle, countOffline float64
+	metricRunnerCount.Reset()
 
 	for _, runner := range runners {
-		status := runner.GetStatus()
-		if status == "offline" {
-			countOffline++
-			continue
+		metricLabels := prometheus.Labels{
+			"enterprise":   enterprise,
+			"organization": org,
+			"repository":   repo,
+			"labels":       serializeLabels(runner.Labels),
+			"status":       string(determineStatus(*runner)),
 		}
 
-		isBusy := runner.GetBusy()
-		if isBusy {
-			countActive++
-			continue
-		}
+		metricRunnerCount.With(metricLabels).Inc()
+	}
+}
 
-		countIdle++
+func determineStatus(runner github.Runner) runnerStatus {
+	if runner.GetStatus() == "offline" {
+		return offline
 	}
 
-	labels := prometheus.Labels{
-		"enterprise":   enterprise,
-		"organization": org,
-		"repository":   repo,
+	if runner.GetBusy() {
+		return active
 	}
 
-	metricRunnerActiveCount.With(labels).Set(countActive)
-	metricRunnerIdleCount.With(labels).Set(countIdle)
-	metricRunnerOfflineCount.With(labels).Set(countOffline)
+	return idle
+}
+
+func serializeLabels(runnerLabels []*github.RunnerLabels) string {
+	var labels []string
+
+	for _, runnerLabel := range runnerLabels {
+		labels = append(labels, runnerLabel.GetName())
+	}
+
+	sort.Strings(labels)
+	return strings.Join(labels, ",")
 }
