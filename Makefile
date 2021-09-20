@@ -192,8 +192,9 @@ acceptance/deploy:
 	RUNNER_FEATURE_FLAG_EPHEMERAL=${RUNNER_FEATURE_FLAG_EPHEMERAL} \
 	acceptance/deploy.sh
 
-acceptance/tests:
-	acceptance/checks.sh
+.PHONY: entrypoint/tests
+entrypoint/tests:
+	cd test/entrypoint && bash entrypoint_unittest.sh
 
 # We use -count=1 instead of `go clean -testcache`
 # See https://terratest.gruntwork.io/docs/testing-best-practices/avoid-test-caching/
