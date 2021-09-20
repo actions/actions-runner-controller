@@ -3,7 +3,7 @@ DIND_RUNNER_NAME ?= ${NAME}-dind
 TAG ?= latest
 TARGET_PLATFORM ?= $(shell arch)
 
-RUNNER_VERSION ?= 2.280.3
+RUNNER_VERSION ?= 2.283.1
 DOCKER_VERSION ?= 20.10.8
 
 # default list of platforms for which multiarch image is built
