@@ -150,11 +150,5 @@ if [ -z "${UNITTEST:-}" ]; then
   done
 fi
 
-args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
-  args+=(--once)
-  echo "Passing --once to runsvc.sh to enable the legacy ephemeral runner."
-fi
-
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh "${args[@]}"
+exec ./bin/runsvc.sh

@@ -22,10 +22,9 @@ error(){
 
 success ""
 success "Running the service..."
-# test if --once is present as a parameter
-echo "$*" | grep -q 'once' && error "Should not include --once in the parameters"
-success "...successful"
+# creating a file to show this script has run
 touch runsvc_ran
+success "...successful"
 success ""
 
 

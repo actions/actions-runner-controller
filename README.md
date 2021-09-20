@@ -852,7 +852,7 @@ spec:
           tolerationSeconds: 10
       # true (default) = The runner restarts after running jobs, to ensure a clean and reproducible build environment
       # false = The runner is persistent across jobs and doesn't automatically restart
-      # This directly controls the behaviour of `--once` flag provided to the github runner
+      # This directly controls the behaviour of `--ephemeral` flag provided to the github runner
       ephemeral: false
       # true (default) = A privileged docker sidecar container is included in the runner pod.
       # false = A docker sidecar container is not included in the runner pod and you can't use docker.
@@ -1126,19 +1126,7 @@ A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which 
 
 Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
 
-When it is configured, it passes a `--once` flag to every runner.
-
-`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. But it is a known race issue that may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in #466.
-
-> The below feature depends on an unreleased GitHub feature
-
-GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
-
-`actions-runner-controller` has a feature flag backend by an environment variable to enable using `--ephemeral` instead of `--once`. The environment variable is `RUNNER_FEATURE_FLAG_EPHEMERAL`. You can se it to `true` on runner containers in your runner pods to enable the feature.
-
-> At the time of writing this, you need to wait until GitHub rolls out the server-side feature for `--ephemeral`, AND you need to include your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 into the runner container image to test this feature.
->
-> Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
+When it is configured, it passes a `--ephemeral` flag to every runner, that is a new `actions/runner` feature that instructs the runner to stop after the first job run. Just set the environment variable `RUNNER_FEATURE_FLAG_EPHEMERAL` to `true` on runner containers in your runner pods to enable the feature.
 
 For example, a `RunnerSet` config with the flag enabled looks like:
 
@@ -1161,9 +1149,7 @@ spec:
           value: "true"
 ```
 
-Note that once https://github.com/actions/runner/pull/660 becomes generally available on GitHub, you no longer need to build a custom runner image to use this feature. Just set `RUNNER_FEATURE_FLAG_EPHEMERAL` and it should use `--ephemeral`.
-
-In the future, `--once` might get removed in `actions/runner`. `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the legacy flag is removed.
+In the future, `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the feature is supported in all GitHub products.
 
 ### Software Installed in the Runner Image
 

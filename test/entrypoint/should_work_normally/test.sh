@@ -4,7 +4,6 @@
 # Will simulate a normal execution scenario. expects:
 # - the configuration step to be run exactly once
 # - the entrypoint script to exit with no error
-# - the runsvc.sh script to run with the --once flag activated.
 
 source ../logging.sh
 
