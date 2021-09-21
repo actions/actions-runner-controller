@@ -79,7 +79,7 @@ cd ${RUNNER_HOME}
 # past that point, it's all relative pathes from /runner
 
 config_args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "false" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
   config_args+=(--ephemeral)
   echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
 fi
@@ -150,5 +150,11 @@ if [ -z "${UNITTEST:-}" ]; then
   done
 fi
 
+args=()
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "false" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+  args+=(--once)
+  echo "Passing --once to runsvc.sh to enable the legacy ephemeral runner."
+fi
+
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh
+exec ./bin/runsvc.sh "${args[@]}"

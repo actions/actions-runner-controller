@@ -1124,11 +1124,13 @@ A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which 
 
 ### Ephemeral Runners
 
-Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
+Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: <true|false>` in the spec. The ephemeral mode is configured on by default.
 
-When it is configured, it passes a `--ephemeral` flag to every runner, that is a new `actions/runner` feature that instructs the runner to stop after the first job run. Just set the environment variable `RUNNER_FEATURE_FLAG_EPHEMERAL` to `true` on runner containers in your runner pods to enable the feature.
+When it is configured, it passes a `--ephemeral` flag to every runner, that is a new `actions/runner` feature that instructs the runner to stop after the first job run.
 
-For example, a `RunnerSet` config with the flag enabled looks like:
+_Note: GitHub Enterprise servers don't support the feature yet and you need to set the environment variable `RUNNER_FEATURE_FLAG_EPHEMERAL` to `false` on runner containers in your runner pods to fallback to the legacy ephemeral mode._
+
+For example, a `RunnerSet` config with the flag disabled looks like:
 
 ```yaml
 kind: RunnerSet
@@ -1146,10 +1148,8 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
         - name: RUNNER_FEATURE_FLAG_EPHEMERAL
-          value: "true"
+          value: "false"
 ```
-
-In the future, `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the feature is supported in all GitHub products.
 
 ### Software Installed in the Runner Image
 

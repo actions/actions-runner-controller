@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # UNITTEST: should work as non ephemeral
-# Will simulate a scenario where ephemeral=false. expects:
+# Will simulate a scenario where ephemeral=true. expects:
 # - the configuration step to be run exactly once
 # - the entrypoint script to exit with no error
+# - the runsvc.sh script to run with the --once flag
 
 source ../logging.sh
 
@@ -20,7 +21,7 @@ export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
 export RUNNER_EPHEMERAL=true
-export RUNNER_FEATURE_FLAG_EPHEMERAL=true
+export RUNNER_FEATURE_FLAG_EPHEMERAL=false
 
 mkdir -p ${RUNNER_HOME}/bin
 # add up the config.sh and runsvc.sh
@@ -60,9 +61,9 @@ if [ ${count} != "1" ]; then
 fi
 
 log "Testing if the configuration included the --ephemeral flag"
-if ! grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
+if grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
   error "==============================================="
-  error "The configuration did not include the --ephemeral flag"
+  error "The configuration did include the --ephemeral flag"
   exit 1
 fi
 

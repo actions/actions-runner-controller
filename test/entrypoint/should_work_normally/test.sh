@@ -4,6 +4,7 @@
 # Will simulate a normal execution scenario. expects:
 # - the configuration step to be run exactly once
 # - the entrypoint script to exit with no error
+# - the runsvc.sh script to run without the --once flag
 
 source ../logging.sh
 
@@ -57,9 +58,9 @@ fi
 success "The configuration ran ${count} time(s)"
 
 log "Testing if the configuration included the --ephemeral flag"
-if grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
+if ! grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
   error "==============================================="
-  error "The configuration should not include the --ephemeral flag"
+  error "The configuration did not include the --ephemeral flag"
   exit 1
 fi
 

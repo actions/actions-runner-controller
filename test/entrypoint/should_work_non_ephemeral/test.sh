@@ -4,6 +4,7 @@
 # Will simulate a scenario where ephemeral=false. expects:
 # - the configuration step to be run exactly once
 # - the entrypoint script to exit with no error
+# - the runsvc.sh script to run without the --once flag
 
 source ../logging.sh
 
