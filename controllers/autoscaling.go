@@ -76,7 +76,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTa
 
 		return nil, nil
 	} else if numMetrics > 2 {
-		return nil, fmt.Errorf("Too many autoscaling metrics configured: It must be 0 to 2, but got %d", numMetrics)
+		return nil, fmt.Errorf("too many autoscaling metrics configured: It must be 0 to 2, but got %d", numMetrics)
 	}
 
 	primaryMetric := metrics[0]
@@ -93,7 +93,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTa
 	case v1alpha1.AutoscalingMetricTypePercentageRunnersBusy:
 		suggested, err = r.suggestReplicasByPercentageRunnersBusy(st, hra, primaryMetric)
 	default:
-		return nil, fmt.Errorf("validting autoscaling metrics: unsupported metric type %q", primaryMetric)
+		return nil, fmt.Errorf("validating autoscaling metrics: unsupported metric type %q", primaryMetric)
 	}
 
 	if err != nil {
@@ -221,7 +221,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	necessaryReplicas := queued + inProgress
 
 	r.Log.V(1).Info(
-		fmt.Sprintf("Suggested desired replicas of %d by TotalNumberOfQueuedAndInProgressWorkflowRuns", necessaryReplicas),
+		fmt.Sprintf("suggested desired replicas of %d by TotalNumberOfQueuedAndInProgressWorkflowRuns", necessaryReplicas),
 		"workflow_runs_completed", completed,
 		"workflow_runs_in_progress", inProgress,
 		"workflow_runs_queued", queued,
@@ -363,7 +363,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	//   the runnerdeployment controller is replacing RunnerReplicaSet for runner update.
 
 	r.Log.V(1).Info(
-		fmt.Sprintf("Suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),
+		fmt.Sprintf("suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),
 		"replicas_desired_before", desiredReplicasBefore,
 		"replicas_desired", desiredReplicas,
 		"num_runners", numRunners,
