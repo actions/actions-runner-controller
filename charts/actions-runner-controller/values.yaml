@@ -173,3 +173,9 @@ githubWebhookServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+
+certManagerEnabled: true
+
+admissionWebHooks:
+  {}
+  #caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle containing the CA that signed the webhook's serving certificate>...tLS0K"
