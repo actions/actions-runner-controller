@@ -619,7 +619,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Resources:       runner.Spec.Resources,
 		})
 
-		if runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer {
+		if (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
 			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
 				Name:         "docker",
 				VolumeMounts: runner.Spec.DockerVolumeMounts,
