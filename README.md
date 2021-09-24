@@ -374,9 +374,9 @@ This, in combination with a correctly configured HorizontalRunnerAutoscaler, all
 
 ### Autoscaling
 
-__**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
+Since GitHub's recent release of [`workflow_job` webhook events](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)
 
-**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**
+**NB** For GHES users: autoscaling with `workflow_job` webhooks is not supported on GHES versions before 3.3.
 
 A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
 
@@ -646,8 +646,6 @@ spec:
 See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
 
 ###### Example 3: Scale on each `workflow_job` event
-
-> This feature depends on an unreleased GitHub feature
 
 ```yaml
 kind: RunnerDeployment
