@@ -221,7 +221,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	necessaryReplicas := queued + inProgress
 
 	r.Log.V(1).Info(
-		fmt.Sprintf("suggested desired replicas of %d by TotalNumberOfQueuedAndInProgressWorkflowRuns", necessaryReplicas),
+		fmt.Sprintf("Suggested desired replicas of %d by TotalNumberOfQueuedAndInProgressWorkflowRuns", necessaryReplicas),
 		"workflow_runs_completed", completed,
 		"workflow_runs_in_progress", inProgress,
 		"workflow_runs_queued", queued,
