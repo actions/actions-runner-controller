@@ -363,7 +363,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	//   the runnerdeployment controller is replacing RunnerReplicaSet for runner update.
 
 	r.Log.V(1).Info(
-		fmt.Sprintf("suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),
+		fmt.Sprintf("Suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),
 		"replicas_desired_before", desiredReplicasBefore,
 		"replicas_desired", desiredReplicas,
 		"num_runners", numRunners,
