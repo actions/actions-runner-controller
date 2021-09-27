@@ -214,9 +214,9 @@ Configure your values.yaml, see the chart's [README](./charts/actions-runner-con
 
 By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy multiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or you wish to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
 
-This feature is configured via the controller `--watch-namespace` flag. When a namespace is provided via this flag the controller will only monitor runners in that namespace.
+This feature is configured via the controller's `--watch-namespace` flag. When a namespace is provided via this flag, the controller will only monitor runners in that namespace.
 
-If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done by giving each a unique release name, or via the `fullnameOverride` properties.
+If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources unique to each stack. In the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
 
 Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
 
