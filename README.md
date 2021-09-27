@@ -566,8 +566,7 @@ by learning the following configuration examples.
 - [Example 2: Scale up on each `check_run` event](#example-1-scale-up-on-each-check_run-event)
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-2-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 
-###### Example 1: Scale on each `workflow_job` event
-
+##### Example 1: Scale on each `workflow_job` event
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
@@ -601,7 +600,6 @@ Beware that a scale-down after a scale-up is deferred until `scaleDownDelaySecon
 You must not include `spec.metrics` like `PercentageRunnersBusy` when using this feature, as it is unnecessary. That is, if you've configured the webhook for `workflow_job`, it should be enough for all your scale-out needs.
 
 ##### Example 2: Scale up on each `check_run` event
-
 
 > Note: This should work almost like https://github.com/philips-labs/terraform-aws-github-runner
 
@@ -651,7 +649,7 @@ spec:
     duration: "5m"
 ```
 
-###### Example 3: Scale on each `pull_request` event against a given set of branches
+##### Example 3: Scale on each `pull_request` event against a given set of branches
 
 To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `pull_request` against the `main` or `develop` branch you write manifests like the below:
 
