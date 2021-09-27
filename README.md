@@ -568,6 +568,7 @@ by learning the following configuration examples.
 
 ###### Example 1: Scale on each `workflow_job` event
 
+
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
 The most flexible webhook GitHub offers is the `workflow_job` webhook, it includes the `runs-on` information in the payload allowing scaling based on runner labels.
@@ -600,6 +601,7 @@ Beware that a scale-down after a scale-up is deferred until `scaleDownDelaySecon
 You must not include `spec.metrics` like `PercentageRunnersBusy` when using this feature, as it is unnecessary. That is, if you've configured the webhook for `workflow_job`, it should be enough for all your scale-out needs.
 
 ##### Example 2: Scale up on each `check_run` event
+
 
 > Note: This should work almost like https://github.com/philips-labs/terraform-aws-github-runner
 
