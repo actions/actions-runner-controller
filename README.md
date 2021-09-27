@@ -562,9 +562,9 @@ Once you were able to confirm that the Webhook server is ready and running from 
 GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
 by learning the following configuration examples.
 
-- [Example 1: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)
-- [Example 2: Scale up on each `check_run` event](#example-1-scale-up-on-each-check_run-event)
-- [Example 3: Scale on each `pull_request` event against a given set of branches](#example-2-scale-on-each-pull_request-event-against-a-given-set-of-branches)
+- [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
+- [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
+- [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 
 ##### Example 1: Scale on each `workflow_job` event
 
