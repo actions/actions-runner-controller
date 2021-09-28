@@ -63,6 +63,13 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
       - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v2
         with:
@@ -74,8 +81,10 @@ jobs:
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
+            ${{ secrets.DOCKER_USER }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
+            ${{ secrets.DOCKER_USER }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
+            ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
+            ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
 
   latest-tags:
     if: ${{ github.event_name == 'push' || github.event_name == 'release' }}
@@ -107,6 +116,13 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
       - name: Build and Push Latest Tag
         uses: docker/build-push-action@v2
         with:
@@ -118,4 +134,5 @@ jobs:
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
+            ${{ secrets.DOCKER_USER }}/${{ matrix.name }}:latest
+            ghcr.io/${{ github.repository }}/${{ matrix.name }}:latest
