@@ -374,7 +374,7 @@ This, in combination with a correctly configured HorizontalRunnerAutoscaler, all
 
 ### Autoscaling
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields based on either a pull based scaling metric as defined in the `metrics` attribute or from a webhook. Since GitHub's release of the [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook-based autoscaling is the preferred way of autoscaling, it offers more accurate quicker scaling compared to the pull based metrics and is easy to setup.
+A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields on either a pull based scaling metric as defined in the `metrics` attribute or a webhook event. Since GitHub's release of the [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook-based autoscaling is the preferred way of autoscaling, it offers more accurate quicker scaling compared to the pull based metrics and is easy to setup.
 
 The below section covers the pull based metrics which you may want to consider if your scaling demands are minor. To configure your webhook based scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section.
 
