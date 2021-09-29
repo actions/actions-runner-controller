@@ -501,11 +501,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 
 	var scaleDownDelayUntil *time.Time
 
-	if hra.Status.DesiredReplicas == nil ||
-		*hra.Status.DesiredReplicas < newDesiredReplicas ||
-		hra.Status.LastSuccessfulScaleOutTime == nil {
-
-	} else if hra.Status.LastSuccessfulScaleOutTime != nil {
+	if hra.Status.LastSuccessfulScaleOutTime != nil {
 		t := hra.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay)
 
 		// ScaleDownDelay is not passed
