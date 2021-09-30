@@ -7,7 +7,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v0.4.0
 	github.com/google/go-cmp v0.5.6
-	github.com/google/go-github/v36 v36.0.0 // indirect
 	github.com/google/go-github/v37 v37.0.0
 	github.com/gorilla/mux v1.8.0
 	github.com/kelseyhightower/envconfig v1.4.0
