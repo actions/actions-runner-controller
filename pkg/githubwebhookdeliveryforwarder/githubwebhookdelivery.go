@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
-	gogithub "github.com/google/go-github/v36/github"
+	gogithub "github.com/google/go-github/v37/github"
 )
 
 type server struct {
@@ -126,7 +126,7 @@ OUTER:
 			s.Logf("Received %T at %s: %v", payload, deliveredAt, payload)
 
 			if deliveredAt.After(pos.deliveredAt) {
-				pos.deliveredAt = deliveredAt
+				pos.deliveredAt = deliveredAt.Time
 			}
 
 			if id > pos.id {
@@ -142,7 +142,7 @@ OUTER:
 	}
 
 	sort.Slice(deliveries, func(a, b int) bool {
-		return deliveries[b].GetDeliveredAt().After(deliveries[a].GetDeliveredAt())
+		return deliveries[b].GetDeliveredAt().After(deliveries[a].GetDeliveredAt().Time)
 	})
 
 	var payloads [][]byte
