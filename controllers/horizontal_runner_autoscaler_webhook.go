@@ -542,7 +542,7 @@ HRA:
 			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
 				var matched bool
-				for _, l2 := range rd.Spec.Template.Spec.Labels  {
+				for _, l2 := range rd.Spec.Template.Spec.Labels {
 					if l == l2 {
 						matched = true
 						break

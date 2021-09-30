@@ -114,6 +114,145 @@ func TestWebhookPing(t *testing.T) {
 	)
 }
 
+func TestWebhookWorkflowJob(t *testing.T) {
+	setupTest := func() github.WorkflowJobEvent {
+		f, err := os.Open("testdata/org_webhook_workflow_job_payload.json")
+		if err != nil {
+			t.Fatalf("could not open the fixture: %s", err)
+		}
+		defer f.Close()
+		var e github.WorkflowJobEvent
+		if err := json.NewDecoder(f).Decode(&e); err != nil {
+			t.Fatalf("invalid json: %s", err)
+		}
+
+		return e
+	}
+	t.Run("Successful", func(t *testing.T) {
+		e := setupTest()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"label1"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"scaled test-name by 1",
+			initObjs,
+		)
+	})
+	t.Run("WrongLabels", func(t *testing.T) {
+		e := setupTest()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"bad-label"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"no horizontalrunnerautoscaler to scale for this github event",
+			initObjs,
+		)
+	})
+	// This test verifies that the old way of matching labels doesn't work anymore
+	t.Run("OldLabels", func(t *testing.T) {
+		e := setupTest()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"label1": "label1",
+						},
+					},
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"bad-label"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"no horizontalrunnerautoscaler to scale for this github event",
+			initObjs,
+		)
+	})
+}
+
 func TestGetRequest(t *testing.T) {
 	hra := HorizontalRunnerAutoscalerGitHubWebhook{}
 	request, _ := http.NewRequest(http.MethodGet, "/", nil)
@@ -177,12 +316,10 @@ func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.
 	return logs
 }
 
-func testServer(t *testing.T, eventType string, event interface{}, wantCode int, wantBody string) {
+func testServerWithInitObjs(t *testing.T, eventType string, event interface{}, wantCode int, wantBody string, initObjs []runtime.Object) {
 	t.Helper()
 
 	hraWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{}
-
-	var initObjs []runtime.Object
 
 	client := fake.NewFakeClientWithScheme(sc, initObjs...)
 
@@ -225,6 +362,11 @@ func testServer(t *testing.T, eventType string, event interface{}, wantCode int,
 	if string(respBody) != wantBody {
 		t.Fatal("body:", string(respBody))
 	}
+}
+
+func testServer(t *testing.T, eventType string, event interface{}, wantCode int, wantBody string) {
+	var initObjs []runtime.Object
+	testServerWithInitObjs(t, eventType, event, wantCode, wantBody, initObjs)
 }
 
 func sendWebhook(server *httptest.Server, eventType string, event interface{}) (*http.Response, error) {
