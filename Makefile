@@ -86,8 +86,11 @@ deploy: manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: manifests-gen-crds chart-crds
 
-manifests-gen-crds: controller-gen
+manifests-gen-crds: controller-gen yq
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	for YAMLFILE in config/crd/bases/actions*.yaml; do \
+		$(YQ) write --inplace "$$YAMLFILE" spec.preserveUnknownFields false; \
+	done
 
 chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
@@ -226,6 +229,23 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+# find or download yq
+# download yq if necessary
+# Use always go-version to get consistent line wraps etc.
+yq:
+ifeq (, $(wildcard $(GOBIN)/yq))
+	echo "Downloading yq"
+	@{ \
+	set -e ;\
+	YQ_TMP_DIR=$$(mktemp -d) ;\
+	cd $$YQ_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/mikefarah/yq/v3@3.4.0 ;\
+	rm -rf $$YQ_TMP_DIR ;\
+	}
+endif
+YQ=$(GOBIN)/yq
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 

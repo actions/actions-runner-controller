@@ -4,7 +4,7 @@
 
 Depending on what you are patching depends on how you should go about it. Below are some guides on how to test patches locally as well as develop the controller and runners.
 
-When sumitting a PR for a change please provide evidence that your change works as we still need to work on improving the CI of the project. Some resources are provided for helping achieve this, see this guide for details.
+When submitting a PR for a change please provide evidence that your change works as we still need to work on improving the CI of the project. Some resources are provided for helping achieve this, see this guide for details.
 
 #### Running an End to End Test
 
