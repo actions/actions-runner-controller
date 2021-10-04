@@ -384,7 +384,7 @@ The below section covers the pull based metrics which you may want to consider i
 
 #### Anti-Flapping Configuration
 
-For both pull based or webhook based scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below). Depending on your circumstance you may want to consider playing with this figure as having runners not immediately scale down allows you to retain slack for jobs to be immedaitely assigned to runners.
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below) and has the final say on if a runner can be scaled down. Depending on your circumstance you may want to consider playing with this figure as having runners not immediately scale down allows you to retain slack for jobs to be immedaitely assigned to runners.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
