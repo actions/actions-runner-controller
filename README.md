@@ -20,6 +20,8 @@ ToC:
   - [Runner Deployments](#runnerdeployments)
     - [Note on scaling to/from 0](#note-on-scaling-tofrom-0)
   - [Autoscaling](#autoscaling)
+    - [Anti-Flapping Configuration](#anti-flapping-configuration)
+    - [Pull Driven Scaling](#pull-driven-scaling)
     - [Webhook Driven Scaling](#webhook-driven-scaling)
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
@@ -367,27 +369,64 @@ spec:
 
 The implication of setting `replicas: 0` instead of deleting the runner deployment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
 
-Also note that the controller creates a "registration-only" runner per RunnerReplicaSet on it's being scaled to zero,
-and retains it until there are one or more runners available.
+Also note that the controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available.
 
 This, in combination with a correctly configured HorizontalRunnerAutoscaler, allows you to automatically [scale to/from 0](#autoscaling-tofrom-0)
 
 ### Autoscaling
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields on either a pull based scaling metric as defined in the `metrics` attribute or a webhook event. Since GitHub's release of the [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook-based autoscaling is the preferred way of autoscaling, it offers more accurate quicker scaling compared to the pull based metrics and is easy to setup.
+> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developerswebhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job) webhook-based autoscaling is the preferred way of autoscaling as it offers more accurate, quicker scaling compared to the pull based metrics and is easy to setup.
+
+A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields on either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event based or pull based metric it is implemented by backing a `RunnerDeployment` kind with a `HorizontalRunnerAutoscaler`. 
 
 The below section covers the pull based metrics which you may want to consider if your scaling demands are minor. To configure your webhook based scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section.
 
-**Pull Driven Scaling Metrics**
+
+#### Anti-Flapping Configuration
+
+For both pull based or webhook based scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below). Depending on your circumstance you may want to consider playing with this figure as having runners not immediately scale down allows you to retain slack for jobs to be immedaitely assigned to runners.
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runner-deployment
+spec:
+  # Runners in this RunnerDeployment won't be scaled down for 5 minutes now
+  scaleDownDelaySecondsAfterScaleOut: 300
+  template:
+    spec:
+      repository: example/myrepo
+```
+
+#### Pull Driven Scaling
+
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below) with the period between polls being defined by the controller `--sync-period` flag, if this isn't provided then the controller defaults to a sync period of 10 minutes. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API, you will most likely want to adjust this.
+
+_Be aware of the risk of being rate limited if you have a busy environment and a short of a sync period. Various mitigations options are possible and have been discussed in this document._
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    # Your RunnerDeployment Here
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  # Your chosen scaling metrics here
+  metrics: [] 
+```
+
+Metric options:
 
 **TotalNumberOfQueuedAndInProgressWorkflowRuns**
 
-In the below example, `actions-runner` will poll GitHub for all pending workflows with the poll period defined by the sync period configuration. It will then scale to e.g. 3 if there're 3 pending jobs at sync time.
+The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all pending workflows, it will then scale to e.g. 5 if there're 5 pending jobs at sync time. 
+
 With this scaling metric we are required to define a list of repositories within our metric.
-
-The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API.
-
-**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
@@ -399,7 +438,6 @@ The scale out performance is controlled via the manager containers startup `--sy
 2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is
 4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
-
 
 Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
@@ -413,7 +451,7 @@ metadata:
 spec:
   template:
     spec:
-      repository: actions-runner-controller/actions-runner-controller
+      repository: example/myrepo
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
@@ -423,7 +461,7 @@ spec:
   scaleTargetRef:
     name: example-runner-deployment
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
@@ -433,16 +471,9 @@ spec:
 Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
 By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured however by adding the setting `scaleDownDelaySecondsAfterScaleOut` in the `HorizontalRunnerAutoscaler` `spec`:
 
-```yaml
-spec:
-  scaleDownDelaySecondsAfterScaleOut: 60
-```
-
 **PercentageRunnersBusy**
 
-The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
-
-**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
+The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in the `busy` state which live in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
 
 **Benefits of this metric**
 1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
@@ -454,9 +485,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 1. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 2. We are scaling up and down based on indicative information rather than a count of the actual number of queued jobs and so the desired runner count is likely to under provision new runners or overprovision them relative to actual job queue depth, this may or may not be a problem for you.
 
-
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
-
 
 **_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_**
 
@@ -470,7 +499,7 @@ spec:
   scaleTargetRef:
     name: example-runner-deployment
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
@@ -489,7 +518,7 @@ spec:
   scaleTargetRef:
     name: example-runner-deployment
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
@@ -498,30 +527,21 @@ spec:
     scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
 ```
 
-Like the previous metric, the scale down factor respects the anti-flapping configuration is applied to the `HorizontalRunnerAutoscaler` as mentioned previously:
-
-```yaml
-spec:
-  scaleDownDelaySecondsAfterScaleOut: 60
-```
-
 #### Webhook Driven Scaling
 
-`actions-runner-controller` has an optional Webhook server that receives GitHub Webhook events and scale
+Webhooks are processed by a seperate webhook server. The webhook server receives GitHub Webhook events and scales
 [`RunnerDeployments`](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscalers`](#autoscaling).
 
 Today, the Webhook server can be configured to respond GitHub `check_run`, `workflow_job`, `pull_request` and `push`  events
-by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within
-`HorizontalRunnerAutoscaler's` `Spec`.
+by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within `HorizontalRunnerAutoscaler`'s `spec:`.
 
-More concretely, you can configure the targeted GitHub event types and the `N` in
-`scaleUpTriggers`:
+More concretely, you can configure the targeted GitHub event types and the `N` in `scaleUpTriggers`:
 
 ```yaml
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -531,21 +551,15 @@ spec:
     duration: "5m"
 ```
 
-With the above example, the webhook server scales `myrunners` by `1` replica for 5 minutes on each `check_run` event
+With the above example, the webhook server scales `example-runners` by `1` replica for 5 minutes on each `check_run` event
 with the type of `created` and the status of `queued` received.
 
-The primary benefit of autoscaling on Webhook compared to the standard autoscaling is that it is far quicker as it allows you to
-immediately add "resource slack" for future GitHub Actions job runs.
-
-In contrast, the standard autoscaling requires you to wait next sync period to add
-insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
-But doing so eventually results in the controller not being functional due to it being rated limited by the GitHub API.
+The primary benefit of autoscaling on Webhook compared to the pull driven scaling is that it is far quicker as it allows you to
+immediately add runners resource rather than waiting for the next sync period.
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
-To enable this feature, you firstly need to install the webhook server.
-
-Currently, only our Helm chart has the ability install it:
+To enable this feature, you firstly need to install the webhook server, currently, only our Helm chart has the ability install it:
 _[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
 
 ```console
@@ -572,19 +586,19 @@ by learning the following configuration examples.
 
 The most flexible webhook GitHub offers is the `workflow_job` webhook, it includes the `runs-on` information in the payload allowing scaling based on runner labels.
 
-This webhook should cover most people's needs, please experiment with this webhook before considering the others.
+This webhook should cover most people's needs, please experiment with this webhook first before considering the others.
 
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
   repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent: {}
     duration: "30m"
@@ -592,12 +606,7 @@ spec:
 
 You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
 
-Each kind has a `status` of `queued`, `in_progress` and `completed`.
-With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`.
-
-Beware that a scale-down after a scale-up is deferred until `scaleDownDelaySecondsAfterScaleOut` elapses. Let's say you had configured `scaleDownDelaySecondsAfterScaleOut` of 60 seconds, 2 consequtive workflow jobs will result in immediately adding 2 runners. The 2 runners are removed only after 60 seconds. This basically gives you 60 seconds of a "grace period" that makes it possible for self-hosted runners to immediately run additional workflow jobs enqueued in that 60 seconds.
-
-You must not include `spec.metrics` like `PercentageRunnersBusy` when using this feature, as it is unnecessary. That is, if you've configured the webhook for `workflow_job`, it should be enough for all your scale-out needs.
+Each kind has a `status` of `queued`, `in_progress` and `completed`. With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`. The cavaet to this to remember is that this the scale down is within the bounds of your `scaleDownDelaySecondsAfterScaleOut` configuration, if this time hasn't past the scale down will be defered.
 
 ##### Example 2: Scale up on each `check_run` event
 
@@ -608,14 +617,14 @@ To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on e
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
   repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -630,14 +639,14 @@ To scale up replicas of the runners for `myorg` organization by 1 for 5 minutes 
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
   organization: myorg
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -656,14 +665,14 @@ To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on e
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
   repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       pullRequest:
@@ -674,7 +683,6 @@ spec:
 ```
 
 See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
-
 
 #### Autoscaling to/from 0
 
