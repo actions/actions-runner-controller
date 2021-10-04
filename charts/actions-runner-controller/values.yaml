@@ -55,9 +55,6 @@ serviceAccount:
 
 podAnnotations: {}
 
-# webhookServiceAnnotations contains annotations to be added to the provisioned webhook service resource
-webhookServiceAnnotations: {}
-
 podLabels: {}
 
 podSecurityContext:
@@ -76,6 +73,8 @@ securityContext:
 service:
   type: ClusterIP
   port: 443
+  # annotations to be added to the provisioned webhook service resource
+  annotations: {}
 
 metrics:
   # serviceAnnotations contains annotations to be added to the provisioned metrics service resource
