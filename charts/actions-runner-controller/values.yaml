@@ -55,8 +55,8 @@ serviceAccount:
 
 podAnnotations: {}
 
-# serviceAnnotations contains annotations to be added to the provisioned service resource
-serviceAnnotations: {}
+# webhookServiceAnnotations contains annotations to be added to the provisioned webhook service resource
+webhookServiceAnnotations: {}
 
 podLabels: {}
 
@@ -78,6 +78,8 @@ service:
   port: 443
 
 metrics:
+  # serviceAnnotations contains annotations to be added to the provisioned metrics service resource
+  serviceAnnotations: {}
   serviceMonitor: false
   serviceMonitorLabels: {}
   port: 8443
