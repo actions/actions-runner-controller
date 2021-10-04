@@ -55,6 +55,9 @@ serviceAccount:
 
 podAnnotations: {}
 
+# serviceAnnotations contains annotations to be added to the provisioned service resource
+serviceAnnotations: {}
+
 podLabels: {}
 
 podSecurityContext:
