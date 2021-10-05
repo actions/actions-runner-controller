@@ -1,3 +1,5 @@
+name: Publish Canary Image
+
 on:
   push:
     branches:

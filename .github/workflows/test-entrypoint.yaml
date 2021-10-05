@@ -7,6 +7,7 @@ on:
     paths:
       - 'runner/**'
       - 'test/entrypoint/**'
+      - '!**.md'
 
 jobs:
   test:

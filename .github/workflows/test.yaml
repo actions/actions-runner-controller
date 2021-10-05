@@ -5,10 +5,10 @@ on:
     branches:
       - master
     paths-ignore:
-    - 'runner/**'
-    - .github/workflows/build-and-release-runners.yml
-    - '*.md'
-    - '.gitignore'
+      - 'runner/**'
+      - .github/workflows/build-and-release-runners.yml
+      - '*.md'
+      - '.gitignore'
 
 jobs:
   test:
