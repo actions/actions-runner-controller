@@ -18,6 +18,9 @@ env:
 jobs:
   lint-chart:
     runs-on: ubuntu-latest
+    name: Lint Chart
+    outputs:
+      publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -81,7 +84,7 @@ jobs:
 
       # WARNING: This relies on the latest release being inat the top of the JSON from GitHub and a clean chart.yaml
       - name: Check if Chart Publish is Needed
-        id: publish-chart
+        id: publish-chart-step
         run: |
           CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/actions-runner-controller/actions-runner-controller/master/charts/actions-runner-controller/Chart.yaml)
           NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
@@ -94,9 +97,10 @@ jobs:
           fi
 
   publish-chart:
-    if: steps.publish-chart.outputs.publish == 'true'
-    runs-on: ubuntu-latest
+    if: needs.lint-chart.outputs.publish-chart == 'true'
     needs: lint-chart
+    runs-on: ubuntu-latest
+    name: Publish Chart
 
     steps:
       - name: Checkout
