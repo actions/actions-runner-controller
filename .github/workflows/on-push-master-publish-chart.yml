@@ -79,8 +79,22 @@ jobs:
         run: ct install --config charts/.ci/ct-config.yaml
         if: steps.list-changed.outputs.changed == 'true'
 
-  publish-chart:
+      # WARNING: This relies on the latest release being inat the top of the JSON from GitHub and a clean chart.yaml
+      - name: Check if Chart Publish is Needed
+        id: publish-chart
+        run: |
+          CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/actions-runner-controller/actions-runner-controller/master/charts/actions-runner-controller/Chart.yaml)
+          NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
+          RELEASE_LIST=$(curl -fs https://api.github.com/repos/actions-runner-controller/actions-runner-controller/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
+          LATEST_RELEASED_CHART_VERSION=$(echo $RELEASE_LIST | cut -d ' ' -f 1)
+          echo "Chart version in master : $NEW_CHART_VERSION"
+          echo "Latest release chart version : $LATEST_RELEASED_CHART_VERSION"
+          if [[ $NEW_CHART_VERSION != $LATEST_RELEASED_CHART_VERSION ]]; then
+            echo "::set-output name=publish::true"
+          fi
 
+  publish-chart:
+    if: steps.publish-chart.outputs.publish == 'true'
     runs-on: ubuntu-latest
     needs: lint-chart
 
