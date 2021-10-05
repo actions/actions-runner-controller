@@ -5,6 +5,11 @@ on:
     branches:
       - master
     paths-ignore:
+      - .github/workflows/build-and-release-runners.yml
+      - .github/workflows/on-push-lint-charts.yml
+      - .github/workflows/on-push-master-publish-chart.yml
+      - .github/workflows/release.yml
+      - .github/workflows/test-entrypoint.yml
       - "runner/**"
       - "**.md"
       - ".gitignore"
