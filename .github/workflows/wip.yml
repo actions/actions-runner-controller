@@ -17,7 +17,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: release-latest
+    name: Build and Publish Canary Image
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
     steps:

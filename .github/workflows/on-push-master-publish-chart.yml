@@ -18,6 +18,7 @@ env:
 jobs:
   lint-chart:
     runs-on: ubuntu-latest
+    name: Lint Chart
     outputs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
@@ -97,8 +98,9 @@ jobs:
 
   publish-chart:
     if: needs.lint-chart.outputs.publish-chart == 'true'
-    runs-on: ubuntu-latest
     needs: lint-chart
+    runs-on: ubuntu-latest
+    name: Publish Chart
 
     steps:
       - name: Checkout
