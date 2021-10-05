@@ -79,7 +79,7 @@ jobs:
         run: ct install --config charts/.ci/ct-config.yaml
         if: steps.list-changed.outputs.changed == 'true'
 
-      # WARNING: This relies on the versioning being ordered by most recent being latest in the JSON from GitHub and a clean chart.yaml
+      # WARNING: This relies on the latest release being inat the top of the JSON from GitHub and a clean chart.yaml
       - name: Check if Chart Publish is Needed
         id: publish-chart
         run: |
