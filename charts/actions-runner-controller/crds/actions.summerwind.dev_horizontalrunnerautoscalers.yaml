@@ -146,6 +146,7 @@ spec:
                             description: https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
                             properties:
                               branches:
+                                description: 
                                 items:
                                   type: string
                                 type: array
@@ -156,6 +157,17 @@ spec:
                             type: object
                           push:
                             description: PushSpec is the condition for triggering scale-up on push event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+                            properties:
+                              branches:
+                                description: branches is a list of git branches. Any push event whose ref matches one of branches in the list can trigger autoscaling.
+                                items:
+                                  type: string
+                                type: array
+                              branchesIgnore:
+                                description: branches is a list of git branches. Any push event whose ref matches one of branches in the list will be ignored.
+                                items:
+                                  type: string
+                                type: array
                             type: object
                         type: object
                     type: object

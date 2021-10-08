@@ -99,6 +99,8 @@ type PullRequestSpec struct {
 // PushSpec is the condition for triggering scale-up on push event
 // Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
 type PushSpec struct {
+	Branches       []string `json:"branches,omitempty"`
+	BranchesIgnore []string `json:"branchesIgnore,omitempty"`
 }
 
 // CapacityReservation specifies the number of replicas temporarily added

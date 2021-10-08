@@ -5,6 +5,7 @@ import (
 	"github.com/google/go-github/v37/github"
 )
 
+// MatchPushEvent()
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) MatchPushEvent(event *github.PushEvent) func(scaleUpTrigger v1alpha1.ScaleUpTrigger) bool {
 	return func(scaleUpTrigger v1alpha1.ScaleUpTrigger) bool {
 		g := scaleUpTrigger.GitHubEvent
@@ -16,6 +17,15 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) MatchPushEvent(event 
 		push := g.Push
 
 		if push == nil {
+			return false
+		}
+
+		// event.Ref = refs/heads/branch-name
+		if !matchTriggerConditionAgainstEvent(push.Branches, event.Ref) {
+			return false
+		}
+
+		if matchTriggerConditionAgainstEvent(push.BranchesIgnore, event.Ref) {
 			return false
 		}
 
