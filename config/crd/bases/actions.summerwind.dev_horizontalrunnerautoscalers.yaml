@@ -156,6 +156,15 @@ spec:
                             type: object
                           push:
                             description: PushSpec is the condition for triggering scale-up on push event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+                            properties:
+                              branches:
+                                items:
+                                  type: string
+                                type: array
+                              branchesIgnore:
+                                items:
+                                  type: string
+                                type: array
                             type: object
                         type: object
                     type: object
