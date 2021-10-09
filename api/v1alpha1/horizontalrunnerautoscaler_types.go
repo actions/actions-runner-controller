@@ -69,9 +69,10 @@ type ScaleUpTrigger struct {
 }
 
 type GitHubEventScaleUpTriggerSpec struct {
-	CheckRun    *CheckRunSpec    `json:"checkRun,omitempty"`
-	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
-	Push        *PushSpec        `json:"push,omitempty"`
+	CheckRun         *CheckRunSpec         `json:"checkRun,omitempty"`
+	PullRequest      *PullRequestSpec      `json:"pullRequest,omitempty"`
+	Push             *PushSpec             `json:"push,omitempty"`
+	WorkflowDispatch *WorkflowDispatchSpec `json:"push,omitempty"`
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
@@ -99,6 +100,13 @@ type PullRequestSpec struct {
 // PushSpec is the condition for triggering scale-up on push event
 // Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
 type PushSpec struct {
+}
+
+// WorkflowDispatchSpec is the condition for triggering scale-up on push event
+// Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#workflow_dispatch
+type WorkflowDispatchSpec struct {
+	Branches       []string `json:"branches,omitempty"`
+	BranchesIgnore []string `json:"branchesIgnore,omitempty"`
 }
 
 // CapacityReservation specifies the number of replicas temporarily added
