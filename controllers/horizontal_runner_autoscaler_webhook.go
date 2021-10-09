@@ -183,15 +183,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				"action", e.GetAction(),
 			)
 		}
-	case *gogithub.WorkflowDispatchEvent:
-		target, err = autoscaler.getScaleUpTarget(
-			context.TODO(),
-			log,
-			e.Repo.GetName(),
-			e.Repo.Owner.GetLogin(),
-			e.Repo.Owner.GetType(),
-			autoscaler.WorkflowDispatchEvent(e),
-		)
 	case *gogithub.WorkflowJobEvent:
 		if workflowJob := e.GetWorkflowJob(); workflowJob != nil {
 			log = log.WithValues(
