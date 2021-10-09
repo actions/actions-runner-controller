@@ -157,18 +157,6 @@ spec:
                           push:
                             description: PushSpec is the condition for triggering scale-up on push event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
                             type: object
-                          workflowDispatch:
-                            description: WorkflowDispatchSpec is the condition for triggering scale-up on workflow_dispatch event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#workflow_dispatch
-                            properties:
-                              branches:
-                                items:
-                                  type: string
-                                type: array
-                              branchesIgnore:
-                                items:
-                                  type: string
-                                type: array
-                            type: object
                         type: object
                     type: object
                   type: array
