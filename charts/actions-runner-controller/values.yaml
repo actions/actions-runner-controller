@@ -21,10 +21,8 @@ syncPeriod: 10m
 authSecret:
   create: false
   name: "controller-manager"
-  ## Set specific secret annotations
-  # annotations:
-  # key: "value"
-  ### GitHub Apps Configuration
+  annotations: {}
+  ### GitHub App Configuration
   #github_app_id: ""
   #github_app_installation_id: ""
   #github_app_private_key: |
