@@ -98,6 +98,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 	// respond ok to GET / e.g. for health check
 	if r.Method == http.MethodGet {
+		ok = true
 		fmt.Fprintln(w, "webhook server is running")
 		return
 	}
