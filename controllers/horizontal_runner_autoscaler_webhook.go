@@ -243,7 +243,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}
 
 	if err != nil {
-		log.Error(err, "handling " + webhookType + " event")
+		log.Error(err, "handling " + webhookType.Name + " event")
 
 		return
 	}
