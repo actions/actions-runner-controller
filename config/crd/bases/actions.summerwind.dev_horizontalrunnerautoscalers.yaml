@@ -59,7 +59,7 @@ spec:
                     type: object
                   type: array
                 maxReplicas:
-                  description: MinReplicas is the maximum number of replicas the deployment is allowed to scale
+                  description: MaxReplicas is the maximum number of replicas the deployment is allowed to scale
                   type: integer
                 metrics:
                   description: Metrics is the collection of various metric targets to calculate desired number of runners
