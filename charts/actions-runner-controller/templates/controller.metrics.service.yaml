@@ -5,6 +5,10 @@ metadata:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
   name: {{ include "actions-runner-controller.metricsServiceName" . }}
   namespace: {{ .Release.Namespace }}
+  {{- with .Values.metrics.serviceAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ports:
   - name: metrics-port

@@ -71,11 +71,15 @@ securityContext:
   # runAsNonRoot: true
   # runAsUser: 1000
 
+# Webhook service resource
 service:
   type: ClusterIP
   port: 443
+  annotations: {}
 
+# Metrics service resource
 metrics:
+  serviceAnnotations: {}
   serviceMonitor: false
   serviceMonitorLabels: {}
   port: 8443
