@@ -823,6 +823,14 @@ spec:
         key: node-role.kubernetes.io/test
         operator: Exists
 
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              runner-deployment-name: actions-runner
+
       repository: mumoshu/actions-runner-controller-ci
       # The default "summerwind/actions-runner" images are available at DockerHub:
       #  https://hub.docker.com/r/summerwind/actions-runner
