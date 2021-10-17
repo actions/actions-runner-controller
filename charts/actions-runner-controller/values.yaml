@@ -26,7 +26,8 @@ enableLeaderElection: true
 authSecret:
   create: false
   name: "controller-manager"
-  ### GitHub Apps Configuration
+  annotations: {}
+  ### GitHub App Configuration
   #github_app_id: ""
   #github_app_installation_id: ""
   #github_app_private_key: |
