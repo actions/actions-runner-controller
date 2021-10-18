@@ -42,6 +42,9 @@ spec:
         {{- if .Values.githubWebhookServer.logLevel }}
         - "--log-level={{ .Values.githubWebhookServer.logLevel }}"
         {{- end }}
+        {{- if .Values.scope.singleNamespace }}
+        - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
+        {{- end }}
         command:
         - "/github-webhook-server"
         env:

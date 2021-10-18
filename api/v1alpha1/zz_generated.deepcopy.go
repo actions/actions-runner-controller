@@ -707,6 +707,13 @@ func (in *RunnerPodSpec) DeepCopyInto(out *RunnerPodSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.TopologySpreadConstraints != nil {
+		in, out := &in.TopologySpreadConstraints, &out.TopologySpreadConstraints
+		*out = make([]v1.TopologySpreadConstraint, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.RuntimeClassName != nil {
 		in, out := &in.RuntimeClassName, &out.RuntimeClassName
 		*out = new(string)

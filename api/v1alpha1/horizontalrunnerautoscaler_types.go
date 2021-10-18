@@ -29,7 +29,7 @@ type HorizontalRunnerAutoscalerSpec struct {
 	// +optional
 	MinReplicas *int `json:"minReplicas,omitempty"`
 
-	// MinReplicas is the maximum number of replicas the deployment is allowed to scale
+	// MaxReplicas is the maximum number of replicas the deployment is allowed to scale
 	// +optional
 	MaxReplicas *int `json:"maxReplicas,omitempty"`
 
