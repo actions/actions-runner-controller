@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -40,6 +41,8 @@ import (
 
 const (
 	scaleTargetKey = "scaleTarget"
+
+	keyPrefixEnterprise = "enterprises/"
 )
 
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
@@ -141,6 +144,20 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		"delivery", r.Header.Get("X-GitHub-Delivery"),
 	)
 
+	var enterpriseEvent struct {
+		Enterprise struct {
+			Slug string `json:"slug,omitempty"`
+		} `json:"enterprise,omitempty"`
+	}
+	if err := json.Unmarshal(payload, &enterpriseEvent); err != nil {
+		var s string
+		if payload != nil {
+			s = string(payload)
+		}
+		autoscaler.Log.Error(err, "could not parse webhook payload for extracting enterprise slug", "webhookType", webhookType, "payload", s)
+	}
+	enterpriseSlug := enterpriseEvent.Enterprise.Slug
+
 	switch e := event.(type) {
 	case *gogithub.PushEvent:
 		target, err = autoscaler.getScaleUpTarget(
@@ -149,6 +166,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			e.Repo.GetName(),
 			e.Repo.Owner.GetLogin(),
 			e.Repo.Owner.GetType(),
+			// Most go-github Event types don't seem to contain Enteprirse(.Slug) fields
+			// we need, so we parse it by ourselves.
+			enterpriseSlug,
 			autoscaler.MatchPushEvent(e),
 		)
 	case *gogithub.PullRequestEvent:
@@ -158,6 +178,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			e.Repo.GetName(),
 			e.Repo.Owner.GetLogin(),
 			e.Repo.Owner.GetType(),
+			// Most go-github Event types don't seem to contain Enteprirse(.Slug) fields
+			// we need, so we parse it by ourselves.
+			enterpriseSlug,
 			autoscaler.MatchPullRequestEvent(e),
 		)
 
@@ -174,6 +197,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			e.Repo.GetName(),
 			e.Repo.Owner.GetLogin(),
 			e.Repo.Owner.GetType(),
+			// Most go-github Event types don't seem to contain Enteprirse(.Slug) fields
+			// we need, so we parse it by ourselves.
+			enterpriseSlug,
 			autoscaler.MatchCheckRunEvent(e),
 		)
 
@@ -191,6 +217,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				"repository.name", e.Repo.GetName(),
 				"repository.owner.login", e.Repo.Owner.GetLogin(),
 				"repository.owner.type", e.Repo.Owner.GetType(),
+				"enterprise.slug", enterpriseSlug,
 				"action", e.GetAction(),
 			)
 		}
@@ -205,6 +232,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				e.Repo.GetName(),
 				e.Repo.Owner.GetLogin(),
 				e.Repo.Owner.GetType(),
+				enterpriseSlug,
 				labels,
 			)
 
@@ -391,7 +419,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 			"Found too many scale targets: "+
 				"It must be exactly one to avoid ambiguity. "+
 				"Either set Namespace for the webhook-based autoscaler to let it only find HRAs in the namespace, "+
-				"or update Repository or Organization fields in your RunnerDeployment resources to fix the ambiguity.",
+				"or update Repository, Organization, or Enterprise fields in your RunnerDeployment resources to fix the ambiguity.",
 			"scaleTargets", strings.Join(scaleTargetIDs, ","))
 
 		return nil, nil
@@ -400,7 +428,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 	return &targets[0], nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
 	repositoryRunnerKey := owner + "/" + repo
 
 	if target, err := autoscaler.getScaleTarget(ctx, repositoryRunnerKey, f); err != nil {
@@ -423,17 +451,37 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 	} else if target != nil {
 		log.Info("scale up target is organizational runners", "organization", owner)
 		return target, nil
-	} else {
+	}
+
+	if enterprise == "" {
 		log.V(1).Info("no repository runner or organizational runner found",
 			"repository", repositoryRunnerKey,
 			"organization", owner,
+		)
+
+		return nil, nil
+	}
+
+	if target, err := autoscaler.getScaleTarget(ctx, enterpriseKey(enterprise), f); err != nil {
+		log.Error(err, "finding enterprise runner", "enterprise", enterprise)
+		return nil, err
+	} else if target != nil {
+		log.Info("scale up target is enterprise runners", "enterprise", enterprise)
+		return target, nil
+	} else {
+		log.V(1).Info("no repository/organizational/enterprise runner found",
+			"repository", repositoryRunnerKey,
+			"organization", owner,
+			"enterprises", enterprise,
 		)
 	}
 
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(ctx context.Context, log logr.Logger, repo, owner, ownerType string, labels []string) (*ScaleTarget, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(
+	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, labels []string,
+) (*ScaleTarget, error) {
 	repositoryRunnerKey := owner + "/" + repo
 
 	if target, err := autoscaler.getJobScaleTarget(ctx, repositoryRunnerKey, labels); err != nil {
@@ -456,10 +504,27 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 	} else if target != nil {
 		log.Info("job scale up target is organizational runners", "organization", owner)
 		return target, nil
-	} else {
+	}
+
+	if enterprise == "" {
 		log.V(1).Info("no repository runner or organizational runner found",
 			"repository", repositoryRunnerKey,
 			"organization", owner,
+		)
+		return nil, nil
+	}
+
+	if target, err := autoscaler.getJobScaleTarget(ctx, enterpriseKey(enterprise), labels); err != nil {
+		log.Error(err, "finding enterprise runner", "enterprise", enterprise)
+		return nil, err
+	} else if target != nil {
+		log.Info("scale up target is enterprise runners", "enterprise", enterprise)
+		return target, nil
+	} else {
+		log.V(1).Info("no repository/organizational/enterprise runner found",
+			"repository", repositoryRunnerKey,
+			"organization", owner,
+			"enterprises", enterprise,
 		)
 	}
 
@@ -649,7 +714,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 				return nil
 			}
 
-			return []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+			keys := []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
+
+			if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
+				keys = append(keys, enterpriseKey(enterprise))
+			}
+
+			return keys
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
 
@@ -657,7 +728,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 				return nil
 			}
 
-			return []string{rs.Spec.Repository, rs.Spec.Organization}
+			keys := []string{rs.Spec.Repository, rs.Spec.Organization}
+
+			if enterprise := rs.Spec.Enterprise; enterprise != "" {
+				keys = append(keys, enterpriseKey(enterprise))
+			}
+
+			return keys
 		}
 
 		return nil
@@ -669,4 +746,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
 		Named(name).
 		Complete(autoscaler)
+}
+
+func enterpriseKey(name string) string {
+	return keyPrefixEnterprise + name
 }
