@@ -109,5 +109,5 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "actions-runner-controller.pdbName" -}}
-{{- include "actions-runner-controller.fullname" . }}-pdb
+{{- include "actions-runner-controller.fullname" . | trunc 59 }}-pdb
 {{- end }}

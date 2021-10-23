@@ -60,5 +60,5 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "actions-runner-controller-github-webhook-server.pdbName" -}}
-{{- include "actions-runner-controller-github-webhook-server.fullname" . | trunc 47 }}-pdb
+{{- include "actions-runner-controller-github-webhook-server.fullname" . | trunc 59 }}-pdb
 {{- end }}
