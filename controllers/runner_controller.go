@@ -173,7 +173,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			}
 		}
 
-		log.Info("Successfully deleted egistration-only runner pod to free node and cluster resource")
+		log.Info("Successfully deleted registration-only runner pod to free node and cluster resource")
 
 		// Return here to not recreate the deleted pod, because recreating it is the waste of cluster and node resource,
 		// and also defeats the original purpose of scale-from/to-zero we're trying to implement by using the registration-only runner.
@@ -678,6 +678,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runnerSpec.Tolerations) != 0 {
 		pod.Spec.Tolerations = runnerSpec.Tolerations
+	}
+
+	if len(runnerSpec.TopologySpreadConstraints) != 0 {
+		pod.Spec.TopologySpreadConstraints = runnerSpec.TopologySpreadConstraints
 	}
 
 	if len(runnerSpec.EphemeralContainers) != 0 {

@@ -26,7 +26,9 @@ enableLeaderElection: true
 authSecret:
   create: false
   name: "controller-manager"
+  annotations: {}
   ### GitHub Apps Configuration
+  ## NOTE: IDs MUST be strings, use quotes
   #github_app_id: ""
   #github_app_installation_id: ""
   #github_app_private_key: |
@@ -70,11 +72,15 @@ securityContext:
   # runAsNonRoot: true
   # runAsUser: 1000
 
+# Webhook service resource
 service:
   type: ClusterIP
   port: 443
+  annotations: {}
 
+# Metrics service resource
 metrics:
+  serviceAnnotations: {}
   serviceMonitor: false
   serviceMonitorLabels: {}
   port: 8443

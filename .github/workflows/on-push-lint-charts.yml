@@ -15,6 +15,7 @@ env:
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    name: Lint Chart
     steps:
       - name: Checkout
         uses: actions/checkout@v2

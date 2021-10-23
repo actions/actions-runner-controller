@@ -7,6 +7,7 @@ on:
     paths:
       - 'runner/**'
       - .github/workflows/build-and-release-runners.yml
+      - '!**.md'
   push:
     branches:
       - master
@@ -17,9 +18,10 @@ on:
       - runner/Dockerfile.dindrunner
       - runner/entrypoint.sh
       - .github/workflows/build-and-release-runners.yml
+      - '!**.md'
 
 env:
-  RUNNER_VERSION: 2.283.2
+  RUNNER_VERSION: 2.283.3
   DOCKER_VERSION: 20.10.8
   DOCKERHUB_USERNAME: summerwind
 
