@@ -356,15 +356,13 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developerswebhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployments` / `RunnerSets` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event or pull based metric it is implemented by backing a `RunnerDeployment` kind with a `HorizontalRunnerAutoscaler`. 
-
-The below section covers the pull based metrics which you may want to consider if your scaling demands are minor. To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section.
+A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event or pull based metric it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler`. 
 
 ##### Anti-Flapping Configuration
 
 For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below).
 
-This configuration has the final say on if a runner can be scaled down or not. Depending on your circumstance, you may want to consider adjusting this as having runners not immediately scale down allows you to retain slack for jobs to be immediately assigned to previously scaled up runners which could potentially be beneficial. Likewise you may want a much smaller threshold.
+This configuration has the final say on if a runner can be scaled down or not. Depending on your circumstance, you may want to consider adjusting this.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -381,7 +379,9 @@ spec:
 
 ##### Pull Driven Scaling
 
-The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below) with the period between polls being defined by the controller `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of 10 minutes. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API, you will most likely want to adjust this.
+> To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
+
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of 10 minutes. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API, you will most likely want to adjust this.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -398,7 +398,7 @@ spec:
   metrics: [] 
 ```
 
-Metric options:
+**Metric Options:**
 
 **TotalNumberOfQueuedAndInProgressWorkflowRuns**
 
@@ -501,6 +501,8 @@ spec:
 ```
 
 ##### Webhook Driven Scaling
+
+> To configure pull driven scaling see the [Pull Driven Scaling](#pull-driven-scaling) section
 
 Webhooks are processed by a seperate webhook server. The webhook server receives GitHub Webhook events and scales
 [`RunnerDeployments`](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscalers`](#autoscaling).
