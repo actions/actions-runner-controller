@@ -35,6 +35,6 @@ kubectl apply -f crds/
 helm upgrade --install \
   --namespace actions-runner-system \
   --version ${CHART_VERSION} \
-  actions-runner-controller/actions-runner-controller \
-  actions-runner-controller
+  actions-runner-controller \
+  actions-runner-controller/actions-runner-controller
 ```
