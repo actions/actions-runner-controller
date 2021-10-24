@@ -362,7 +362,9 @@ The below section covers the pull based metrics which you may want to consider i
 
 ##### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below) and has the final say on if a runner can be scaled down. Depending on your circumstance, you may want to consider adjusting this as having runners not immediately scale down allows you to retain slack for jobs to be immediately assigned to runners which could potentially be beneficial. Likewise you may want a much smaller threshold. 
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below).
+
+This configuration has the final say on if a runner can be scaled down or not. Depending on your circumstance, you may want to consider adjusting this as having runners not immediately scale down allows you to retain slack for jobs to be immediately assigned to previously scaled up runners which could potentially be beneficial. Likewise you may want a much smaller threshold.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -522,11 +524,15 @@ spec:
     duration: "5m"
 ```
 
-With the above example, the webhook server scales `example-runners` by `1` replica for 5 minutes on each `check_run` event
-with the type of `created` and the status of `queued` received.
+With the above example, the webhook server scales `example-runners` by `1` replica for 5 minutes on each `check_run` event with the type of `created` and the status of `queued` received.
 
-The primary benefit of autoscaling on Webhook compared to the pull driven scaling is that it is far quicker as it allows you to
-immediately add runners resource rather than waiting for the next sync period.
+Of note is the `HRA.spec.scaleUpTriggers[].duration` attribute. This attribute is used to calculate if the replica number added via the trigger is expired or not. On each reconcilation loop, the controller sums up all the non-expiring replica numbers from previous scale up triggers. It then compares the summed desired replica number against the current replica number. If the summed desired replica number > the current number then it means the replica count needs to scale up.
+
+As mentioned previously, the `scaleDownDelaySecondsAfterScaleOut` property has the final say still. If the latest scale-up time + the anti-flapping duration is later than the current time, it doesn’t immediately scale up and instead retries the calculation again later to see if it needs to scale yet.
+
+---
+
+The primary benefit of autoscaling on Webhook compared to the pull driven scaling is that it is far quicker as it allows you to immediately add runners resource rather than waiting for the next sync period.
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
@@ -1022,6 +1028,8 @@ Note that there's no official Istio integration in actions-runner-controller. It
 ### Stateful Runners
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+
+> This feature only supports the `workflow_job` event for webhook driven scaling
 
 `actions-runner-controller` supports `RunnerSet` API that let you deploy stateful runners. A stateful runner is designed to be able to store some data persists across GitHub Actions workflow and job runs. You might find it useful, for example, to speed up your docker builds by persisting the docker layer cache.
 
