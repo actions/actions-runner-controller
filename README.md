@@ -356,7 +356,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developerswebhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployments` / `RunnerSets` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event or pull based metric it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind. 
+A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event or pull based metric it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind. (see [stateful runners](#stateful-runners) for auto-scale limitations of this kind)
 
 ##### Anti-Flapping Configuration
 
