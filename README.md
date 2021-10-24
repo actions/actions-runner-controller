@@ -356,7 +356,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developerswebhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployments` / `RunnerSets` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
-A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event or pull based metric it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind. (see [stateful runners](#stateful-runners) for auto-scale limitations of this kind)
+A `RunnerDeployment` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either a pull based scaling metric or via a webhook event. Whether the autoscaling is based on a webhook event or pull based metric it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind (see limitaions section of [stateful runners](#stateful-runners) section for cavaets of this kind).
 
 ##### Anti-Flapping Configuration
 
@@ -1031,8 +1031,6 @@ Note that there's no official Istio integration in actions-runner-controller. It
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
-> This feature only supports the `workflow_job` event for webhook driven scaling
-
 `actions-runner-controller` supports `RunnerSet` API that let you deploy stateful runners. A stateful runner is designed to be able to store some data persists across GitHub Actions workflow and job runs. You might find it useful, for example, to speed up your docker builds by persisting the docker layer cache.
 
 A basic `RunnerSet` would look like this:
@@ -1120,7 +1118,8 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 
 **Limitations**
 
-A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`.
+* For autoscaling the `RunnerSet` kind only supports webhook driven scaling and only the `workflow_job` event.
+* A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`.
 A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Ephemeral Runners
