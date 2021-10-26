@@ -1,5 +1,20 @@
 ## Contributing
 
+### Testing Controller Built from a Pull Request
+
+We always appreciate your help in testing open pull requests by deploying custom builds of actions-runner-controller onto your own environment, so that we are extra sure we didn't break anything.
+
+It is especially true when the pull request is about GitHub Enterprise, both GHEC and GHES, as [maintainers don't have GitHub Enterprise environments for testing](/README.md#github-enterprise-support).
+
+The process would look like the below:
+
+- Clone this repository locally
+- Checkout the branch. If you use the `gh` command, run `gh pr checkout $PR_NUMBER`
+- Run `NAME=$DOCKER_USER/actions-runner-controller VERSION=canary make docker-build docker-push` for a custom container image build
+- Update your actions-runner-controller's controller-manager deployment to use the new image, `$DOCKER_USER/actions-runner-controller:canary`
+
+Please also note that you need to replace `$DOCKER_USER` with your own DockerHub account name.
+
 ### How to Contribute a Patch
 
 Depending on what you are patching depends on how you should go about it. Below are some guides on how to test patches locally as well as develop the controller and runners.
