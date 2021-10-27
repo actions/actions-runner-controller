@@ -579,7 +579,9 @@ kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
-  repository: example/myrepo
+  template:
+    spec:
+      repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
@@ -610,7 +612,9 @@ kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
-  repository: example/myrepo
+  template:
+    spec:
+      repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
@@ -632,7 +636,9 @@ kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
-  organization: myorg
+  template:
+    spec:
+      organization: myorg
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
@@ -658,7 +664,9 @@ kind: RunnerDeployment
 metadata:
    name: myrunners
 spec:
-  repository: example/myrepo
+  template:
+    spec:
+      repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
