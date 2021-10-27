@@ -6,32 +6,40 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 
 ToC:
 
-- [Motivation](#motivation)
-- [Installation](#installation)
-  - [GitHub Enterprise Support](#github-enterprise-support)
-- [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
-  - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
-  - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
-- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
-- [Usage](#usage)
-  - [Repository Runners](#repository-runners)
-  - [Organization Runners](#organization-runners)
-  - [Enterprise Runners](#enterprise-runners)
-  - [Runner Deployments](#runnerdeployments)
-    - [Note on scaling to/from 0](#note-on-scaling-tofrom-0)
-  - [Autoscaling](#autoscaling)
-    - [Webhook Driven Scaling](#webhook-driven-scaling)
-    - [Autoscaling to/from 0](#autoscaling-tofrom-0)
-    - [Scheduled Overrides](#scheduled-overrides)
-  - [Runner with DinD](#runner-with-dind)
-  - [Additional Tweaks](#additional-tweaks)
-  - [Runner Labels](#runner-labels)
-  - [Runner Groups](#runner-groups)
-  - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
-  - [Stateful Runners](#stateful-runners)
-  - [Ephemeral Runners](#ephemeral-runners)
-  - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
-  - [Common Errors](#common-errors)
+- [actions-runner-controller](#actions-runner-controller)
+  - [Motivation](#motivation)
+  - [Installation](#installation)
+    - [GitHub Enterprise Support](#github-enterprise-support)
+  - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
+    - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
+    - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
+    - [Deploying Multiple Controllers](#deploying-multiple-controllers)
+  - [Usage](#usage)
+    - [Repository Runners](#repository-runners)
+    - [Organization Runners](#organization-runners)
+    - [Enterprise Runners](#enterprise-runners)
+    - [RunnerDeployments](#runnerdeployments)
+        - [Note on scaling to/from 0](#note-on-scaling-tofrom-0)
+    - [Autoscaling](#autoscaling)
+      - [Webhook Driven Scaling](#webhook-driven-scaling)
+        - [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
+        - [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
+        - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
+      - [Autoscaling to/from 0](#autoscaling-tofrom-0)
+      - [Scheduled Overrides](#scheduled-overrides)
+    - [Runner with DinD](#runner-with-dind)
+    - [Additional Tweaks](#additional-tweaks)
+    - [Runner Labels](#runner-labels)
+    - [Runner Groups](#runner-groups)
+    - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
+    - [Use with Istio](#use-with-istio)
+    - [Stateful Runners](#stateful-runners)
+    - [Ephemeral Runners](#ephemeral-runners)
+    - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
+    - [Common Errors](#common-errors)
+      - [invalid header field value](#invalid-header-field-value)
+      - [Runner coming up before network available](#runner-coming-up-before-network-available)
+      - [Runner coming up before dind container is ready](#runner-coming-up-before-dind-container-is-ready)
 - [Contributing](#contributing)
 
 ## Motivation
@@ -1082,7 +1090,7 @@ spec:
       securityContext:
         #All level/role/type/user values will vary based on your SELinux policies.
         #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
+        seLinuxOptions:
           level: "s0"
           role: "system_r"
           type: "super_t"
@@ -1209,7 +1217,7 @@ spec:
 #### invalid header field value
 
 ```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error
 {
   "controller": "runner",
   "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
@@ -1265,6 +1273,35 @@ spec:
         - name: STARTUP_DELAY_IN_SECONDS
           value: "2" # Remember! env var values must be strings.
 ```
+
+#### Runner coming up before dind container is ready
+
+If you're running your action runners with Docker in Docker sidecars then you may run into an issue like:
+
+```
+Error: unable to resolve docker endpoint: open /certs/client/ca.pem: no such file or directory
+```
+
+This is because the `dind` sidecar container has not completed configuring itself when the github action tries to communicate with docker
+
+**Solution**
+
+You can force the runner's entrypoint script to wait for docker to be ready by setting the `WAIT_FOR_DOCKER` environment variable for the runner pod. This will cause the script to wait until docker is ready
+
+*Example `RunnerDeployment` with a 2 second startup delay:*
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment-with-wait-for-docker
+spec:
+  template:
+    spec:
+      env:
+        - name: WAIT_FOR_DOCKER
+          value: "true" # Remember! env var values must be strings.
+```
+
 
 # Contributing
 

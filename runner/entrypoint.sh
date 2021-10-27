@@ -24,6 +24,11 @@ if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
 
+if [ -n "${WAIT_FOR_DOCKER}" ]; then
+  echo "Waiting for docker to be available"
+  until docker info; do sleep 1; done
+  echo "Docker is now available"
+fi
 
 if [ -z "${GITHUB_URL}" ]; then
   log "Working with public GitHub"
