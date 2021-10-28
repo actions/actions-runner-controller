@@ -39,6 +39,19 @@ image:
   actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
+  # Defines secret to use as ImagePullSecrets in the runner pod spec
+  # actionsRunnerPullImageSecretName: someSecretName
+
+
+imagePullSecrets:
+- name: github-actions-docker-config
+
+# Optionally create a secret with the dockerconfigjson used for the runner pod spec
+# imagePullSecretsDockerConfig:
+#   secretName: someSecretName
+#   registry: somePrivateRegistry
+#   username: someUsername
+#   password: somePassword
 
 imagePullSecrets: []
 nameOverride: ""

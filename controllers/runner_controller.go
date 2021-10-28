@@ -65,6 +65,7 @@ type RunnerReconciler struct {
 	Scheme                      *runtime.Scheme
 	GitHubClient                *github.Client
 	RunnerImage                 string
+	RunnerImagePullSecretName   string
 	DockerImage                 string
 	DockerRegistryMirror        string
 	Name                        string
@@ -635,7 +636,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
 
-	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
+	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecretName, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
 	if err != nil {
 		return pod, err
 	}
@@ -729,7 +730,7 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage, defaultRunnerImagePullSecretName, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -870,6 +871,12 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				Value: fmt.Sprintf("%d", *runnerSpec.DockerMTU),
 			},
 		}...)
+	}
+
+	if defaultRunnerImagePullSecretName != "" {
+		pod.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
+			{Name: defaultRunnerImagePullSecretName},
+		}
 	}
 
 	if dockerRegistryMirror != "" && dockerdInRunner {
