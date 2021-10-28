@@ -191,6 +191,8 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 _Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
+_Note: GitHub do not document exactly what permissions you get with each scope. The best documentation they provide on this topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review_
+
 ---
 
 Once you have created the appropriate token, deploy it as a secret to your Kubernetes cluster that you are going to deploy the solution on:
