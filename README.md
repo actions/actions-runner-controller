@@ -251,7 +251,7 @@ kind: Runner
 metadata:
   name: example-runner
 spec:
-  repository: actions-runner-controller/actions-runner-controller
+  repository: example/myrepo
   env: []
 ```
 
@@ -376,7 +376,7 @@ metadata:
 spec:
   template:
     spec:
-      repository: actions-runner-controller/actions-runner-controller
+      repository: example/myrepo
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
@@ -461,7 +461,7 @@ spec:
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
-    - actions-runner-controller/actions-runner-controller
+    - example/myrepo
 ```
 
 **PercentageRunnersBusy**
