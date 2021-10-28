@@ -362,7 +362,7 @@ A `RunnerDeployment` or `RunnerSet` (see [stateful runners](#stateful-runners) f
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `RunnerDeployment` `spec:` (see snippet below).
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` `spec:` (see snippet below for a basic exmaple).
 
 This configuration has the final say on if a runner can be scaled down or not regardless of the chosen scaling method. Depending on your requirements, you may want to consider adjusting this.
 
@@ -372,11 +372,27 @@ kind: RunnerDeployment
 metadata:
   name: example-runner-deployment
 spec:
-  # Runners in this RunnerDeployment won't be scaled down for 5 minutes instead of the default 10 minutes now
-  scaleDownDelaySecondsAfterScaleOut: 300
   template:
     spec:
-      repository: example/myrepo
+      repository: actions-runner-controller/actions-runner-controller
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  # Runners in the targeted RunnerDeployment won't be scaled down for 5 minutes instead of the default 10 minutes now
+  scaleDownDelaySecondsAfterScaleOut: 300
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.25'
+    scaleUpFactor: '2'
+    scaleDownFactor: '0.5'
 ```
 
 #### Pull Driven Scaling
