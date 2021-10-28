@@ -717,7 +717,7 @@ spec:
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-_Note: The controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available. This is a deprecated feature as "registration-only" runners are no longer needed due to GitHub changing their runner routing logic to no longer fail a workflow run if it targets a runner label that there are no registered runners for._
+_Note: The controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available. This is a deprecated feature for GitHub Cloud as "registration-only" runners are no longer needed due to GitHub changing their runner [routing logic](https://docs.github.com/en/enterprise-cloud@latest/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) to no longer fail a workflow run if it targets a runner label that there are no registered runners for._
 
 The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
@@ -1155,7 +1155,7 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* For autoscaling the `RunnerSet` kind does not support scaling from zero.
+* For autoscaling the `RunnerSet` kind doesn't support the [registration-only](#autoscaling-tofrom-0)
 * A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Ephemeral Runners
