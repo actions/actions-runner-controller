@@ -72,12 +72,33 @@ type GitHubEventScaleUpTriggerSpec struct {
 	CheckRun    *CheckRunSpec    `json:"checkRun,omitempty"`
 	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
 	Push        *PushSpec        `json:"push,omitempty"`
+	WorkflowJob *WorkflowJobSpec `json:"workflowJob,omitempty"`
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
 type CheckRunSpec struct {
+	// One of: created, rerequested, or completed
 	Types  []string `json:"types,omitempty"`
 	Status string   `json:"status,omitempty"`
+
+	// Names is a list of GitHub Actions glob patterns.
+	// Any check_run event whose name matches one of patterns in the list can trigger autoscaling.
+	// Note that check_run name seem to equal to the job name you've defined in your actions workflow yaml file.
+	// So it is very likely that you can utilize this to trigger depending on the job.
+	Names []string `json:"names,omitempty"`
+
+	// Repositories is a list of GitHub repositories.
+	// Any check_run event whose repository matches one of repositories in the list can trigger autoscaling.
+	Repositories []string `json:"repositories,omitempty"`
+}
+
+// https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job
+type WorkflowJobSpec struct {
+	// One of: queued, in_progress, or completed
+	Status string `json:"status,omitempty"`
+
+	// +optional
+	Labels []string `json:"labels,omitempty"`
 
 	// Names is a list of GitHub Actions glob patterns.
 	// Any check_run event whose name matches one of patterns in the list can trigger autoscaling.
