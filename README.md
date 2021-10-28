@@ -1118,9 +1118,9 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 
 **Limitations**
 
-* For autoscaling the `RunnerSet` kind only supports webhook driven scaling and only the `workflow_job` event.
-* A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`.
-A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
+* For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
+* For autoscaling the `RunnerSet` kind does not support scaling from zero.
+* A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Ephemeral Runners
 
