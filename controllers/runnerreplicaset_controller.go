@@ -23,7 +23,7 @@ import (
 	"reflect"
 	"time"
 
-	gogithub "github.com/google/go-github/v37/github"
+	gogithub "github.com/google/go-github/v39/github"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
