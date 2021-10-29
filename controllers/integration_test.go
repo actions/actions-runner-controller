@@ -538,6 +538,109 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 		})
 
+		It("should create and scale organization's repository runners on workflow_job event", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 1 replica via ScaleUpTriggers.GitHubEvent.WorkflowJob based scaling
+			{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{
+										Status:       "queued",
+										Repositories: []string{"valid", "foo", "bar"},
+									},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first workflow_job.queued webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+
+			// Scale-up to 3 replicas on second workflow_job.queued webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
+			}
+
+			// Do not scale-up on third workflow_job.queued webhook event
+			// repo "example" doesn't match our Spec
+			{
+				env.SendWorkflowJobEvent("test", "example", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after third webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
+			}
+		})
+
 		It("should create and scale organization's repository runners only on check_run event", func() {
 			name := "example-runnerdeploy"
 
@@ -1162,6 +1265,30 @@ func (env *testEnvironment) SendOrgCheckRunEvent(org, repo, status, action strin
 	})
 
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send check_run event")
+
+	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
+}
+
+func (env *testEnvironment) SendWorkflowJobEvent(org, repo, status_and_action string, labels []string) {
+	resp, err := sendWebhook(env.webhookServer, "workflow_job", &github.WorkflowJobEvent{
+		WorkflowJob: &github.WorkflowJob{
+			Status: github.String(status_and_action),
+			Labels: labels,
+		},
+		Org: &github.Organization{
+			Login: github.String(org),
+		},
+		Repo: &github.Repository{
+			Name: github.String(repo),
+			Owner: &github.User{
+				Login: github.String(org),
+				Type:  github.String("Organization"),
+			},
+		},
+		Action: github.String(status_and_action),
+	})
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send workflow_job event")
 
 	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
 }
