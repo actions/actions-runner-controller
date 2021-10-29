@@ -685,9 +685,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
 			}
 
-			// Scale-up to 3 replicas by the default TotalNumberOfQueuedAndInProgressWorkflowRuns-based scaling
-			// See workflowRunsFor3Replicas_queued and workflowRunsFor3Replicas_in_progress for GitHub List-Runners API responses
-			// used while testing.
+			// Scale-up to 1 replica via ScaleUpTriggers.GitHubEvent.CheckRun based scaling
 			{
 				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
 					ObjectMeta: metav1.ObjectMeta{
