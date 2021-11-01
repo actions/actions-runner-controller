@@ -776,6 +776,10 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			Value: runnerSpec.Group,
 		},
 		{
+			Name:  "DOCKER_ENABLED",
+			Value: fmt.Sprintf("%v", dockerEnabled),
+		},
+		{
 			Name:  "DOCKERD_IN_RUNNER",
 			Value: fmt.Sprintf("%v", dockerdInRunner),
 		},
