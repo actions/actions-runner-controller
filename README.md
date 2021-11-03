@@ -115,6 +115,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 * Self-hosted runners (read / write)
 
 **Subscribe to events**
+* Workflow job (if you are going to use [Webhook Driven Scaling with workflow_job events](https://github.com/actions-runner-controller/actions-runner-controller#example-1-scale-on-each-workflow_job-event)
 * Check run (if you are going to use [Webhook Driven Scaling](#webhook-driven-scaling))
 
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
