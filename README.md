@@ -114,10 +114,14 @@ _Note: Links are provided further down to create an app for your logged in user 
 **Organization Permissions**
 * Self-hosted runners (read / write)
 
-**Subscribe to events**
-* Check run (if you are going to use [Webhook Driven Scaling](#webhook-driven-scaling))
-
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
+
+**Subscribe to events**
+
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case the event details are:
+
+* Check run (required for all webhook driven scaling events)
+* Workflow job (optionally) (required for [webhook driven scaling with workflow_job events](https://github.com/actions-runner-controller/actions-runner-controller#example-1-scale-on-each-workflow_job-event)
 
 ---
 
