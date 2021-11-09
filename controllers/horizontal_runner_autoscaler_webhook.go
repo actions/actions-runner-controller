@@ -224,7 +224,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 		labels := e.WorkflowJob.Labels
 
-		switch e.GetAction() {
+		switch action := e.GetAction(); action {
 		case "queued", "completed":
 			target, err = autoscaler.getJobScaleUpTargetForRepoOrOrg(
 				context.TODO(),
@@ -248,7 +248,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				}
 			}
 		default:
+			ok = true
 
+			w.WriteHeader(http.StatusOK)
+
+			log.V(2).Info("Received and ignored a workflow_job event as it triggers neither scale-up nor scale-down", "action", action)
+
+			return
 		}
 	case *gogithub.PingEvent:
 		ok = true
