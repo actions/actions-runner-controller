@@ -24,6 +24,7 @@ enableLeaderElection: true
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 authSecret:
+  enabled: true
   create: false
   name: "controller-manager"
   annotations: {}
