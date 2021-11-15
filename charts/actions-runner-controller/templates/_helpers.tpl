@@ -107,3 +107,7 @@ Create the name of the service account to use
 {{- define "actions-runner-controller.servingCertName" -}}
 {{- include "actions-runner-controller.fullname" . }}-serving-cert
 {{- end }}
+
+{{- define "actions-runner-controller.pdbName" -}}
+{{- include "actions-runner-controller.fullname" . | trunc 59 }}-pdb
+{{- end }}

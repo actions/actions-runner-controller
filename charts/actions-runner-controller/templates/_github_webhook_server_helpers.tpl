@@ -58,3 +58,7 @@ Create the name of the service account to use
 {{- define "actions-runner-controller-github-webhook-server.serviceMonitorName" -}}
 {{- include "actions-runner-controller-github-webhook-server.fullname" . | trunc 47 }}-service-monitor
 {{- end }}
+
+{{- define "actions-runner-controller-github-webhook-server.pdbName" -}}
+{{- include "actions-runner-controller-github-webhook-server.fullname" . | trunc 59 }}-pdb
+{{- end }}
