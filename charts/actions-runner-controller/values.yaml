@@ -126,6 +126,14 @@ env:
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
 
+## specify additional volumes to mount in the manager container, this can be used
+## to specify additional storage of material or to inject files from ConfigMaps
+## into the running container
+additionalVolumes: []
+
+## specify where the additional volumes are mounted in the manager container
+additionalVolumeMounts: []
+
 scope:
   # If true, the controller will only watch custom resources in a single namespace
   singleNamespace: false
