@@ -69,6 +69,7 @@ func main() {
 		syncPeriod           time.Duration
 
 		gitHubAPICacheDuration time.Duration
+		defaultScaleDownDelay  time.Duration
 
 		runnerImage          string
 		dockerImage          string
@@ -98,6 +99,7 @@ func main() {
 	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
+	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", 10*time.Minute, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change. . If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak github-api-cache-duration, too")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
@@ -207,6 +209,7 @@ func main() {
 	log.Info(
 		"Initializing actions-runner-controller",
 		"github-api-cache-duration", gitHubAPICacheDuration,
+		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
 		"runner-image", runnerImage,
 		"docker-image", dockerImage,
@@ -215,11 +218,12 @@ func main() {
 	)
 
 	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
-		Client:        mgr.GetClient(),
-		Log:           log.WithName("horizontalrunnerautoscaler"),
-		Scheme:        mgr.GetScheme(),
-		GitHubClient:  ghClient,
-		CacheDuration: gitHubAPICacheDuration,
+		Client:                mgr.GetClient(),
+		Log:                   log.WithName("horizontalrunnerautoscaler"),
+		Scheme:                mgr.GetScheme(),
+		GitHubClient:          ghClient,
+		CacheDuration:         gitHubAPICacheDuration,
+		DefaultScaleDownDelay: defaultScaleDownDelay,
 	}
 
 	runnerPodReconciler := &controllers.RunnerPodReconciler{
