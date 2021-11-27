@@ -115,7 +115,7 @@ spec:
           name: cert
           readOnly: true
         {{- if .Values.additionalVolumeMounts }}
-          {{- toYaml .Values.additionalVolumeMounts | nindent 10 }} 
+          {{- toYaml .Values.additionalVolumeMounts | nindent 8 }} 
         {{- end }}
       {{- if .Values.metrics.proxy.enabled }}
       - args:
@@ -146,7 +146,7 @@ spec:
       - name: tmp
         emptyDir: {}
       {{- if .Values.additionalVolumes }}
-        {{- toYaml .Values.additionalVolumes | nindent 8}}
+        {{- toYaml .Values.additionalVolumes | nindent 6}}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
