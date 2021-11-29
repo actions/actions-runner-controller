@@ -17,7 +17,7 @@ RUNNER_FEATURE_FLAG_EPHEMERAL ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
-TARGET_PLATFORM ?= $(shell arch)
+TARGETPLATFORM ?= $(shell arch)
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,generateEmbeddedObjectMeta=true"
@@ -111,7 +111,7 @@ generate: controller-gen
 # Build the docker image
 docker-build:
 	docker build -t ${NAME}:${VERSION} .
-	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGET_PLATFORM=${TARGET_PLATFORM} runner
+	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=${TARGETPLATFORM} runner
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled

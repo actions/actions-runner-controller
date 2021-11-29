@@ -1,12 +1,12 @@
 FROM ubuntu:20.04
 
-ARG TARGET_PLATFORM
+ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.280.3
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=19.03.13
 ARG DUMB_INIT_VERSION=1.2.5
 
-RUN test -n "$TARGET_PLATFORM" || (echo "TARGET_PLATFORM must be set" && false)
+RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
@@ -57,7 +57,7 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 # Docker download supports arm64 as aarch64 & amd64 / i386 as x86_64
-RUN export ARCH=$(echo ${TARGET_PLATFORM} | cut -d / -f2) \
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
 	&& if ! curl -f -L -o docker.tgz "https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; then \
@@ -82,7 +82,7 @@ ENV HOME=/home/runner
 # libyaml-dev is required for ruby/setup-ruby action.
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
-RUN export ARCH=$(echo ${TARGET_PLATFORM} | cut -d / -f2) \
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
@@ -106,7 +106,7 @@ COPY entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/startup.sh /usr/local/bin/entrypoint.sh /usr/local/bin/modprobe
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
-RUN export ARCH=$(echo ${TARGET_PLATFORM} | cut -d / -f2) \
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
     && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \

@@ -1,7 +1,7 @@
 # Build the manager binary
 FROM golang:1.17 as builder
 
-ARG TARGET_PLATFORM
+ARG TARGETPLATFORM
 
 WORKDIR /workspace
 
@@ -19,9 +19,9 @@ RUN go mod download
 COPY . .
 
 # Build
-RUN export GOOS=$(echo ${TARGET_PLATFORM} | cut -d / -f1) && \
-  export GOARCH=$(echo ${TARGET_PLATFORM} | cut -d / -f2) && \
-  GOARM=$(echo ${TARGET_PLATFORM} | cut -d / -f3 | cut -c2-) && \
+RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
+  export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
+  GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3 | cut -c2-) && \
   go build -a -o manager main.go && \
   go build -a -o github-webhook-server ./cmd/githubwebhookserver
 

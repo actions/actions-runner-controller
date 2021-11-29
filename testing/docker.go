@@ -26,7 +26,7 @@ type BuildArg struct {
 func (k *Docker) Build(ctx context.Context, builds []DockerBuild) error {
 	for _, build := range builds {
 		var args []string
-		args = append(args, "--build-arg=TARGET_PLATFORM="+"linux/amd64")
+		args = append(args, "--build-arg=TARGETPLATFORM="+"linux/amd64")
 		for _, buildArg := range build.Args {
 			args = append(args, "--build-arg="+buildArg.Name+"="+buildArg.Value)
 		}
