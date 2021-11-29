@@ -873,7 +873,7 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		}...)
 	}
 
-	if defaultRunnerImagePullSecretName != "" {
+	if len(pod.Spec.ImagePullSecrets) == 0 && defaultRunnerImagePullSecretName != "" {
 		pod.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
 			{Name: defaultRunnerImagePullSecretName},
 		}
