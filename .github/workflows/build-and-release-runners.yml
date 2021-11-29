@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build ${{ matrix.name }}-ubuntu-${{ matrix.os-version }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: actions-runner
