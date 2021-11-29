@@ -1,9 +1,10 @@
-NAME ?= summerwind/actions-runner
-DIND_RUNNER_NAME ?= ${NAME}-dind
+DOCKER_USER ?= summerwind
+RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
+DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 TAG ?= latest
 TARGET_PLATFORM ?= $(shell arch)
 
-RUNNER_VERSION ?= 2.280.3
+RUNNER_VERSION ?= 2.284.0
 DOCKER_VERSION ?= 20.10.8
 
 # default list of platforms for which multiarch image is built
@@ -24,11 +25,11 @@ else
 endif
 
 docker-build-ubuntu:
-	docker build --build-arg TARGETPLATFORM=${TARGET_PLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
-	docker build --build-arg TARGETPLATFORM=${TARGET_PLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
+	docker build --build-arg TARGET_PLATFORM=${TARGET_PLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${RUNNER_NAME}:${TAG} .
+	docker build --build-arg TARGET_PLATFORM=${TARGET_PLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
 
 docker-push-ubuntu:
-	docker push ${NAME}:${TAG}
+	docker push ${RUNNER_NAME}:${TAG}
 	docker push ${DIND_RUNNER_NAME}:${TAG}
 
 docker-buildx-ubuntu:
@@ -39,12 +40,13 @@ docker-buildx-ubuntu:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${NAME}:latest" \
+		-t "${RUNNER_NAME}:${TAG}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${DIND_RUNNER_NAME}:latest" \
+		-t "${DIND_RUNNER_NAME}:${TAG}" \
 		-f Dockerfile.dindrunner \
 		. ${PUSH_ARG}
+	
