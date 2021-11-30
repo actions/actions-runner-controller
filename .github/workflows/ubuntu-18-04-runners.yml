@@ -2,6 +2,11 @@ name: Ubuntu 18.04 Runners
 
 on:
   pull_request:
+    types: 
+      - opened
+      - synchronize
+      - reopened
+      - closed
     branches:
       - 'master'
     paths:
