@@ -8,6 +8,11 @@ inputs:
     description: "Password"
     required: true
 
+outputs:
+  sha_short:
+    description: "The name of the service"
+    value: ${{ steps.vars.outputs.sha_short }}
+
 runs:
   using: "composite"
   steps:
