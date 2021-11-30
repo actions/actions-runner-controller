@@ -17,7 +17,7 @@ on:
       - '!runner/Dockerfile.dindrunner'
 
 env:
-  RUNNER_VERSION: 2.284.0
+  RUNNER_VERSION: 2.285.0
   DOCKER_VERSION: 20.10.8
   DOCKERHUB_USERNAME: summerwind
 
