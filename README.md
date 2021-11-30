@@ -68,11 +68,11 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deploying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+If you are deploying this solution into a GHES environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes) as a minimum, in order to use all the features of actions-runner-controller >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes) is required.
 
-When deploying the solution for a GitHub Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
+When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -89,7 +89,7 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
 
-If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
+If you are deploying the solution for a GHES environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GHEC or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying Using GitHub App Authentication
 
@@ -360,9 +360,11 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ### Autoscaling
 
-> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployments` / `RunnerSets` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
+> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
 A `RunnerDeployment` or `RunnerSet` (see [stateful runners](#stateful-runners) for more details on this kind) can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for cavaets of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
+
+**_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
 #### Anti-Flapping Configuration
 
@@ -387,7 +389,8 @@ kind: HorizontalRunnerAutoscaler
 metadata:
   name: example-runner-deployment-autoscaler
 spec:
-  # Runners in the targeted RunnerDeployment won't be scaled down for 5 minutes instead of the default 10 minutes now
+  # Runners in the targeted RunnerDeployment won't be scaled down
+  # for 5 minutes instead of the default 10 minutes now
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
     name: example-runner-deployment
@@ -441,8 +444,6 @@ The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all p
 
 Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
-**_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_**
-
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
@@ -483,8 +484,6 @@ The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in t
 2. We are scaling up and down based on indicative information rather than a count of the actual number of queued jobs and so the desired runner count is likely to under provision new runners or overprovision them relative to actual job queue depth, this may or may not be a problem for you.
 
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
-
-**_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_**
 
 ```yaml
 ---
@@ -587,6 +586,8 @@ by learning the following configuration examples.
 ##### Example 1: Scale on each `workflow_job` event
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+
+_Note: GitHub does not include the runner group information of a repository in the payload of `workflow_job` event in the initial `queued` event. The runner group information is only include for `workflow_job` events when the job has already been allocated to a runner (events with a status of `in_progress` or `completed`). Please do raise feature requests against [GitHub](https://support.github.com/tickets/personal/0) for this information to be included in the initial `queued` event if this would improve autoscaling runners for you._
 
 The most flexible webhook GitHub offers is the `workflow_job` webhook, it includes the `runs-on` information in the payload allowing scaling based on runner labels.
 
@@ -717,6 +718,7 @@ spec:
     amount: 1
     duration: "5m"
 ```
+
 #### Autoscaling to/from 0
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
