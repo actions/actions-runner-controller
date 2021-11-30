@@ -10,7 +10,7 @@ inputs:
 
 outputs:
   sha_short:
-    description: "The name of the service"
+    description: "The short SHA used for image builds"
     value: ${{ steps.vars.outputs.sha_short }}
 
 runs:
@@ -31,8 +31,8 @@ runs:
         version: latest
 
     - name: Login to DockerHub
+      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
       uses: docker/login-action@v1
-      if: ${{ github.event_name == 'push' || github.event_name == 'release' }}
       with:
         username: ${{ inputs.username }}
         password: ${{ inputs.password }}
