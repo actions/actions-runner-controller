@@ -5,7 +5,7 @@ go 1.15
 require (
 	github.com/bradleyfalzon/ghinstallation v1.1.1
 	github.com/davecgh/go-spew v1.1.1
-	github.com/go-logr/logr v0.4.0
+	github.com/go-logr/logr v1.2.1
 	github.com/google/go-cmp v0.5.6
 	github.com/google/go-github/v37 v37.0.0
 	github.com/gorilla/mux v1.8.0
