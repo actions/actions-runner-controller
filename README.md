@@ -587,7 +587,7 @@ by learning the following configuration examples.
 
 **Limitations**
 
-* GitHub does not include the runner group information of a repository in the payload of `workflow_job` event in the initial `queued` event. The runner group information is only include for `workflow_job` events when the job has always been allocated to a runner (a status of `in_progress` or `completed`)
+* GitHub does not include the runner group information of a repository in the payload of `workflow_job` event in the initial `queued` event. The runner group information is only include for `workflow_job` events when the job has already been allocated to a runner (events with a status of `in_progress` or `completed`). Please do raise feature requests against GitHub for this information to be included in the initial `queued` event if this would improve autoscaling runners for you.
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
