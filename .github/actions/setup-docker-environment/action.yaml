@@ -1,0 +1,38 @@
+name: "Setup Docker"
+
+inputs:
+  username:
+    description: "Username"
+    required: true
+  password:
+    description: "Password"
+    required: true
+
+outputs:
+  sha_short:
+    description: "The short SHA used for image builds"
+    value: ${{ steps.vars.outputs.sha_short }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get Short SHA
+      id: vars
+      run: |
+        echo ::set-output name=sha_short::${GITHUB_SHA::7}
+      shell: bash
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+      with:
+        version: latest
+
+    - name: Login to DockerHub
+      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
+      uses: docker/login-action@v1
+      with:
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}

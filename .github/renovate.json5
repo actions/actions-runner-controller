@@ -12,7 +12,10 @@
   "regexManagers": [
     {
       // use https://github.com/actions/runner/releases
-      "fileMatch": [".github/workflows/build-and-release-runners.yml"],
+      "fileMatch": [
+        ".github/workflows/ubuntu-18-04-runners.yml",
+        ".github/workflows/ubuntu-20-04-runners.yml"
+        ],
       "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
       "datasourceTemplate": "github-releases"

@@ -1,0 +1,61 @@
+name: Ubuntu 18.04 Runners
+
+on:
+  pull_request:
+    types: 
+      - opened
+      - synchronize
+      - reopened
+      - closed
+    branches:
+      - 'master'
+    paths:
+      - 'runner/**'
+      - .github/workflows/ubuntu-18-04-runners.yml
+      - '!**.md'
+      - '!runner/Dockerfile'
+      - '!runner/Dockerfile.dindrunner'
+
+env:
+  RUNNER_VERSION: 2.284.0
+  DOCKER_VERSION: 20.10.8
+  DOCKERHUB_USERNAME: summerwind
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build ${{ matrix.name }}-ubuntu-${{ matrix.os-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: actions-runner
+            os-version: 18.04
+            dockerfile: Dockerfile.ubuntu.1804
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Docker Environment
+        id: vars
+        uses: ./.github/actions/setup-docker-environment
+        with: 
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build and Push Versioned Tags
+        uses: docker/build-push-action@v2
+        with:
+          context: ./runner
+          file: ./runner/${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
+          build-args: |
+            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
+            DOCKER_VERSION=${{ env.DOCKER_VERSION }}
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
