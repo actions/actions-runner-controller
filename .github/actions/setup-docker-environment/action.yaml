@@ -18,7 +18,9 @@ runs:
   steps:
     - name: Get Short SHA
       id: vars
-      run: echo ::set-output name=sha_short::${GITHUB_SHA::7}
+      run: |
+        echo ::set-output name=sha_short::${GITHUB_SHA::7}
+      shell: bash
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v1
