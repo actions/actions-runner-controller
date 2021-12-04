@@ -1,4 +1,4 @@
-name: Ubuntu 20.04 Runners
+name: Runners
 
 on:
   pull_request:
@@ -22,15 +22,17 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build ${{ matrix.name }}-ubuntu-${{ matrix.os-version }}
+    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: actions-runner
+            os-name: ubuntu
             os-version: 20.04
             dockerfile: Dockerfile
           - name: actions-runner-dind
+            os-name: ubuntu
             os-version: 20.04
             dockerfile: Dockerfile.dindrunner
 
@@ -56,8 +58,8 @@ jobs:
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
