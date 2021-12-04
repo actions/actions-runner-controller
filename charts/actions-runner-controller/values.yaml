@@ -109,6 +109,12 @@ tolerations: []
 
 affinity: {}
 
+# Only one of minAvailable or maxUnavailable can be set
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 3
+
 # Leverage a PriorityClass to ensure your pods survive resource shortages
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
@@ -119,6 +125,14 @@ env:
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
+
+## specify additional volumes to mount in the manager container, this can be used
+## to specify additional storage of material or to inject files from ConfigMaps
+## into the running container
+additionalVolumes: []
+
+## specify where the additional volumes are mounted in the manager container
+additionalVolumeMounts: []
 
 scope:
   # If true, the controller will only watch custom resources in a single namespace
@@ -179,3 +193,9 @@ githubWebhookServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+
+  # Only one of minAvailable or maxUnavailable can be set
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 3
