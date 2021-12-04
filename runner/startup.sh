@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# SC1091: source /opt/bash-utils/logger.sh won't exist when shellcheck is ran
+# shellcheck disable=SC1091
+
 source /opt/bash-utils/logger.sh
 
 function wait_for_process () {
@@ -48,8 +52,7 @@ INFO "Waiting for processes to be running"
 processes=(dockerd)
 
 for process in "${processes[@]}"; do
-    wait_for_process "$process"
-    if [ $? -ne 0 ]; then
+    if ! wait_for_process "$process"; then
         ERROR "$process is not running after max time"
         ERROR "Dumping /var/log/dockerd.err.log to help investigation"
         cat /var/log/dockerd.err.log
@@ -60,7 +63,7 @@ for process in "${processes[@]}"; do
 done
 
 if [ -n "${MTU}" ]; then
-  sudo ifconfig docker0 mtu ${MTU} up
+  sudo ifconfig docker0 mtu "${MTU}" up
 fi
 
 # Wait processes to be running
