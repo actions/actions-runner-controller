@@ -23,6 +23,9 @@ else
 	export PUSH_ARG="--push"
 endif
 
+lint-scripts:
+	shellcheck --shell bash *.sh
+
 docker-build-ubuntu:
 	docker build --build-arg TARGETPLATFORM=${TARGET_PLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
 	docker build --build-arg TARGETPLATFORM=${TARGET_PLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .

@@ -8,20 +8,20 @@ WHITE="\e[0;97m"
 RESET="\e[0m"
 
 log(){
-  printf "${WHITE}${@}${RESET}\n" 1>&2
+  printf "${WHITE}%s${RESET}\n" "${@}" 1>&2
 }
 
 success(){
-  printf "${LIGHTGREEN}${@}${RESET}\n" 1>&2
+  printf "${LIGHTGREEN}%s${RESET}\n" "${@}" 1>&2
 }
 
 error(){
-  printf "${LIGHTRED}${@}${RESET}\n" 1>&2
+  printf "${LIGHTRED}%s${RESET}\n" "${@}" 1>&2
 }
 
-if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
+if [ -n "${STARTUP_DELAY_IN_SECONDS}" ]; then
   log "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds"
-  sleep ${STARTUP_DELAY_IN_SECONDS}
+  sleep "${STARTUP_DELAY_IN_SECONDS}"
 fi
 
 
@@ -71,15 +71,15 @@ fi
 
 # if this is not a testing environment
 if [ -z "${UNITTEST:-}" ]; then
-  sudo chown -R runner:docker ${RUNNER_HOME}
-  mv /runnertmp/* ${RUNNER_HOME}/
+  sudo chown -R runner:docker "${RUNNER_HOME}"
+  mv /runnertmp/* "${RUNNER_HOME}/"
 fi
 
-cd ${RUNNER_HOME}
+cd "${RUNNER_HOME}" || exit
 # past that point, it's all relative pathes from /runner
 
 config_args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" ] && [ "${RUNNER_EPHEMERAL}" != "false" ]; then
   config_args+=(--ephemeral)
   echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
 fi
@@ -151,7 +151,7 @@ if [ -z "${UNITTEST:-}" ]; then
 fi
 
 args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" ] && [ "${RUNNER_EPHEMERAL}" != "false" ]; then
   args+=(--once)
   echo "Passing --once to runsvc.sh to enable the legacy ephemeral runner."
 fi
