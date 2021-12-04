@@ -26,15 +26,15 @@ fi
 
 if [ "${DOCKER_ENABLED}" == "true" ] && [ "${ENABLE_WAIT_FOR_DOCKER}" != "false" ]; then
   log "Docker enabled runner detected and Docker daemon wait is enabled"
-  log "waiting ..."
-  until docker ps; do
-    sleep 1;
-  done
-  log "Docker daemon is now available, continuing with entrypoint"
+  log "Waiting until docker is avaliable or the timeout of 60 seconds is reached"
+  timeout 60s bash -c '
+    until docker ps ;do
+      sleep 1;
+    done'
 else
   log "Docker daemon wait skipped, either Docker is disabled or the wait for the Docker deamon is disabled, continuing with entrypoint"
 fi
-
+or 
 if [ -z "${GITHUB_URL}" ]; then
   log "Working with public GitHub"
   GITHUB_URL="https://github.com/"
