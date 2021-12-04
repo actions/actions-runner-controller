@@ -34,7 +34,7 @@ if [ "${DOCKER_ENABLED}" == "true" ] && [ "${DISABLE_WAIT_FOR_DOCKER}" != "true"
 else
   log "Docker daemon wait skipped, either Docker is disabled or the wait for the Docker deamon is disabled, continuing with entrypoint"
 fi
-or 
+
 if [ -z "${GITHUB_URL}" ]; then
   log "Working with public GitHub"
   GITHUB_URL="https://github.com/"
