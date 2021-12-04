@@ -32,7 +32,7 @@ if [ "${DOCKER_ENABLED}" == "true" ] && [ "${DISABLE_WAIT_FOR_DOCKER}" != "true"
       sleep 1;
     done'
 else
-  log "Docker daemon wait skipped, either Docker is disabled or the wait for the Docker deamon is disabled, continuing with entrypoint"
+  log "Docker daemon wait check skipped. Either Docker is disabled or the wait for the Docker deamon check is disabled, continuing with entrypoint"
 fi
 
 if [ -z "${GITHUB_URL}" ]; then
