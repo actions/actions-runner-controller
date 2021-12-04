@@ -1,4 +1,4 @@
-name: Ubuntu 18.04 Runners
+name: Ubuntu 20.04 Runners
 
 on:
   pull_request:
@@ -11,13 +11,11 @@ on:
       - 'master'
     paths:
       - 'runner/**'
-      - .github/workflows/ubuntu-18-04-runners.yml
+      - .github/workflows/runners.yml
       - '!**.md'
-      - '!runner/Dockerfile'
-      - '!runner/Dockerfile.dindrunner'
 
 env:
-  RUNNER_VERSION: 2.284.0
+  RUNNER_VERSION: 2.285.0
   DOCKER_VERSION: 20.10.8
   DOCKERHUB_USERNAME: summerwind
 
@@ -30,8 +28,11 @@ jobs:
       matrix:
         include:
           - name: actions-runner
-            os-version: 18.04
-            dockerfile: Dockerfile.ubuntu.1804
+            os-version: 20.04
+            dockerfile: Dockerfile
+          - name: actions-runner-dind
+            os-version: 20.04
+            dockerfile: Dockerfile.dindrunner
 
     steps:
       - name: Checkout
@@ -57,5 +58,6 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-ubuntu-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -13,8 +13,7 @@
     {
       // use https://github.com/actions/runner/releases
       "fileMatch": [
-        ".github/workflows/ubuntu-18-04-runners.yml",
-        ".github/workflows/ubuntu-20-04-runners.yml"
+        ".github/workflows/runners.yml"
         ],
       "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
