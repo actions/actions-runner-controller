@@ -5,8 +5,7 @@ on:
     branches:
       - master
     paths-ignore:
-      - .github/workflows/ubuntu-18-04-runners.yml
-      - .github/workflows/ubuntu-20-04-runners.yml
+      - .github/workflows/runners.yml
       - .github/workflows/on-push-lint-charts.yml
       - .github/workflows/on-push-master-publish-chart.yml
       - .github/workflows/release.yml
