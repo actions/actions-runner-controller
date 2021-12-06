@@ -1244,6 +1244,10 @@ Assuming you are installing in the default namespace, ensure your certificate ha
 * `webhook-service.actions-runner-system.svc`
 * `webhook-service.actions-runner-system.svc.cluster.local`
 
+It is possible to use a self-signed certificate by following a guide like
+[this one](https://mariadb.com/docs/security/encryption/in-transit/create-self-signed-certificates-keys-openssl/)
+using `openssl`.
+
 Install your certificate as a TLS secret:
 
 ```shell
