@@ -194,7 +194,7 @@ githubWebhookServer:
     #    hosts:
     #      - chart-example.local
  
- # Only one of minAvailable or maxUnavailable can be set
+  # Only one of minAvailable or maxUnavailable can be set
   podDisruptionBudget:
     enabled: false
     # minAvailable: 1
