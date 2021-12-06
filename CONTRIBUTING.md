@@ -1,10 +1,25 @@
 ## Contributing
 
+### Testing Controller Built from a Pull Request
+
+We always appreciate your help in testing open pull requests by deploying custom builds of actions-runner-controller onto your own environment, so that we are extra sure we didn't break anything.
+
+It is especially true when the pull request is about GitHub Enterprise, both GHEC and GHES, as [maintainers don't have GitHub Enterprise environments for testing](/README.md#github-enterprise-support).
+
+The process would look like the below:
+
+- Clone this repository locally
+- Checkout the branch. If you use the `gh` command, run `gh pr checkout $PR_NUMBER`
+- Run `NAME=$DOCKER_USER/actions-runner-controller VERSION=canary make docker-build docker-push` for a custom container image build
+- Update your actions-runner-controller's controller-manager deployment to use the new image, `$DOCKER_USER/actions-runner-controller:canary`
+
+Please also note that you need to replace `$DOCKER_USER` with your own DockerHub account name.
+
 ### How to Contribute a Patch
 
 Depending on what you are patching depends on how you should go about it. Below are some guides on how to test patches locally as well as develop the controller and runners.
 
-When sumitting a PR for a change please provide evidence that your change works as we still need to work on improving the CI of the project. Some resources are provided for helping achieve this, see this guide for details.
+When submitting a PR for a change please provide evidence that your change works as we still need to work on improving the CI of the project. Some resources are provided for helping achieve this, see this guide for details.
 
 #### Running an End to End Test
 
@@ -136,7 +151,4 @@ GINKGO_FOCUS='[It] should create a new Runner resource from the specified templa
 
 #### Helm Version Bumps
 
-**Chart Version :** When bumping the chart version follow semantic versioning https://semver.org/<br />
-**App Version :** When bumping the app version you will also need to bump the chart version too. Again, follow semantic versioning when bumping the chart.
-
-To determine if you need to bump the MAJOR, MINOR or PATCH versions you will need to review the changes between the previous app version and the new app version and / or ask for a maintainer to advise.
+In general we ask you not to bump the version in your PR, the maintainers in general manage the publishing of a new chart.

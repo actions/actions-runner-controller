@@ -18,8 +18,9 @@ exemptLabels:
   - refactor
   - documentation
   - chore
-  - needs-investigation
   - bug
+  - dependencies
+  - needs-investigation
 
 # Set to true to ignore issues in a project (defaults to false)
 exemptProjects: false

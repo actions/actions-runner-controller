@@ -17,10 +17,11 @@ ToC:
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
-  - [Runner Deployments](#runnerdeployments)
-    - [Note on scaling to/from 0](#note-on-scaling-tofrom-0)
+  - [RunnerDeployments](#runnerdeployments)
   - [Autoscaling](#autoscaling)
-    - [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook)
+    - [Anti-Flapping Configuration](#anti-flapping-configuration)
+    - [Pull Driven Scaling](#pull-driven-scaling)
+    - [Webhook Driven Scaling](#webhook-driven-scaling)
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
@@ -52,8 +53,8 @@ Subsequent to this, install the custom resource definitions and actions-runner-c
 **Kubectl Deployment:**
 
 ```shell
-# REPLACE "v0.18.2" with the version you wish to deploy
-kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.18.2/actions-runner-controller.yaml
+# REPLACE "v0.20.2" with the version you wish to deploy
+kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.20.2/actions-runner-controller.yaml
 ```
 
 **Helm Deployment:**
@@ -68,11 +69,11 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deploying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+If you are deploying this solution into a GHES environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes) as a minimum, in order to use all the features of actions-runner-controller >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes) is required.
 
-When deploying the solution for a GitHub Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
+When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -89,7 +90,7 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
 
-If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
+If you are deploying the solution for a GHES environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GHEC or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying Using GitHub App Authentication
 
@@ -102,7 +103,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 * Actions (read)
 * Administration (read / write)
-* Checks (read) (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
+* Checks (read) (if you are going to use [Webhook Driven Scaling](#webhook-driven-scaling))
 * Metadata (read)
 
 **Required Permissions for Organization Runners:**<br />
@@ -114,10 +115,14 @@ _Note: Links are provided further down to create an app for your logged in user 
 **Organization Permissions**
 * Self-hosted runners (read / write)
 
-**Subscribe to events**
-* Check run (if you are going to use [Faster Autoscaling with GitHub Webhook](#faster-autoscaling-with-github-webhook))
-
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
+
+**Subscribe to events**
+
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case the event details are:
+
+* Check run (required for all webhook driven scaling events)
+* Workflow job (optionally) (required for [webhook driven scaling with workflow_job events](https://github.com/actions-runner-controller/actions-runner-controller#example-1-scale-on-each-workflow_job-event)
 
 ---
 
@@ -187,9 +192,11 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 **Required Scopes for Enterprise Runners**
 
-* admin:enterprise (Full control)
+* admin:enterprise (manage_runners:enterprise)
 
 _Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
+
+_Note: GitHub do not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and amy not be 100% accurate._ 
 
 ---
 
@@ -215,9 +222,9 @@ Configure your values.yaml, see the chart's [README](./charts/actions-runner-con
 
 By default the controller will look for runners in all namespaces, the watch namespace feature allows you to restrict the controller to monitoring a single namespace. This then lets you deploy multiple controllers in a single cluster. You may want to do this either because you wish to scale beyond the API rate limit of a single PAT / GitHub App configuration or you wish to support multiple GitHub organizations with runners installed at the organization level in a single cluster.
 
-This feature is configured via the controller `--watch-namespace` flag. When a namespace is provided via this flag the controller will only monitor runners in that namespace.
+This feature is configured via the controller's `--watch-namespace` flag. When a namespace is provided via this flag, the controller will only monitor runners in that namespace.
 
-If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources are unique for each stack. In the case of Helm this can be done by giving each a unique release name, or via the `fullnameOverride` properties.
+If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources unique to each stack. In the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
 
 Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
 
@@ -249,7 +256,7 @@ kind: Runner
 metadata:
   name: example-runner
 spec:
-  repository: actions-runner-controller/actions-runner-controller
+  repository: example/myrepo
   env: []
 ```
 
@@ -316,9 +323,11 @@ Now you can see the runner on the enterprise level (if you have enterprise acces
 
 ### RunnerDeployments
 
-There are `RunnerReplicaSet` and `RunnerDeployment` that corresponds to `ReplicaSet` and `Deployment` but for `Runner`.
+You can manage sets of runners instead of individually through the `RunnerDeployment` kind and its `replicas:` attribute. This kind is required for many of the advanced features.
 
-You usually need only `RunnerDeployment` rather than `RunnerReplicaSet` as the former is for managing the latter.
+There are `RunnerReplicaSet` and `RunnerDeployment` kinds that corresponds to the `ReplicaSet` and `Deployment` kinds but for the `Runner` kind.
+
+You typically only need `RunnerDeployment` rather than `RunnerReplicaSet` as the former is for managing the latter.
 
 ```yaml
 # runnerdeployment.yaml
@@ -350,63 +359,21 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
-##### Note on scaling to/from 0
-
-> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
-
-You can either delete the runner deployment, or update it to have `replicas: 0`, so that there will be 0 runner pods in the cluster. This, in combination with e.g. `cluster-autoscaler`, enables you to save your infrastructure cost when there's no need to run Actions jobs.
-
-```yaml
-# runnerdeployment.yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runnerdeploy
-spec:
-  replicas: 0
-```
-
-The implication of setting `replicas: 0` instead of deleting the runner deployment is that you can let GitHub Actions queue jobs until there will be one or more runners. See [#465](https://github.com/actions-runner-controller/actions-runner-controller/pull/465) for more information.
-
-Also note that the controller creates a "registration-only" runner per RunnerReplicaSet on it's being scaled to zero,
-and retains it until there are one or more runners available.
-
-This, in combination with a correctly configured HorizontalRunnerAutoscaler, allows you to automatically [scale to/from 0](#autoscaling-tofrom-0)
-
 ### Autoscaling
 
-__**IMPORTANT : Due to limitations / a bug with GitHub's [routing engine](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) autoscaling does NOT work correctly with RunnerDeployments that target the enterprise level. Scaling activity works as expected however jobs fail to get assigned to the scaled out replicas. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470). Once GitHub resolves the issue with their backend service we expect the solution to be able to support autoscaled enterprise runnerdeploments without any additional changes.**__
+> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
-**NOTE: Once `workflow_job` webhook events are released on GitHub, the webhook-based autoscaling is the preferred way of autoscaling, because it is easy to configure and has the ability to accurately detect which runners to scale. See [Example 3: Scale on each `workflow_job` event](#example-3-scale-on-each-workflow_job-event)**
+A `RunnerDeployment` or `RunnerSet` (see [stateful runners](#stateful-runners) for more details on this kind) can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for cavaets of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
-A `RunnerDeployment` (excluding enterprise runners) can scale the number of runners between `minReplicas` and `maxReplicas` fields based the chosen scaling metric as defined in the `metrics` attribute
+**_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
-**Scaling Metrics**
+#### Anti-Flapping Configuration
 
-**TotalNumberOfQueuedAndInProgressWorkflowRuns**
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
-In the below example, `actions-runner` will poll GitHub for all pending workflows with the poll period defined by the sync period configuration. It will then scale to e.g. 3 if there're 3 pending jobs at sync time.
-With this scaling metric we are required to define a list of repositories within our metric.
+This configuration has the final say on if a runner can be scaled down or not regardless of the chosen scaling method. Depending on your requirements, you may want to consider adjusting this by setting the `scaleDownDelaySecondsAfterScaleOut:` attribute.
 
-The scale out performance is controlled via the manager containers startup `--sync-period` argument. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API.
-
-**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
-
-**Benefits of this metric**
-1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server side.
-2. Scales the runner count based on the actual queue depth of the jobs meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
-3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
-
-**Drawbacks of this metric**
-1. Repositories must be named within the scaling metric, maintaining a list of repositories may not be viable in larger environments or self-serve environments.
-2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
-3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is
-4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
-
-
-Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
-
-_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_
+Below is a complete basic example with one of the pull driven scaling metrics.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -416,7 +383,77 @@ metadata:
 spec:
   template:
     spec:
-      repository: actions-runner-controller/actions-runner-controller
+      repository: example/myrepo
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  # Runners in the targeted RunnerDeployment won't be scaled down
+  # for 5 minutes instead of the default 10 minutes now
+  scaleDownDelaySecondsAfterScaleOut: 300
+  scaleTargetRef:
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.25'
+    scaleUpFactor: '2'
+    scaleDownFactor: '0.5'
+```
+
+#### Pull Driven Scaling
+
+> To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
+
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of 10 minutes. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API, you will most likely want to adjust this.
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    # Your RunnerDeployment Here
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  # Your chosen scaling metrics here
+  metrics: [] 
+```
+
+**Metric Options:**
+
+**TotalNumberOfQueuedAndInProgressWorkflowRuns**
+
+The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all pending workflow runs against a given set of repositories. The metric will scale the runner count up to the total number of pending jobs at the sync time up to the `maxReplicas` configuration.
+
+**Benefits of this metric**
+1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server-side.
+2. Scales the runner count based on the depth of the job queue meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
+
+**Drawbacks of this metric**
+1. A list of repositories must be included within the scaling metric. Maintaining a list of repositories may not be viable in larger environments or self-serve environments.
+2. May not scale quick enough for some users needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
+3. Relatively large amounts of API requests required to maintain this metric, you may run in API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is.
+4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
+
+Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runner-deployment
+spec:
+  template:
+    spec:
+      repository: example/myrepo
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
@@ -426,29 +463,19 @@ spec:
   scaleTargetRef:
     name: example-runner-deployment
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
-    - actions-runner-controller/actions-runner-controller
-```
-
-Additionally, the `HorizontalRunnerAutoscaler` also has an anti-flapping option that prevents periodic loop of scaling up and down.
-By default, it doesn't scale down until the grace period of 10 minutes passes after a scale up. The grace period can be configured however by adding the setting `scaleDownDelaySecondsAfterScaleOut` in the `HorizontalRunnerAutoscaler` `spec`:
-
-```yaml
-spec:
-  scaleDownDelaySecondsAfterScaleOut: 60
+    - example/myrepo
 ```
 
 **PercentageRunnersBusy**
 
-The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration sync period for the number of busy runners which live in the RunnerDeployment's namespace and scale based on the settings
-
-**Kustomize Config :** The period can be customised in the `config/default/manager_auth_proxy_patch.yaml` patch<br />
+The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in the `busy` state which live in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
 
 **Benefits of this metric**
-1. Supports named repositories server side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
+1. Supports named repositories server-side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
 2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223)
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels)
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223) [#315](https://github.com/actions-runner-controller/actions-runner-controller/pull/315)
@@ -457,11 +484,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub based on the configuration syn
 1. May not scale quick enough for some users needs. This metric is pull based and so the number of busy runners are polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 2. We are scaling up and down based on indicative information rather than a count of the actual number of queued jobs and so the desired runner count is likely to under provision new runners or overprovision them relative to actual job queue depth, this may or may not be a problem for you.
 
-
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
-
-
-_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_
 
 ```yaml
 ---
@@ -473,7 +496,7 @@ spec:
   scaleTargetRef:
     name: example-runner-deployment
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
@@ -492,7 +515,7 @@ spec:
   scaleTargetRef:
     name: example-runner-deployment
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
@@ -501,35 +524,23 @@ spec:
     scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
 ```
 
-Like the previous metric, the scale down factor respects the anti-flapping configuration is applied to the `HorizontalRunnerAutoscaler` as mentioned previously:
+#### Webhook Driven Scaling
 
-```yaml
-spec:
-  scaleDownDelaySecondsAfterScaleOut: 60
-```
+> To configure pull driven scaling see the [Pull Driven Scaling](#pull-driven-scaling) section
 
-#### Faster Autoscaling with GitHub Webhook
-
-__**IMPORTANT : Due to missing webhook events, webhook based scaling is not available for enterprise level RunnerDeployments. This was explored in issue [#470](https://github.com/actions-runner-controller/actions-runner-controller/issues/470).**__
-
-> This feature is an ADVANCED feature which may require more work to set up.
-> Please get prepared to put some time and effort to learn and leverage this feature!
-
-`actions-runner-controller` has an optional Webhook server that receives GitHub Webhook events and scale
+Webhooks are processed by a seperate webhook server. The webhook server receives GitHub Webhook events and scales
 [`RunnerDeployments`](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscalers`](#autoscaling).
 
-Today, the Webhook server can be configured to respond GitHub `check_run`, `pull_request`, and `push` events
-by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within
-`HorizontalRunnerAutoscaler's` `Spec`.
+Today, the Webhook server can be configured to respond GitHub `check_run`, `workflow_job`, `pull_request` and `push`  events
+by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within `HorizontalRunnerAutoscaler`'s `spec:`.
 
-More concretely, you can configure the targeted GitHub event types and the `N` in
-`scaleUpTriggers`:
+More concretely, you can configure the targeted GitHub event types and the `N` in `scaleUpTriggers`:
 
 ```yaml
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -539,21 +550,20 @@ spec:
     duration: "5m"
 ```
 
-With the above example, the webhook server scales `myrunners` by `1` replica for 5 minutes on each `check_run` event
-with the type of `created` and the status of `queued` received.
+With the above example, the webhook server scales `example-runners` by `1` replica for 5 minutes on each `check_run` event with the type of `created` and the status of `queued` received.
 
-The primary benefit of autoscaling on Webhook compared to the standard autoscaling is that this one allows you to
-immediately add "resource slack" for future GitHub Actions job runs.
+Of note is the `HRA.spec.scaleUpTriggers[].duration` attribute. This attribute is used to calculate if the replica number added via the trigger is expired or not. On each reconcilation loop, the controller sums up all the non-expiring replica numbers from previous scale up triggers. It then compares the summed desired replica number against the current replica number. If the summed desired replica number > the current number then it means the replica count needs to scale up.
 
-In contrast, the standard autoscaling requires you to wait next sync period to add
-insufficient runners. You can definitely shorten the sync period to make the standard autoscaling more responsive.
-But doing so eventually results in the controller not being functional due to it being rated limited by the GitHub API.
+As mentioned previously, the `scaleDownDelaySecondsAfterScaleOut` property has the final say still. If the latest scale-up time + the anti-flapping duration is later than the current time, it doesn’t immediately scale up and instead retries the calculation again later to see if it needs to scale yet.
+
+---
+
+The primary benefit of autoscaling on Webhook compared to the pull driven scaling is that it is far quicker as it allows you to immediately add runners resource rather than waiting for the next sync period.
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
-To enable this feature, you firstly need to install the webhook server.
-
-Currently, only our Helm chart has the ability install it.
+To enable this feature, you firstly need to install the webhook server, currently, only our Helm chart has the ability install it:
+_[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
 
 ```console
 $ helm --upgrade install actions-runner-controller/actions-runner-controller \
@@ -569,10 +579,44 @@ Once you were able to confirm that the Webhook server is ready and running from 
 GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
 by learning the following configuration examples.
 
-- [Example 1: Scale up on each `check_run` event](#example-1-scale-up-on-each-check_run-event)
-- [Example 2: Scale on each `pull_request` event against `develop` or `main` branches](#example-2-scale-on-each-pull_request-event-against-develop-or-main-branches)
+- [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
+- [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
+- [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
+- [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
 
-##### Example 1: Scale up on each `check_run` event
+##### Example 1: Scale on each `workflow_job` event
+
+> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+
+_Note: GitHub does not include the runner group information of a repository in the payload of `workflow_job` event in the initial `queued` event. The runner group information is only include for `workflow_job` events when the job has already been allocated to a runner (events with a status of `in_progress` or `completed`). Please do raise feature requests against [GitHub](https://support.github.com/tickets/personal/0) for this information to be included in the initial `queued` event if this would improve autoscaling runners for you._
+
+The most flexible webhook GitHub offers is the `workflow_job` webhook, it includes the `runs-on` information in the payload allowing scaling based on runner labels.
+
+This webhook should cover most people's needs, please experiment with this webhook first before considering the others.
+
+```yaml
+kind: RunnerDeployment
+metadata:
+   name: example-runners
+spec:
+  template:
+    spec:
+      repository: example/myrepo
+---
+kind: HorizontalRunnerAutoscaler
+spec:
+  scaleTargetRef:
+    name: example-runners
+  scaleUpTriggers:
+  - githubEvent: {}
+    duration: "30m"
+```
+
+You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
+
+Each kind has a `status` of `queued`, `in_progress` and `completed`. With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`. The cavaet to this to remember is that this the scale down is within the bounds of your `scaleDownDelaySecondsAfterScaleOut` configuration, if this time hasn't past the scale down will be defered.
+
+##### Example 2: Scale up on each `check_run` event
 
 > Note: This should work almost like https://github.com/philips-labs/terraform-aws-github-runner
 
@@ -581,14 +625,16 @@ To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on e
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
-  repository: example/myrepo
+  template:
+    spec:
+      repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -603,38 +649,44 @@ To scale up replicas of the runners for `myorg` organization by 1 for 5 minutes 
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
-  organization: myorg
+  template:
+    spec:
+      organization: myorg
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       checkRun:
         types: ["created"]
         status: "queued"
-        # allow only certain repositories within your organization to trigger autoscaling
+        # Optionally restrict autoscaling to being triggered by events from specific repositories within your organization still
         # repositories: ["myrepo", "myanotherrepo"]
     amount: 1
     duration: "5m"
 ```
 
-###### Example 2: Scale on each `pull_request` event against `develop` or `main` branches
+##### Example 3: Scale on each `pull_request` event against a given set of branches
+
+To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `pull_request` against the `main` or `develop` branch you write manifests like the below:
 
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
-  repository: example/myrepo
+  template:
+    spec:
+      repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
   - githubEvent:
       pullRequest:
@@ -646,90 +698,57 @@ spec:
 
 See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
 
-###### Example 3: Scale on each `workflow_job` event
+###### Example 4: Scale on each push event
 
-> This feature depends on an unreleased GitHub feature
+To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `push` write manifests like the below:
 
 ```yaml
 kind: RunnerDeployment
 metadata:
-   name: myrunners
+   name: example-runners
 spec:
   repository: example/myrepo
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    name: myrunners
+    name: example-runners
   scaleUpTriggers:
-  - githubEvent: {}
-    duration: "30m"
+  - githubEvent:
+      push:
+    amount: 1
+    duration: "5m"
 ```
-
-You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
-
-Each kind has a `status` of `queued`, `in_progress` and `completed`.
-With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`.
-
-Beware that a scale-down after a scale-up is deferred until `scaleDownDelaySecondsAfterScaleOut` elapses. Let's say you had configured `scaleDownDelaySecondsAfterScaleOut` of 60 seconds, 2 consequtive workflow jobs will result in immediately adding 2 runners. The 2 runners are removed only after 60 seconds. This basically gives you 60 seconds of a "grace period" that makes it possible for self-hosted runners to immediately run additional workflow jobs enqueued in that 60 seconds.
-
-You must not include `spec.metrics` like `PercentageRunnersBusy` when using this feature, as it is unnecessary. That is, if you've configured the webhook for `workflow_job`, it should be enough for all the scale-out need.
 
 #### Autoscaling to/from 0
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-Previously, we've discussed about [how to scale a RunnerDeployment to/from 0](#note-on-scaling-tofrom-0)
+_Note: The controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available. This is a deprecated feature for GitHub Cloud as "registration-only" runners are no longer needed due to GitHub changing their runner [routing logic](https://docs.github.com/en/enterprise-cloud@latest/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) to no longer fail a workflow run if it targets a runner label that there are no registered runners for._
 
-To automate the process of scaling to/from 0, you can use `HorizontalRunnerAutoscaler` with a caveat.
+The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
-That is, you need to choose one of the following configuration for metrics and triggers:
+The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` kind. To scale from 0 whilst still being able to provision runners as jobs are queued we must use the `HorizontalRunnerAutoscaler` with only certain scaling configurations, only the below configurations support scaling from 0 whilst also being able to provision runners as jobs are queued:
 
 - `TotalNumberOfQueuedAndInProgressWorkflowRuns`
 - `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns`
 - `PercentageRunnersBusy` + Webhook-based autoscaling
+- Webhook-based autoscaling only
 
-This is due to that `PercentageRunnersBusy`, by its definition, needs one or more GitHub runners that can become `busy`, which cannot happen at all when you have 0 active runners.
+`PercentageRunnersBusy` can't be used alone as, by its definition, it needs one or more GitHub runners to become `busy` to be able to scale. If there isn't a runner to pick up a job and enter a `busy` state then the controller will never know to provision a runner to begin with as this metric has no knowledge of the job queue and is relying using the number of busy runners as a means for calculating the desired replica count.
 
-If and only if HorizontalRunnerAutoscaler is configured to have a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` and the controller sees the primary metric of `PercentageRunnersBusy` returned 0 desired replicas, it uses the secondary metric for calculating the desired replicas once again.
-
-A correctly configured `TotalNumberOfQueuedAndInProgressWorkflowRuns` can return non-zero desired replicas even when there are no runners other than [registration-only runners](#note-on-scaling-tofrom-0), hence the `PercentageRunnersBusy` + `TotalNumberOfQueuedAndInProgressWorkflowRuns` configuration makes scaling from zero possible.
-
-Similarly, Webhook-based autoscaling works regardless of there are active runners, hence `PercentageRunnersBusy` + Webhook-based autoscaling configuration makes scaling from zero, too.
+If a HorizontalRunnerAutoscaler is configured with a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` then be aware that the controller will check the primary metric of `PercentageRunnersBusy` first and will only use the secondary metric to calculate the desired replica count if the primary metric returns 0 desired replicas.
 
 #### Scheduled Overrides
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-`Scheduled Overrides` allows you to configure HorizontalRunnerAutoscaler so that its Spec gets updated only during a certain period of time.
+`Scheduled Overrides` allows you to configure `HorizontalRunnerAutoscaler` so that its `spec:` gets updated only during a certain period of time. This feature is usually used for following scenarios:
 
-usually, this feature is used for following scenarios:
+- You want to reduce your infrastructure costs by scaling your Kubernetes nodes down outside a given period
+- You want to scale for scheduled spikes in workloads
 
-- You want to pay for your infrastructure cost running runners only in business hours
-- You want to prepare for scheduled spikes in workloads
-
-For the first scenario, you might consider configuration like the below:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: HorizontalRunnerAutoscaler
-metadata:
-  name: example-runner-deployment-autoscaler
-spec:
-  scaleTargetRef:
-    name: example-runner-deployment
-  scheduledOverrides:
-  # Override minReplicas to 0 only between 0am sat to 0am mon
-  - startTime: "2021-05-01T00:00:00+09:00"
-    endTime: "2021-05-03T00:00:00+09:00"
-    recurrenceRule:
-      frequency: Weekly
-      untilTime: "2022-05-01T00:00:00+09:00"
-    minReplicas: 0
-  minReplicas: 1
-```
-
-For the second scenario, you might consider something like the below:
+The most basic usage of this feature is to set a non-repeating override:
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -747,10 +766,31 @@ spec:
   minReplicas: 1
 ```
 
-The most basic usage of this feature is actually the second scenario mentioned above.
 A scheduled override without `recurrenceRule` is considered a one-off override, that is active between `startTime` and `endTime`. In the second scenario, it overrides `minReplicas` to `100` only between `2021-06-01T00:00:00+09:00` and `2021-06-03T00:00:00+09:00`.
 
-A scheduled override with `recurrenceRule` is considered a recurring override. A recurring override is initially active between `startTime` and `endTime`, and then it repeatedly get activated after a certain period of time denoted by `frequency`.
+A more advanced configuration is to include a `recurrenceRule` in the override:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    name: example-runner-deployment
+  scheduledOverrides:
+  # Override minReplicas to 0 only between 0am sat to 0am mon
+  - startTime: "2021-05-01T00:00:00+09:00"
+    endTime: "2021-05-03T00:00:00+09:00"
+    recurrenceRule:
+      frequency: Weekly
+      # Optional sunset datetime attribute
+      # untilTime: "2022-05-01T00:00:00+09:00"
+    minReplicas: 0
+  minReplicas: 1
+```
+
+ A recurring override is initially active between `startTime` and `endTime`, and then it repeatedly get activated after a certain period of time denoted by `frequency`.
 
 `frequecy` can take one of the following values:
 
@@ -761,13 +801,15 @@ A scheduled override with `recurrenceRule` is considered a recurring override. A
 
 By default, a scheduled override repeats forever. If you want it to repeat until a specific point in time, define `untilTime`. The controller create the last recurrence of the override until the recurrence's `startTime` is equal or earlier than `untilTime`.
 
-Do note that you have enough slack for `untilTime`, so that a delayed or offline `actions-runner-controller` is much less likely to miss the last recurrence. For example, you might want to set `untilTime` to `M` minutes after the last recurrence's `startTime`, so that `actions-runner-controller` being offline up to `M` minutes doesn't miss the last recurrence.
+Do ensure that you have enough slack for `untilTime` so that a delayed or offline `actions-runner-controller` is much less likely to miss the last recurrence. For example, you might want to set `untilTime` to `M` minutes after the last recurrence's `startTime`, so that `actions-runner-controller` being offline up to `M` minutes doesn't miss the last recurrence.
 
 **Combining Multiple Scheduled Overrides**:
 
 In case you have a more complex scenarios, try writing two or more entries under `scheduledOverrides`.
 
 The earlier entry is prioritized higher than later entries. So you usually define one-time overrides in the top of your list, then yearly, monthly, weekly, and lastly daily overrides.
+
+A common use case for this may be to have 1 override to scale to 0 during the week outside of core business hours and another override to scale to 0 during all hours of the weekend.
 
 ### Runner with DinD
 
@@ -825,9 +867,17 @@ spec:
         key: node-role.kubernetes.io/test
         operator: Exists
 
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              runner-deployment-name: actions-runner
+
       repository: mumoshu/actions-runner-controller-ci
       # The default "summerwind/actions-runner" images are available at DockerHub:
-      #  https://hub.docker.com/r/summerwind/actions-runner
+      # https://hub.docker.com/r/summerwind/actions-runner
       # You can also build your own and specify it like the below:
       image: custom-image/actions-runner:latest
       imagePullPolicy: Always
@@ -1022,10 +1072,7 @@ Note that there's no official Istio integration in actions-runner-controller. It
 
 ### Stateful Runners
 
-> This is a documentation about a unreleased version of actions-runner-controller.
->
-> It would be great if you could try building the latest controller image following https://github.com/actions-runner-controller/actions-runner-controller#contributing if you are eager to test it early and help
-> developers by reporting any bugs :smile:
+> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
 `actions-runner-controller` supports `RunnerSet` API that let you deploy stateful runners. A stateful runner is designed to be able to store some data persists across GitHub Actions workflow and job runs. You might find it useful, for example, to speed up your docker builds by persisting the docker layer cache.
 
@@ -1114,10 +1161,9 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 
 **Limitations**
 
-A known down-side of `RunnerSet` compared to `RunnerDeployment` is that it is uanble to create [a registration-only pod on scaling-down to zero](https://github.com/actions-runner-controller/actions-runner-controller#note-on-scaling-tofrom-0). To workaround that, you need to create a `RunnerDeployment` with `spec.repliacs` set to `0` with `spec.repository`, `spec.organization`, or `spec.enterprise`, and `spec.labels` and `spec.groups` as same values as your `RunnerSet`, so that you can keep the registration-only runner regardless of the number of `RunnerSet`-managed runners.
-
-A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`.
-A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
+* For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
+* For autoscaling the `RunnerSet` kind doesn't support the [registration-only runner](#autoscaling-tofrom-0)
+* A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Ephemeral Runners
 
@@ -1125,19 +1171,9 @@ Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: tru
 
 When it is configured, it passes a `--once` flag to every runner.
 
-`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. But it is a known race issue that may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in #466.
+`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. It has a known race condition issue that means the runner may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in issue [#466](https://github.com/actions-runner-controller/actions-runner-controller/issues/466).
 
-> The below feature depends on an unreleased GitHub feature
-
-GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
-
-`actions-runner-controller` has a feature flag backend by an environment variable to enable using `--ephemeral` instead of `--once`. The environment variable is `RUNNER_FEATURE_FLAG_EPHEMERAL`. You can se it to `true` on runner containers in your runner pods to enable the feature.
-
-> At the time of writing this, you need to wait until GitHub rolls out the server-side feature for `--ephemeral`, AND you need to include your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 into the runner container image to test this feature.
->
-> Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
-
-For example, a `RunnerSet` config with the flag enabled looks like:
+Since the implementation of the `--once` flag GitHub have implemented the `--ephemeral` flag which has no known race conditions and is much more supported by GitHub, this is the prefered flag for ephemeral runners. To have your `RunnerDeployment` and `RunnerSet` kinds use this new flag instead of the `--once` flag set `RUNNER_FEATURE_FLAG_EPHEMERAL` to `"true"`. For example, a `RunnerSet` configured to use the new flag looks like:
 
 ```yaml
 kind: RunnerSet
@@ -1158,9 +1194,9 @@ spec:
           value: "true"
 ```
 
-Note that once https://github.com/actions/runner/pull/660 becomes generally available on GitHub, you no longer need to build a custom runner image to use this feature. Just set `RUNNER_FEATURE_FLAG_EPHEMERAL` and it should use `--ephemeral`.
+You should configure all your ephemeral runners to use the new flag unless you have a reason for needing to use the old flag.
 
-In the future, `--once` might get removed in `actions/runner`. `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the legacy flag is removed.
+Once able, `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners and potentially remove `--once` entirely. It is likely that in the future the `--once` flag will be officially deprecated by GitHub and subsquently removed in `actions/runner`.
 
 ### Software Installed in the Runner Image
 
@@ -1170,7 +1206,7 @@ The project supports being deployed on the various cloud Kubernetes platforms (e
 **Bundled Software**<br />
 The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintain a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
 
-This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
+This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
 - git

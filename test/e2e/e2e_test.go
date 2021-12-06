@@ -66,7 +66,7 @@ var (
 // This tests ues testing.Logf extensively for debugging purpose.
 // But messages logged via Logf shows up only when the test failed by default.
 // To always enable logging, do not forget to pass `-test.v` to `go test`.
-// If you're using VS Code, open `Workspace Settings` and search for `go test flags`, edit the `settings.json` and put the below:
+// If you're using VS Code, open `Workspace Settings` and search for `go test flags`, edit the `.vscode/settings.json` and put the below:
 //   "go.testFlags": ["-v"]
 //
 // This function requires a few environment variables to be set to provide some test data.
