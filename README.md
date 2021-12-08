@@ -33,6 +33,7 @@ ToC:
   - [Stateful Runners](#stateful-runners)
   - [Ephemeral Runners](#ephemeral-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
+  - [Using without cert-manager](#using-without-cert-manager)
   - [Common Errors](#common-errors)
 - [Contributing](#contributing)
 
@@ -44,7 +45,7 @@ ToC:
 
 ## Installation
 
-actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
+By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
@@ -1139,7 +1140,6 @@ kind: RunnerSet
 metadata:
   name: example
 spec:
-  # NOTE: RunnerSet supports non-ephemeral runners only today
   ephemeral: false
   replicas: 2
   repository: mumoshu/actions-runner-controller-ci
@@ -1185,7 +1185,7 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* For autoscaling the `RunnerSet` kind doesn't support the [registration-only runner](#autoscaling-tofrom-0)
+* For autoscaling the `RunnerSet` kind doesn't support the [registration-only runner](#autoscaling-tofrom-0), these are deprecated however and to be [removed](https://github.com/actions-runner-controller/actions-runner-controller/issues/859)
 * A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Ephemeral Runners
@@ -1194,19 +1194,9 @@ Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: tru
 
 When it is configured, it passes a `--once` flag to every runner.
 
-`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. But it is a known race issue that may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in #466.
+`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. It has a known race condition issue that means the runner may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in issue [#466](https://github.com/actions-runner-controller/actions-runner-controller/issues/466).
 
-> The below feature depends on an unreleased GitHub feature
-
-GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
-
-`actions-runner-controller` has a feature flag backend by an environment variable to enable using `--ephemeral` instead of `--once`. The environment variable is `RUNNER_FEATURE_FLAG_EPHEMERAL`. You can se it to `true` on runner containers in your runner pods to enable the feature.
-
-> At the time of writing this, you need to wait until GitHub rolls out the server-side feature for `--ephemeral`, AND you need to include your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 into the runner container image to test this feature.
->
-> Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
-
-For example, a `RunnerSet` config with the flag enabled looks like:
+Since the implementation of the `--once` flag GitHub have implemented the `--ephemeral` flag which has no known race conditions and is much more supported by GitHub, this is the prefered flag for ephemeral runners. To have your `RunnerDeployment` and `RunnerSet` kinds use this new flag instead of the `--once` flag set `RUNNER_FEATURE_FLAG_EPHEMERAL` to `"true"`. For example, a `RunnerSet` configured to use the new flag looks like:
 
 ```yaml
 kind: RunnerSet
@@ -1227,9 +1217,9 @@ spec:
           value: "true"
 ```
 
-Note that once https://github.com/actions/runner/pull/660 becomes generally available on GitHub, you no longer need to build a custom runner image to use this feature. Just set `RUNNER_FEATURE_FLAG_EPHEMERAL` and it should use `--ephemeral`.
+You should configure all your ephemeral runners to use the new flag unless you have a reason for needing to use the old flag.
 
-In the future, `--once` might get removed in `actions/runner`. `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the legacy flag is removed.
+Once able, `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners and potentially remove `--once` entirely. It is likely that in the future the `--once` flag will be officially deprecated by GitHub and subsquently removed in `actions/runner`.
 
 ### Software Installed in the Runner Image
 
@@ -1268,6 +1258,35 @@ metadata:
 spec:
   repository: actions-runner-controller/actions-runner-controller
   image: YOUR_CUSTOM_DOCKER_IMAGE
+```
+
+### Using without cert-manager
+
+Assuming you are installing in the default namespace, ensure your certificate has SANs:
+
+* `webhook-service.actions-runner-system.svc`
+* `webhook-service.actions-runner-system.svc.cluster.local`
+
+It is possible to use a self-signed certificate by following a guide like
+[this one](https://mariadb.com/docs/security/encryption/in-transit/create-self-signed-certificates-keys-openssl/)
+using `openssl`.
+
+Install your certificate as a TLS secret:
+
+```shell
+$ kubectl create secret tls webhook-server-cert \
+  -n actions-runner-system \
+  --cert=path/to/cert/file \
+  --key=path/to/key/file
+```
+
+Set the Helm chart values as follows:
+
+```shell
+$ CA_BUNDLE=$(cat path/to/ca.pem | base64)
+$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+  certManagerEnabled=false \
+  admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
 
 ### Common Errors
