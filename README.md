@@ -32,6 +32,7 @@ ToC:
   - [Stateful Runners](#stateful-runners)
   - [Ephemeral Runners](#ephemeral-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
+  - [Using without cert-manager](#using-without-cert-manager)
   - [Common Errors](#common-errors)
 - [Contributing](#contributing)
 
@@ -43,7 +44,7 @@ ToC:
 
 ## Installation
 
-actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
+By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
@@ -1234,6 +1235,35 @@ metadata:
 spec:
   repository: actions-runner-controller/actions-runner-controller
   image: YOUR_CUSTOM_DOCKER_IMAGE
+```
+
+### Using without cert-manager
+
+Assuming you are installing in the default namespace, ensure your certificate has SANs:
+
+* `webhook-service.actions-runner-system.svc`
+* `webhook-service.actions-runner-system.svc.cluster.local`
+
+It is possible to use a self-signed certificate by following a guide like
+[this one](https://mariadb.com/docs/security/encryption/in-transit/create-self-signed-certificates-keys-openssl/)
+using `openssl`.
+
+Install your certificate as a TLS secret:
+
+```shell
+$ kubectl create secret tls webhook-server-cert \
+  -n actions-runner-system \
+  --cert=path/to/cert/file \
+  --key=path/to/key/file
+```
+
+Set the Helm chart values as follows:
+
+```shell
+$ CA_BUNDLE=$(cat path/to/ca.pem | base64)
+$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+  certManagerEnabled=false \
+  admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
 
 ### Common Errors
