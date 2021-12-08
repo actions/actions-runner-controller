@@ -1116,7 +1116,6 @@ kind: RunnerSet
 metadata:
   name: example
 spec:
-  # NOTE: RunnerSet supports non-ephemeral runners only today
   ephemeral: false
   replicas: 2
   repository: mumoshu/actions-runner-controller-ci
@@ -1162,7 +1161,7 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* For autoscaling the `RunnerSet` kind doesn't support the [registration-only runner](#autoscaling-tofrom-0)
+* For autoscaling the `RunnerSet` kind doesn't support the [registration-only runner](#autoscaling-tofrom-0), these are deprecated however and to be [removed](https://github.com/actions-runner-controller/actions-runner-controller/issues/859)
 * A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Ephemeral Runners
