@@ -64,6 +64,7 @@ type RunnerReconciler struct {
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
 	GitHubClient                *github.Client
+	RunnerCache                 RunnerCache
 	RunnerImage                 string
 	DockerImage                 string
 	DockerRegistryMirror        string
@@ -505,13 +506,13 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
+	err := r.updateCachedRunners(ctx, enterprise, org, repo)
 	if err != nil {
 		return false, err
 	}
 
 	id := int64(0)
-	for _, runner := range runners {
+	for _, runner := range r.RunnerCache.Runners {
 		if runner.GetName() == name {
 			if runner.GetBusy() {
 				return false, fmt.Errorf("runner is busy")
@@ -1095,4 +1096,21 @@ func removeFinalizer(finalizers []string, finalizerName string) ([]string, bool)
 	}
 
 	return result, removed
+}
+
+func (r *RunnerReconciler) updateCachedRunners(ctx context.Context, enterprise, org, repo string) error {
+	now := time.Now().Add(-60 * time.Second)
+	if !r.RunnerCache.ExpirationTime.Time.IsZero() && now.Before(r.RunnerCache.ExpirationTime.Time) {
+		return nil
+	}
+	// if context of time is not passed and the cached_runners is not null, return cached runners
+	// else, call the runners and 'cache' it to return
+	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
+	// always cache runners for one minute regardless of other caching in GitHub
+	r.RunnerCache = RunnerCache{
+		ExpirationTime: metav1.Time{Time: time.Now().Add(60 * time.Second)},
+		Runners:        runners,
+	}
+
+	return err
 }

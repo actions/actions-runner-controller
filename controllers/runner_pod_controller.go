@@ -23,6 +23,7 @@ import (
 	"time"
 
 	gogithub "github.com/google/go-github/v37/github"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/go-logr/logr"
@@ -44,6 +45,7 @@ type RunnerPodReconciler struct {
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
 	GitHubClient                *github.Client
+	RunnerCache                 RunnerCache
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
@@ -378,7 +380,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *RunnerPodReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
+	err := r.updateCachedRunners(ctx, enterprise, org, repo)
 	if err != nil {
 		return false, err
 	}
@@ -386,7 +388,7 @@ func (r *RunnerPodReconciler) unregisterRunner(ctx context.Context, enterprise, 
 	var busy bool
 
 	id := int64(0)
-	for _, runner := range runners {
+	for _, runner := range r.RunnerCache.Runners {
 		if runner.GetName() == name {
 			// Sometimes a runner can stuck "busy" even though it is already "offline".
 			// Thus removing the condition on status can block the runner pod from being terminated forever.
@@ -428,4 +430,21 @@ func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&corev1.Pod{}).
 		Named(name).
 		Complete(r)
+}
+
+func (r *RunnerPodReconciler) updateCachedRunners(ctx context.Context, enterprise, org, repo string) error {
+	now := time.Now().Add(-60 * time.Second)
+	if !r.RunnerCache.ExpirationTime.Time.IsZero() && now.Before(r.RunnerCache.ExpirationTime.Time) {
+		return nil
+	}
+	// if context of time is not passed and the cached_runners is not null, return cached runners
+	// else, call the runners and 'cache' it to return
+	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
+	// always cache runners for one minute regardless of other caching in GitHub
+	r.RunnerCache = RunnerCache{
+		ExpirationTime: metav1.Time{Time: time.Now().Add(60 * time.Second)},
+		Runners:        runners,
+	}
+
+	return err
 }
