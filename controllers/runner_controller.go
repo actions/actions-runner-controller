@@ -422,16 +422,26 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 						"configuredRegistrationTimeout", registrationTimeout,
 					)
 				} else if registrationDidTimeout {
-					log.Info(
-						"Already existing GitHub runner still appears offline . "+
-							"Recreating the pod to see if it resolves the issue. "+
-							"CAUTION: If you see this a lot, you should investigate the root cause. ",
-						"podCreationTimestamp", pod.CreationTimestamp,
-						"currentTime", currentTime,
-						"configuredRegistrationTimeout", registrationTimeout,
-					)
+					if runnerBusy {
+						log.Info(
+							"Timeout out while waiting for the runner to be online, but observed that it's busy at the same time."+
+								"This is a known (unintuitive) behaviour of a runner that is already running a job. Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/911",
+							"podCreationTimestamp", pod.CreationTimestamp,
+							"currentTime", currentTime,
+							"configuredRegistrationTimeout", registrationTimeout,
+						)
+					} else {
+						log.Info(
+							"Already existing GitHub runner still appears offline . "+
+								"Recreating the pod to see if it resolves the issue. "+
+								"CAUTION: If you see this a lot, you should investigate the root cause. ",
+							"podCreationTimestamp", pod.CreationTimestamp,
+							"currentTime", currentTime,
+							"configuredRegistrationTimeout", registrationTimeout,
+						)
 
-					restart = true
+						restart = true
+					}
 				} else {
 					log.V(1).Info(
 						"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
