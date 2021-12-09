@@ -17,6 +17,7 @@ RUNNER_FEATURE_FLAG_EPHEMERAL ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
+KUBE_RBAC_PROXY_VERSION ?= v0.11.0
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,generateEmbeddedObjectMeta=true"
@@ -156,7 +157,7 @@ acceptance/kind:
 # See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
 acceptance/load:
 	kind load docker-image ${NAME}:${VERSION} --name ${CLUSTER}
-	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name ${CLUSTER}
+	kind load docker-image quay.io/brancz/kube-rbac-proxy:$(KUBE_RBAC_PROXY_VERSION) --name ${CLUSTER}
 	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name ${CLUSTER}
 	kind load docker-image docker:dind --name ${CLUSTER}
 	kind load docker-image quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
@@ -166,7 +167,7 @@ acceptance/load:
 
 # Pull the docker images for acceptance
 acceptance/pull:
-	docker pull quay.io/brancz/kube-rbac-proxy:v0.10.0
+	docker pull quay.io/brancz/kube-rbac-proxy:$(KUBE_RBAC_PROXY_VERSION)
 	docker pull docker:dind
 	docker pull quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION)
 	docker pull quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION)
