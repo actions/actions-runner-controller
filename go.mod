@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v37 v37.0.0
 	github.com/gorilla/mux v1.8.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/onsi/ginkgo v1.16.4
+	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.15.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/teambition/rrule-go v1.7.2
