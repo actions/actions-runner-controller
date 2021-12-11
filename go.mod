@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.11.0
 	github.com/teambition/rrule-go v1.7.2
 	go.uber.org/zap v1.19.1
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
+	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	gomodules.xyz/jsonpatch/v2 v2.2.0
 	k8s.io/api v0.22.2
 	k8s.io/apimachinery v0.22.2
