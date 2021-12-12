@@ -324,34 +324,25 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					"configuredRegistrationTimeout", registrationTimeout,
 				)
 			} else if registrationDidTimeout {
-				if registrationOnly {
+				if runnerBusy {
 					log.Info(
-						"Observed that registration-only runner for scaling-from-zero has successfully been registered.",
+						"Timeout out while waiting for the runner to be online, but observed that it's busy at the same time."+
+							"This is a known (unintuitive) behaviour of a runner that is already running a job. Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/911",
 						"podCreationTimestamp", pod.CreationTimestamp,
 						"currentTime", currentTime,
 						"configuredRegistrationTimeout", registrationTimeout,
 					)
-				} else if registrationDidTimeout {
-					if runnerBusy {
-						log.Info(
-							"Timeout out while waiting for the runner to be online, but observed that it's busy at the same time."+
-								"This is a known (unintuitive) behaviour of a runner that is already running a job. Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/911",
-							"podCreationTimestamp", pod.CreationTimestamp,
-							"currentTime", currentTime,
-							"configuredRegistrationTimeout", registrationTimeout,
-						)
-					} else {
-						log.Info(
-							"Already existing GitHub runner still appears offline . "+
-								"Recreating the pod to see if it resolves the issue. "+
-								"CAUTION: If you see this a lot, you should investigate the root cause. ",
-							"podCreationTimestamp", pod.CreationTimestamp,
-							"currentTime", currentTime,
-							"configuredRegistrationTimeout", registrationTimeout,
-						)
+				} else {
+					log.Info(
+						"Already existing GitHub runner still appears offline . "+
+							"Recreating the pod to see if it resolves the issue. "+
+							"CAUTION: If you see this a lot, you should investigate the root cause. ",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
 
-						restart = true
-					}
+					restart = true
 				}
 			} else {
 				log.V(1).Info(
