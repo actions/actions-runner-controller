@@ -39,8 +39,9 @@ image:
   actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
-  # Defines secret to use as ImagePullSecrets in the runner pod spec
-  # actionsRunnerPullImageSecretName: someSecretName
+  # The default image-pull secret name for self-hosted runner container.
+  # It's added to spec.ImagePullSecrets of self-hosted runner pods.
+  # actionsRunnerImagePullSecret: someSecretName
 
 
 imagePullSecrets:

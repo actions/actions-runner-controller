@@ -70,7 +70,9 @@ func main() {
 
 		gitHubAPICacheDuration time.Duration
 
-		runnerImage          string
+		runnerImage           string
+		runnerImagePullSecret string
+
 		dockerImage          string
 		dockerRegistryMirror string
 		namespace            string
@@ -91,6 +93,7 @@ func main() {
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
 	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
 	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
+	flag.StringVar(&runnerImagePullSecret, "runner-image-pull-secret", "", "The default image-pull secret name for self-hosted runner container.")
 	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -146,9 +149,11 @@ func main() {
 		Log:                  log.WithName("runner"),
 		Scheme:               mgr.GetScheme(),
 		GitHubClient:         ghClient,
-		RunnerImage:          runnerImage,
 		DockerImage:          dockerImage,
 		DockerRegistryMirror: dockerRegistryMirror,
+		// Defaults for self-hosted runner containers
+		RunnerImage:               runnerImage,
+		RunnerImagePullSecretName: runnerImagePullSecret,
 	}
 
 	if err = runnerReconciler.SetupWithManager(mgr); err != nil {
@@ -185,10 +190,12 @@ func main() {
 		Log:                  log.WithName("runnerset"),
 		Scheme:               mgr.GetScheme(),
 		CommonRunnerLabels:   commonRunnerLabels,
-		RunnerImage:          runnerImage,
 		DockerImage:          dockerImage,
 		DockerRegistryMirror: dockerRegistryMirror,
 		GitHubBaseURL:        ghClient.GithubBaseURL,
+		// Defaults for self-hosted runner containers
+		RunnerImage:               runnerImage,
+		RunnerImagePullSecretName: runnerImagePullSecret,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
