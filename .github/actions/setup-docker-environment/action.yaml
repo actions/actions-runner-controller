@@ -7,6 +7,12 @@ inputs:
   password:
     description: "Password"
     required: true
+  ghcr_username:
+    description: "GHCR username. Usually set from the github.actor variable"
+    required: true
+  ghcr_password:
+    description: "GHCR password. Usually set from the secrets.GITHUB_TOKEN variable"
+    required: true
 
 outputs:
   sha_short:
@@ -36,3 +42,11 @@ runs:
       with:
         username: ${{ inputs.username }}
         password: ${{ inputs.password }}
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v1
+      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
+      with:
+        registry: ghcr.io
+        username: ${{ inputs.ghcr_username }}
+        password: ${{ inputs.ghcr_password }}
