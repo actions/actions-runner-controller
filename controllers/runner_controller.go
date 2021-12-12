@@ -352,6 +352,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 						restart = true
 					}
+				}
 			} else {
 				log.V(1).Info(
 					"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
