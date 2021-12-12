@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,48 +109,8 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 	} else {
-		finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
-
-		if removed {
-			if len(runner.Status.Registration.Token) > 0 {
-				ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-				if err != nil {
-					if errors.Is(err, &gogithub.RateLimitError{}) {
-						// We log the underlying error when we failed calling GitHub API to list or unregisters,
-						// or the runner is still busy.
-						log.Error(
-							err,
-							fmt.Sprintf(
-								"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
-								retryDelayOnGitHubAPIRateLimitError,
-							),
-						)
-
-						return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-					}
-
-					return ctrl.Result{}, err
-				}
-
-				if !ok {
-					log.V(1).Info("Runner no longer exists on GitHub")
-				}
-			} else {
-				log.V(1).Info("Runner was never registered on GitHub")
-			}
-
-			newRunner := runner.DeepCopy()
-			newRunner.ObjectMeta.Finalizers = finalizers
-
-			if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
-				log.Error(err, "Failed to update runner for finalizer removal")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository, "organization", runner.Spec.Organization)
-		}
-
-		return ctrl.Result{}, nil
+		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
+		return r.processRunnerDeletion(runner, ctx, log)
 	}
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
@@ -183,334 +144,389 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if !kerrors.IsNotFound(err) {
+			// An error ocurred
 			return ctrl.Result{}, err
 		}
+		return r.processRunnerCreation(ctx, runner, log)
+	}
 
-		if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
-			return ctrl.Result{}, err
-		} else if updated {
-			return ctrl.Result{Requeue: true}, nil
-		}
+	// Pod already exists
 
-		newPod, err := r.newPod(runner)
-		if err != nil {
-			log.Error(err, "Could not create pod")
-			return ctrl.Result{}, err
-		}
+	if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.processRunnerPodDeletion(ctx, runner, log, pod)
+	}
 
-		if err := r.Create(ctx, &newPod); err != nil {
-			if kerrors.IsAlreadyExists(err) {
-				// Gracefully handle pod-already-exists errors due to informer cache delay.
-				// Without this we got a few errors like the below on new runner pod:
-				// 2021-03-16T00:23:10.116Z        ERROR   controller-runtime.controller   Reconciler error      {"controller": "runner-controller", "request": "default/example-runnerdeploy-b2g2g-j4mcp", "error": "pods \"example-runnerdeploy-b2g2g-j4mcp\" already exists"}
-				log.Info(
-					"Failed to create pod due to AlreadyExists error. Probably this pod has been already created in previous reconcilation but is still not in the informer cache. Will retry on pod created. If it doesn't repeat, there's no problem",
-				)
+	// If pod has ended up succeeded we need to restart it
+	// Happens e.g. when dind is in runner and run completes
+	stopped := pod.Status.Phase == corev1.PodSucceeded
 
-				return ctrl.Result{}, nil
-			}
-
-			log.Error(err, "Failed to create pod resource")
-
-			return ctrl.Result{}, err
-		}
-
-		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
-		log.Info("Created runner pod", "repository", runner.Spec.Repository)
-	} else {
-		if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
-			deletionTimeout := 1 * time.Minute
-			currentTime := time.Now()
-			deletionDidTimeout := currentTime.Sub(pod.DeletionTimestamp.Add(deletionTimeout)) > 0
-
-			if deletionDidTimeout {
-				log.Info(
-					fmt.Sprintf("Failed to delete pod within %s. ", deletionTimeout)+
-						"This is typically the case when a Kubernetes node became unreachable "+
-						"and the kube controller started evicting nodes. Forcefully deleting the pod to not get stuck.",
-					"podDeletionTimestamp", pod.DeletionTimestamp,
-					"currentTime", currentTime,
-					"configuredDeletionTimeout", deletionTimeout,
-				)
-
-				var force int64 = 0
-				// forcefully delete runner as we would otherwise get stuck if the node stays unreachable
-				if err := r.Delete(ctx, &pod, &client.DeleteOptions{GracePeriodSeconds: &force}); err != nil {
-					// probably
-					if !kerrors.IsNotFound(err) {
-						log.Error(err, "Failed to forcefully delete pod resource ...")
-						return ctrl.Result{}, err
-					}
-					// forceful deletion finally succeeded
-					return ctrl.Result{Requeue: true}, nil
+	if !stopped {
+		if pod.Status.Phase == corev1.PodRunning {
+			for _, status := range pod.Status.ContainerStatuses {
+				if status.Name != containerName {
+					continue
 				}
 
-				r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Forcefully deleted pod '%s'", pod.Name))
-				log.Info("Forcefully deleted runner pod", "repository", runner.Spec.Repository)
-				// give kube manager a little time to forcefully delete the stuck pod
-				return ctrl.Result{RequeueAfter: 3 * time.Second}, err
+				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+					stopped = true
+				}
+			}
+		}
+	}
+
+	restart := stopped
+
+	if registrationOnly && stopped {
+		restart = false
+
+		log.Info(
+			"Observed that registration-only runner for scaling-from-zero has successfully stopped. " +
+				"Unlike other pods, this one will be recreated only when runner spec changes.",
+		)
+	}
+
+	if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
+		return ctrl.Result{}, err
+	} else if updated {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	newPod, err := r.newPod(runner)
+	if err != nil {
+		log.Error(err, "Could not create pod")
+		return ctrl.Result{}, err
+	}
+
+	if registrationOnly {
+		newPod.Spec.Containers[0].Env = append(
+			newPod.Spec.Containers[0].Env,
+			corev1.EnvVar{
+				Name:  "RUNNER_REGISTRATION_ONLY",
+				Value: "true",
+			},
+		)
+	}
+
+	var registrationRecheckDelay time.Duration
+
+	// all checks done below only decide whether a restart is needed
+	// if a restart was already decided before, there is no need for the checks
+	// saving API calls and scary log messages
+	if !restart {
+		registrationCheckInterval := time.Minute
+		if r.RegistrationRecheckInterval > 0 {
+			registrationCheckInterval = r.RegistrationRecheckInterval
+		}
+
+		// We want to call ListRunners GitHub Actions API only once per runner per minute.
+		// This if block, in conjunction with:
+		//   return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
+		// achieves that.
+		if lastCheckTime := runner.Status.LastRegistrationCheckTime; lastCheckTime != nil {
+			nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
+			now := time.Now()
+
+			// Requeue scheduled by RequeueAfter can happen a bit earlier (like dozens of milliseconds)
+			// so to avoid excessive, in-effective retry, we heuristically ignore the remaining delay in case it is
+			// shorter than 1s
+			requeueAfter := nextCheckTime.Sub(now) - time.Second
+			if requeueAfter > 0 {
+				log.Info(
+					fmt.Sprintf("Skipped registration check because it's deferred until %s. Retrying in %s at latest", nextCheckTime, requeueAfter),
+					"lastRegistrationCheckTime", lastCheckTime,
+					"registrationCheckInterval", registrationCheckInterval,
+				)
+
+				// Without RequeueAfter, the controller may not retry on scheduled. Instead, it must wait until the
+				// next sync period passes, which can be too much later than nextCheckTime.
+				//
+				// We need to requeue on this reconcilation even though we have already scheduled the initial
+				// requeue previously with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil`.
+				// Apparently, the workqueue used by controller-runtime seems to deduplicate and resets the delay on
+				// other requeues- so the initial scheduled requeue may have been reset due to requeue on
+				// spec/status change.
+				return ctrl.Result{RequeueAfter: requeueAfter}, nil
+			}
+		}
+
+		notFound := false
+		offline := false
+
+		runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+
+		currentTime := time.Now()
+
+		if err != nil {
+			var notFoundException *github.RunnerNotFound
+			var offlineException *github.RunnerOffline
+			if errors.As(err, &notFoundException) {
+				notFound = true
+			} else if errors.As(err, &offlineException) {
+				offline = true
 			} else {
+				var e *gogithub.RateLimitError
+				if errors.As(err, &e) {
+					// We log the underlying error when we failed calling GitHub API to list or unregisters,
+					// or the runner is still busy.
+					log.Error(
+						err,
+						fmt.Sprintf(
+							"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
+							retryDelayOnGitHubAPIRateLimitError,
+						),
+					)
+
+					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+				}
+
 				return ctrl.Result{}, err
 			}
 		}
 
-		// If pod has ended up succeeded we need to restart it
-		// Happens e.g. when dind is in runner and run completes
-		stopped := pod.Status.Phase == corev1.PodSucceeded
+		// See the `newPod` function called above for more information
+		// about when this hash changes.
+		curHash := pod.Labels[LabelKeyPodTemplateHash]
+		newHash := newPod.Labels[LabelKeyPodTemplateHash]
 
-		if !stopped {
-			if pod.Status.Phase == corev1.PodRunning {
-				for _, status := range pod.Status.ContainerStatuses {
-					if status.Name != containerName {
-						continue
-					}
-
-					if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
-						stopped = true
-					}
-				}
-			}
+		if !runnerBusy && curHash != newHash {
+			restart = true
 		}
 
-		restart := stopped
+		registrationTimeout := 10 * time.Minute
+		durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
+		registrationDidTimeout := durationAfterRegistrationTimeout > 0
 
-		if registrationOnly && stopped {
-			restart = false
+		if notFound {
+			if registrationDidTimeout {
+				log.Info(
+					"Runner failed to register itself to GitHub in timely manner. "+
+						"Recreating the pod to see if it resolves the issue. "+
+						"CAUTION: If you see this a lot, you should investigate the root cause. "+
+						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
+					"podCreationTimestamp", pod.CreationTimestamp,
+					"currentTime", currentTime,
+					"configuredRegistrationTimeout", registrationTimeout,
+				)
 
-			log.Info(
-				"Observed that registration-only runner for scaling-from-zero has successfully stopped. " +
-					"Unlike other pods, this one will be recreated only when runner spec changes.",
-			)
-		}
-
-		if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
-			return ctrl.Result{}, err
-		} else if updated {
-			return ctrl.Result{Requeue: true}, nil
-		}
-
-		newPod, err := r.newPod(runner)
-		if err != nil {
-			log.Error(err, "Could not create pod")
-			return ctrl.Result{}, err
-		}
-
-		if registrationOnly {
-			newPod.Spec.Containers[0].Env = append(
-				newPod.Spec.Containers[0].Env,
-				corev1.EnvVar{
-					Name:  "RUNNER_REGISTRATION_ONLY",
-					Value: "true",
-				},
-			)
-		}
-
-		var registrationRecheckDelay time.Duration
-
-		// all checks done below only decide whether a restart is needed
-		// if a restart was already decided before, there is no need for the checks
-		// saving API calls and scary log messages
-		if !restart {
-			registrationCheckInterval := time.Minute
-			if r.RegistrationRecheckInterval > 0 {
-				registrationCheckInterval = r.RegistrationRecheckInterval
-			}
-
-			// We want to call ListRunners GitHub Actions API only once per runner per minute.
-			// This if block, in conjunction with:
-			//   return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
-			// achieves that.
-			if lastCheckTime := runner.Status.LastRegistrationCheckTime; lastCheckTime != nil {
-				nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
-				now := time.Now()
-
-				// Requeue scheduled by RequeueAfter can happen a bit earlier (like dozens of milliseconds)
-				// so to avoid excessive, in-effective retry, we heuristically ignore the remaining delay in case it is
-				// shorter than 1s
-				requeueAfter := nextCheckTime.Sub(now) - time.Second
-				if requeueAfter > 0 {
-					log.Info(
-						fmt.Sprintf("Skipped registration check because it's deferred until %s. Retrying in %s at latest", nextCheckTime, requeueAfter),
-						"lastRegistrationCheckTime", lastCheckTime,
-						"registrationCheckInterval", registrationCheckInterval,
-					)
-
-					// Without RequeueAfter, the controller may not retry on scheduled. Instead, it must wait until the
-					// next sync period passes, which can be too much later than nextCheckTime.
-					//
-					// We need to requeue on this reconcilation even though we have already scheduled the initial
-					// requeue previously with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil`.
-					// Apparently, the workqueue used by controller-runtime seems to deduplicate and resets the delay on
-					// other requeues- so the initial scheduled requeue may have been reset due to requeue on
-					// spec/status change.
-					return ctrl.Result{RequeueAfter: requeueAfter}, nil
-				}
-			}
-
-			notFound := false
-			offline := false
-
-			runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-
-			currentTime := time.Now()
-
-			if err != nil {
-				var notFoundException *github.RunnerNotFound
-				var offlineException *github.RunnerOffline
-				if errors.As(err, &notFoundException) {
-					notFound = true
-				} else if errors.As(err, &offlineException) {
-					offline = true
-				} else {
-					var e *gogithub.RateLimitError
-					if errors.As(err, &e) {
-						// We log the underlying error when we failed calling GitHub API to list or unregisters,
-						// or the runner is still busy.
-						log.Error(
-							err,
-							fmt.Sprintf(
-								"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
-								retryDelayOnGitHubAPIRateLimitError,
-							),
-						)
-
-						return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-					}
-
-					return ctrl.Result{}, err
-				}
-			}
-
-			// See the `newPod` function called above for more information
-			// about when this hash changes.
-			curHash := pod.Labels[LabelKeyPodTemplateHash]
-			newHash := newPod.Labels[LabelKeyPodTemplateHash]
-
-			if !runnerBusy && curHash != newHash {
 				restart = true
+			} else {
+				log.V(1).Info(
+					"Runner pod exists but we failed to check if runner is busy. Apparently it still needs more time.",
+					"runnerName", runner.Name,
+				)
 			}
-
-			registrationTimeout := 10 * time.Minute
-			durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
-			registrationDidTimeout := durationAfterRegistrationTimeout > 0
-
-			if notFound {
-				if registrationDidTimeout {
+		} else if offline {
+			if registrationOnly {
+				log.Info(
+					"Observed that registration-only runner for scaling-from-zero has successfully been registered.",
+					"podCreationTimestamp", pod.CreationTimestamp,
+					"currentTime", currentTime,
+					"configuredRegistrationTimeout", registrationTimeout,
+				)
+			} else if registrationDidTimeout {
+				if runnerBusy {
 					log.Info(
-						"Runner failed to register itself to GitHub in timely manner. "+
+						"Timeout out while waiting for the runner to be online, but observed that it's busy at the same time."+
+							"This is a known (unintuitive) behaviour of a runner that is already running a job. Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/911",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
+				} else {
+					log.Info(
+						"Already existing GitHub runner still appears offline . "+
 							"Recreating the pod to see if it resolves the issue. "+
-							"CAUTION: If you see this a lot, you should investigate the root cause. "+
-							"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
+							"CAUTION: If you see this a lot, you should investigate the root cause. ",
 						"podCreationTimestamp", pod.CreationTimestamp,
 						"currentTime", currentTime,
 						"configuredRegistrationTimeout", registrationTimeout,
 					)
 
 					restart = true
-				} else {
-					log.V(1).Info(
-						"Runner pod exists but we failed to check if runner is busy. Apparently it still needs more time.",
-						"runnerName", runner.Name,
-					)
 				}
-			} else if offline {
-				if registrationOnly {
-					log.Info(
-						"Observed that registration-only runner for scaling-from-zero has successfully been registered.",
-						"podCreationTimestamp", pod.CreationTimestamp,
-						"currentTime", currentTime,
-						"configuredRegistrationTimeout", registrationTimeout,
-					)
-				} else if registrationDidTimeout {
-					if runnerBusy {
-						log.Info(
-							"Timeout out while waiting for the runner to be online, but observed that it's busy at the same time."+
-								"This is a known (unintuitive) behaviour of a runner that is already running a job. Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/911",
-							"podCreationTimestamp", pod.CreationTimestamp,
-							"currentTime", currentTime,
-							"configuredRegistrationTimeout", registrationTimeout,
-						)
-					} else {
-						log.Info(
-							"Already existing GitHub runner still appears offline . "+
-								"Recreating the pod to see if it resolves the issue. "+
-								"CAUTION: If you see this a lot, you should investigate the root cause. ",
-							"podCreationTimestamp", pod.CreationTimestamp,
-							"currentTime", currentTime,
-							"configuredRegistrationTimeout", registrationTimeout,
-						)
-
-						restart = true
-					}
-				} else {
-					log.V(1).Info(
-						"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
-						"runnerName", runner.Name,
-					)
-				}
-			}
-
-			if (notFound || (offline && !registrationOnly)) && !registrationDidTimeout {
-				registrationRecheckJitter := 10 * time.Second
-				if r.RegistrationRecheckJitter > 0 {
-					registrationRecheckJitter = r.RegistrationRecheckJitter
-				}
-
-				registrationRecheckDelay = registrationCheckInterval + wait.Jitter(registrationRecheckJitter, 0.1)
+			} else {
+				log.V(1).Info(
+					"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
+					"runnerName", runner.Name,
+				)
 			}
 		}
 
-		// Don't do anything if there's no need to restart the runner
-		if !restart {
-			// This guard enables us to update runner.Status.Phase to `Running` only after
-			// the runner is registered to GitHub.
-			if registrationRecheckDelay > 0 {
-				log.V(1).Info(fmt.Sprintf("Rechecking the runner registration in %s", registrationRecheckDelay))
-
-				updated := runner.DeepCopy()
-				updated.Status.LastRegistrationCheckTime = &metav1.Time{Time: time.Now()}
-
-				if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
-					log.Error(err, "Failed to update runner status for LastRegistrationCheckTime")
-					return ctrl.Result{}, err
-				}
-
-				return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
+		if (notFound || (offline && !registrationOnly)) && !registrationDidTimeout {
+			registrationRecheckJitter := 10 * time.Second
+			if r.RegistrationRecheckJitter > 0 {
+				registrationRecheckJitter = r.RegistrationRecheckJitter
 			}
 
-			if runner.Status.Phase != string(pod.Status.Phase) {
-				if pod.Status.Phase == corev1.PodRunning {
-					// Seeing this message, you can expect the runner to become `Running` soon.
-					log.Info(
-						"Runner appears to have registered and running.",
-						"podCreationTimestamp", pod.CreationTimestamp,
-					)
-				}
+			registrationRecheckDelay = registrationCheckInterval + wait.Jitter(registrationRecheckJitter, 0.1)
+		}
+	}
 
-				updated := runner.DeepCopy()
-				updated.Status.Phase = string(pod.Status.Phase)
-				updated.Status.Reason = pod.Status.Reason
-				updated.Status.Message = pod.Status.Message
+	// Don't do anything if there's no need to restart the runner
+	if !restart {
+		// This guard enables us to update runner.Status.Phase to `Running` only after
+		// the runner is registered to GitHub.
+		if registrationRecheckDelay > 0 {
+			log.V(1).Info(fmt.Sprintf("Rechecking the runner registration in %s", registrationRecheckDelay))
 
-				if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
-					log.Error(err, "Failed to update runner status for Phase/Reason/Message")
-					return ctrl.Result{}, err
-				}
+			updated := runner.DeepCopy()
+			updated.Status.LastRegistrationCheckTime = &metav1.Time{Time: time.Now()}
+
+			if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
+				log.Error(err, "Failed to update runner status for LastRegistrationCheckTime")
+				return ctrl.Result{}, err
 			}
 
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
 		}
 
-		// Delete current pod if recreation is needed
-		if err := r.Delete(ctx, &pod); err != nil {
-			log.Error(err, "Failed to delete pod resource")
+		if runner.Status.Phase != string(pod.Status.Phase) {
+			if pod.Status.Phase == corev1.PodRunning {
+				// Seeing this message, you can expect the runner to become `Running` soon.
+				log.Info(
+					"Runner appears to have registered and running.",
+					"podCreationTimestamp", pod.CreationTimestamp,
+				)
+			}
+
+			updated := runner.DeepCopy()
+			updated.Status.Phase = string(pod.Status.Phase)
+			updated.Status.Reason = pod.Status.Reason
+			updated.Status.Message = pod.Status.Message
+
+			if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
+				log.Error(err, "Failed to update runner status for Phase/Reason/Message")
+				return ctrl.Result{}, err
+			}
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	// Delete current pod if recreation is needed
+	if err := r.Delete(ctx, &pod); err != nil {
+		log.Error(err, "Failed to delete pod resource")
+		return ctrl.Result{}, err
+	}
+
+	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
+	log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
+
+	return ctrl.Result{}, nil
+}
+
+func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger) (reconcile.Result, error) {
+	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
+
+	if removed {
+		if len(runner.Status.Registration.Token) > 0 {
+			ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+			if err != nil {
+				if errors.Is(err, &gogithub.RateLimitError{}) {
+					// We log the underlying error when we failed calling GitHub API to list or unregisters,
+					// or the runner is still busy.
+					log.Error(
+						err,
+						fmt.Sprintf(
+							"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
+							retryDelayOnGitHubAPIRateLimitError,
+						),
+					)
+
+					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
+				}
+
+				return ctrl.Result{}, err
+			}
+
+			if !ok {
+				log.V(1).Info("Runner no longer exists on GitHub")
+			}
+		} else {
+			log.V(1).Info("Runner was never registered on GitHub")
+		}
+
+		newRunner := runner.DeepCopy()
+		newRunner.ObjectMeta.Finalizers = finalizers
+
+		if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
+			log.Error(err, "Failed to update runner for finalizer removal")
 			return ctrl.Result{}, err
 		}
 
-		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
-		log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
+		log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository, "organization", runner.Spec.Organization)
 	}
 
+	return ctrl.Result{}, nil
+}
+
+func (r *RunnerReconciler) processRunnerPodDeletion(ctx context.Context, runner v1alpha1.Runner, log logr.Logger, pod corev1.Pod) (reconcile.Result, error) {
+	deletionTimeout := 1 * time.Minute
+	currentTime := time.Now()
+	deletionDidTimeout := currentTime.Sub(pod.DeletionTimestamp.Add(deletionTimeout)) > 0
+
+	if deletionDidTimeout {
+		log.Info(
+			fmt.Sprintf("Failed to delete pod within %s. ", deletionTimeout)+
+				"This is typically the case when a Kubernetes node became unreachable "+
+				"and the kube controller started evicting nodes. Forcefully deleting the pod to not get stuck.",
+			"podDeletionTimestamp", pod.DeletionTimestamp,
+			"currentTime", currentTime,
+			"configuredDeletionTimeout", deletionTimeout,
+		)
+
+		var force int64 = 0
+		// forcefully delete runner as we would otherwise get stuck if the node stays unreachable
+		if err := r.Delete(ctx, &pod, &client.DeleteOptions{GracePeriodSeconds: &force}); err != nil {
+			// probably
+			if !kerrors.IsNotFound(err) {
+				log.Error(err, "Failed to forcefully delete pod resource ...")
+				return ctrl.Result{}, err
+			}
+			// forceful deletion finally succeeded
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Forcefully deleted pod '%s'", pod.Name))
+		log.Info("Forcefully deleted runner pod", "repository", runner.Spec.Repository)
+		// give kube manager a little time to forcefully delete the stuck pod
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
+	} else {
+		return ctrl.Result{}, nil
+	}
+}
+
+func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1alpha1.Runner, log logr.Logger) (reconcile.Result, error) {
+	if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
+		return ctrl.Result{}, err
+	} else if updated {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	newPod, err := r.newPod(runner)
+	if err != nil {
+		log.Error(err, "Could not create pod")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.Create(ctx, &newPod); err != nil {
+		if kerrors.IsAlreadyExists(err) {
+			// Gracefully handle pod-already-exists errors due to informer cache delay.
+			// Without this we got a few errors like the below on new runner pod:
+			// 2021-03-16T00:23:10.116Z        ERROR   controller-runtime.controller   Reconciler error      {"controller": "runner-controller", "request": "default/example-runnerdeploy-b2g2g-j4mcp", "error": "pods \"example-runnerdeploy-b2g2g-j4mcp\" already exists"}
+			log.Info(
+				"Failed to create pod due to AlreadyExists error. Probably this pod has been already created in previous reconcilation but is still not in the informer cache. Will retry on pod created. If it doesn't repeat, there's no problem",
+			)
+			return ctrl.Result{}, nil
+		}
+
+		log.Error(err, "Failed to create pod resource")
+
+		return ctrl.Result{}, err
+	}
+
+	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
+	log.Info("Created runner pod", "repository", runner.Spec.Repository)
 	return ctrl.Result{}, nil
 }
 
