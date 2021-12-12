@@ -111,7 +111,7 @@ NAME=$DOCKER_USER/actions-runner-controller \
 Similarly, if you'd like to recreate runner pods with the newer runner image,
 
 ```shell
-NAME=$DOCKER_USER/actions-runner make \
+RUNNER_NAME=$DOCKER_USER/actions-runner make \
   -C runner docker-{build,push}-ubuntu && \
   (kubectl get po -ojsonpath={.items[*].metadata.name} | xargs -n1 kubectl delete po)
 ```
