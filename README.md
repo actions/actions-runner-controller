@@ -584,6 +584,8 @@ by learning the following configuration examples.
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 - [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
 
+**Note:** All these examples should have **minReplicas** & **maxReplicas** as mandatory parameter even for webhook driven scaling. 
+
 ##### Example 1: Scale on each `workflow_job` event
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
