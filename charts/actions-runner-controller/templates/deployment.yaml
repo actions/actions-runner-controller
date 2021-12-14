@@ -85,7 +85,11 @@ spec:
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
-          value: /etc/actions-runner-controller/github_app_private_key
+          valueFrom:
+            secretKeyRef:
+              key: github_app_private_key
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
         {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}

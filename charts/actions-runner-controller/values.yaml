@@ -23,6 +23,12 @@ enableLeaderElection: true
 
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
+#
+# If authSecret.enabled=true these values are inherited to actions-runner-controller's controller-manager container's env.
+#
+# Do set authSecret.enabled=false and set env if you want full control over
+# the GitHub authn related envvars of the container.
+# See https://github.com/actions-runner-controller/actions-runner-controller/pull/937 for more details.
 authSecret:
   enabled: true
   create: false
