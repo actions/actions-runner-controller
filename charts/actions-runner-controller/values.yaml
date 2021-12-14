@@ -33,33 +33,15 @@ authSecret:
   ### GitHub PAT Configuration
   #github_token: ""
 
-# Optionally create additional secrets required for your deployments
-extraSecrets: []
-# When using private docker registries to host your runner images you could use the following and
-# include the secret in image.actionsRunnerImagePullSecretName
-# extraSecrets:
-# - name: "github-actions-runner-image-pull-secret"
-#   type: "kubernetes.io/dockerconfigjson"
-#   stringData:
-#     .dockerconfigjson: |-
-#       {
-#         "auths": {
-#           "my-private-registry.com": {
-#               "username": "someUsername",
-#               "password": "somePassword"
-#           }
-#         }
-#       }
-
 dockerRegistryMirror: ""
 image:
   repository: "summerwind/actions-runner-controller"
   actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
-  # The default image-pull secret name for self-hosted runner container.
+  # The default image-pull secrets name for self-hosted runner container.
   # It's added to spec.ImagePullSecrets of self-hosted runner pods.
-  # actionsRunnerImagePullSecretName: github-actions-runner-image-pull-secret
+  actionsRunnerImagePullSecrets: []
 
 imagePullSecrets: []
 nameOverride: ""

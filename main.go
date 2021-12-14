@@ -58,6 +58,17 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+type stringSlice []string
+
+func (i *stringSlice) String() string {
+	return fmt.Sprintf("%v", *i)
+}
+
+func (i *stringSlice) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 func main() {
 	var (
 		err      error
@@ -70,8 +81,8 @@ func main() {
 
 		gitHubAPICacheDuration time.Duration
 
-		runnerImage           string
-		runnerImagePullSecret string
+		runnerImage            string
+		runnerImagePullSecrets stringSlice
 
 		dockerImage          string
 		dockerRegistryMirror string
@@ -93,7 +104,7 @@ func main() {
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
 	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
 	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
-	flag.StringVar(&runnerImagePullSecret, "runner-image-pull-secret", "", "The default image-pull secret name for self-hosted runner container.")
+	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
 	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -152,8 +163,8 @@ func main() {
 		DockerImage:          dockerImage,
 		DockerRegistryMirror: dockerRegistryMirror,
 		// Defaults for self-hosted runner containers
-		RunnerImage:               runnerImage,
-		RunnerImagePullSecretName: runnerImagePullSecret,
+		RunnerImage:            runnerImage,
+		RunnerImagePullSecrets: runnerImagePullSecrets,
 	}
 
 	if err = runnerReconciler.SetupWithManager(mgr); err != nil {
@@ -194,8 +205,8 @@ func main() {
 		DockerRegistryMirror: dockerRegistryMirror,
 		GitHubBaseURL:        ghClient.GithubBaseURL,
 		// Defaults for self-hosted runner containers
-		RunnerImage:               runnerImage,
-		RunnerImagePullSecretName: runnerImagePullSecret,
+		RunnerImage:            runnerImage,
+		RunnerImagePullSecrets: runnerImagePullSecrets,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
