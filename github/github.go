@@ -337,7 +337,7 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 	for _, runner := range runners {
 		if runner.GetName() == name {
 			if runner.GetStatus() == "offline" {
-				return false, &RunnerOffline{runnerName: name}
+				return runner.GetBusy(), &RunnerOffline{runnerName: name}
 			}
 			return runner.GetBusy(), nil
 		}
