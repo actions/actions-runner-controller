@@ -33,7 +33,6 @@ authSecret:
   enabled: true
   create: false
   name: "controller-manager"
-  github_private_key_from_disk: true
   annotations: {}
   ### GitHub Apps Configuration
   ## NOTE: IDs MUST be strings, use quotes
