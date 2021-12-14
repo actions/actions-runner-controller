@@ -599,6 +599,13 @@ func (in *RunnerPodSpec) DeepCopyInto(out *RunnerPodSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DockerEnv != nil {
+		in, out := &in.DockerEnv, &out.DockerEnv
+		*out = make([]v1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Containers != nil {
 		in, out := &in.Containers, &out.Containers
 		*out = make([]v1.Container, len(*in))

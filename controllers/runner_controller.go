@@ -650,6 +650,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				Name:         "docker",
 				VolumeMounts: runner.Spec.DockerVolumeMounts,
 				Resources:    runner.Spec.DockerdContainerResources,
+				Env:          runner.Spec.DockerEnv,
 			})
 		}
 	} else {
