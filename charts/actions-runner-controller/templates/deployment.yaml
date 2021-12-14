@@ -65,6 +65,7 @@ spec:
         - name: GITHUB_ENTERPRISE_URL
           value: {{ .Values.githubEnterpriseServerURL }}
         {{- end }}
+        {{- if .Values.authSecret.enabled }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
@@ -89,6 +90,7 @@ spec:
               key: github_app_private_key
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
+        {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}
           value: {{ $val | quote }}
@@ -110,14 +112,19 @@ spec:
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
         volumeMounts:
+        {{- if .Values.authSecret.enabled }}
         - mountPath: "/etc/actions-runner-controller"
           name: secret
           readOnly: true
+        {{- end }}
         - mountPath: /tmp
           name: tmp
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+        {{- if .Values.additionalVolumeMounts }}
+          {{- toYaml .Values.additionalVolumeMounts | nindent 8 }} 
+        {{- end }}
       {{- if .Values.metrics.proxy.enabled }}
       - args:
         - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.port }}"
@@ -137,15 +144,20 @@ spec:
       {{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
+      {{- if .Values.authSecret.enabled }}
       - name: secret
         secret:
           secretName: {{ include "actions-runner-controller.secretName" . }}
+      {{- end }}
       - name: cert
         secret:
           defaultMode: 420
           secretName: {{ include "actions-runner-controller.servingCertName" . }}
       - name: tmp
         emptyDir: {}
+      {{- if .Values.additionalVolumes }}
+        {{- toYaml .Values.additionalVolumes | nindent 6}}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

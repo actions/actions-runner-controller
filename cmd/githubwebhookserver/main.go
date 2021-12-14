@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"sync"
@@ -48,6 +49,8 @@ const (
 	logLevelInfo  = "info"
 	logLevelWarn  = "warn"
 	logLevelError = "error"
+
+	webhookSecretTokenEnvName = "GITHUB_WEBHOOK_SECRET_TOKEN"
 )
 
 func init() {
@@ -65,7 +68,8 @@ func main() {
 		metricsAddr string
 
 		// The secret token of the GitHub Webhook. See https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks
-		webhookSecretToken string
+		webhookSecretToken    string
+		webhookSecretTokenEnv string
 
 		watchNamespace string
 
@@ -74,7 +78,7 @@ func main() {
 		logLevel             string
 	)
 
-	webhookSecretToken = os.Getenv("GITHUB_WEBHOOK_SECRET_TOKEN")
+	webhookSecretTokenEnv = os.Getenv(webhookSecretTokenEnvName)
 
 	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -83,10 +87,16 @@ func main() {
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.StringVar(&logLevel, "log-level", logLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
+	flag.StringVar(&webhookSecretToken, "github-webhook-secret-token", "", "The personal access token of GitHub.")
 	flag.Parse()
 
+	if webhookSecretToken == "" && webhookSecretTokenEnv != "" {
+		setupLog.Info(fmt.Sprintf("Using the value from %s for -github-webhook-secret-token", webhookSecretTokenEnvName))
+		webhookSecretToken = webhookSecretTokenEnv
+	}
+
 	if webhookSecretToken == "" {
-		setupLog.Info("-webhook-secret-token is missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks")
+		setupLog.Info(fmt.Sprintf("-github-webhook-secret-token and %s are missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks and specify it via the flag or the envvar", webhookSecretTokenEnvName))
 	}
 
 	if watchNamespace == "" {

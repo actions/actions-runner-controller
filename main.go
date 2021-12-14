@@ -82,7 +82,8 @@ func main() {
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error: Environment variable read failed.")
+		fmt.Fprintf(os.Stderr, "Error: processing environment variables: %v\n", err)
+		os.Exit(1)
 	}
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")

@@ -25,6 +25,7 @@ enableLeaderElection: true
 # Uncomment the configuration you are applying and fill in the details
 # Setting github_private_key_from_disk to false will load the key from ENV
 authSecret:
+  enabled: true
   create: false
   name: "controller-manager"
   github_private_key_from_disk: true
@@ -90,7 +91,7 @@ metrics:
     enabled: true
     image:
       repository: quay.io/brancz/kube-rbac-proxy
-      tag: v0.10.0
+      tag: v0.11.0
 
 resources:
   {}
@@ -111,6 +112,12 @@ tolerations: []
 
 affinity: {}
 
+# Only one of minAvailable or maxUnavailable can be set
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 3
+
 # Leverage a PriorityClass to ensure your pods survive resource shortages
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
@@ -122,12 +129,26 @@ env:
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
 
+## specify additional volumes to mount in the manager container, this can be used
+## to specify additional storage of material or to inject files from ConfigMaps
+## into the running container
+additionalVolumes: []
+
+## specify where the additional volumes are mounted in the manager container
+additionalVolumeMounts: []
+
 scope:
   # If true, the controller will only watch custom resources in a single namespace
   singleNamespace: false
   # If `scope.singleNamespace=true`, the controller will only watch custom resources in this namespace
   # The default value is "", which means the namespace of the controller
   watchNamespace: ""
+
+certManagerEnabled: true
+
+admissionWebHooks:
+  {}
+  #caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle containing the CA that signed the webhook's serving certificate>...tLS0K"
 
 githubWebhookServer:
   enabled: false
@@ -181,3 +202,9 @@ githubWebhookServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+
+  # Only one of minAvailable or maxUnavailable can be set
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 3

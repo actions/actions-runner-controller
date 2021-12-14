@@ -1,3 +1,4 @@
+{{- if .Values.certManagerEnabled }}
 # The following manifests contain a self-signed issuer CR and a certificate CR.
 # More document can be found at https://docs.cert-manager.io
 # WARNING: Targets CertManager 0.11 check https://docs.cert-manager.io/en/latest/tasks/upgrading/index.html for breaking changes
@@ -22,3 +23,4 @@ spec:
     kind: Issuer
     name: {{ include "actions-runner-controller.selfsignedIssuerName" . }}
   secretName: {{ include "actions-runner-controller.servingCertName" . }}
+{{- end }}
