@@ -919,6 +919,7 @@ spec:
       # true = No docker sidecar container is deployed in the runner pod but docker can be used within the runner container instead. The image summerwind/actions-runner-dind is used by default.
       dockerdWithinRunnerContainer: true
       #Optional environement variables for docker container
+      # Valid only when dockerdWithinRunnerContainer=false
       dockerEnv:
         - name: HTTP_PROXY
           value: http://example.com      
