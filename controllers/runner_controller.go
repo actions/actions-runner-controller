@@ -876,9 +876,9 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 	if len(pod.Spec.ImagePullSecrets) == 0 && len(defaultRunnerImagePullSecrets) > 0 {
 		// runner spec didn't provide custom values and default image pull secrets are provided
 		for _, imagePullSecret := range defaultRunnerImagePullSecrets {
-			pod.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
-				{Name: imagePullSecret},
-			}
+			pod.Spec.ImagePullSecrets = append(pod.Spec.ImagePullSecrets, corev1.LocalObjectReference{
+				Name: imagePullSecret,
+			})
 		}
 	}
 
