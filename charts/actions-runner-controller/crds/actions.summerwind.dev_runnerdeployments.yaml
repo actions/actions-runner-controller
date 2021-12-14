@@ -1339,38 +1339,6 @@ spec:
                           type: array
                         dockerEnabled:
                           type: boolean
-                        dockerMTU:
-                          format: int64
-                          type: integer
-                        dockerRegistryMirror:
-                          type: string
-                        dockerVolumeMounts:
-                          items:
-                            description: VolumeMount describes a mounting of a Volume within a container.
-                            properties:
-                              mountPath:
-                                description: Path within the container at which the volume should be mounted.  Must not contain ':'.
-                                type: string
-                              mountPropagation:
-                                description: mountPropagation determines how mounts are propagated from the host to container and the other way around. When not set, MountPropagationNone is used. This field is beta in 1.10.
-                                type: string
-                              name:
-                                description: This must match the Name of a Volume.
-                                type: string
-                              readOnly:
-                                description: Mounted read-only if true, read-write otherwise (false or unspecified). Defaults to false.
-                                type: boolean
-                              subPath:
-                                description: Path within the volume from which the container's volume should be mounted. Defaults to "" (volume's root).
-                                type: string
-                              subPathExpr:
-                                description: Expanded path within the volume from which the container's volume should be mounted. Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment. Defaults to "" (volume's root). SubPathExpr and SubPath are mutually exclusive.
-                                type: string
-                            required:
-                              - mountPath
-                              - name
-                            type: object
-                          type: array
                         dockerEnv:
                           items:
                             description: EnvVar represents an environment variable present in a Container.
@@ -1379,7 +1347,7 @@ spec:
                                 description: Name of the environment variable. Must be a C_IDENTIFIER.
                                 type: string
                               value:
-                                description: 'Variable references $(VAR_NAME) are expanded using the previous defined environment variables in the container and any service environment variables. If a variable cannot be resolved, the reference in the input string will be unchanged. The $(VAR_NAME) syntax can be escaped with a double $$, ie: $$(VAR_NAME). Escaped references will never be expanded, regardless of whether the variable exists or not. Defaults to "".'
+                                description: 'Variable references $(VAR_NAME) are expanded using the previously defined environment variables in the container and any service environment variables. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)". Escaped references will never be expanded, regardless of whether the variable exists or not. Defaults to "".'
                                 type: string
                               valueFrom:
                                 description: Source for the environment variable's value. Cannot be used if value is not empty.
@@ -1447,6 +1415,38 @@ spec:
                                     type: object
                                 type: object
                             required:
+                              - name
+                            type: object
+                          type: array
+                        dockerMTU:
+                          format: int64
+                          type: integer
+                        dockerRegistryMirror:
+                          type: string
+                        dockerVolumeMounts:
+                          items:
+                            description: VolumeMount describes a mounting of a Volume within a container.
+                            properties:
+                              mountPath:
+                                description: Path within the container at which the volume should be mounted.  Must not contain ':'.
+                                type: string
+                              mountPropagation:
+                                description: mountPropagation determines how mounts are propagated from the host to container and the other way around. When not set, MountPropagationNone is used. This field is beta in 1.10.
+                                type: string
+                              name:
+                                description: This must match the Name of a Volume.
+                                type: string
+                              readOnly:
+                                description: Mounted read-only if true, read-write otherwise (false or unspecified). Defaults to false.
+                                type: boolean
+                              subPath:
+                                description: Path within the volume from which the container's volume should be mounted. Defaults to "" (volume's root).
+                                type: string
+                              subPathExpr:
+                                description: Expanded path within the volume from which the container's volume should be mounted. Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment. Defaults to "" (volume's root). SubPathExpr and SubPath are mutually exclusive.
+                                type: string
+                            required:
+                              - mountPath
                               - name
                             type: object
                           type: array
