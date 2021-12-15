@@ -306,12 +306,14 @@ func TestGetValidCapacityReservations(t *testing.T) {
 func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.Buffer {
 	logs := &bytes.Buffer{}
 
-	log := testLogger{
+	sink := &testLogSink{
 		name:   "testlog",
 		writer: logs,
 	}
 
-	webhook.Log = &log
+	log := logr.New(sink)
+
+	webhook.Log = log
 
 	return logs
 }
@@ -398,18 +400,22 @@ func sendWebhook(server *httptest.Server, eventType string, event interface{}) (
 	return http.DefaultClient.Do(req)
 }
 
-// testLogger is a sample logr.Logger that logs in-memory.
+// testLogSink is a sample logr.Logger that logs in-memory.
 // It's only for testing log outputs.
-type testLogger struct {
+type testLogSink struct {
 	name      string
 	keyValues map[string]interface{}
 
 	writer io.Writer
 }
 
-var _ logr.Logger = &testLogger{}
+var _ logr.LogSink = &testLogSink{}
 
-func (l *testLogger) Info(msg string, kvs ...interface{}) {
+func (l *testLogSink) Init(_ logr.RuntimeInfo) {
+
+}
+
+func (l *testLogSink) Info(_ int, msg string, kvs ...interface{}) {
 	fmt.Fprintf(l.writer, "%s] %s\t", l.name, msg)
 	for k, v := range l.keyValues {
 		fmt.Fprintf(l.writer, "%s=%+v ", k, v)
@@ -420,28 +426,24 @@ func (l *testLogger) Info(msg string, kvs ...interface{}) {
 	fmt.Fprintf(l.writer, "\n")
 }
 
-func (_ *testLogger) Enabled() bool {
+func (_ *testLogSink) Enabled(level int) bool {
 	return true
 }
 
-func (l *testLogger) Error(err error, msg string, kvs ...interface{}) {
+func (l *testLogSink) Error(err error, msg string, kvs ...interface{}) {
 	kvs = append(kvs, "error", err)
-	l.Info(msg, kvs...)
+	l.Info(0, msg, kvs...)
 }
 
-func (l *testLogger) V(_ int) logr.InfoLogger {
-	return l
-}
-
-func (l *testLogger) WithName(name string) logr.Logger {
-	return &testLogger{
+func (l *testLogSink) WithName(name string) logr.LogSink {
+	return &testLogSink{
 		name:      l.name + "." + name,
 		keyValues: l.keyValues,
 		writer:    l.writer,
 	}
 }
 
-func (l *testLogger) WithValues(kvs ...interface{}) logr.Logger {
+func (l *testLogSink) WithValues(kvs ...interface{}) logr.LogSink {
 	newMap := make(map[string]interface{}, len(l.keyValues)+len(kvs)/2)
 	for k, v := range l.keyValues {
 		newMap[k] = v
@@ -449,7 +451,7 @@ func (l *testLogger) WithValues(kvs ...interface{}) logr.Logger {
 	for i := 0; i < len(kvs); i += 2 {
 		newMap[kvs[i].(string)] = kvs[i+1]
 	}
-	return &testLogger{
+	return &testLogSink{
 		name:      l.name,
 		keyValues: newMap,
 		writer:    l.writer,
