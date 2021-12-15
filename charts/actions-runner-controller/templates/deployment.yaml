@@ -46,6 +46,9 @@ spec:
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
         - "--runner-image={{ .Values.image.actionsRunnerRepositoryAndTag }}"
+        {{- range .Values.image.actionsRunnerImagePullSecrets }}
+        - "--runner-image-pull-secret={{ . }}"
+        {{- end }}
         {{- if .Values.dockerRegistryMirror }}
         - "--docker-registry-mirror={{ .Values.dockerRegistryMirror }}"
         {{- end }}

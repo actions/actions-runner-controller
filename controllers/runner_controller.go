@@ -66,6 +66,7 @@ type RunnerReconciler struct {
 	Scheme                      *runtime.Scheme
 	GitHubClient                *github.Client
 	RunnerImage                 string
+	RunnerImagePullSecrets      []string
 	DockerImage                 string
 	DockerRegistryMirror        string
 	Name                        string
@@ -662,7 +663,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
 
-	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
+	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
 	if err != nil {
 		return pod, err
 	}
@@ -760,7 +761,7 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -901,6 +902,15 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				Value: fmt.Sprintf("%d", *runnerSpec.DockerMTU),
 			},
 		}...)
+	}
+
+	if len(pod.Spec.ImagePullSecrets) == 0 && len(defaultRunnerImagePullSecrets) > 0 {
+		// runner spec didn't provide custom values and default image pull secrets are provided
+		for _, imagePullSecret := range defaultRunnerImagePullSecrets {
+			pod.Spec.ImagePullSecrets = append(pod.Spec.ImagePullSecrets, corev1.LocalObjectReference{
+				Name: imagePullSecret,
+			})
+		}
 	}
 
 	if dockerRegistryMirror != "" && dockerdInRunner {

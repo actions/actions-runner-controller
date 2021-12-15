@@ -51,11 +51,12 @@ type RunnerSetReconciler struct {
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 
-	CommonRunnerLabels   []string
-	GitHubBaseURL        string
-	RunnerImage          string
-	DockerImage          string
-	DockerRegistryMirror string
+	CommonRunnerLabels     []string
+	GitHubBaseURL          string
+	RunnerImage            string
+	RunnerImagePullSecrets []string
+	DockerImage            string
+	DockerRegistryMirror   string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
@@ -259,7 +260,7 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
+	pod, err := newRunnerPod(template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
 	if err != nil {
 		return nil, err
 	}
