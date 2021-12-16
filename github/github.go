@@ -103,7 +103,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 		return rt, nil
 	}
 
-	enterprise, owner, repo, err := getEnterpriseOrganisationAndRepo(enterprise, org, repo)
+	enterprise, owner, repo, err := getEnterpriseOrganizationAndRepo(enterprise, org, repo)
 
 	if err != nil {
 		return rt, err
@@ -129,7 +129,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 
 // RemoveRunner removes a runner with specified runner ID from repository.
 func (c *Client) RemoveRunner(ctx context.Context, enterprise, org, repo string, runnerID int64) error {
-	enterprise, owner, repo, err := getEnterpriseOrganisationAndRepo(enterprise, org, repo)
+	enterprise, owner, repo, err := getEnterpriseOrganizationAndRepo(enterprise, org, repo)
 
 	if err != nil {
 		return err
@@ -150,7 +150,7 @@ func (c *Client) RemoveRunner(ctx context.Context, enterprise, org, repo string,
 
 // ListRunners returns a list of runners of specified owner/repository name.
 func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) ([]*github.Runner, error) {
-	enterprise, owner, repo, err := getEnterpriseOrganisationAndRepo(enterprise, org, repo)
+	enterprise, owner, repo, err := getEnterpriseOrganizationAndRepo(enterprise, org, repo)
 
 	if err != nil {
 		return nil, err
@@ -174,6 +174,93 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	}
 
 	return runners, nil
+}
+
+func (c *Client) GetRunnerGroupsFromRepository(ctx context.Context, org, repo string, potentialEnterpriseGroups []string, potentialOrgGroups []string) ([]string, []string, error) {
+
+	var enterpriseRunnerGroups []string
+	var orgRunnerGroups []string
+
+	if org != "" {
+		runnerGroups, err := c.getOrganizationRunnerGroups(ctx, org, repo)
+		if err != nil {
+			return enterpriseRunnerGroups, orgRunnerGroups, err
+		}
+		for _, runnerGroup := range runnerGroups {
+			if runnerGroup.GetInherited() { // enterprise runner groups
+				if !containsString(potentialEnterpriseGroups, runnerGroup.GetName()) {
+					continue
+				}
+				if runnerGroup.GetVisibility() == "all" {
+					enterpriseRunnerGroups = append(enterpriseRunnerGroups, runnerGroup.GetName())
+				} else {
+					hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
+					if err != nil {
+						return enterpriseRunnerGroups, orgRunnerGroups, err
+					}
+					if hasAccess {
+						enterpriseRunnerGroups = append(enterpriseRunnerGroups, runnerGroup.GetName())
+					}
+				}
+			} else { // organization runner groups
+				if !containsString(potentialOrgGroups, runnerGroup.GetName()) {
+					continue
+				}
+				if runnerGroup.GetVisibility() == "all" {
+					orgRunnerGroups = append(orgRunnerGroups, runnerGroup.GetName())
+				} else {
+					hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
+					if err != nil {
+						return enterpriseRunnerGroups, orgRunnerGroups, err
+					}
+					if hasAccess {
+						orgRunnerGroups = append(orgRunnerGroups, runnerGroup.GetName())
+					}
+				}
+			}
+		}
+	}
+	return enterpriseRunnerGroups, orgRunnerGroups, nil
+}
+
+func (c *Client) hasRepoAccessToOrganizationRunnerGroup(ctx context.Context, org string, runnerGroupId int64, repo string) (bool, error) {
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.Client.Actions.ListRepositoryAccessRunnerGroup(ctx, org, runnerGroupId, &opts)
+		if err != nil {
+			return false, fmt.Errorf("failed to list repository access for runner group: %w", err)
+		}
+		for _, githubRepo := range list.Repositories {
+			if githubRepo.GetFullName() == repo {
+				return true, nil
+			}
+		}
+		if res.NextPage == 0 {
+			break
+		}
+		opts.Page = res.NextPage
+	}
+	return false, nil
+}
+
+func (c *Client) getOrganizationRunnerGroups(ctx context.Context, org, repo string) ([]*github.RunnerGroup, error) {
+	var runnerGroups []*github.RunnerGroup
+
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.Client.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
+		if err != nil {
+			return runnerGroups, fmt.Errorf("failed to list organization runner groups: %w", err)
+		}
+
+		runnerGroups = append(runnerGroups, list.RunnerGroups...)
+		if res.NextPage == 0 {
+			break
+		}
+		opts.Page = res.NextPage
+	}
+
+	return runnerGroups, nil
 }
 
 // cleanup removes expired registration tokens.
@@ -267,8 +354,8 @@ func (c *Client) listRepositoryWorkflowRuns(ctx context.Context, user string, re
 	return workflowRuns, nil
 }
 
-// Validates enterprise, organisation and repo arguments. Both are optional, but at least one should be specified
-func getEnterpriseOrganisationAndRepo(enterprise, org, repo string) (string, string, string, error) {
+// Validates enterprise, organization and repo arguments. Both are optional, but at least one should be specified
+func getEnterpriseOrganizationAndRepo(enterprise, org, repo string) (string, string, string, error) {
 	if len(repo) > 0 {
 		owner, repository, err := splitOwnerAndRepo(repo)
 		return "", owner, repository, err
@@ -344,4 +431,13 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 	}
 
 	return false, &RunnerNotFound{runnerName: name}
+}
+
+func containsString(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }

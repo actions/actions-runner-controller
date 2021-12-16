@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 const (
@@ -56,6 +57,9 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// SecretKeyBytes is the byte representation of the Webhook secret token
 	// the administrator is generated and specified in GitHub Web UI.
 	SecretKeyBytes []byte
+
+	// GitHub Client to discover runner groups assigned to a repository
+	GitHubClient *github.Client
 
 	// Namespace is the namespace to watch for HorizontalRunnerAutoscaler's to be
 	// scaled on Webhook.
@@ -489,10 +493,12 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(
 	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, labels []string,
 ) (*ScaleTarget, error) {
+
 	repositoryRunnerKey := owner + "/" + repo
 
+	// Search for repository HRAs
 	if target, err := autoscaler.getJobScaleTarget(ctx, repositoryRunnerKey, labels); err != nil {
-		log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
+		log.Error(err, "finding repository-wide runner", "repository", repositoryRunnerKey)
 		return nil, err
 	} else if target != nil {
 		log.Info("job scale up target is repository-wide runners", "repository", repo)
@@ -500,34 +506,41 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 	}
 
 	if ownerType == "User" {
-		log.V(1).Info("no repository runner found", "organization", owner)
-
+		log.V(1).Info("user repositories not supported", "owner", owner)
 		return nil, nil
 	}
 
+	// Search for organization runner HRAs in default runner group
 	if target, err := autoscaler.getJobScaleTarget(ctx, owner, labels); err != nil {
-		log.Info("finding organizational runner", "organization", owner)
+		log.Error(err, "finding organizational runner", "organization", owner)
 		return nil, err
 	} else if target != nil {
 		log.Info("job scale up target is organizational runners", "organization", owner)
 		return target, nil
 	}
 
-	if enterprise == "" {
-		log.V(1).Info("no repository runner or organizational runner found",
-			"repository", repositoryRunnerKey,
-			"organization", owner,
-		)
-		return nil, nil
+	if enterprise != "" {
+		// Search for enterprise runner HRAs in default runner group
+		if target, err := autoscaler.getJobScaleTarget(ctx, enterpriseKey(enterprise), labels); err != nil {
+			log.Error(err, "finding enterprise runner", "enterprise", enterprise)
+			return nil, err
+		} else if target != nil {
+			log.Info("scale up target is default enterprise runners", "enterprise", enterprise)
+			return target, nil
+		}
 	}
 
-	if target, err := autoscaler.getJobScaleTarget(ctx, enterpriseKey(enterprise), labels); err != nil {
-		log.Error(err, "finding enterprise runner", "enterprise", enterprise)
+	// At this point there were no default organization/enterprise runners available to use, try now
+	// searching in runner groups
+
+	// We need to get the potential runner groups first to avoid spending API queries needless. Once/if GitHub improves an
+	// API to find related/linked runner groups from a specific repository this logic could be removed
+	availableEnterpriseGroups, availableOrganizationGroups, err := autoscaler.getPotentialGroupsFromHRAs(ctx, enterprise, owner)
+	if err != nil {
+		log.Error(err, "finding potential organization runner groups from HRAs", "organization", owner)
 		return nil, err
-	} else if target != nil {
-		log.Info("scale up target is enterprise runners", "enterprise", enterprise)
-		return target, nil
-	} else {
+	}
+	if len(availableEnterpriseGroups) == 0 && len(availableOrganizationGroups) == 0 {
 		log.V(1).Info("no repository/organizational/enterprise runner found",
 			"repository", repositoryRunnerKey,
 			"organization", owner,
@@ -535,7 +548,101 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 		)
 	}
 
+	var enterpriseGroups []string
+	var organizationGroups []string
+	if autoscaler.GitHubClient != nil {
+		// Get available organization runner groups and enterprise runner groups for a repository
+		// These are the sum of runner groups with repository access = All repositories plus
+		// runner groups where owner/repo has access to
+		enterpriseGroups, organizationGroups, err = autoscaler.GitHubClient.GetRunnerGroupsFromRepository(ctx, owner, repositoryRunnerKey, availableEnterpriseGroups, availableOrganizationGroups)
+		log.V(1).Info("Searching in runner groups", "enterprise.groups", enterpriseGroups, "organization.groups", organizationGroups)
+		if err != nil {
+			log.Error(err, "Unable to find runner groups from repository", "organization", owner, "repository", repo)
+			return nil, nil
+		}
+	} else {
+		// For backwards compatibility if GitHub authentication is not configured, we assume all runner groups have
+		// visibility=all to honor the previous implementation, therefore any available enterprise/organization runner
+		// is a potential target for scaling
+		enterpriseGroups = availableEnterpriseGroups
+		organizationGroups = availableOrganizationGroups
+	}
+
+	for _, group := range organizationGroups {
+		if target, err := autoscaler.getJobScaleTarget(ctx, owner+"/"+group, labels); err != nil {
+			log.Error(err, "finding organizational runner group", "organization", owner)
+			return nil, err
+		} else if target != nil {
+			log.Info(fmt.Sprintf("job scale up target is organizational runner group %s", target.Name), "organization", owner)
+			return target, nil
+		}
+	}
+
+	for _, group := range enterpriseGroups {
+		if target, err := autoscaler.getJobScaleTarget(ctx, enterpriseKey(enterprise)+"/"+group, labels); err != nil {
+			log.Error(err, "finding enterprise runner group", "enterprise", owner)
+			return nil, err
+		} else if target != nil {
+			log.Info(fmt.Sprintf("job scale up target is enterprise runner group %s", target.Name), "enterprise", owner)
+			return target, nil
+		}
+	}
+
+	log.V(1).Info("no repository/organizational/enterprise runner found",
+		"repository", repositoryRunnerKey,
+		"organization", owner,
+		"enterprises", enterprise,
+	)
 	return nil, nil
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getPotentialGroupsFromHRAs(ctx context.Context, enterprise, org string) ([]string, []string, error) {
+	var enterpriseRunnerGroups []string
+	var orgRunnerGroups []string
+	ns := autoscaler.Namespace
+
+	var defaultListOpts []client.ListOption
+	if ns != "" {
+		defaultListOpts = append(defaultListOpts, client.InNamespace(ns))
+	}
+
+	opts := append([]client.ListOption{}, defaultListOpts...)
+	if autoscaler.Namespace != "" {
+		opts = append(opts, client.InNamespace(autoscaler.Namespace))
+	}
+
+	var hraList v1alpha1.HorizontalRunnerAutoscalerList
+	if err := autoscaler.List(ctx, &hraList, opts...); err != nil {
+		return orgRunnerGroups, enterpriseRunnerGroups, err
+	}
+
+	for _, hra := range hraList.Items {
+		switch hra.Spec.ScaleTargetRef.Kind {
+		case "RunnerSet":
+			var rs v1alpha1.RunnerSet
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+				return orgRunnerGroups, enterpriseRunnerGroups, err
+			}
+			if rs.Spec.Organization == org && rs.Spec.Group != "" {
+				orgRunnerGroups = append(orgRunnerGroups, rs.Spec.Group)
+			}
+			if rs.Spec.Enterprise == enterprise && rs.Spec.Group != "" {
+				enterpriseRunnerGroups = append(enterpriseRunnerGroups, rs.Spec.Group)
+			}
+		case "RunnerDeployment", "":
+			var rd v1alpha1.RunnerDeployment
+			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+				return orgRunnerGroups, enterpriseRunnerGroups, err
+			}
+			if rd.Spec.Template.Spec.Organization == org && rd.Spec.Template.Spec.Group != "" {
+				orgRunnerGroups = append(orgRunnerGroups, rd.Spec.Template.Spec.Group)
+			}
+			if rd.Spec.Template.Spec.Enterprise == enterprise && rd.Spec.Template.Spec.Group != "" {
+				enterpriseRunnerGroups = append(enterpriseRunnerGroups, rd.Spec.Template.Spec.Group)
+			}
+		}
+	}
+	return enterpriseRunnerGroups, orgRunnerGroups, nil
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleTarget(ctx context.Context, name string, labels []string) (*ScaleTarget, error) {
@@ -586,6 +693,9 @@ HRA:
 
 			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
+				if l == "self-hosted" {
+					continue // label is automatically added to self-hosted runners
+				}
 				var matched bool
 				for _, l2 := range rs.Spec.Labels {
 					if l == l2 {
@@ -613,6 +723,9 @@ HRA:
 
 			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
+				if l == "self-hosted" {
+					continue // label is automatically added to self-hosted runners
+				}
 				var matched bool
 				for _, l2 := range rd.Spec.Template.Spec.Labels {
 					if l == l2 {
@@ -716,31 +829,55 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 		switch hra.Spec.ScaleTargetRef.Kind {
 		case "", "RunnerDeployment":
 			var rd v1alpha1.RunnerDeployment
-
 			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+				autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerDeployment not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
 				return nil
 			}
 
-			keys := []string{rd.Spec.Template.Spec.Repository, rd.Spec.Template.Spec.Organization}
-
-			if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
-				keys = append(keys, enterpriseKey(enterprise))
+			keys := []string{}
+			if rd.Spec.Template.Spec.Repository != "" {
+				keys = append(keys, rd.Spec.Template.Spec.Repository) // Repository runners
 			}
-
+			if rd.Spec.Template.Spec.Organization != "" {
+				if group := rd.Spec.Template.Spec.Group; group != "" {
+					keys = append(keys, rd.Spec.Template.Spec.Organization+"/"+rd.Spec.Template.Spec.Group) // Organization runner groups
+				} else {
+					keys = append(keys, rd.Spec.Template.Spec.Organization) // Organization runners
+				}
+			}
+			if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
+				if group := rd.Spec.Template.Spec.Group; group != "" {
+					keys = append(keys, enterpriseKey(enterprise)+"/"+rd.Spec.Template.Spec.Group) // Enterprise runner groups
+				} else {
+					keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
+				}
+			}
+			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
 			return keys
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
-
 			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+				autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerSet not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
 				return nil
 			}
 
-			keys := []string{rs.Spec.Repository, rs.Spec.Organization}
-
-			if enterprise := rs.Spec.Enterprise; enterprise != "" {
-				keys = append(keys, enterpriseKey(enterprise))
+			keys := []string{}
+			if rs.Spec.Repository != "" {
+				keys = append(keys, rs.Spec.Repository) // Repository runners
 			}
-
+			if rs.Spec.Organization != "" {
+				keys = append(keys, rs.Spec.Organization) // Organization runners
+				if group := rs.Spec.Group; group != "" {
+					keys = append(keys, rs.Spec.Organization+"/"+rs.Spec.Group) // Organization runner groups
+				}
+			}
+			if enterprise := rs.Spec.Enterprise; enterprise != "" {
+				keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
+				if group := rs.Spec.Group; group != "" {
+					keys = append(keys, enterpriseKey(enterprise)+"/"+rs.Spec.Group) // Enterprise runner groups
+				}
+			}
+			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
 			return keys
 		}
 

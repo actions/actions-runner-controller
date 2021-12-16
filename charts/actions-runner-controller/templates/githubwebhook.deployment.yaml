@@ -54,6 +54,32 @@ spec:
               key: github_webhook_secret_token
               name: {{ include "actions-runner-controller-github-webhook-server.secretName" . }}
               optional: true
+        {{- if .Values.authSecret.enabled }}
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: github_token
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_id
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        - name: GITHUB_APP_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_installation_id
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              key: github_app_private_key
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        {{- end }}
         {{- range $key, $val := .Values.githubWebhookServer.env }}
         - name: {{ $key }}
           value: {{ $val | quote }}
