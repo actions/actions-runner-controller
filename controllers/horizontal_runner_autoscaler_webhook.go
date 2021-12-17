@@ -440,64 +440,29 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
-	repositoryRunnerKey := owner + "/" + repo
-
-	if target, err := autoscaler.getScaleTarget(ctx, repositoryRunnerKey, f); err != nil {
-		log.Info("finding repository-wide runner", "repository", repositoryRunnerKey)
-		return nil, err
-	} else if target != nil {
-		log.Info("scale up target is repository-wide runners", "repository", repo)
-		return target, nil
+	scaleTarget := func(value string) (*ScaleTarget, error) {
+		return autoscaler.getScaleTarget(ctx, value, f)
 	}
-
-	if ownerType == "User" {
-		log.V(1).Info("no repository runner found", "organization", owner)
-
-		return nil, nil
-	}
-
-	if target, err := autoscaler.getScaleTarget(ctx, owner, f); err != nil {
-		log.Info("finding organizational runner", "organization", owner)
-		return nil, err
-	} else if target != nil {
-		log.Info("scale up target is organizational runners", "organization", owner)
-		return target, nil
-	}
-
-	if enterprise == "" {
-		log.V(1).Info("no repository runner or organizational runner found",
-			"repository", repositoryRunnerKey,
-			"organization", owner,
-		)
-
-		return nil, nil
-	}
-
-	if target, err := autoscaler.getScaleTarget(ctx, enterpriseKey(enterprise), f); err != nil {
-		log.Error(err, "finding enterprise runner", "enterprise", enterprise)
-		return nil, err
-	} else if target != nil {
-		log.Info("scale up target is enterprise runners", "enterprise", enterprise)
-		return target, nil
-	} else {
-		log.V(1).Info("no repository/organizational/enterprise runner found",
-			"repository", repositoryRunnerKey,
-			"organization", owner,
-			"enterprises", enterprise,
-		)
-	}
-
-	return nil, nil
+	return autoscaler.getScaleUpTargetWithFunction(ctx, log, repo, owner, ownerType, enterprise, scaleTarget)
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(
 	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, labels []string,
 ) (*ScaleTarget, error) {
 
+	scaleTarget := func(value string) (*ScaleTarget, error) {
+		return autoscaler.getJobScaleTarget(ctx, value, labels)
+	}
+	return autoscaler.getScaleUpTargetWithFunction(ctx, log, repo, owner, ownerType, enterprise, scaleTarget)
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithFunction(
+	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, scaleTarget func(value string) (*ScaleTarget, error)) (*ScaleTarget, error) {
+
 	repositoryRunnerKey := owner + "/" + repo
 
 	// Search for repository HRAs
-	if target, err := autoscaler.getJobScaleTarget(ctx, repositoryRunnerKey, labels); err != nil {
+	if target, err := scaleTarget(repositoryRunnerKey); err != nil {
 		log.Error(err, "finding repository-wide runner", "repository", repositoryRunnerKey)
 		return nil, err
 	} else if target != nil {
@@ -511,7 +476,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 	}
 
 	// Search for organization runner HRAs in default runner group
-	if target, err := autoscaler.getJobScaleTarget(ctx, owner, labels); err != nil {
+	if target, err := scaleTarget(owner); err != nil {
 		log.Error(err, "finding organizational runner", "organization", owner)
 		return nil, err
 	} else if target != nil {
@@ -521,7 +486,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 
 	if enterprise != "" {
 		// Search for enterprise runner HRAs in default runner group
-		if target, err := autoscaler.getJobScaleTarget(ctx, enterpriseKey(enterprise), labels); err != nil {
+		if target, err := scaleTarget(enterpriseKey(enterprise)); err != nil {
 			log.Error(err, "finding enterprise runner", "enterprise", enterprise)
 			return nil, err
 		} else if target != nil {
@@ -569,7 +534,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 	}
 
 	for _, group := range organizationGroups {
-		if target, err := autoscaler.getJobScaleTarget(ctx, owner+"/"+group, labels); err != nil {
+		if target, err := scaleTarget(owner + "/group/" + group); err != nil {
 			log.Error(err, "finding organizational runner group", "organization", owner)
 			return nil, err
 		} else if target != nil {
@@ -579,7 +544,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 	}
 
 	for _, group := range enterpriseGroups {
-		if target, err := autoscaler.getJobScaleTarget(ctx, enterpriseKey(enterprise)+"/"+group, labels); err != nil {
+		if target, err := scaleTarget(enterpriseKey(enterprise) + "/group/" + group); err != nil {
 			log.Error(err, "finding enterprise runner group", "enterprise", owner)
 			return nil, err
 		} else if target != nil {
@@ -840,14 +805,14 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			}
 			if rd.Spec.Template.Spec.Organization != "" {
 				if group := rd.Spec.Template.Spec.Group; group != "" {
-					keys = append(keys, rd.Spec.Template.Spec.Organization+"/"+rd.Spec.Template.Spec.Group) // Organization runner groups
+					keys = append(keys, rd.Spec.Template.Spec.Organization+"/group/"+rd.Spec.Template.Spec.Group) // Organization runner groups
 				} else {
 					keys = append(keys, rd.Spec.Template.Spec.Organization) // Organization runners
 				}
 			}
 			if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
 				if group := rd.Spec.Template.Spec.Group; group != "" {
-					keys = append(keys, enterpriseKey(enterprise)+"/"+rd.Spec.Template.Spec.Group) // Enterprise runner groups
+					keys = append(keys, enterpriseKey(enterprise)+"/group/"+rd.Spec.Template.Spec.Group) // Enterprise runner groups
 				} else {
 					keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
 				}
@@ -868,13 +833,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			if rs.Spec.Organization != "" {
 				keys = append(keys, rs.Spec.Organization) // Organization runners
 				if group := rs.Spec.Group; group != "" {
-					keys = append(keys, rs.Spec.Organization+"/"+rs.Spec.Group) // Organization runner groups
+					keys = append(keys, rs.Spec.Organization+"/group/"+rs.Spec.Group) // Organization runner groups
 				}
 			}
 			if enterprise := rs.Spec.Enterprise; enterprise != "" {
 				keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
 				if group := rs.Spec.Group; group != "" {
-					keys = append(keys, enterpriseKey(enterprise)+"/"+rs.Spec.Group) // Enterprise runner groups
+					keys = append(keys, enterpriseKey(enterprise)+"/group/"+rs.Spec.Group) // Enterprise runner groups
 				}
 			}
 			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
