@@ -44,6 +44,7 @@ const (
 	scaleTargetKey = "scaleTarget"
 
 	keyPrefixEnterprise = "enterprises/"
+	keyRunnerGroup      = "/group/"
 )
 
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
@@ -534,7 +535,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 	}
 
 	for _, group := range organizationGroups {
-		if target, err := scaleTarget(owner + "/group/" + group); err != nil {
+		if target, err := scaleTarget(organizationalRunnerGroupKey(owner, group)); err != nil {
 			log.Error(err, "finding organizational runner group", "organization", owner)
 			return nil, err
 		} else if target != nil {
@@ -544,7 +545,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 	}
 
 	for _, group := range enterpriseGroups {
-		if target, err := scaleTarget(enterpriseKey(enterprise) + "/group/" + group); err != nil {
+		if target, err := scaleTarget(enterpriseRunnerGroupKey(enterprise, group)); err != nil {
 			log.Error(err, "finding enterprise runner group", "enterprise", owner)
 			return nil, err
 		} else if target != nil {
@@ -805,14 +806,14 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			}
 			if rd.Spec.Template.Spec.Organization != "" {
 				if group := rd.Spec.Template.Spec.Group; group != "" {
-					keys = append(keys, rd.Spec.Template.Spec.Organization+"/group/"+rd.Spec.Template.Spec.Group) // Organization runner groups
+					keys = append(keys, organizationalRunnerGroupKey(rd.Spec.Template.Spec.Organization, rd.Spec.Template.Spec.Group)) // Organization runner groups
 				} else {
 					keys = append(keys, rd.Spec.Template.Spec.Organization) // Organization runners
 				}
 			}
 			if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
 				if group := rd.Spec.Template.Spec.Group; group != "" {
-					keys = append(keys, enterpriseKey(enterprise)+"/group/"+rd.Spec.Template.Spec.Group) // Enterprise runner groups
+					keys = append(keys, enterpriseRunnerGroupKey(enterprise, rd.Spec.Template.Spec.Group)) // Enterprise runner groups
 				} else {
 					keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
 				}
@@ -833,13 +834,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 			if rs.Spec.Organization != "" {
 				keys = append(keys, rs.Spec.Organization) // Organization runners
 				if group := rs.Spec.Group; group != "" {
-					keys = append(keys, rs.Spec.Organization+"/group/"+rs.Spec.Group) // Organization runner groups
+					keys = append(keys, organizationalRunnerGroupKey(rs.Spec.Organization, rs.Spec.Group)) // Organization runner groups
 				}
 			}
 			if enterprise := rs.Spec.Enterprise; enterprise != "" {
 				keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
 				if group := rs.Spec.Group; group != "" {
-					keys = append(keys, enterpriseKey(enterprise)+"/group/"+rs.Spec.Group) // Enterprise runner groups
+					keys = append(keys, enterpriseRunnerGroupKey(enterprise, rs.Spec.Group)) // Enterprise runner groups
 				}
 			}
 			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
@@ -859,4 +860,12 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 
 func enterpriseKey(name string) string {
 	return keyPrefixEnterprise + name
+}
+
+func organizationalRunnerGroupKey(owner, group string) string {
+	return owner + keyRunnerGroup + group
+}
+
+func enterpriseRunnerGroupKey(enterprise, group string) string {
+	return keyPrefixEnterprise + enterprise + keyRunnerGroup + group
 }
