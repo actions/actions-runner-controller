@@ -580,13 +580,17 @@ HRA:
 				return nil, err
 			}
 
-			if len(labels) == 1 && labels[0] == "self-hosted" {
-				return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
-			}
-
 			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
 				var matched bool
+
+				// ignore "self-hosted" label as all instance here are self-hosted
+				if l == "self-hosted" {
+					continue
+				}
+
+				// TODO labels related to OS and architecture needs to be explicitely declared or the current implementation will not be able to find them.
+
 				for _, l2 := range rs.Spec.Labels {
 					if l == l2 {
 						matched = true
@@ -607,13 +611,17 @@ HRA:
 				return nil, err
 			}
 
-			if len(labels) == 1 && labels[0] == "self-hosted" {
-				return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
-			}
-
 			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
 				var matched bool
+
+				// ignore "self-hosted" label as all instance here are self-hosted
+				if l == "self-hosted" {
+					continue
+				}
+
+				// TODO labels related to OS and architecture needs to be explicitely declared or the current implementation will not be able to find them.
+
 				for _, l2 := range rd.Spec.Template.Spec.Labels {
 					if l == l2 {
 						matched = true

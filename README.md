@@ -615,6 +615,8 @@ spec:
     duration: "30m"
 ```
 
+This webhook requires you to explicitely set the labels in the RunnerDeployment / RunnerSet if you are using them in your workflow to match the agents (field `runs-on`). Only `self-hosted` will be considered as included by default.
+
 You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
 
 Each kind has a `status` of `queued`, `in_progress` and `completed`. With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`. The cavaet to this to remember is that this the scale down is within the bounds of your `scaleDownDelaySecondsAfterScaleOut` configuration, if this time hasn't past the scale down will be defered.
