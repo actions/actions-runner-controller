@@ -655,9 +655,6 @@ HRA:
 
 			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
-				if l == "self-hosted" {
-					continue // label is automatically added to self-hosted runners
-				}
 				var matched bool
 
 				// ignore "self-hosted" label as all instance here are self-hosted
@@ -689,9 +686,6 @@ HRA:
 
 			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
-				if l == "self-hosted" {
-					continue // label is automatically added to self-hosted runners
-				}
 				var matched bool
 
 				// ignore "self-hosted" label as all instance here are self-hosted
