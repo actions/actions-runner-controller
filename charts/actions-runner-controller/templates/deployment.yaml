@@ -61,12 +61,23 @@ spec:
         {{- if .Values.logLevel }}
         - "--log-level={{ .Values.logLevel }}"
         {{- end }}
+        {{- if .Values.runnerGithubUrl  }}
+        - "--runner-github-url={{ .Values.runnerGithubUrl }}"
+        {{- end }}
         command:
         - "/manager"
         env:
         {{- if .Values.githubEnterpriseServerURL  }}
         - name: GITHUB_ENTERPRISE_URL
           value: {{ .Values.githubEnterpriseServerURL }}
+        {{- end }}
+        {{- if .Values.githubUrl  }}
+        - name: GITHUB_URL
+          value: {{ .Values.githubUrl }}
+        {{- end }}
+        {{- if .Values.githubUploadUrl  }}
+        - name: GITHUB_UPLOAD_URL
+          value: {{ .Values.githubUploadUrl }}
         {{- end }}
         {{- if .Values.authSecret.enabled }}
         - name: GITHUB_TOKEN
@@ -93,27 +104,15 @@ spec:
               key: github_app_private_key
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
-        {{- if .Values.authSecret.proxyUrl  }}
-        - name: GITHUB_PROXY_URL
-          value: {{ .Values.authSecret.proxyUrl }}
+        {{- if .Values.authSecret.githubBasicauthUsername  }}
+        - name: GITHUB_BASICAUTH_USERNAME
+          value: {{ .Values.authSecret.githubBasicauthUsername }}
         {{- end }}
-        {{- if .Values.authSecret.proxyUploadUrl  }}
-        - name: GITHUB_PROXY_UPLOAD_URL
-          value: {{ .Values.authSecret.proxyUploadUrl }}
-        {{- end }}
-        {{- if .Values.authSecret.proxyRunnerUrl  }}
-        - name: GITHUB_PROXY_RUNNER_URL
-          value: {{ .Values.authSecret.proxyRunnerUrl }}
-        {{- end }}
-        {{- if .Values.authSecret.proxyUsername  }}
-        - name: GITHUB_PROXY_USERNAME
-          value: {{ .Values.authSecret.proxyUsername }}
-        {{- end }}
-        {{- if .Values.authSecret.proxyPassword }}
-        - name: GITHUB_PROXY_PASSWORD
+        {{- if .Values.authSecret.githubBasicauthPassword }}
+        - name: GITHUB_BASICAUTH_PASSWORD
           valueFrom:
             secretKeyRef:
-              key: github_proxy_password
+              key: github_basicauth_password
               name: {{ include "actions-runner-controller.secretName" . }}
         {{- end }}
         {{- end }}

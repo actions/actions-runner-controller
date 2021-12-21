@@ -23,11 +23,11 @@ type Config struct {
 	AppInstallationID int64  `split_words:"true"`
 	AppPrivateKey     string `split_words:"true"`
 	Token             string
-	ProxyUrl          string `split_words:"true"`
-	ProxyUploadUrl    string `split_words:"true"`
-	ProxyRunnerUrl    string `split_words:"true"`
-	ProxyUsername     string `split_words:"true"`
-	ProxyPassword     string `split_words:"true"`
+	Url               string
+	UploadUrl         string `split_words:"true"`
+	BasicauthUsername string `split_words:"true"`
+	BasicauthPassword string `split_words:"true"`
+	RunnerGitHubURL   string `split_words:"true"`
 }
 
 // Client wraps GitHub client with some additional
@@ -39,13 +39,12 @@ type Client struct {
 	GithubBaseURL string
 }
 
-type ProxyTransport struct {
-	BaseUrl  string
+type BasicAuthTransport struct {
 	Username string
 	Password string
 }
 
-func (p ProxyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (p BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.SetBasicAuth(p.Username, p.Password)
 	req.Header.Set("User-Agent", "actions-runner-controller")
 	return http.DefaultTransport.RoundTrip(req)
@@ -54,8 +53,8 @@ func (p ProxyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
 	var transport http.RoundTripper
-	if len(c.ProxyUrl) > 0 {
-		transport = ProxyTransport{BaseUrl: c.ProxyUrl, Username: c.ProxyUsername, Password: c.ProxyPassword}
+	if len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0 {
+		transport = BasicAuthTransport{Username: c.BasicauthUsername, Password: c.BasicauthPassword}
 	} else if len(c.Token) > 0 {
 		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
@@ -82,6 +81,7 @@ func (c *Config) NewClient() (*Client, error) {
 		}
 		transport = tr
 	}
+
 	transport = metrics.Transport{Transport: transport}
 	httpClient := &http.Client{Transport: transport}
 
@@ -97,33 +97,33 @@ func (c *Config) NewClient() (*Client, error) {
 	} else {
 		client = github.NewClient(httpClient)
 		githubBaseURL = "https://github.com/"
-		if len(c.ProxyUrl) > 0 {
 
-			// Set proxy base URL
-			baseUrl, err := url.Parse(c.ProxyUrl)
+		if len(c.Url) > 0 {
+			baseUrl, err := url.Parse(c.Url)
 			if err != nil {
-				return nil, fmt.Errorf("proxy client creation failed: %v", err)
+				return nil, fmt.Errorf("github client creation failed: %v", err)
 			}
 			if !strings.HasSuffix(baseUrl.Path, "/") {
 				baseUrl.Path += "/"
 			}
 			client.BaseURL = baseUrl
+		}
 
-			// Set proxy upload URL
-			var proxyUploadUrl *url.URL
-			if len(c.ProxyUploadUrl) > 0 {
-				proxyUploadUrl, err = url.Parse(c.ProxyUploadUrl)
-			} else {
-				proxyUploadUrl, err = url.Parse(baseUrl.Path + "/api/uploads")
-			}
+		if len(c.UploadUrl) > 0 {
+			uploadUrl, err := url.Parse(c.UploadUrl)
 			if err != nil {
-				return nil, fmt.Errorf("proxy client creation failed: %v", err)
+				return nil, fmt.Errorf("github client creation failed: %v", err)
 			}
-			client.UploadURL = proxyUploadUrl
+			if !strings.HasSuffix(uploadUrl.Path, "/") {
+				uploadUrl.Path += "/"
+			}
+			client.UploadURL = uploadUrl
+		}
 
-			// Set github base URL for runners if a custom was provided
-			if len(c.ProxyRunnerUrl) > 0 {
-				githubBaseURL = c.ProxyRunnerUrl
+		if len(c.RunnerGitHubURL) > 0 {
+			githubBaseURL = c.RunnerGitHubURL
+			if !strings.HasSuffix(githubBaseURL, "/") {
+				githubBaseURL += "/"
 			}
 		}
 	}
