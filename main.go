@@ -112,6 +112,8 @@ func main() {
 	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
 	flag.StringVar(&c.ProxyUrl, "github-proxy-url", c.ProxyUrl, "The custom proxy URL for GitHub API calls")
+	flag.StringVar(&c.ProxyUploadUrl, "github-proxy-upload-url", c.ProxyUrl, "The custom proxy URL for GitHub Upload API calls")
+	flag.StringVar(&c.ProxyRunnerUrl, "github-proxy-runner-url", c.ProxyUrl, "The custom proxy URL set in runners as GITHUB_URL environment variable")
 	flag.StringVar(&c.ProxyUsername, "github-proxy-username", c.ProxyUsername, "The custom proxy username for GitHub API calls")
 	flag.StringVar(&c.ProxyPassword, "github-proxy-password", c.ProxyPassword, "The custom proxy password for GitHub API calls")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")

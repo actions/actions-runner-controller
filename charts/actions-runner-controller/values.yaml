@@ -43,6 +43,8 @@ authSecret:
   #github_token: ""
   ### Custom proxy for GitHub API calls
   #proxyUrl: ""
+  #proxyUploadUrl: ""
+  #proxyRunnerUrl: ""
   #proxyUsername: ""
   #proxyPassword: ""
 

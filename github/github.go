@@ -23,9 +23,11 @@ type Config struct {
 	AppInstallationID int64  `split_words:"true"`
 	AppPrivateKey     string `split_words:"true"`
 	Token             string
-	ProxyUrl          string
-	ProxyUsername     string
-	ProxyPassword     string
+	ProxyUrl          string `split_words:"true"`
+	ProxyUploadUrl    string `split_words:"true"`
+	ProxyRunnerUrl    string `split_words:"true"`
+	ProxyUsername     string `split_words:"true"`
+	ProxyPassword     string `split_words:"true"`
 }
 
 // Client wraps GitHub client with some additional
@@ -96,12 +98,33 @@ func (c *Config) NewClient() (*Client, error) {
 		client = github.NewClient(httpClient)
 		githubBaseURL = "https://github.com/"
 		if len(c.ProxyUrl) > 0 {
-			proxyUrl, err := url.Parse(c.ProxyUrl)
+
+			// Set proxy base URL
+			baseUrl, err := url.Parse(c.ProxyUrl)
 			if err != nil {
 				return nil, fmt.Errorf("proxy client creation failed: %v", err)
 			}
-			client.BaseURL = proxyUrl
-			client.UploadURL = proxyUrl
+			if !strings.HasSuffix(baseUrl.Path, "/") {
+				baseUrl.Path += "/"
+			}
+			client.BaseURL = baseUrl
+
+			// Set proxy upload URL
+			var proxyUploadUrl *url.URL
+			if len(c.ProxyUploadUrl) > 0 {
+				proxyUploadUrl, err = url.Parse(c.ProxyUploadUrl)
+			} else {
+				proxyUploadUrl, err = url.Parse(baseUrl.Path + "/api/uploads")
+			}
+			if err != nil {
+				return nil, fmt.Errorf("proxy client creation failed: %v", err)
+			}
+			client.UploadURL = proxyUploadUrl
+
+			// Set github base URL for runners if a custom was provided
+			if len(c.ProxyRunnerUrl) > 0 {
+				githubBaseURL = c.ProxyRunnerUrl
+			}
 		}
 	}
 

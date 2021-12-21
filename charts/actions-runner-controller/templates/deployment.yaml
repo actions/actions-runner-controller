@@ -97,6 +97,14 @@ spec:
         - name: GITHUB_PROXY_URL
           value: {{ .Values.authSecret.proxyUrl }}
         {{- end }}
+        {{- if .Values.authSecret.proxyUploadUrl  }}
+        - name: GITHUB_PROXY_UPLOAD_URL
+          value: {{ .Values.authSecret.proxyUploadUrl }}
+        {{- end }}
+        {{- if .Values.authSecret.proxyRunnerUrl  }}
+        - name: GITHUB_PROXY_RUNNER_URL
+          value: {{ .Values.authSecret.proxyRunnerUrl }}
+        {{- end }}
         {{- if .Values.authSecret.proxyUsername  }}
         - name: GITHUB_PROXY_USERNAME
           value: {{ .Values.authSecret.proxyUsername }}
