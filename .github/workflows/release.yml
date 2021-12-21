@@ -20,13 +20,11 @@ jobs:
 
       - name: Install tools
         run: |
-          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
-          tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+          curl -Ls https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz -o - | tar -xvzf - -C .
           sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
           curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
           sudo mv kustomize /usr/local/bin
-          curl -L -O https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
-          tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
+          curl -Ls https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz -o - | tar -xvzf - -C .
           sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
 
       - name: Set version
@@ -39,6 +37,9 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: all
 
       - name: Set up Docker Buildx
         id: buildx
@@ -58,8 +59,9 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
-
