@@ -1,12 +1,10 @@
 # Build the manager binary
+FROM pratikimprowise/upx:3.96 as upx
 FROM golang:1.17 as builder
-
-ARG TARGETPLATFORM
-
+COPY --from=upx / /
 WORKDIR /workspace
 
-ENV GO111MODULE=on \
-  CGO_ENABLED=0
+ENV GO111MODULE=on
 
 # Copy the Go Modules manifests
 COPY go.mod go.sum ./
@@ -18,12 +16,17 @@ RUN go mod download
 # Copy the go source
 COPY . .
 
+ARG TARGETARCH TARGETOS
+
 # Build
-RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
-  export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
-  GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3 | cut -c2-) && \
+ENV CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH"
+RUN export GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3 | cut -c2-) && \
   go build -a -o manager main.go && \
   go build -a -o github-webhook-server ./cmd/githubwebhookserver
+
+## Compress binary with upx https://github.com/upx/upx/
+RUN upx -9 /workspace/manager || true && \
+  upx -9 /workspace/github-webhook-server || true
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
