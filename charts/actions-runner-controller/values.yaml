@@ -41,6 +41,10 @@ authSecret:
   #github_app_private_key: |
   ### GitHub PAT Configuration
   #github_token: ""
+  ### Custom proxy for GitHub API calls
+  #proxyUrl: ""
+  #proxyUsername: ""
+  #proxyPassword: ""
 
 dockerRegistryMirror: ""
 image:

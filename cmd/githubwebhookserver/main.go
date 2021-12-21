@@ -103,6 +103,9 @@ func main() {
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
 	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
+	flag.StringVar(&c.ProxyUrl, "github-proxy-url", c.ProxyUrl, "The custom proxy URL for GitHub API calls")
+	flag.StringVar(&c.ProxyUsername, "github-proxy-username", c.ProxyUsername, "The custom proxy username for GitHub API calls")
+	flag.StringVar(&c.ProxyPassword, "github-proxy-password", c.ProxyPassword, "The custom proxy password for GitHub API calls")
 
 	flag.Parse()
 
@@ -137,7 +140,7 @@ func main() {
 		}
 	})
 
-	if len(c.Token) > 0 || (c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != "") {
+	if len(c.Token) > 0 || (c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != "") || c.ProxyUrl != "" {
 		ghClient, err = c.NewClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)

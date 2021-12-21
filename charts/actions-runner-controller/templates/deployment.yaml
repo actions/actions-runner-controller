@@ -93,6 +93,21 @@ spec:
               key: github_app_private_key
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
+        {{- if .Values.authSecret.proxyUrl  }}
+        - name: GITHUB_PROXY_URL
+          value: {{ .Values.authSecret.proxyUrl }}
+        {{- end }}
+        {{- if .Values.authSecret.proxyUsername  }}
+        - name: GITHUB_PROXY_USERNAME
+          value: {{ .Values.authSecret.proxyUsername }}
+        {{- end }}
+        {{- if .Values.authSecret.proxyPassword }}
+        - name: GITHUB_PROXY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: github_proxy_password
+              name: {{ include "actions-runner-controller.secretName" . }}
+        {{- end }}
         {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}

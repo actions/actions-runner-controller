@@ -23,6 +23,9 @@ type Config struct {
 	AppInstallationID int64  `split_words:"true"`
 	AppPrivateKey     string `split_words:"true"`
 	Token             string
+	ProxyUrl          string
+	ProxyUsername     string
+	ProxyPassword     string
 }
 
 // Client wraps GitHub client with some additional
@@ -34,10 +37,24 @@ type Client struct {
 	GithubBaseURL string
 }
 
+type ProxyTransport struct {
+	BaseUrl  string
+	Username string
+	Password string
+}
+
+func (p ProxyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(p.Username, p.Password)
+	req.Header.Set("User-Agent", "actions-runner-controller")
+	return http.DefaultTransport.RoundTrip(req)
+}
+
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
 	var transport http.RoundTripper
-	if len(c.Token) > 0 {
+	if len(c.ProxyUrl) > 0 {
+		transport = ProxyTransport{BaseUrl: c.ProxyUrl, Username: c.ProxyUsername, Password: c.ProxyPassword}
+	} else if len(c.Token) > 0 {
 		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
 		var tr *ghinstallation.Transport
@@ -78,6 +95,14 @@ func (c *Config) NewClient() (*Client, error) {
 	} else {
 		client = github.NewClient(httpClient)
 		githubBaseURL = "https://github.com/"
+		if len(c.ProxyUrl) > 0 {
+			proxyUrl, err := url.Parse(c.ProxyUrl)
+			if err != nil {
+				return nil, fmt.Errorf("proxy client creation failed: %v", err)
+			}
+			client.BaseURL = proxyUrl
+			client.UploadURL = proxyUrl
+		}
 	}
 
 	return &Client{
