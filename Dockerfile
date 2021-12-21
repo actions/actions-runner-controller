@@ -21,8 +21,8 @@ ARG TARGETARCH TARGETOS
 # Build
 ENV CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH"
 RUN export GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3 | cut -c2-) && \
-  go build -a -o manager main.go && \
-  go build -a -o github-webhook-server ./cmd/githubwebhookserver
+  go build -a -o manager -trimpath -ldflags "-s -w" main.go && \
+  go build -a -o github-webhook-server -trimpath -ldflags "-s -w" ./cmd/githubwebhookserver
 
 ## Compress binary with upx https://github.com/upx/upx/
 RUN upx -9 /workspace/manager || true && \
