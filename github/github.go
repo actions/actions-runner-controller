@@ -23,8 +23,8 @@ type Config struct {
 	AppInstallationID int64  `split_words:"true"`
 	AppPrivateKey     string `split_words:"true"`
 	Token             string
-	Url               string
-	UploadUrl         string `split_words:"true"`
+	URL               string `split_words:"true"`
+	UploadURL         string `split_words:"true"`
 	BasicauthUsername string `split_words:"true"`
 	BasicauthPassword string `split_words:"true"`
 	RunnerGitHubURL   string `split_words:"true"`
@@ -98,8 +98,8 @@ func (c *Config) NewClient() (*Client, error) {
 		client = github.NewClient(httpClient)
 		githubBaseURL = "https://github.com/"
 
-		if len(c.Url) > 0 {
-			baseUrl, err := url.Parse(c.Url)
+		if len(c.URL) > 0 {
+			baseUrl, err := url.Parse(c.URL)
 			if err != nil {
 				return nil, fmt.Errorf("github client creation failed: %v", err)
 			}
@@ -109,8 +109,8 @@ func (c *Config) NewClient() (*Client, error) {
 			client.BaseURL = baseUrl
 		}
 
-		if len(c.UploadUrl) > 0 {
-			uploadUrl, err := url.Parse(c.UploadUrl)
+		if len(c.UploadURL) > 0 {
+			uploadUrl, err := url.Parse(c.UploadURL)
 			if err != nil {
 				return nil, fmt.Errorf("github client creation failed: %v", err)
 			}

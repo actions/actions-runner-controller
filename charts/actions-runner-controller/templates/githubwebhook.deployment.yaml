@@ -45,8 +45,8 @@ spec:
         {{- if .Values.scope.singleNamespace }}
         - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
         {{- end }}
-        {{- if .Values.runnerGithubUrl  }}
-        - "--runner-github-url={{ .Values.runnerGithubUrl }}"
+        {{- if .Values.runnerGithubURL  }}
+        - "--runner-github-url={{ .Values.runnerGithubURL }}"
         {{- end }}
         command:
         - "/github-webhook-server"
@@ -61,13 +61,13 @@ spec:
         - name: GITHUB_ENTERPRISE_URL
           value: {{ .Values.githubEnterpriseServerURL }}
         {{- end }}
-        {{- if .Values.githubUrl  }}
+        {{- if .Values.githubURL  }}
         - name: GITHUB_URL
-          value: {{ .Values.githubUrl }}
+          value: {{ .Values.githubURL }}
         {{- end }}
-        {{- if .Values.githubUploadUrl  }}
+        {{- if .Values.githubUploadURL  }}
         - name: GITHUB_UPLOAD_URL
-          value: {{ .Values.githubUploadUrl }}
+          value: {{ .Values.githubUploadURL }}
         {{- end }}
         {{- if .Values.authSecret.enabled }}
         - name: GITHUB_TOKEN
@@ -94,11 +94,11 @@ spec:
               key: github_app_private_key
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
-        {{- if .Values.authSecret.githubBasicauthUsername  }}
+        {{- if .Values.authSecret.github_basicauth_username  }}
         - name: GITHUB_BASICAUTH_USERNAME
-          value: {{ .Values.authSecret.githubBasicauthUsername }}
+          value: {{ .Values.authSecret.github_basicauth_username }}
         {{- end }}
-        {{- if .Values.authSecret.githubBasicauthPassword }}
+        {{- if .Values.authSecret.github_basicauth_password }}
         - name: GITHUB_BASICAUTH_PASSWORD
           valueFrom:
             secretKeyRef:
