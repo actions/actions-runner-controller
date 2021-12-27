@@ -1,5 +1,5 @@
 DOCKER_USER ?= summerwind
-RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
+NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
@@ -25,11 +25,11 @@ else
 endif
 
 docker-build-ubuntu:
-	docker build --build-arg TARGETPLATFORM=${TARGETPLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${RUNNER_NAME}:${TAG} .
+	docker build --build-arg TARGETPLATFORM=${TARGETPLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
 	docker build --build-arg TARGETPLATFORM=${TARGETPLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
 
 docker-push-ubuntu:
-	docker push ${RUNNER_NAME}:${TAG}
+	docker push ${NAME}:${TAG}
 	docker push ${DIND_RUNNER_NAME}:${TAG}
 
 docker-buildx-ubuntu:
@@ -40,7 +40,7 @@ docker-buildx-ubuntu:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${RUNNER_NAME}:${TAG}" \
+		-t "${NAME}:${TAG}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
