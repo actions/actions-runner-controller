@@ -754,6 +754,8 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		dockerRegistryMirror = *runnerSpec.DockerRegistryMirror
 	}
 
+	// Be aware some of the environment variables are used
+	// in the runner entrypoint script
 	env := []corev1.EnvVar{
 		{
 			Name:  EnvVarOrg,
@@ -777,7 +779,7 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		},
 		{
 			Name:  "DOCKER_ENABLED",
-			Value: fmt.Sprintf("%v", dockerEnabled),
+			Value: fmt.Sprintf("%v", dockerEnabled || dockerdInRunner),
 		},
 		{
 			Name:  "DOCKERD_IN_RUNNER",

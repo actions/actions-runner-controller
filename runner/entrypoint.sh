@@ -24,10 +24,10 @@ if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
 
-if [ "${DOCKER_ENABLED}" == "true" ] && [ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]; then
-  log "Docker and Docker wait is enabled"
-  log "Waiting until docker is avaliable or the timeout of 60 seconds is reached"
-  timeout 5m bash -c 'until docker ps; do sleep 1s; done'
+if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
+    log "Docker enabled runner detected and Docker daemon wait is enabled"
+    log "Waiting until Docker is avaliable or the timeout is reached"
+    timeout 120s bash -c 'until docker ps ;do sleep 1; done'
 else
   log "Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint"
 fi
