@@ -28,6 +28,7 @@ ToC:
   - [Additional Tweaks](#additional-tweaks)
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
+  - [Runner Entrypoint Features](#runner-entrypoint-features)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
   - [Stateful Runners](#stateful-runners)
   - [Ephemeral Runners](#ephemeral-runners)
@@ -1042,6 +1043,29 @@ spec:
   template:
     spec:
       group: NewGroup
+```
+
+### Runner Entrypoint Features
+
+> Environment variable values must all be strings
+
+The entrypoint script is aware of a few environment variables for configuring features:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      env:
+        # Issues a sleep command at the start of the entrypoint
+        - name: STARTUP_DELAY_IN_SECONDS
+          value: "2"
+        # Disables the wait for the docker daemon to be available check
+        - name: DISABLE_WAIT_FOR_DOCKER
+          value: "true"
 ```
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS

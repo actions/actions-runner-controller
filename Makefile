@@ -5,6 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 VERSION ?= latest
+TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
 TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
@@ -111,7 +112,7 @@ generate: controller-gen
 # Build the docker image
 docker-build:
 	docker build -t ${NAME}:${VERSION} .
-	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=$(shell arch) runner
+	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=${TARGETPLATFORM} runner
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled
