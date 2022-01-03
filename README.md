@@ -28,12 +28,14 @@ ToC:
   - [Additional Tweaks](#additional-tweaks)
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
+  - [Runner Entrypoint Features](#runner-entrypoint-features)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
   - [Stateful Runners](#stateful-runners)
   - [Ephemeral Runners](#ephemeral-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Using without cert-manager](#using-without-cert-manager)
   - [Common Errors](#common-errors)
+- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
 ## Motivation
@@ -614,6 +616,8 @@ spec:
     duration: "30m"
 ```
 
+This webhook requires you to explicitely set the labels in the RunnerDeployment / RunnerSet if you are using them in your workflow to match the agents (field `runs-on`). Only `self-hosted` will be considered as included by default.
+
 You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
 
 Each kind has a `status` of `queued`, `in_progress` and `completed`. With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`. The cavaet to this to remember is that this the scale down is within the bounds of your `scaleDownDelaySecondsAfterScaleOut` configuration, if this time hasn't past the scale down will be defered.
@@ -1041,6 +1045,29 @@ spec:
       group: NewGroup
 ```
 
+### Runner Entrypoint Features
+
+> Environment variable values must all be strings
+
+The entrypoint script is aware of a few environment variables for configuring features:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      env:
+        # Issues a sleep command at the start of the entrypoint
+        - name: STARTUP_DELAY_IN_SECONDS
+          value: "2"
+        # Disables the wait for the docker daemon to be available check
+        - name: DISABLE_WAIT_FOR_DOCKER
+          value: "true"
+```
+
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
 > This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
@@ -1272,67 +1299,9 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
 
-### Common Errors
+# Troubleshooting
 
-#### invalid header field value
-
-```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
-{
-  "controller": "runner",
-  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
-  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
-}
-```
-
-**Solution**
-
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
-* `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documented flags
-
-#### Runner coming up before network available
-
-If you're running your action runners on a service mesh like Istio, you might
-have problems with runner configuration accompanied by logs like:
-
-```
-....
-runner Starting Runner listener with startup type: service
-runner Started listener process
-runner An error occurred: Not configured
-runner Runner listener exited with error code 2
-runner Runner listener exit with retryable error, re-launch runner in 5 seconds.
-....
-```
-
-This is because the `istio-proxy` has not completed configuring itself when the
-configuration script tries to communicate with the network.
-
-**Solution**<br />
-
-> Added originally to help users with older istio instances.
-> Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
-> Please read the discussion in [#592](https://github.com/actions-runner-controller/actions-runner-controller/pull/592) for more information.
-
-_Note: Prior to the runner version v2.279.0, the environment variable referenced below was called `STARTUP_DELAY`._
-
-You can add a delay to the runner's entrypoint script by setting the `STARTUP_DELAY_IN_SECONDS` environment
-variable for the runner pod. This will cause the script to sleep X seconds, this works with any runner kind.
-
-*Example `RunnerDeployment` with a 2 second startup delay:*
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runnerdeployment-with-sleep
-spec:
-  template:
-    spec:
-      env:
-        - name: STARTUP_DELAY_IN_SECONDS
-          value: "2" # Remember! env var values must be strings.
-```
+See [troubleshooting guide](TROUBLESHOOTING.md) for solutions to various problems people have ran into consistently.
 
 # Contributing
 

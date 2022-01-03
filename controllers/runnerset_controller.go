@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,6 +35,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
+	"github.com/go-logr/logr"
 )
 
 const (
@@ -51,11 +51,12 @@ type RunnerSetReconciler struct {
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 
-	CommonRunnerLabels   []string
-	GitHubBaseURL        string
-	RunnerImage          string
-	DockerImage          string
-	DockerRegistryMirror string
+	CommonRunnerLabels     []string
+	GitHubBaseURL          string
+	RunnerImage            string
+	RunnerImagePullSecrets []string
+	DockerImage            string
+	DockerRegistryMirror   string
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
@@ -259,7 +260,7 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
+	pod, err := newRunnerPod(template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
 	if err != nil {
 		return nil, err
 	}

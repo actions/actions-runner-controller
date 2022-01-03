@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/google/go-github/v39/github"
 )
 
 const (
@@ -164,14 +165,24 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			fallback_cb()
 			return
 		}
-		jobs, _, err := r.GitHubClient.Actions.ListWorkflowJobs(context.TODO(), user, repoName, runID, nil)
-		if err != nil {
-			r.Log.Error(err, "Error listing workflow jobs")
-			fallback_cb()
-		} else if len(jobs.Jobs) == 0 {
+		opt := github.ListWorkflowJobsOptions{ListOptions: github.ListOptions{PerPage: 50}}
+		var allJobs []*github.WorkflowJob
+		for {
+			jobs, resp, err := r.GitHubClient.Actions.ListWorkflowJobs(context.TODO(), user, repoName, runID, &opt)
+			if err != nil {
+				r.Log.Error(err, "Error listing workflow jobs")
+				return //err
+			}
+			allJobs = append(allJobs, jobs.Jobs...)
+			if resp.NextPage == 0 {
+				break
+			}
+			opt.Page = resp.NextPage
+		}
+		if len(allJobs) == 0 {
 			fallback_cb()
 		} else {
-			for _, job := range jobs.Jobs {
+			for _, job := range allJobs {
 				switch job.GetStatus() {
 				case "completed":
 					// We add a case for `completed` so it is not counted in `unknown`.
