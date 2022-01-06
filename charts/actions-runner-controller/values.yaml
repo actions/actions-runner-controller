@@ -165,6 +165,10 @@ admissionWebHooks:
   {}
   #caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle containing the CA that signed the webhook's serving certificate>...tLS0K"
 
+# There may be alternatives to setting `hostNetwork: true`, see
+# https://github.com/actions-runner-controller/actions-runner-controller/issues/1005#issuecomment-993097155
+#hostNetwork: true
+
 githubWebhookServer:
   enabled: false
   replicaCount: 1
