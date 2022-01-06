@@ -662,7 +662,7 @@ HRA:
 					continue
 				}
 
-				// TODO labels related to OS and architecture needs to be explicitely declared or the current implementation will not be able to find them.
+				// TODO labels related to OS and architecture needs to be explicitly declared or the current implementation will not be able to find them.
 
 				for _, l2 := range rs.Spec.Labels {
 					if l == l2 {
@@ -693,7 +693,7 @@ HRA:
 					continue
 				}
 
-				// TODO labels related to OS and architecture needs to be explicitely declared or the current implementation will not be able to find them.
+				// TODO labels related to OS and architecture needs to be explicitly declared or the current implementation will not be able to find them.
 
 				for _, l2 := range rd.Spec.Template.Spec.Labels {
 					if l == l2 {
