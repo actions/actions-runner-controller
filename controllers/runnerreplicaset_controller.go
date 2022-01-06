@@ -117,6 +117,8 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		desired = 1
 	}
 
+	// TODO: remove this registration runner cleanup later (v0.23.0 or v0.24.0)
+	//
 	// We had to have a registration-only runner to support scale-from-zero before.
 	// But since Sep 2021 Actions update on GitHub Cloud and GHES 3.3, it is unneceesary.
 	// See the below issues for more contexts:
