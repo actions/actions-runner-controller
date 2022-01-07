@@ -21,6 +21,11 @@ enableLeaderElection: true
 # The URL of your GitHub Enterprise server, if you're using one.
 #githubEnterpriseServerURL: https://github.example.com
 
+# Override GitHub URLs in case of using proxy APIs
+#githubURL: ""
+#githubUploadURL: ""
+#runnerGithubURL: ""
+
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
 #
@@ -41,6 +46,9 @@ authSecret:
   #github_app_private_key: |
   ### GitHub PAT Configuration
   #github_token: ""
+  ### Basic auth for github API proxy
+  #github_basicauth_username: ""
+  #github_basicauth_password: ""
 
 dockerRegistryMirror: ""
 image:

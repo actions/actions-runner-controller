@@ -23,6 +23,11 @@ type Config struct {
 	AppInstallationID int64  `split_words:"true"`
 	AppPrivateKey     string `split_words:"true"`
 	Token             string
+	URL               string `split_words:"true"`
+	UploadURL         string `split_words:"true"`
+	BasicauthUsername string `split_words:"true"`
+	BasicauthPassword string `split_words:"true"`
+	RunnerGitHubURL   string `split_words:"true"`
 }
 
 // Client wraps GitHub client with some additional
@@ -34,10 +39,23 @@ type Client struct {
 	GithubBaseURL string
 }
 
+type BasicAuthTransport struct {
+	Username string
+	Password string
+}
+
+func (p BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(p.Username, p.Password)
+	req.Header.Set("User-Agent", "actions-runner-controller")
+	return http.DefaultTransport.RoundTrip(req)
+}
+
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
 	var transport http.RoundTripper
-	if len(c.Token) > 0 {
+	if len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0 {
+		transport = BasicAuthTransport{Username: c.BasicauthUsername, Password: c.BasicauthPassword}
+	} else if len(c.Token) > 0 {
 		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
 		var tr *ghinstallation.Transport
@@ -63,6 +81,7 @@ func (c *Config) NewClient() (*Client, error) {
 		}
 		transport = tr
 	}
+
 	transport = metrics.Transport{Transport: transport}
 	httpClient := &http.Client{Transport: transport}
 
@@ -78,6 +97,35 @@ func (c *Config) NewClient() (*Client, error) {
 	} else {
 		client = github.NewClient(httpClient)
 		githubBaseURL = "https://github.com/"
+
+		if len(c.URL) > 0 {
+			baseUrl, err := url.Parse(c.URL)
+			if err != nil {
+				return nil, fmt.Errorf("github client creation failed: %v", err)
+			}
+			if !strings.HasSuffix(baseUrl.Path, "/") {
+				baseUrl.Path += "/"
+			}
+			client.BaseURL = baseUrl
+		}
+
+		if len(c.UploadURL) > 0 {
+			uploadUrl, err := url.Parse(c.UploadURL)
+			if err != nil {
+				return nil, fmt.Errorf("github client creation failed: %v", err)
+			}
+			if !strings.HasSuffix(uploadUrl.Path, "/") {
+				uploadUrl.Path += "/"
+			}
+			client.UploadURL = uploadUrl
+		}
+
+		if len(c.RunnerGitHubURL) > 0 {
+			githubBaseURL = c.RunnerGitHubURL
+			if !strings.HasSuffix(githubBaseURL, "/") {
+				githubBaseURL += "/"
+			}
+		}
 	}
 
 	return &Client{

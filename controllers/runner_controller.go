@@ -672,10 +672,29 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	runnerSpec := runner.Spec
 
 	if len(runnerSpec.VolumeMounts) != 0 {
+		// if operater provides a work volume mount, use that
+		isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
+		if isPresent {
+			// remove work volume since it will be provided from runnerSpec.Volumes
+			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
+			_, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
+			pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts[:index], pod.Spec.Containers[0].VolumeMounts[index+1:]...)
+		}
+
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runnerSpec.VolumeMounts...)
 	}
 
 	if len(runnerSpec.Volumes) != 0 {
+		// if operator provides a work volume. use that
+		isPresent, _ := workVolumePresent(runnerSpec.Volumes)
+		if isPresent {
+			_, index := workVolumePresent(pod.Spec.Volumes)
+
+			// remove work volume since it will be provided from runnerSpec.Volumes
+			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
+			pod.Spec.Volumes = append(pod.Spec.Volumes[:index], pod.Spec.Volumes[index+1:]...)
+		}
+
 		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
 	}
 	if len(runnerSpec.InitContainers) != 0 {
@@ -782,6 +801,8 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		dockerRegistryMirror = *runnerSpec.DockerRegistryMirror
 	}
 
+	// Be aware some of the environment variables are used
+	// in the runner entrypoint script
 	env := []corev1.EnvVar{
 		{
 			Name:  EnvVarOrg,
@@ -802,6 +823,10 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		{
 			Name:  "RUNNER_GROUP",
 			Value: runnerSpec.Group,
+		},
+		{
+			Name:  "DOCKER_ENABLED",
+			Value: fmt.Sprintf("%v", dockerEnabled || dockerdInRunner),
 		},
 		{
 			Name:  "DOCKERD_IN_RUNNER",
@@ -985,6 +1010,7 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				},
 			},
 		)
+
 		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
 			corev1.VolumeMount{
 				Name:      "work",
@@ -996,6 +1022,7 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				ReadOnly:  true,
 			},
 		)
+
 		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
 			{
 				Name:  "DOCKER_HOST",
@@ -1015,10 +1042,6 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		// set of mounts. See https://github.com/actions-runner-controller/actions-runner-controller/issues/435 for context.
 		dockerVolumeMounts := []corev1.VolumeMount{
 			{
-				Name:      "work",
-				MountPath: workDir,
-			},
-			{
 				Name:      runnerVolumeName,
 				MountPath: runnerVolumeMountPath,
 			},
@@ -1026,6 +1049,14 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				Name:      "certs-client",
 				MountPath: "/certs/client",
 			},
+		}
+
+		mountPresent, _ := workVolumeMountPresent(dockerdContainer.VolumeMounts)
+		if !mountPresent {
+			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
+				Name:      "work",
+				MountPath: workDir,
+			})
 		}
 
 		if dockerdContainer.Image == "" {
@@ -1132,4 +1163,22 @@ func removeFinalizer(finalizers []string, finalizerName string) ([]string, bool)
 	}
 
 	return result, removed
+}
+
+func workVolumePresent(items []corev1.Volume) (bool, int) {
+	for index, item := range items {
+		if item.Name == "work" {
+			return true, index
+		}
+	}
+	return false, 0
+}
+
+func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
+	for index, item := range items {
+		if item.Name == "work" {
+			return true, index
+		}
+	}
+	return false, 0
 }

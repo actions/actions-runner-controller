@@ -95,6 +95,7 @@ To make your development cycle faster, use the below command to update deploy an
 # you either need to bump VERSION and RUNNER_TAG on each run,
 # or manually run `kubectl delete pod $POD` on respective pods for changes to actually take effect.
 
+# Makefile
 VERSION=controller1 \
   RUNNER_TAG=runner1 \
   make acceptance/pull acceptance/kind docker-build acceptance/load acceptance/deploy
@@ -103,14 +104,16 @@ VERSION=controller1 \
 If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
 
 ```shell
+# Makefile
 NAME=$DOCKER_USER/actions-runner-controller \
   make docker-build acceptance/load && \
   kubectl -n actions-runner-system delete po $(kubectl -n actions-runner-system get po -ojsonpath={.items[*].metadata.name})
 ```
 
-Similarly, if you'd like to recreate runner pods with the newer runner image,
+Similarly, if you'd like to recreate runner pods with the newer runner image you can use the runner specific [Makefile](runner/Makefile) to build and / or push new runner images
 
 ```shell
+# runner/Makefile
 NAME=$DOCKER_USER/actions-runner make \
   -C runner docker-{build,push}-ubuntu && \
   (kubectl get po -ojsonpath={.items[*].metadata.name} | xargs -n1 kubectl delete po)

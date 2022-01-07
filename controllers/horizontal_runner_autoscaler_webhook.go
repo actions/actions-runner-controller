@@ -655,9 +655,6 @@ HRA:
 
 			// Ensure that the RunnerSet-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
-				if l == "self-hosted" {
-					continue // label is automatically added to self-hosted runners
-				}
 				var matched bool
 
 				// ignore "self-hosted" label as all instance here are self-hosted
@@ -665,7 +662,7 @@ HRA:
 					continue
 				}
 
-				// TODO labels related to OS and architecture needs to be explicitely declared or the current implementation will not be able to find them.
+				// TODO labels related to OS and architecture needs to be explicitly declared or the current implementation will not be able to find them.
 
 				for _, l2 := range rs.Spec.Labels {
 					if l == l2 {
@@ -689,9 +686,6 @@ HRA:
 
 			// Ensure that the RunnerDeployment-managed runners have all the labels requested by the workflow_job.
 			for _, l := range labels {
-				if l == "self-hosted" {
-					continue // label is automatically added to self-hosted runners
-				}
 				var matched bool
 
 				// ignore "self-hosted" label as all instance here are self-hosted
@@ -699,7 +693,7 @@ HRA:
 					continue
 				}
 
-				// TODO labels related to OS and architecture needs to be explicitely declared or the current implementation will not be able to find them.
+				// TODO labels related to OS and architecture needs to be explicitly declared or the current implementation will not be able to find them.
 
 				for _, l2 := range rd.Spec.Template.Spec.Labels {
 					if l == l2 {

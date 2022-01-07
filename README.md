@@ -28,6 +28,7 @@ ToC:
   - [Additional Tweaks](#additional-tweaks)
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
+  - [Runner Entrypoint Features](#runner-entrypoint-features)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
   - [Stateful Runners](#stateful-runners)
   - [Ephemeral Runners](#ephemeral-runners)
@@ -72,7 +73,7 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deploying this solution into a GHES environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes) as a minimum, in order to use all the features of actions-runner-controller >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes) is required.
+If you are deploying this solution into a GHES environment then you will need to be running version >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes).
 
 When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
 
@@ -615,7 +616,7 @@ spec:
     duration: "30m"
 ```
 
-This webhook requires you to explicitely set the labels in the RunnerDeployment / RunnerSet if you are using them in your workflow to match the agents (field `runs-on`). Only `self-hosted` will be considered as included by default.
+This webhook requires you to explicitly set the labels in the RunnerDeployment / RunnerSet if you are using them in your workflow to match the agents (field `runs-on`). Only `self-hosted` will be considered as included by default.
 
 You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
 
@@ -729,8 +730,6 @@ spec:
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-_Note: The controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available. This is a deprecated feature for GitHub Cloud as "registration-only" runners are no longer needed due to GitHub changing their runner [routing logic](https://docs.github.com/en/enterprise-cloud@latest/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) to no longer fail a workflow run if it targets a runner label that there are no registered runners for._
-
 The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
 The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` kind. To scale from 0 whilst still being able to provision runners as jobs are queued we must use the `HorizontalRunnerAutoscaler` with only certain scaling configurations, only the below configurations support scaling from 0 whilst also being able to provision runners as jobs are queued:
@@ -743,6 +742,8 @@ The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` ki
 `PercentageRunnersBusy` can't be used alone as, by its definition, it needs one or more GitHub runners to become `busy` to be able to scale. If there isn't a runner to pick up a job and enter a `busy` state then the controller will never know to provision a runner to begin with as this metric has no knowledge of the job queue and is relying using the number of busy runners as a means for calculating the desired replica count.
 
 If a HorizontalRunnerAutoscaler is configured with a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` then be aware that the controller will check the primary metric of `PercentageRunnersBusy` first and will only use the secondary metric to calculate the desired replica count if the primary metric returns 0 desired replicas.
+
+Webhook-based autoscaling is the best option as it is relatively easy to configure and also it can scale scale quickly.
 
 #### Scheduled Overrides
 
@@ -1044,6 +1045,29 @@ spec:
       group: NewGroup
 ```
 
+### Runner Entrypoint Features
+
+> Environment variable values must all be strings
+
+The entrypoint script is aware of a few environment variables for configuring features:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      env:
+        # Issues a sleep command at the start of the entrypoint
+        - name: STARTUP_DELAY_IN_SECONDS
+          value: "2"
+        # Disables the wait for the docker daemon to be available check
+        - name: DISABLE_WAIT_FOR_DOCKER
+          value: "true"
+```
+
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
 > This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
@@ -1275,94 +1299,9 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
 
-### Common Errors
+# Troubleshooting
 
-#### Invalid header field value
-
-```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
-{
-  "controller": "runner",
-  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
-  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
-}
-```
-
-**Solution**
-
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
-* `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documented flags
-
-#### Runner coming up before network available
-
-If you're running your action runners on a service mesh like Istio, you might
-have problems with runner configuration accompanied by logs like:
-
-```
-....
-runner Starting Runner listener with startup type: service
-runner Started listener process
-runner An error occurred: Not configured
-runner Runner listener exited with error code 2
-runner Runner listener exit with retryable error, re-launch runner in 5 seconds.
-....
-```
-
-This is because the `istio-proxy` has not completed configuring itself when the
-configuration script tries to communicate with the network.
-
-**Solution**<br />
-
-> Added originally to help users with older istio instances.
-> Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
-> Please read the discussion in [#592](https://github.com/actions-runner-controller/actions-runner-controller/pull/592) for more information.
-
-_Note: Prior to the runner version v2.279.0, the environment variable referenced below was called `STARTUP_DELAY`._
-
-You can add a delay to the runner's entrypoint script by setting the `STARTUP_DELAY_IN_SECONDS` environment
-variable for the runner pod. This will cause the script to sleep X seconds, this works with any runner kind.
-
-*Example `RunnerDeployment` with a 2 second startup delay:*
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runnerdeployment-with-sleep
-spec:
-  template:
-    spec:
-      env:
-        - name: STARTUP_DELAY_IN_SECONDS
-          value: "2" # Remember! env var values must be strings.
-```
-
-#### Deployment fails on GKE due to webhooks
-
-Due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster:
-```
-Internal error occurred: failed calling webhook "mutate.runner.actions.summerwind.dev": Post https://webhook-service.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runner?timeout=10s: context deadline exceeded
-```
-
-**Solution**<br />
-
-
-To fix this, you need to set up a firewall rule to allow the master node to connect to the webhook port.
-The exact way to do this may wary, but the following script should point you in the right direction:
-
-```
-# 1) Retrieve the network tag automatically given to the worker nodes
-# NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
-WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
-
-# 2) Take note of the VPC network in which you deployed your cluster
-# NOTE this only works if you have only one network in which you deploy your clusters
-NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
-
-# 3) Get the master source ip block
-SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
-gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
-```
+See [troubleshooting guide](TROUBLESHOOTING.md) for solutions to various problems people have ran into consistently.
 
 # Contributing
 
