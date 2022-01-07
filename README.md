@@ -73,7 +73,7 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deploying this solution into a GHES environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes) as a minimum, in order to use all the features of actions-runner-controller >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes) is required.
+If you are deploying this solution into a GHES environment then you will need to be running version >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes).
 
 When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
 
@@ -730,8 +730,6 @@ spec:
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-_Note: The controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available. This is a deprecated feature for GitHub Cloud as "registration-only" runners are no longer needed due to GitHub changing their runner [routing logic](https://docs.github.com/en/enterprise-cloud@latest/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) to no longer fail a workflow run if it targets a runner label that there are no registered runners for._
-
 The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
 The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` kind. To scale from 0 whilst still being able to provision runners as jobs are queued we must use the `HorizontalRunnerAutoscaler` with only certain scaling configurations, only the below configurations support scaling from 0 whilst also being able to provision runners as jobs are queued:
@@ -744,6 +742,8 @@ The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` ki
 `PercentageRunnersBusy` can't be used alone as, by its definition, it needs one or more GitHub runners to become `busy` to be able to scale. If there isn't a runner to pick up a job and enter a `busy` state then the controller will never know to provision a runner to begin with as this metric has no knowledge of the job queue and is relying using the number of busy runners as a means for calculating the desired replica count.
 
 If a HorizontalRunnerAutoscaler is configured with a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` then be aware that the controller will check the primary metric of `PercentageRunnersBusy` first and will only use the secondary metric to calculate the desired replica count if the primary metric returns 0 desired replicas.
+
+Webhook-based autoscaling is the best option as it is relatively easy to configure and also it can scale scale quickly.
 
 #### Scheduled Overrides
 

@@ -117,6 +117,17 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		desired = 1
 	}
 
+	// TODO: remove this registration runner cleanup later (v0.23.0 or v0.24.0)
+	//
+	// We had to have a registration-only runner to support scale-from-zero before.
+	// But since Sep 2021 Actions update on GitHub Cloud and GHES 3.3, it is unneceesary.
+	// See the below issues for more contexts:
+	// https://github.com/actions-runner-controller/actions-runner-controller/issues/516
+	// https://github.com/actions-runner-controller/actions-runner-controller/issues/859
+	//
+	// In the below block, we have a logic to remove existing registration-only runners as unnecessary.
+	// This logic is introduced since actions-runner-controller 0.21.0 and probably last one or two minor releases
+	// so that actions-runner-controller instance in everyone's cluster won't leave dangling registration-only runners.
 	registrationOnlyRunnerNsName := req.NamespacedName
 	registrationOnlyRunnerNsName.Name = registrationOnlyRunnerNameFor(rs.Name)
 	registrationOnlyRunner := v1alpha1.Runner{}
@@ -133,52 +144,11 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		registrationOnlyRunnerExists = true
 	}
 
-	// On scale to zero, we must have fully registered registration-only runner before we start deleting other runners, hence `desired == 0`
-	// On scale from zero, we must retain the registratoin-only runner until one or more other runners get registered, hence `registrationOnlyRunnerExists && available == 0`.
-	// On RunnerReplicaSet creation, it have always 0 replics and no registration-only runner.
-	// In this case We don't need to bother creating a registration-only runner which gets deleted soon after we have 1 or more available repolicas,
-	// hence it's not `available == 0`, but `registrationOnlyRunnerExists && available == 0`.
-	// See https://github.com/actions-runner-controller/actions-runner-controller/issues/516
-	registrationOnlyRunnerNeeded := desired == 0 || (registrationOnlyRunnerExists && current == 0)
+	if registrationOnlyRunnerExists {
+		if err := r.Client.Delete(ctx, &registrationOnlyRunner); err != nil {
+			log.Error(err, "Retrying soon because we failed to delete registration-only runner")
 
-	if registrationOnlyRunnerNeeded {
-		if registrationOnlyRunnerExists {
-			if registrationOnlyRunner.Status.Phase == "" {
-				log.Info("Still waiting for the registration-only runner to be registered")
-
-				return ctrl.Result{}, nil
-			}
-		} else {
-			// A registration-only runner does not exist and is needed, hence create it.
-
-			runnerForScaleFromToZero, err := r.newRunner(rs)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to create runner for scale from/to zero: %v", err)
-			}
-
-			runnerForScaleFromToZero.ObjectMeta.Name = registrationOnlyRunnerNsName.Name
-			runnerForScaleFromToZero.ObjectMeta.GenerateName = ""
-			runnerForScaleFromToZero.ObjectMeta.Labels = nil
-			metav1.SetMetaDataAnnotation(&runnerForScaleFromToZero.ObjectMeta, annotationKeyRegistrationOnly, "true")
-
-			if err := r.Client.Create(ctx, &runnerForScaleFromToZero); err != nil {
-				log.Error(err, "Failed to create runner for scale from/to zero")
-
-				return ctrl.Result{}, err
-			}
-
-			// We can continue to deleting runner pods only after the
-			// registration-only runner gets registered.
-			return ctrl.Result{}, nil
-		}
-	} else {
-		// A registration-only runner exists and is not needed, hence delete it.
-		if registrationOnlyRunnerExists {
-			if err := r.Client.Delete(ctx, &registrationOnlyRunner); err != nil {
-				log.Error(err, "Retrying soon because we failed to delete registration-only runner")
-
-				return ctrl.Result{Requeue: true}, nil
-			}
+			return ctrl.Result{Requeue: true}, nil
 		}
 	}
 

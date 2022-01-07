@@ -138,8 +138,7 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			log.Error(err, "Failed to patch statefulset", "reason", errors.ReasonForError(err))
 
 			if errors.IsInvalid(err) {
-				// NOTE: This might not be ideal but deal the forbidden error by recreating the statefulset
-				// Probably we'd better create a registration-only runner to prevent queued jobs from immediately failing.
+				// NOTE: This might not be ideal but is currently required to deal with the forbidden error by recreating the statefulset
 				//
 				// 2021-06-13T07:19:52.760Z        ERROR   actions-runner-controller.runnerset     Failed to patch statefulset
 				// {"runnerset": "default/example-runnerset", "error": "StatefulSet.apps \"example-runnerset\" is invalid: s
