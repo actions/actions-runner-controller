@@ -26,12 +26,18 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: all
 
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v1
         with:
-          version: latest
+          ## parallelism to no of cores
+          config-inline: |
+            [worker.oci]
+              max-parallelism = 2
 
       - name: Login to DockerHub
         uses: docker/login-action@v1
@@ -39,13 +45,17 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
-      # Considered unstable builds
-      # See Issue #285, PR #286, and PR #323 for more information
-      - name: Build and Push
-        uses: docker/build-push-action@v2
+      - name: Build
+        uses: docker/bake-action@master
+        env:
+          TAGS: ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
+          TAGS_SLIM: ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary-slim
         with:
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
+          targets: |
+            image-all
+            image-slim-all
+          files: docker-bake.hcl
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max

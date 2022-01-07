@@ -36,18 +36,6 @@ ifeq (${PLATFORMS}, )
 	export PLATFORMS="linux/amd64,linux/arm64"
 endif
 
-# if IMG_RESULT is unspecified, by default the image will be pushed to registry
-ifeq (${IMG_RESULT}, load)
-	export PUSH_ARG="--load"
-	# if load is specified, image will be built only for the build machine architecture.
-	export PLATFORMS="local"
-else ifeq (${IMG_RESULT}, cache)
-	# if cache is specified, image will only be available in the build cache, it won't be pushed or loaded
-	# therefore no PUSH_ARG will be specified
-else
-	export PUSH_ARG="--push"
-endif
-
 all: manager
 
 GO_TEST_ARGS ?= -short
@@ -110,7 +98,11 @@ generate: controller-gen
 
 # Build the docker image
 docker-build:
-	docker build -t ${NAME}:${VERSION} .
+	export DOCKER_CLI_EXPERIMENTAL=enabled
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
+	fi
+	TAGS="${NAME}:${VERSION}" docker buildx bake
 	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=$(shell arch) runner
 
 docker-buildx:
@@ -118,12 +110,7 @@ docker-buildx:
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
-	docker buildx build --platform ${PLATFORMS} \
-		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		-t "${NAME}:${VERSION}" \
-		-f Dockerfile \
-		. ${PUSH_ARG}
+	TAGS="${NAME}:${VERSION}" docker buildx bake
 
 # Push the docker image
 docker-push:
