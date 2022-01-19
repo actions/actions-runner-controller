@@ -440,8 +440,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleTarget(ctx co
 	return &targets[0], nil
 }
 
+// This is used for scaling on a webhook event of push, pull_request, and so on.
+//
+// TODO We'd need to update the documentation to note that autoscaling
+// with runner groups are not supported by webhook events other than `workflow_job`
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTarget(ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, f func(v1alpha1.ScaleUpTrigger) bool) (*ScaleTarget, error) {
 	scaleTarget := func(value string) (*ScaleTarget, error) {
+		// TODO You'd need to somehow pass all the available runner groups(org groups and enterprise groups)
 		return autoscaler.getScaleTarget(ctx, value, f)
 	}
 	return autoscaler.getScaleUpTargetWithFunction(ctx, log, repo, owner, ownerType, enterprise, scaleTarget)
@@ -452,6 +457,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 ) (*ScaleTarget, error) {
 
 	scaleTarget := func(value string) (*ScaleTarget, error) {
+		// TODO You'd need to somehow pass all the available runner groups(org groups and enterprise groups)
 		return autoscaler.getJobScaleTarget(ctx, value, labels)
 	}
 	return autoscaler.getScaleUpTargetWithFunction(ctx, log, repo, owner, ownerType, enterprise, scaleTarget)
@@ -462,7 +468,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 
 	repositoryRunnerKey := owner + "/" + repo
 
-	// Search for repository HRAs
+	// TODO Search for repository HRAs for organizational runner groups
+	// that are visible to this repository.
 	if target, err := scaleTarget(repositoryRunnerKey); err != nil {
 		log.Error(err, "finding repository-wide runner", "repository", repositoryRunnerKey)
 		return nil, err
@@ -476,7 +483,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		return nil, nil
 	}
 
-	// Search for organization runner HRAs in default runner group
+	// TODO Search for organization runner HRAs for enterprise runner groups
+	// that are visible to this organization
 	if target, err := scaleTarget(owner); err != nil {
 		log.Error(err, "finding organizational runner", "organization", owner)
 		return nil, err
@@ -496,9 +504,20 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		}
 	}
 
-	// At this point there were no default organization/enterprise runners available to use, try now
-	// searching in runner groups
+	log.V(1).Info("no repository/organizational/enterprise runner found",
+		"repository", repositoryRunnerKey,
+		"organization", owner,
+		"enterprises", enterprise,
+	)
+	return nil, nil
+}
 
+// TODO Use a function like this one to build:
+// 1. A map whose keys are organizational runner group IDs and the values are sets of allowed repositories
+// 2. A map whose keys are enterprise runner group IDs and the values are sets of allowed organizations
+// so that the `getJobScaleTarget` function can skip any RunnerSet and RunnerDeployment that are associated to runneer
+// groups that are not visible to the repository.
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getRunnerGroupsAvailableToRepo(ctx context.Context, log logr.Logger, enterprise, owner, repo, repositoryRunnerKey string) ([]string, error) {
 	// We need to get the potential runner groups first to avoid spending API queries needless. Once/if GitHub improves an
 	// API to find related/linked runner groups from a specific repository this logic could be removed
 	availableEnterpriseGroups, availableOrganizationGroups, err := autoscaler.getPotentialGroupsFromHRAs(ctx, enterprise, owner)
@@ -534,32 +553,12 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		organizationGroups = availableOrganizationGroups
 	}
 
-	for _, group := range organizationGroups {
-		if target, err := scaleTarget(organizationalRunnerGroupKey(owner, group)); err != nil {
-			log.Error(err, "finding organizational runner group", "organization", owner)
-			return nil, err
-		} else if target != nil {
-			log.Info(fmt.Sprintf("job scale up target is organizational runner group %s", target.Name), "organization", owner)
-			return target, nil
-		}
-	}
+	var available []string
 
-	for _, group := range enterpriseGroups {
-		if target, err := scaleTarget(enterpriseRunnerGroupKey(enterprise, group)); err != nil {
-			log.Error(err, "finding enterprise runner group", "enterprise", owner)
-			return nil, err
-		} else if target != nil {
-			log.Info(fmt.Sprintf("job scale up target is enterprise runner group %s", target.Name), "enterprise", owner)
-			return target, nil
-		}
-	}
+	available = append(available, enterpriseGroups...)
+	available = append(available, organizationGroups...)
 
-	log.V(1).Info("no repository/organizational/enterprise runner found",
-		"repository", repositoryRunnerKey,
-		"organization", owner,
-		"enterprises", enterprise,
-	)
-	return nil, nil
+	return available, nil
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getPotentialGroupsFromHRAs(ctx context.Context, enterprise, org string) ([]string, []string, error) {
@@ -674,6 +673,10 @@ HRA:
 				if !matched {
 					continue HRA
 				}
+
+				// TODO Skip it if the RunnerSet is associated to a either:
+				// 1. org runner group that is invisible to this repo
+				// 2. enterprise runner gorup that is invisible to the org of this repo
 			}
 
 			return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
@@ -705,6 +708,10 @@ HRA:
 				if !matched {
 					continue HRA
 				}
+
+				// TODO Skip it if the RunnerDeployment is associated to a either:
+				// 1. org runner group that is invisible to this repo
+				// 2. enterprise runner gorup that is invisible to the org of this repo
 			}
 
 			return &ScaleTarget{HorizontalRunnerAutoscaler: hra, ScaleUpTrigger: v1alpha1.ScaleUpTrigger{Duration: duration}}, nil
