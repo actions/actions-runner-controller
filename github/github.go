@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
+	"github.com/actions-runner-controller/actions-runner-controller/utils"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v39/github"
 	"golang.org/x/oauth2"
@@ -224,51 +225,78 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	return runners, nil
 }
 
-func (c *Client) GetRunnerGroupsFromRepository(ctx context.Context, org, repo string, potentialEnterpriseGroups []string, potentialOrgGroups []string) ([]string, []string, error) {
+func (c *Client) GetRunnerGroupsFromRepository(ctx context.Context, org, repo string, potentialGroups utils.RunnerGroups) (utils.RunnerGroups, error) {
 
-	var enterpriseRunnerGroups []string
-	var orgRunnerGroups []string
+	var visibleGroups utils.RunnerGroups
 
 	if org != "" {
 		runnerGroups, err := c.getOrganizationRunnerGroups(ctx, org, repo)
 		if err != nil {
-			return enterpriseRunnerGroups, orgRunnerGroups, err
+			return visibleGroups, err
 		}
 		for _, runnerGroup := range runnerGroups {
 			if runnerGroup.GetInherited() { // enterprise runner groups
-				if !containsString(potentialEnterpriseGroups, runnerGroup.GetName()) {
-					continue
-				}
-				if runnerGroup.GetVisibility() == "all" {
-					enterpriseRunnerGroups = append(enterpriseRunnerGroups, runnerGroup.GetName())
-				} else {
-					hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-					if err != nil {
-						return enterpriseRunnerGroups, orgRunnerGroups, err
+				if runnerGroup.GetDefault() {
+					if !potentialGroups.DefaultEnterprise {
+						continue
 					}
-					if hasAccess {
-						enterpriseRunnerGroups = append(enterpriseRunnerGroups, runnerGroup.GetName())
+					if runnerGroup.GetVisibility() == "all" {
+						visibleGroups.DefaultEnterprise = true
+					} else {
+						visibleGroups.DefaultEnterprise, err = c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
+						if err != nil {
+							return visibleGroups, err
+						}
+					}
+				} else {
+					if !utils.ContainsString(potentialGroups.Enterprise, runnerGroup.GetName()) {
+						continue
+					}
+					if runnerGroup.GetVisibility() == "all" {
+						visibleGroups.Enterprise = append(visibleGroups.Enterprise, runnerGroup.GetName())
+					} else {
+						hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
+						if err != nil {
+							return visibleGroups, err
+						}
+						if hasAccess {
+							visibleGroups.Enterprise = append(visibleGroups.Enterprise, runnerGroup.GetName())
+						}
 					}
 				}
 			} else { // organization runner groups
-				if !containsString(potentialOrgGroups, runnerGroup.GetName()) {
-					continue
-				}
-				if runnerGroup.GetVisibility() == "all" {
-					orgRunnerGroups = append(orgRunnerGroups, runnerGroup.GetName())
-				} else {
-					hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-					if err != nil {
-						return enterpriseRunnerGroups, orgRunnerGroups, err
+				if runnerGroup.GetDefault() {
+					if !potentialGroups.DefaultOrganization {
+						continue
 					}
-					if hasAccess {
-						orgRunnerGroups = append(orgRunnerGroups, runnerGroup.GetName())
+					if runnerGroup.GetVisibility() == "all" {
+						visibleGroups.DefaultOrganization = true
+					} else {
+						visibleGroups.DefaultOrganization, err = c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
+						if err != nil {
+							return visibleGroups, err
+						}
+					}
+				} else {
+					if !utils.ContainsString(potentialGroups.Organization, runnerGroup.GetName()) {
+						continue
+					}
+					if runnerGroup.GetVisibility() == "all" {
+						visibleGroups.Organization = append(visibleGroups.Organization, runnerGroup.GetName())
+					} else {
+						hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
+						if err != nil {
+							return visibleGroups, err
+						}
+						if hasAccess {
+							visibleGroups.Organization = append(visibleGroups.Organization, runnerGroup.GetName())
+						}
 					}
 				}
 			}
 		}
 	}
-	return enterpriseRunnerGroups, orgRunnerGroups, nil
+	return visibleGroups, nil
 }
 
 func (c *Client) hasRepoAccessToOrganizationRunnerGroup(ctx context.Context, org string, runnerGroupId int64, repo string) (bool, error) {
@@ -479,13 +507,4 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 	}
 
 	return false, &RunnerNotFound{runnerName: name}
-}
-
-func containsString(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-	return false
 }
