@@ -79,7 +79,8 @@ fi
 # if this is not a testing environment
 if [ -z "${UNITTEST:-}" ]; then
   sudo chown -R runner:docker ${RUNNER_HOME}
-  mv /runnertmp/* ${RUNNER_HOME}/
+  # use cp over mv to avoid issues when /runnertmp and {RUNNER_HOME} are on different devices
+  cp -r /runnertmp/* ${RUNNER_HOME}/
 fi
 
 cd ${RUNNER_HOME}
