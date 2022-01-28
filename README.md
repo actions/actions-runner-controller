@@ -22,7 +22,7 @@ kubectl apply -f https://github.com/summerwind/actions-runner-controller/release
 
 ### Github Enterprise support
 
-If you use either Github Enterprise Cloud or Server (and have recent enought version supporting Actions), you can use **actions-runner-controller**  with those, too. Authentication works same way as with public Github (repo and organization level).
+If you use either Github Enterprise Cloud or Server (and have recent enough version supporting Actions), you can use **actions-runner-controller**  with those, too. Authentication works same way as with public Github (repo and organization level).
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
