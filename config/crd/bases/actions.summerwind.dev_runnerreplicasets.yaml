@@ -4154,7 +4154,7 @@ spec:
                                 type: string
                             type: object
                           type: array
-                        topologySpreadConstraint:
+                        topologySpreadConstraints:
                           items:
                             description: TopologySpreadConstraint specifies how to spread matching pods among the given topology.
                             properties:

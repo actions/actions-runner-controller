@@ -145,7 +145,7 @@ type RunnerPodSpec struct {
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 
 	// +optional
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraint,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// RuntimeClassName is the container runtime configuration that containers should run under.
 	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class
