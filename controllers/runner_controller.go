@@ -53,6 +53,10 @@ const (
 	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
 	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
 
+	// This annotation is added to ephemeral runner's pod when ARC
+	// detected it's registration to GitHub for the first time.
+	AnnotationKeyFirstRegistrationDate = "actions-runner-controller/first-registration-date"
+
 	EnvVarOrg        = "RUNNER_ORG"
 	EnvVarRepo       = "RUNNER_REPO"
 	EnvVarEnterprise = "RUNNER_ENTERPRISE"
@@ -295,21 +299,44 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		registrationTimeout := 10 * time.Minute
 		durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
+		ephemeralRunnerRegisteredOnce := false
+		ephemeralRunnerFirstRegistrationDate := ""
+		if annotations := pod.GetAnnotations(); annotations != nil {
+			if v, ok := annotations[AnnotationKeyFirstRegistrationDate]; ok {
+				ephemeralRunnerRegisteredOnce = true
+				ephemeralRunnerFirstRegistrationDate = v
+			}
+		}
 		registrationDidTimeout := durationAfterRegistrationTimeout > 0
 
 		if notFound {
 			if registrationDidTimeout {
-				log.Info(
-					"Runner failed to register itself to GitHub in timely manner. "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. "+
-						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
-					"podCreationTimestamp", pod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
+				if ephemeralRunnerRegisteredOnce {
+					log.Info(
+						"Ephemeral runner %q was successfully registered once, but is not recognized by GitHub now. "+
+							"This situation is normal and known to happen when ARC called GitHub's List Runners API while "+
+							"the ephemeral runner agent is restarting(It restarts after each job run). "+
+							"ARC will hold on monitoring until the runner agent re-registers itself to GitHub. "+
+							"If this runner remains forever without functioning, please consult the runner container logs to see if there's any annomalies. "+
+							"See https://github.com/actions-runner-controller/actions-runner-controller/issues/911#issuecomment-1024528352 for more information.",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"ephemeralRunerFirstRegistrationDate", ephemeralRunnerFirstRegistrationDate,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
+				} else {
+					log.Info(
+						"Runner failed to register itself to GitHub in timely manner. "+
+							"Recreating the pod to see if it resolves the issue. "+
+							"CAUTION: If you see this a lot, you should investigate the root cause. "+
+							"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
+						"podCreationTimestamp", pod.CreationTimestamp,
+						"currentTime", currentTime,
+						"configuredRegistrationTimeout", registrationTimeout,
+					)
 
-				restart = true
+					restart = true
+				}
 			} else {
 				log.V(1).Info(
 					"Runner pod exists but we failed to check if runner is busy. Apparently it still needs more time.",
@@ -388,6 +415,8 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					"Runner appears to have registered and running.",
 					"podCreationTimestamp", pod.CreationTimestamp,
 				)
+
+				metav1.SetMetaDataAnnotation(&pod.ObjectMeta, AnnotationKeyFirstRegistrationDate, pod.CreationTimestamp.Format(time.RFC3339))
 			}
 
 			updated := runner.DeepCopy()
