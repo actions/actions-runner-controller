@@ -626,6 +626,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		runner.ObjectMeta.Annotations,
 		runner.Spec,
 		r.GitHubClient.GithubBaseURL,
+		// Token change should trigger replacement.
+		// We need to include this explicitly here because
+		// runner.Spec does not contain the possibly updated token stored in the
+		// runner status yet.
+		runner.Status.Registration.Token,
 	)
 
 	objectMeta := metav1.ObjectMeta{
