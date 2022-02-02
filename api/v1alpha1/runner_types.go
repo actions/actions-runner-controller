@@ -73,6 +73,10 @@ type RunnerConfig struct {
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
 }
 
+func (c *RunnerConfig) IsEphemeral() bool {
+	return c.Ephemeral == nil || *c.Ephemeral
+}
+
 // RunnerPodSpec defines the desired pod spec fields of the runner pod
 type RunnerPodSpec struct {
 	// +optional

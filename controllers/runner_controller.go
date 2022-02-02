@@ -416,7 +416,9 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					"podCreationTimestamp", pod.CreationTimestamp,
 				)
 
-				metav1.SetMetaDataAnnotation(&pod.ObjectMeta, AnnotationKeyFirstRegistrationDate, pod.CreationTimestamp.Format(time.RFC3339))
+				if runner.Spec.IsEphemeral() {
+					metav1.SetMetaDataAnnotation(&pod.ObjectMeta, AnnotationKeyFirstRegistrationDate, pod.CreationTimestamp.Format(time.RFC3339))
+				}
 			}
 
 			updated := runner.DeepCopy()
@@ -814,7 +816,7 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
 		dockerEnabled             bool = runnerSpec.DockerEnabled == nil || *runnerSpec.DockerEnabled
-		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
+		ephemeral                 bool = runnerSpec.IsEphemeral()
 		dockerdInRunnerPrivileged bool = dockerdInRunner
 	)
 
