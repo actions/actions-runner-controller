@@ -299,11 +299,9 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		registrationTimeout := 10 * time.Minute
 		durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
-		ephemeralRunnerRegisteredOnce := false
 		ephemeralRunnerFirstRegistrationDate := ""
 		if annotations := pod.GetAnnotations(); annotations != nil {
 			if v, ok := annotations[AnnotationKeyFirstRegistrationDate]; ok {
-				ephemeralRunnerRegisteredOnce = true
 				ephemeralRunnerFirstRegistrationDate = v
 			}
 		}
@@ -311,7 +309,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		if notFound {
 			if registrationDidTimeout {
-				if ephemeralRunnerRegisteredOnce {
+				if ephemeralRunnerFirstRegistrationDate != "" {
 					log.Info(
 						"Ephemeral runner %q was successfully registered once, but is not recognized by GitHub now. "+
 							"This situation is normal and known to happen when ARC called GitHub's List Runners API while "+
