@@ -47,7 +47,7 @@ jobs:
         id: vars
         uses: ./.github/actions/setup-docker-environment
         with: 
-          username: ${{ secrets.DOCKER_USER }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
