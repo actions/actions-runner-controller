@@ -39,3 +39,10 @@ helm upgrade actions-runner-controller \
   --namespace actions-runner-system \
   --version ${CHART_VERSION}
 ```
+
+helm upgrade arc . --install --namespace actions-runner-system -f /Users/callum.tait/git/personal/actions-runner-controller/resources/values.yaml
+  
+
+helm upgrade --install --namespace actions-runner-system --create-namespace \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+             -f /Users/callum.tait/git/personal/actions-runner-controller/docs-auto-scaling-cleanup/charts/actions-runner-controller/values.yaml

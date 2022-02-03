@@ -5,7 +5,7 @@ TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.287.1
-DOCKER_VERSION ?= 20.10.8
+DOCKER_VERSION ?= 20.10.12
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
