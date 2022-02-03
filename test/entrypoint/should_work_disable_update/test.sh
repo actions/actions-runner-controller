@@ -20,7 +20,7 @@ export RUNNER_HOME=localhome
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
-export RUNNER_DISABLE_UPDATE="true"
+export DISABLE_RUNNER_UPDATE="true"
 
 mkdir -p ${RUNNER_HOME}/bin
 # add up the config.sh and runsvc.sh

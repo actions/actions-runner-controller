@@ -1066,6 +1066,9 @@ spec:
         # Disables the wait for the docker daemon to be available check
         - name: DISABLE_WAIT_FOR_DOCKER
           value: "true"
+        # Disables automatic runner updates
+        - name: DISABLE_RUNNER_UPDATE
+          value: "true"
 ```
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
