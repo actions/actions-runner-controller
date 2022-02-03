@@ -91,6 +91,10 @@ if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != 
   config_args+=(--ephemeral)
   echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
 fi
+if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
+  config_args+=(--disableupdate)
+  echo "Passing --disableupdate to config.sh to disable automatic runner updates."
+fi
 
 retries_left=10
 while [[ ${retries_left} -gt 0 ]]; do
