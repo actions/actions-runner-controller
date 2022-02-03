@@ -102,3 +102,4 @@ USER runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["/entrypoint.sh"]
+
