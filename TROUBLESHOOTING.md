@@ -43,6 +43,8 @@ runner Runner listener exit with retryable error, re-launch runner in 5 seconds.
 This is because the `istio-proxy` has not completed configuring itself when the
 configuration script tries to communicate with the network.
 
+More broadly, there are many other circumstances where the runner pod coming up first can cause issues.
+
 **Solution**<br />
 
 > Added originally to help users with older istio instances.
