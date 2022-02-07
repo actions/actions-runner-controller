@@ -1096,17 +1096,6 @@ spec:
         fsGroup: 1000
 ```
 
-
-### Use with Istio
-
-Istio 1.7.0 or greater has `holdApplicationUntilProxyStarts` added in https://github.com/istio/istio/pull/24737, which enables you to delay the `runner` container startup until the injected `istio-proxy` container finish starting. Try using it if you need to use Istio. Otherwise the runner is unlikely to work, because it fails to call any GitHub API to register itself due to `istio-proxy` being not up and running yet.
-
-Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test (a contribution to resolve this is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
-
-- https://github.com/actions-runner-controller/actions-runner-controller/issues/591
-- https://github.com/actions-runner-controller/actions-runner-controller/pull/592
-- https://github.com/istio/istio/issues/11130
-
 ### Stateful Runners
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
