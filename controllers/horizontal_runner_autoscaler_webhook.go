@@ -479,12 +479,12 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 
 	// Find the potential runner groups first to avoid spending API queries needless. Once/if GitHub improves an
 	// API to find related/linked runner groups from a specific repository this logic could be removed
-	availableGroups, err := autoscaler.getPotentialGroupsFromHRAs(ctx, enterprise, owner)
+	managedRunnerGroups, err := autoscaler.getManagedRunnerGroupsFromHRAs(ctx, enterprise, owner)
 	if err != nil {
 		log.Error(err, "finding potential organization/enterprise runner groups from HRAs", "organization", owner)
 		return nil, err
 	}
-	if availableGroups.IsEmpty() {
+	if managedRunnerGroups.IsEmpty() {
 		log.V(1).Info("no repository/organizational/enterprise runner found",
 			"repository", repositoryRunnerKey,
 			"organization", owner,
@@ -497,7 +497,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		// Get available organization runner groups and enterprise runner groups for a repository
 		// These are the sum of runner groups with repository access = All repositories and runner groups
 		// where owner/repo has access to as well. The list will include default runner group also if it has access to
-		visibleGroups, err = autoscaler.GitHubClient.GetRunnerGroupsFromRepository(ctx, owner, repositoryRunnerKey, availableGroups)
+		visibleGroups, err = autoscaler.GitHubClient.GetRunnerGroupsVisibleToRepository(ctx, owner, repositoryRunnerKey, managedRunnerGroups)
 		log.V(1).Info("Searching in runner groups", "groups", visibleGroups)
 		if err != nil {
 			log.Error(err, "Unable to find runner groups from repository", "organization", owner, "repository", repo)
@@ -507,9 +507,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		// For backwards compatibility if GitHub authentication is not configured, we assume all runner groups have
 		// visibility=all to honor the previous implementation, therefore any available enterprise/organization runner
 		// is a potential target for scaling. This will also avoid doing extra API calls caused by
-		// GitHubClient.GetRunnerGroupsFromRepository in case users are not using custom visibility on their runner
+		// GitHubClient.GetRunnerGroupsVisibleToRepository in case users are not using custom visibility on their runner
 		// groups or they are using only default runner groups
-		visibleGroups = availableGroups
+		visibleGroups = managedRunnerGroups
 	}
 
 	log.Info("groups", "groups", visibleGroups)
@@ -568,7 +568,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getPotentialGroupsFromHRAs(ctx context.Context, enterprise, org string) (utils.RunnerGroups, error) {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroupsFromHRAs(ctx context.Context, enterprise, org string) (utils.RunnerGroups, error) {
 	groups := utils.RunnerGroups{}
 	ns := autoscaler.Namespace
 

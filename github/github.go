@@ -225,12 +225,12 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	return runners, nil
 }
 
-func (c *Client) GetRunnerGroupsFromRepository(ctx context.Context, org, repo string, potentialGroups utils.RunnerGroups) (utils.RunnerGroups, error) {
+func (c *Client) GetRunnerGroupsVisibleToRepository(ctx context.Context, org, repo string, potentialGroups utils.RunnerGroups) (utils.RunnerGroups, error) {
 
 	var visibleGroups utils.RunnerGroups
 
 	if org != "" {
-		runnerGroups, err := c.getOrganizationRunnerGroups(ctx, org, repo)
+		runnerGroups, err := c.getDefinedAndInheritedRunnerGroups(ctx, org)
 		if err != nil {
 			return visibleGroups, err
 		}
@@ -319,7 +319,7 @@ func (c *Client) hasRepoAccessToOrganizationRunnerGroup(ctx context.Context, org
 	return false, nil
 }
 
-func (c *Client) getOrganizationRunnerGroups(ctx context.Context, org, repo string) ([]*github.RunnerGroup, error) {
+func (c *Client) getDefinedAndInheritedRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
 	var runnerGroups []*github.RunnerGroup
 
 	opts := github.ListOptions{PerPage: 100}

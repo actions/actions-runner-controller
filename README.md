@@ -1050,13 +1050,13 @@ authentication is included in the GitHub webhook server it will be assumed that 
 Supporting custom visibility requires to do a few GitHub API calls to find out what are the potential runner groups that are visible to
 the webhook's repository, this may incur in increased API rate limiting when using github.com
 
-This option will be enabled when proper GitHub authentication options (token, app or basic auth is provided) in the GitHub webhook server and `enableCustomVisibilityRunnerGroups` is set to true, e.g.
+This option will be enabled when proper GitHub authentication options (token, app or basic auth is provided) in the GitHub webhook server and `useRunnerGroupsVisibility` is set to true, e.g.
 
 ```yaml
 githubWebhookServer:
   enabled: false
   replicaCount: 1
-  enableCustomVisibilityRunnerGroups: true
+  useRunnerGroupsVisibility: true
 ```
 
 ### Runner Entrypoint Features
