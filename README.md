@@ -397,6 +397,8 @@ spec:
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -422,6 +424,8 @@ spec:
   scaleTargetRef:
     # Your RunnerDeployment Here
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
@@ -464,6 +468,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -497,6 +503,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -516,6 +524,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -543,6 +553,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -611,6 +623,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent: {}
     duration: "30m"
@@ -641,6 +655,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -665,6 +681,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -693,6 +711,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       pullRequest:
@@ -719,6 +739,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       push:
@@ -764,6 +786,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 100 only between 2021-06-01T00:00:00+09:00 and 2021-06-03T00:00:00+09:00
   - startTime: "2021-06-01T00:00:00+09:00"
@@ -784,6 +808,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 0 only between 0am sat to 0am mon
   - startTime: "2021-05-01T00:00:00+09:00"
