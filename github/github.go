@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
-	"github.com/actions-runner-controller/actions-runner-controller/utils"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v39/github"
 	"golang.org/x/oauth2"
@@ -225,101 +224,9 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	return runners, nil
 }
 
-func (c *Client) GetRunnerGroupsVisibleToRepository(ctx context.Context, org, repo string, potentialGroups utils.RunnerGroups) (utils.RunnerGroups, error) {
-
-	var visibleGroups utils.RunnerGroups
-
-	if org != "" {
-		runnerGroups, err := c.getDefinedAndInheritedRunnerGroups(ctx, org)
-		if err != nil {
-			return visibleGroups, err
-		}
-		for _, runnerGroup := range runnerGroups {
-			if runnerGroup.GetInherited() { // enterprise runner groups
-				if runnerGroup.GetDefault() {
-					if !potentialGroups.DefaultEnterprise {
-						continue
-					}
-					if runnerGroup.GetVisibility() == "all" {
-						visibleGroups.DefaultEnterprise = true
-					} else {
-						visibleGroups.DefaultEnterprise, err = c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-						if err != nil {
-							return visibleGroups, err
-						}
-					}
-				} else {
-					if !utils.ContainsString(potentialGroups.Enterprise, runnerGroup.GetName()) {
-						continue
-					}
-					if runnerGroup.GetVisibility() == "all" {
-						visibleGroups.Enterprise = append(visibleGroups.Enterprise, runnerGroup.GetName())
-					} else {
-						hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-						if err != nil {
-							return visibleGroups, err
-						}
-						if hasAccess {
-							visibleGroups.Enterprise = append(visibleGroups.Enterprise, runnerGroup.GetName())
-						}
-					}
-				}
-			} else { // organization runner groups
-				if runnerGroup.GetDefault() {
-					if !potentialGroups.DefaultOrganization {
-						continue
-					}
-					if runnerGroup.GetVisibility() == "all" {
-						visibleGroups.DefaultOrganization = true
-					} else {
-						visibleGroups.DefaultOrganization, err = c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-						if err != nil {
-							return visibleGroups, err
-						}
-					}
-				} else {
-					if !utils.ContainsString(potentialGroups.Organization, runnerGroup.GetName()) {
-						continue
-					}
-					if runnerGroup.GetVisibility() == "all" {
-						visibleGroups.Organization = append(visibleGroups.Organization, runnerGroup.GetName())
-					} else {
-						hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-						if err != nil {
-							return visibleGroups, err
-						}
-						if hasAccess {
-							visibleGroups.Organization = append(visibleGroups.Organization, runnerGroup.GetName())
-						}
-					}
-				}
-			}
-		}
-	}
-	return visibleGroups, nil
-}
-
-func (c *Client) hasRepoAccessToOrganizationRunnerGroup(ctx context.Context, org string, runnerGroupId int64, repo string) (bool, error) {
-	opts := github.ListOptions{PerPage: 100}
-	for {
-		list, res, err := c.Client.Actions.ListRepositoryAccessRunnerGroup(ctx, org, runnerGroupId, &opts)
-		if err != nil {
-			return false, fmt.Errorf("failed to list repository access for runner group: %w", err)
-		}
-		for _, githubRepo := range list.Repositories {
-			if githubRepo.GetFullName() == repo {
-				return true, nil
-			}
-		}
-		if res.NextPage == 0 {
-			break
-		}
-		opts.Page = res.NextPage
-	}
-	return false, nil
-}
-
-func (c *Client) getDefinedAndInheritedRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
+// ListOrganizationRunnerGroups returns all the runner groups defined in the organization and
+// inherited to the organization from an enterprise.
+func (c *Client) ListOrganizationRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
 	var runnerGroups []*github.RunnerGroup
 
 	opts := github.ListOptions{PerPage: 100}
@@ -337,6 +244,27 @@ func (c *Client) getDefinedAndInheritedRunnerGroups(ctx context.Context, org str
 	}
 
 	return runnerGroups, nil
+}
+
+func (c *Client) ListRunnerGroupRepositoryAccesses(ctx context.Context, org string, runnerGroupId int64) ([]*github.Repository, error) {
+	var repos []*github.Repository
+
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.Client.Actions.ListRepositoryAccessRunnerGroup(ctx, org, runnerGroupId, &opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list repository access for runner group: %w", err)
+		}
+
+		repos = append(repos, list.Repositories...)
+		if res.NextPage == 0 {
+			break
+		}
+
+		opts.Page = res.NextPage
+	}
+
+	return repos, nil
 }
 
 // cleanup removes expired registration tokens.
