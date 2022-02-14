@@ -32,29 +32,15 @@ const (
 	Custom
 )
 
-type RunnerGroups struct {
-	refs []RunnerGroup
-}
-
-func (r *RunnerGroups) Includes(ref RunnerGroup) bool {
-	for _, r := range r.refs {
-		if r.Scope == ref.Scope && r.Kind == ref.Kind && r.Name == ref.Name {
-			return true
-		}
+func (s RunnerGroupKind) String() string {
+	switch s {
+	case Default:
+		return "Default"
+	case Custom:
+		return "Custom"
+	default:
+		panic(fmt.Sprintf("unimplemented RunnerGroupKind: %v", int(s)))
 	}
-	return false
-}
-
-func (r *RunnerGroups) Add(ref RunnerGroup) {
-	r.refs = append(r.refs, ref)
-}
-
-func (r *RunnerGroups) IsEmpty() bool {
-	return r.Len() == 0
-}
-
-func (r *RunnerGroups) Len() int {
-	return len(r.refs)
 }
 
 func NewRunnerGroupFromGitHub(g *github.RunnerGroup) RunnerGroup {
@@ -71,7 +57,7 @@ func NewRunnerGroupFromGitHub(g *github.RunnerGroup) RunnerGroup {
 		scope = Organization
 	}
 
-	return New(scope, name)
+	return newRunnerGroup(scope, name)
 }
 
 func NewRunnerGroupFromProperties(enterprise, organization, group string) RunnerGroup {
@@ -83,16 +69,12 @@ func NewRunnerGroupFromProperties(enterprise, organization, group string) Runner
 		scope = Organization
 	}
 
-	return New(scope, group)
+	return newRunnerGroup(scope, group)
 }
 
-func NewRunnerGroups() *VisibleRunnerGroups {
-	return &VisibleRunnerGroups{
-		groups: &RunnerGroups{},
-	}
-}
-
-func New(scope RunnerGroupScope, name string) RunnerGroup {
+// newRunnerGroup creates a new RunnerGroup instance from the provided arguments.
+// There's a convention that an empty name implies a default runner group.
+func newRunnerGroup(scope RunnerGroupScope, name string) RunnerGroup {
 	if name == "" {
 		return RunnerGroup{
 			Scope: scope,
@@ -119,28 +101,36 @@ type RunnerGroup struct {
 // GitHub Actions chooses one of such visible group on which the workflow job is scheduled.
 // ARC chooses the same group as Actions as the scale target.
 type VisibleRunnerGroups struct {
-	// groups is a pointer to a mutable list of RunnerGroups that contains all the runner groups
-	// that are visible to the repository, including organization groups defined at the organization level,
-	// and enterprise groups that are inherited down to the organization.
-	groups *RunnerGroups
+	// sortedGroups is a pointer to a mutable list of RunnerGroups that contains all the runner sortedGroups
+	// that are visible to the repository, including organization sortedGroups defined at the organization level,
+	// and enterprise sortedGroups that are inherited down to the organization.
+	sortedGroups []RunnerGroup
+}
+
+func NewVisibleRunnerGroups() *VisibleRunnerGroups {
+	return &VisibleRunnerGroups{}
 }
 
 func (g VisibleRunnerGroups) IsEmpty() bool {
-	return g.groups.IsEmpty()
+	return len(g.sortedGroups) == 0
 }
 
-func (g VisibleRunnerGroups) Includes(rg RunnerGroup) bool {
-	return g.groups.Includes(rg)
-}
-
-func (g VisibleRunnerGroups) Add(rg RunnerGroup) error {
-	if g.groups == nil {
-		g.groups = &RunnerGroups{}
+func (r *VisibleRunnerGroups) Includes(ref RunnerGroup) bool {
+	for _, r := range r.sortedGroups {
+		if r.Scope == ref.Scope && r.Kind == ref.Kind && r.Name == ref.Name {
+			return true
+		}
 	}
+	return false
+}
 
-	n := len(g.groups.refs)
+// Add adds a runner group into VisibleRunnerGroups
+// at a certain position in the list so that
+// Traverse can return runner groups in order of higher precedence to lower precedence.
+func (g *VisibleRunnerGroups) Add(rg RunnerGroup) error {
+	n := len(g.sortedGroups)
 	i := sort.Search(n, func(i int) bool {
-		data := g.groups.refs[i]
+		data := g.sortedGroups[i]
 
 		if rg.Kind > data.Kind {
 			return false
@@ -157,22 +147,25 @@ func (g VisibleRunnerGroups) Add(rg RunnerGroup) error {
 		return false
 	})
 
-	refs := g.groups.refs
-
-	result := []RunnerGroup{}
-	result = append(result, refs[:i]...)
-	result = append(result, rg)
-	result = append(result, refs[i:]...)
-
-	g.groups.refs = result
+	g.insert(rg, i)
 
 	return nil
 }
 
+func (g *VisibleRunnerGroups) insert(rg RunnerGroup, i int) {
+	var result []RunnerGroup
+
+	result = append(result, g.sortedGroups[:i]...)
+	result = append(result, rg)
+	result = append(result, g.sortedGroups[i:]...)
+
+	g.sortedGroups = result
+}
+
 // Traverse traverses all the runner groups visible to a repository
 // in order of higher precedence to lower precedence.
-func (g VisibleRunnerGroups) Traverse(f func(RunnerGroup) (bool, error)) error {
-	for _, rg := range g.groups.refs {
+func (g *VisibleRunnerGroups) Traverse(f func(RunnerGroup) (bool, error)) error {
+	for _, rg := range g.sortedGroups {
 		ok, err := f(rg)
 		if err != nil {
 			return err

@@ -573,7 +573,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroupsFromHRAs(ctx context.Context, enterprise, org string) (*simulator.VisibleRunnerGroups, error) {
-	groups := simulator.NewRunnerGroups()
+	groups := simulator.NewVisibleRunnerGroups()
 	ns := autoscaler.Namespace
 
 	var defaultListOpts []client.ListOption

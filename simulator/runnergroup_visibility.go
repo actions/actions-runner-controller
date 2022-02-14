@@ -12,7 +12,7 @@ type Simulator struct {
 }
 
 func (c *Simulator) GetRunnerGroupsVisibleToRepository(ctx context.Context, org, repo string, managed *VisibleRunnerGroups) (*VisibleRunnerGroups, error) {
-	visible := NewRunnerGroups()
+	visible := NewVisibleRunnerGroups()
 
 	if org == "" {
 		panic(fmt.Sprintf("BUG: owner should not be empty in this context. repo=%v", repo))
