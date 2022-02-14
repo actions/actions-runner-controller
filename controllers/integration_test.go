@@ -1077,6 +1077,169 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 		})
 
+		It("should be able to scale visible organization runner group with default labels", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{},
+								Amount:      1,
+								Duration:    metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first workflow_job webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "pending", "created", []string{"self-hosted"})
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+		})
+
+		It("should be able to scale visible organization runner group with custom labels", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+									Labels:     []string{"custom-label"},
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{},
+								Amount:      1,
+								Duration:    metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first workflow_job webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "pending", "created", []string{"custom-label"})
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+		})
+
 	})
 })
 
@@ -1208,6 +1371,28 @@ func (env *testEnvironment) SendUserCheckRunEvent(owner, repo, status, action st
 	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
 }
 
+func (env *testEnvironment) SendWorkflowJobEvent(owner, repo, status, action string, labels []string) {
+	resp, err := sendWebhook(env.webhookServer, "workflow_job", &github.WorkflowJobEvent{
+		Org: &github.Organization{
+			Name: github.String(owner),
+		},
+		WorkflowJob: &github.WorkflowJob{
+			Labels: labels,
+		},
+		Action: github.String("queued"),
+		Repo: &github.Repository{
+			Name: github.String(repo),
+			Owner: &github.User{
+				Login: github.String(owner),
+				Type:  github.String("Organization"),
+			},
+		},
+	})
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send check_run event")
+
+	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
+}
 func (env *testEnvironment) SyncRunnerRegistrations() {
 	var runnerList actionsv1alpha1.RunnerList
 
