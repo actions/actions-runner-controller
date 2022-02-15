@@ -404,14 +404,23 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	// Delete current pod if recreation is needed
-	if err := r.Delete(ctx, &pod); err != nil {
-		log.Error(err, "Failed to delete pod resource")
-		return ctrl.Result{}, err
+	// Try to delete current pod if recreation is needed
+	ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+	if err != nil {
+		log.Error(err, "Failed to unregister runner before deleting the pod.")
 	}
 
-	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
-	log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
+	if ok {
+		// Only delete the pod if we successfully unregistered the runner
+		// This should help us avoid race condition between runner pickup job after we think the runner is not busy.
+		if err := r.Delete(ctx, &pod); err != nil {
+			log.Error(err, "Failed to delete pod resource")
+			return ctrl.Result{}, err
+		}
+
+		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
+		log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
+	}
 
 	return ctrl.Result{}, nil
 }
