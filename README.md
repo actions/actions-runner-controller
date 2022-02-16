@@ -1071,6 +1071,20 @@ spec:
       group: NewGroup
 ```
 
+GitHub supports custom visilibity in a Runner Group to make it available to a specific set of repositories only. By default if no GitHub
+authentication is included in the GitHub webhook server it will be assumed that all runner groups to be usable in all repositories.
+Supporting custom visibility requires to do a few GitHub API calls to find out what are the potential runner groups that are visible to
+the webhook's repository, this may incur in increased API rate limiting when using github.com
+
+This option will be enabled when proper GitHub authentication options (token, app or basic auth is provided) in the GitHub webhook server and `useRunnerGroupsVisibility` is set to true, e.g.
+
+```yaml
+githubWebhookServer:
+  enabled: false
+  replicaCount: 1
+  useRunnerGroupsVisibility: true
+```
+
 ### Runner Entrypoint Features
 
 > Environment variable values must all be strings

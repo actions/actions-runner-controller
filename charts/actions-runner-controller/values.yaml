@@ -169,6 +169,7 @@ githubWebhookServer:
   enabled: false
   replicaCount: 1
   syncPeriod: 10m
+  useRunnerGroupsVisibility: false
   secret:
     create: false
     name: "github-webhook-server"

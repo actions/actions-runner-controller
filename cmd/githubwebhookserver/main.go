@@ -142,6 +142,11 @@ func main() {
 		}
 	})
 
+	// In order to support runner groups with custom visibility (selected repositories), we need to perform some GitHub API calls.
+	// Let the user define if they want to opt-in supporting this option by providing the proper GitHub authentication parameters
+	// Without an opt-in, runner groups with custom visibility won't be supported to save API calls
+	// That is, all runner groups managed by ARC are assumed to be visible to any repositories,
+	// which is wrong when you have one or more non-default runner groups in your organization or enterprise.
 	if len(c.Token) > 0 || (c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != "") || (len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0) {
 		ghClient, err = c.NewClient()
 		if err != nil {
@@ -149,6 +154,8 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "Runner")
 			os.Exit(1)
 		}
+	} else {
+		setupLog.Info("GitHub client is not initialized. Runner groups with custom visibility are not supported. If needed, please provide GitHub authentication. This will incur in extra GitHub API calls")
 	}
 
 	ctrl.SetLogger(logger)
