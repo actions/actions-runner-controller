@@ -405,13 +405,21 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Try to delete current pod if recreation is needed
+	safeToDeletePod := false
 	ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 	if err != nil {
-		log.Error(err, "Failed to unregister runner before deleting the pod.")
+		log.Error(err, "Failed to unregister runner before deleting the pod.", "runner", runner.Name)
+	} else {
+		// `r.unregisterRunner()` will returns `false, nil` if the runner is not found on GitHub.
+		if !ok {
+			log.Info("Runner no longer exists on GitHub", "runner", runner.Name)
+		}
+
+		safeToDeletePod = true
 	}
 
-	if ok {
-		// Only delete the pod if we successfully unregistered the runner
+	if safeToDeletePod {
+		// Only delete the pod if we successfully unregistered the runner or the runner is already deleted from the service.
 		// This should help us avoid race condition between runner pickup job after we think the runner is not busy.
 		if err := r.Delete(ctx, &pod); err != nil {
 			log.Error(err, "Failed to delete pod resource")
