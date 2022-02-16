@@ -13,7 +13,7 @@ on:
 
 env:
   KUBE_SCORE_VERSION: 1.10.0
-  HELM_VERSION: v3.4.1
+  HELM_VERSION: v3.8.0
 
 jobs:
   lint-chart:
@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v2.0
         with:
           version: ${{ env.HELM_VERSION }}
 
