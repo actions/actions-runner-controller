@@ -1,12 +1,15 @@
 # Set actions-runner-controller settings for testing
 githubAPICacheDuration: 10s
 githubWebhookServer:
+  logLevel: debug
   enabled: true
   labels: {}
   replicaCount: 1
   syncPeriod: 10m
+  useRunnerGroupsVisibility: true
   secret:
-    create: true
+    enabled: true
+    # create: true
     name: "github-webhook-server"
     ### GitHub Webhook Configuration
     #github_webhook_secret_token: ""

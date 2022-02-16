@@ -16,6 +16,7 @@ type GitRepo struct {
 	Name          string
 	CommitMessage string
 	Contents      map[string][]byte
+	Branch        string
 
 	runtime.Cmdr
 }
@@ -43,6 +44,11 @@ func (g *GitRepo) Sync(ctx context.Context) error {
 
 	for path, content := range g.Contents {
 		absPath := filepath.Join(dir, path)
+		d := filepath.Dir(absPath)
+
+		if err := os.MkdirAll(d, 0755); err != nil {
+			return fmt.Errorf("error creating dir %s: %v", d, err)
+		}
 
 		if err := os.WriteFile(absPath, content, 0755); err != nil {
 			return fmt.Errorf("error writing %s: %w", path, err)
@@ -89,7 +95,7 @@ func (g *GitRepo) gitCommitCmd(ctx context.Context, dir, msg string) *exec.Cmd {
 }
 
 func (g *GitRepo) gitPushCmd(ctx context.Context, dir string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", "push", "origin", "master")
+	cmd := exec.CommandContext(ctx, "git", "push", "origin", g.Branch)
 	cmd.Dir = dir
 	return cmd
 }
