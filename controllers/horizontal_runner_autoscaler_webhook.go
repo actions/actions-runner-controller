@@ -93,7 +93,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			if err != nil {
 				msg := err.Error()
 				if written, err := w.Write([]byte(msg)); err != nil {
-					autoscaler.Log.Error(err, "failed writing http error response", "msg", msg, "written", written)
+					autoscaler.Log.V(1).Error(err, "failed writing http error response", "msg", msg, "written", written)
 				}
 			}
 		}
@@ -290,7 +290,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}
 
 	if target == nil {
-		log.Info(
+		log.V(1).Info(
 			"Scale target not found. If this is unexpected, ensure that there is exactly one repository-wide or organizational runner deployment that matches this webhook event",
 		)
 
@@ -490,6 +490,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 			"organization", owner,
 			"enterprises", enterprise,
 		)
+	} else {
+		log.V(1).Info("Found some runner groups are managed by ARC", "groups", managedRunnerGroups)
 	}
 
 	var visibleGroups *simulator.VisibleRunnerGroups
@@ -535,7 +537,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		return ""
 	}
 
-	log.Info("groups", "groups", visibleGroups)
+	log.V(1).Info("groups", "groups", visibleGroups)
 
 	var t *ScaleTarget
 
@@ -552,7 +554,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		}
 
 		t = target
-		log.Info("job scale up target found", "enterprise", enterprise, "organization", owner, "repository", repo, "key", key)
+		log.V(1).Info("job scale up target found", "enterprise", enterprise, "organization", owner, "repository", repo, "key", key)
 
 		return true, nil
 	})
@@ -850,7 +852,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 					keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
 				}
 			}
-			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
+			autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
 			return keys
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
@@ -875,7 +877,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 					keys = append(keys, enterpriseRunnerGroupKey(enterprise, rs.Spec.Group)) // Enterprise runner groups
 				}
 			}
-			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
+			autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
 			return keys
 		}
 
