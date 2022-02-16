@@ -111,7 +111,7 @@ func NewVisibleRunnerGroups() *VisibleRunnerGroups {
 	return &VisibleRunnerGroups{}
 }
 
-func (g VisibleRunnerGroups) IsEmpty() bool {
+func (g *VisibleRunnerGroups) IsEmpty() bool {
 	return len(g.sortedGroups) == 0
 }
 
