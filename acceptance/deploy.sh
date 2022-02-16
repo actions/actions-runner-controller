@@ -37,7 +37,9 @@ if [ "${tool}" == "helm" ]; then
     --set image.repository=${NAME} \
     --set image.tag=${VERSION} \
     -f ${VALUES_FILE}
-  kubectl apply -f charts/actions-runner-controller/crds
+  # To prevent `CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: metadata.annotations: Too long: must have at most 262144 bytes`
+  # errors
+  kubectl create -f charts/actions-runner-controller/crds || kubectl replace -f charts/actions-runner-controller/crds
   kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
 else
   kubectl apply \
