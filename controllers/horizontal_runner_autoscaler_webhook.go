@@ -504,7 +504,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		log.V(1).Info("Searching in runner groups", "groups", visibleGroups)
 		if err != nil {
 			log.Error(err, "Unable to find runner groups from repository", "organization", owner, "repository", repo)
-			return nil, nil
+			return nil, fmt.Errorf("error while finding visible runner groups: %v", err)
 		}
 	} else {
 		// For backwards compatibility if GitHub authentication is not configured, we assume all runner groups have
