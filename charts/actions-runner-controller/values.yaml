@@ -171,6 +171,7 @@ githubWebhookServer:
   syncPeriod: 10m
   useRunnerGroupsVisibility: false
   secret:
+    enabled: false
     create: false
     name: "github-webhook-server"
     ### GitHub Webhook Configuration

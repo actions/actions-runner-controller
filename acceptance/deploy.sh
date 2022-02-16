@@ -23,6 +23,16 @@ else
   exit 1
 fi
 
+if [ -n "${WEBHOOK_GITHUB_TOKEN}" ]; then
+  kubectl -n actions-runner-system delete secret \
+      github-webhook-server || :
+  kubectl -n actions-runner-system create secret generic \
+      github-webhook-server \
+      --from-literal=github_token=${WEBHOOK_GITHUB_TOKEN:?WEBHOOK_GITHUB_TOKEN must not be empty}
+else
+  echo 'Skipped deploying secret "github-webhook-server". Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2
+fi
+
 tool=${ACCEPTANCE_TEST_DEPLOYMENT_TOOL}
 
 if [ "${tool}" == "helm" ]; then
