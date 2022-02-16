@@ -6,6 +6,8 @@ tpe=${ACCEPTANCE_TEST_SECRET_TYPE}
 
 VALUES_FILE=${VALUES_FILE:-$(dirname $0)/values.yaml}
 
+kubectl delete secret controller-manager || :
+
 if [ "${tpe}" == "token" ]; then
   if ! kubectl get secret controller-manager -n actions-runner-system >/dev/null; then
     kubectl create secret generic controller-manager \
