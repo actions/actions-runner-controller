@@ -13,6 +13,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v39/github"
+	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
 
@@ -82,8 +83,10 @@ func (c *Config) NewClient() (*Client, error) {
 		transport = tr
 	}
 
-	transport = metrics.Transport{Transport: transport}
-	httpClient := &http.Client{Transport: transport}
+	cached := httpcache.NewTransport(httpcache.NewMemoryCache())
+	cached.Transport = transport
+	metricsTransport := metrics.Transport{Transport: cached}
+	httpClient := &http.Client{Transport: metricsTransport}
 
 	var client *github.Client
 	var githubBaseURL string
