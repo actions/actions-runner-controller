@@ -130,6 +130,8 @@ func main() {
 		switch logLevel {
 		case logLevelDebug:
 			o.Development = true
+			lvl := zaplib.NewAtomicLevelAt(-2) // maps to logr's V(2)
+			o.Level = &lvl
 		case logLevelInfo:
 			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
 			o.Level = &lvl
@@ -174,8 +176,9 @@ func main() {
 	}
 
 	hraGitHubWebhook := &controllers.HorizontalRunnerAutoscalerGitHubWebhook{
+		Name:           "webhookbasedautoscaler",
 		Client:         mgr.GetClient(),
-		Log:            ctrl.Log.WithName("controllers").WithName("Runner"),
+		Log:            ctrl.Log.WithName("controllers").WithName("webhookbasedautoscaler"),
 		Recorder:       nil,
 		Scheme:         mgr.GetScheme(),
 		SecretKeyBytes: []byte(webhookSecretToken),
@@ -184,7 +187,7 @@ func main() {
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Runner")
+		setupLog.Error(err, "unable to create controller", "controller", "webhookbasedautoscaler")
 		os.Exit(1)
 	}
 
