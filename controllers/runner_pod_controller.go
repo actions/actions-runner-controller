@@ -378,42 +378,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *RunnerPodReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
-	if err != nil {
-		return false, err
-	}
-
-	var busy bool
-
-	id := int64(0)
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			// Sometimes a runner can stuck "busy" even though it is already "offline".
-			// Thus removing the condition on status can block the runner pod from being terminated forever.
-			busy = runner.GetBusy()
-			if runner.GetStatus() != "offline" && busy {
-				r.Log.Info("This runner will delay the runner pod deletion and the runner deregistration until it becomes either offline or non-busy", "name", runner.GetName(), "status", runner.GetStatus(), "busy", runner.GetBusy())
-				return false, fmt.Errorf("runner is busy")
-			}
-			id = runner.GetID()
-			break
-		}
-	}
-
-	if id == int64(0) {
-		return false, nil
-	}
-
-	// Sometimes a runner can stuck "busy" even though it is already "offline".
-	// Trying to remove the offline but busy runner can result in errors like the following:
-	//    failed to remove runner: DELETE https://api.github.com/repos/actions-runner-controller/mumoshu-actions-test/actions/runners/47: 422 Bad request - Runner \"example-runnerset-0\" is still running a job\" []
-	if !busy {
-		if err := r.GitHubClient.RemoveRunner(ctx, enterprise, org, repo, id); err != nil {
-			return false, err
-		}
-	}
-
-	return true, nil
+	return unregisterRunner(ctx, r.GitHubClient, enterprise, org, repo, name)
 }
 
 func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {

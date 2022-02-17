@@ -531,32 +531,15 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 	return ctrl.Result{}, nil
 }
 
+// unregisterRunner unregisters the runner from GitHub Actions by name.
+//
+// This function returns:
+// - (true, nil) when it has successfully unregistered the runner.
+// - (false, nil) when the runner has been already unregistered.
+// - (false, err) when it postponed unregistration due to the runner being busy, or it tried to unregister the runner but failed due to
+//   an error returned by GitHub API.
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
-	if err != nil {
-		return false, err
-	}
-
-	id := int64(0)
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			if runner.GetBusy() {
-				return false, fmt.Errorf("runner is busy")
-			}
-			id = runner.GetID()
-			break
-		}
-	}
-
-	if id == int64(0) {
-		return false, nil
-	}
-
-	if err := r.GitHubClient.RemoveRunner(ctx, enterprise, org, repo, id); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return unregisterRunner(ctx, r.GitHubClient, enterprise, org, repo, name)
 }
 
 func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v1alpha1.Runner) (bool, error) {
