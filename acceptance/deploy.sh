@@ -64,7 +64,7 @@ sleep 20
 RUNNER_LABEL=${RUNNER_LABEL:-self-hosted}
 
 if [ -n "${TEST_REPO}" ]; then
-  if [ -n "USE_RUNNERSET" ]; then
+  if [ "${USE_RUNNERSET}" -ne "false" ]; then
       cat acceptance/testdata/repo.runnerset.yaml | envsubst | kubectl apply -f -
       cat acceptance/testdata/repo.runnerset.hra.yaml | envsubst | kubectl apply -f -
   else
@@ -77,13 +77,25 @@ else
 fi
 
 if [ -n "${TEST_ORG}" ]; then
-  cat acceptance/testdata/org.runnerdeploy.yaml | envsubst | kubectl apply -f -
+  cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ENTERPRISE= TEST_REPO= NAME=org-runnerdeploy envsubst | kubectl apply -f -
 
-  if [ -n "${TEST_ORG_REPO}" ]; then
-    cat acceptance/testdata/org.hra.yaml | envsubst | kubectl apply -f -
+  if [ -n "${TEST_ORG_GROUP}" ]; then
+    cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ENTERPRISE= TEST_REPO= TEST_GROUP=${TEST_ORG_GROUP} NAME=orggroup-runnerdeploy envsubst | kubectl apply -f -
   else
-    echo 'Skipped deploying organizational hra. Set TEST_ORG_REPO to "yourorg/yourrepo" to deploy.'
+    echo 'Skipped deploying enterprise runnerdeployment. Set TEST_ORG_GROUP to deploy.'
   fi
 else
   echo 'Skipped deploying organizational runnerdeployment. Set TEST_ORG to deploy.'
+fi
+
+if [ -n "${TEST_ENTERPRISE}" ]; then
+  cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ORG= TEST_REPO= NAME=enterprise-runnerdeploy envsubst | kubectl apply -f -
+
+  if [ -n "${TEST_ENTERPRISE_GROUP}" ]; then
+    cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ORG= TEST_REPO= TEST_GROUP=${TEST_ENTERPRISE_GROUP} NAME=enterprisegroup-runnerdeploy envsubst | kubectl apply -f -
+  else
+    echo 'Skipped deploying enterprise runnerdeployment. Set TEST_ENTERPRISE_GROUP to deploy.'
+  fi
+else
+  echo 'Skipped deploying enterprise runnerdeployment. Set TEST_ENTERPRISE to deploy.'
 fi

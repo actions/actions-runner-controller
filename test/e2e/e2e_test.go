@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
@@ -166,7 +167,11 @@ type env struct {
 	useRunnerSet bool
 
 	testID                                                   string
+	repoToCommit                                             string
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
+	githubTokenWebhook                                       string
+	testEnterprise                                           string
+	featureFlagEphemeral                                     bool
 	testJobs                                                 []job
 }
 
@@ -186,10 +191,15 @@ func initTestEnv(t *testing.T) *env {
 	e.testID = testID
 	e.runnerLabel = "test-" + id
 	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
-	e.testRepo = testing.Getenv(t, "TEST_REPO")
-	e.testOrg = testing.Getenv(t, "TEST_ORG")
-	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 2)
+	e.githubTokenWebhook = testing.Getenv(t, "WEBHOOK_GITHUB_TOKEN")
+	e.repoToCommit = testing.Getenv(t, "TEST_COMMIT_REPO")
+	e.testRepo = testing.Getenv(t, "TEST_REPO", "")
+	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
+	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
+	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE")
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 10)
+	ephemeral, _ := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL"))
+	e.featureFlagEphemeral = ephemeral
 
 	return e
 }
@@ -237,11 +247,14 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 	}
 
 	varEnv := []string{
+		"TEST_ENTERPRISE=" + e.testEnterprise,
 		"TEST_REPO=" + e.testRepo,
 		"TEST_ORG=" + e.testOrg,
 		"TEST_ORG_REPO=" + e.testOrgRepo,
 		"GITHUB_TOKEN=" + e.githubToken,
+		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
+		fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", e.featureFlagEphemeral),
 	}
 
 	scriptEnv = append(scriptEnv, varEnv...)
@@ -260,7 +273,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testID, e.runnerLabel, testResultCMNamePrefix, e.testRepo, e.testJobs)
+	installActionsWorkflow(t, e.testID, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
 }
 
 func (e *env) verifyActionsWorkflowRun(t *testing.T) {
@@ -287,6 +300,8 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 	return testJobs
 }
 
+const Branch = "main"
+
 func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
 	t.Helper()
 
@@ -298,7 +313,7 @@ func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNameP
 		Name: wfName,
 		On: testing.On{
 			Push: &testing.Push{
-				Branches: []string{"master"},
+				Branches: []string{Branch},
 			},
 		},
 		Jobs: map[string]testing.Job{},
@@ -346,6 +361,7 @@ kubectl create cm %s$id --from-literal=status=ok
 			".github/workflows/workflow.yaml": wfContent,
 			"test.sh":                         script,
 		},
+		Branch: Branch,
 	}
 
 	if err := g.Sync(ctx); err != nil {

@@ -14,6 +14,11 @@ spec:
       image: ${RUNNER_NAME}:${RUNNER_TAG}
       imagePullPolicy: IfNotPresent
 
+      # Whether to pass --ephemeral (true) or --once (false, deprecated)
+      env:
+      - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+        value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
+
       #
       # dockerd within runner container
       #
@@ -30,6 +35,8 @@ spec:
       # labels:
       # - "mylabel 1"
       # - "mylabel 2"
+      labels:
+      - "${RUNNER_LABEL}"
 
       #
       # Non-standard working directory
