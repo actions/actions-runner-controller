@@ -69,30 +69,30 @@ spec:
         - name: GITHUB_UPLOAD_URL
           value: {{ .Values.githubUploadURL }}
         {{- end }}
-        {{- if and .Values.githubWebhookServer.useRunnerGroupsVisibility .Values.authSecret.enabled }}
+        {{- if and .Values.githubWebhookServer.useRunnerGroupsVisibility .Values.githubWebhookServer.secret.enabled }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
               key: github_token
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         - name: GITHUB_APP_ID
           valueFrom:
             secretKeyRef:
               key: github_app_id
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         - name: GITHUB_APP_INSTALLATION_ID
           valueFrom:
             secretKeyRef:
               key: github_app_installation_id
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               key: github_app_private_key
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         {{- if .Values.authSecret.github_basicauth_username  }}
         - name: GITHUB_BASICAUTH_USERNAME
