@@ -18,6 +18,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.7'
+
       - name: Install tools
         run: |
           curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
