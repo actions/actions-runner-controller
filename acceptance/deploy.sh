@@ -37,7 +37,10 @@ fi
 
 tool=${ACCEPTANCE_TEST_DEPLOYMENT_TOOL}
 
+TEST_ID=${TEST_ID:-default}
+
 if [ "${tool}" == "helm" ]; then
+  set -v
   helm upgrade --install actions-runner-controller \
     charts/actions-runner-controller \
     -n actions-runner-system \
@@ -46,7 +49,10 @@ if [ "${tool}" == "helm" ]; then
     --set authSecret.create=false \
     --set image.repository=${NAME} \
     --set image.tag=${VERSION} \
+    --set podAnnotations.test-id=${TEST_ID} \
+    --set githubWebhookServer.podAnnotations.test-id=${TEST_ID} \
     -f ${VALUES_FILE}
+  set +v
   # To prevent `CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: metadata.annotations: Too long: must have at most 262144 bytes`
   # errors
   kubectl create -f charts/actions-runner-controller/crds || kubectl replace -f charts/actions-runner-controller/crds

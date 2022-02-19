@@ -167,6 +167,7 @@ type env struct {
 	useRunnerSet bool
 
 	testID                                                   string
+	testName                                                 string
 	repoToCommit                                             string
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
 	githubTokenWebhook                                       string
@@ -184,11 +185,12 @@ func initTestEnv(t *testing.T) *env {
 
 	id := e.ID()
 
-	testID := t.Name() + " " + id
+	testName := t.Name() + " " + id
 
-	t.Logf("Using test id %s", testID)
+	t.Logf("Initializing test with name %s", testName)
 
-	e.testID = testID
+	e.testID = id
+	e.testName = testName
 	e.runnerLabel = "test-" + id
 	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
 	e.githubTokenWebhook = testing.Getenv(t, "WEBHOOK_GITHUB_TOKEN")
@@ -197,7 +199,7 @@ func initTestEnv(t *testing.T) *env {
 	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 10)
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 100)
 	ephemeral, _ := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL"))
 	e.featureFlagEphemeral = ephemeral
 
@@ -254,6 +256,7 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"GITHUB_TOKEN=" + e.githubToken,
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
+		"TEST_ID=" + e.testID,
 		fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", e.featureFlagEphemeral),
 	}
 
@@ -273,7 +276,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testID, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
+	installActionsWorkflow(t, e.testName, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
 }
 
 func (e *env) verifyActionsWorkflowRun(t *testing.T) {
@@ -302,13 +305,13 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 
 const Branch = "main"
 
-func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	wfName := "E2E " + testID
+	wfName := "E2E " + testName
 	wf := testing.Workflow{
 		Name: wfName,
 		On: testing.On{
