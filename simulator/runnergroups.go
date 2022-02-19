@@ -3,6 +3,7 @@ package simulator
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/go-github/v39/github"
 )
@@ -96,6 +97,10 @@ type RunnerGroup struct {
 	Name  string
 }
 
+func (r RunnerGroup) String() string {
+	return fmt.Sprintf("RunnerGroup{Scope:%s, Kind:%s, Name:%s}", r.Scope, r.Kind, r.Name)
+}
+
 // VisibleRunnerGroups is a set of enterprise and organization runner groups
 // that are visible to a GitHub repository.
 // GitHub Actions chooses one of such visible group on which the workflow job is scheduled.
@@ -109,6 +114,15 @@ type VisibleRunnerGroups struct {
 
 func NewVisibleRunnerGroups() *VisibleRunnerGroups {
 	return &VisibleRunnerGroups{}
+}
+
+func (g *VisibleRunnerGroups) String() string {
+	var gs []string
+	for _, g := range g.sortedGroups {
+		gs = append(gs, g.String())
+	}
+
+	return strings.Join(gs, ", ")
 }
 
 func (g *VisibleRunnerGroups) IsEmpty() bool {
