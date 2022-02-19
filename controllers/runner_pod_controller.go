@@ -105,33 +105,16 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
 		if removed {
-			ok, err := r.unregisterRunner(ctx, enterprise, org, repo, runnerPod.Name)
-			if err != nil {
-				if errors.Is(err, &gogithub.RateLimitError{}) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
-
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-				}
-
-				return ctrl.Result{}, err
+			updatedPod, res, err := tickRunnerGracefulStop(ctx, log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+			if res != nil {
+				return *res, err
 			}
 
-			if !ok {
-				log.V(1).Info("Runner no longer exists on GitHub")
-			}
+			patchedPod := updatedPod.DeepCopy()
+			patchedPod.ObjectMeta.Finalizers = finalizers
 
-			newRunner := runnerPod.DeepCopy()
-			newRunner.ObjectMeta.Finalizers = finalizers
-
-			if err := r.Patch(ctx, newRunner, client.MergeFrom(&runnerPod)); err != nil {
+			// We commit the removal of the finalizer so that Kuberenetes notices it and delete the pod resource from the cluster.
+			if err := r.Patch(ctx, patchedPod, client.MergeFrom(&runnerPod)); err != nil {
 				log.Error(err, "Failed to update runner for finalizer removal")
 				return ctrl.Result{}, err
 			}
@@ -365,8 +348,13 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	updated, res, err := tickRunnerGracefulStop(ctx, log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+	if res != nil {
+		return *res, err
+	}
+
 	// Delete current pod if recreation is needed
-	if err := r.Delete(ctx, &runnerPod); err != nil {
+	if err := r.Delete(ctx, updated); err != nil {
 		log.Error(err, "Failed to delete pod resource")
 		return ctrl.Result{}, err
 	}
@@ -375,10 +363,6 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log.Info("Deleted runner pod", "name", runnerPod.Name)
 
 	return ctrl.Result{}, nil
-}
-
-func (r *RunnerPodReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	return unregisterRunner(ctx, r.GitHubClient, enterprise, org, repo, name)
 }
 
 func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
