@@ -614,11 +614,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroup
 			return nil, fmt.Errorf("unsupported scale target kind: %v", kind)
 		}
 
-		if g == "" {
-			continue
-		}
-
-		if e == "" && o == "" {
+		if g != "" && e == "" && o == "" {
 			autoscaler.Log.V(1).Info(
 				"invalid runner group config in scale target: spec.group must be set along with either spec.enterprise or spec.organization",
 				"scaleTargetKind", kind,
@@ -631,6 +627,16 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroup
 		}
 
 		if e != enterprise && o != org {
+			autoscaler.Log.V(1).Info(
+				"Skipped scale target irrelevant to event",
+				"eventOrganization", org,
+				"eventEnterprise", enterprise,
+				"scaleTargetKind", kind,
+				"scaleTargetGroup", g,
+				"scaleTargetEnterprise", e,
+				"scaleTargetOrganization", o,
+			)
+
 			continue
 		}
 
