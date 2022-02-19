@@ -144,6 +144,8 @@ func main() {
 		}
 	})
 
+	ctrl.SetLogger(logger)
+
 	// In order to support runner groups with custom visibility (selected repositories), we need to perform some GitHub API calls.
 	// Let the user define if they want to opt-in supporting this option by providing the proper GitHub authentication parameters
 	// Without an opt-in, runner groups with custom visibility won't be supported to save API calls
@@ -159,8 +161,6 @@ func main() {
 	} else {
 		setupLog.Info("GitHub client is not initialized. Runner groups with custom visibility are not supported. If needed, please provide GitHub authentication. This will incur in extra GitHub API calls")
 	}
-
-	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
