@@ -770,8 +770,10 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 	capacityReservations := getValidCapacityReservations(copy)
 
 	if amount > 0 {
+		now := time.Now()
 		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-			ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
+			EffectiveTime:  metav1.Time{Time: now},
+			ExpirationTime: metav1.Time{Time: now.Add(target.ScaleUpTrigger.Duration.Duration)},
 			Replicas:       amount,
 		})
 	} else if amount < 0 {

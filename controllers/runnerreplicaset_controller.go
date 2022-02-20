@@ -49,6 +49,10 @@ type RunnerReplicaSetReconciler struct {
 	Name         string
 }
 
+const (
+	SyncTimeAnnotationKey = "sync-time"
+)
+
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets/status,verbs=get;update;patch
@@ -85,19 +89,36 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	var myRunners []v1alpha1.Runner
-
 	var (
 		current   int
 		ready     int
 		available int
+
+		lastSyncTime *time.Time
 	)
 
 	for _, r := range allRunners.Items {
 		// This guard is required to avoid the RunnerReplicaSet created by the controller v0.17.0 or before
 		// to not treat all the runners in the namespace as its children.
 		if metav1.IsControlledBy(&r, &rs) && !metav1.HasAnnotation(r.ObjectMeta, annotationKeyRegistrationOnly) {
-			myRunners = append(myRunners, r)
+			// If the runner is already marked for deletion(=has a non-zero deletion timestamp) by the runner controller (can be caused by an ephemeral runner completion)
+			// or by runnerreplicaset controller (in case it was deleted in the previous reconcilation loop),
+			// we don't need to bother calling GitHub API to re-mark the runner for deletion.
+			// Just hold on, and runners will disappear as long as the runner controller is up and running.
+			if !r.DeletionTimestamp.IsZero() {
+				continue
+			}
+
+			if r.Annotations != nil {
+				if a, ok := r.Annotations[SyncTimeAnnotationKey]; ok {
+					t, err := time.Parse(time.RFC3339, a)
+					if err == nil {
+						if lastSyncTime == nil || lastSyncTime.Before(t) {
+							lastSyncTime = &t
+						}
+					}
+				}
+			}
 
 			current += 1
 
@@ -152,7 +173,30 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	if current > desired {
+	effectiveTime := rs.Spec.EffectiveTime
+	ephemeral := rs.Spec.Template.Spec.Ephemeral == nil || *rs.Spec.Template.Spec.Ephemeral
+
+	if current < desired && ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time) {
+		log.V(1).Info("Detected that some ephemeral runners have disappeared. Usually this is due to that ephemeral runner completions so ARC does not create new runners until EffectiveTime is updated.", "lastSyncTime", metav1.Time{Time: *lastSyncTime}, "effectiveTime", *effectiveTime, "desired", desired, "available", current, "ready", ready)
+	} else if current > desired {
+		// If you use ephemeral runners with webhook-based autoscaler and the runner controller is working normally,
+		// you're unlikely to fall into this branch.
+		//
+		// That's becaseu all the stakeholders work like this:
+		//
+		// 1. A runner pod completes with the runner container exiting with code 0
+		// 2. ARC runner controller detects the pod completion, marks the runner resource on k8s for deletion (=Runner.DeletionTimestamp becomes non-zero)
+		// 3. GitHub triggers a corresponding workflow_job "complete" webhook event
+		// 4. ARC github-webhook-server (webhook-based autoscaler) receives the webhook event updates HRA with removing the oldest capacity reservation
+		// 5. ARC horizontalrunnerautoscaler updates RunnerDeployment's desired replicas based on capacity reservations
+		// 6. ARC runnerdeployment controller updates RunnerReplicaSet's desired replicas
+		// 7. (We're here) ARC runnerreplicaset controller (this controller) starts reconciling the RunnerReplicaSet
+		//
+		// In a normally working ARC installation, the runner that was used to run the workflow job should already have been
+		// marked for deletion by the runner controller.
+		// This runnerreplicaset controller doesn't count marked runners into the `current` value, hence you're unlikely to
+		// fall into this branch when you're using ephemeral runners with webhook-based-autoscaler.
+
 		n := current - desired
 
 		log.V(0).Info(fmt.Sprintf("Deleting %d runners", n), "desired", desired, "current", current, "ready", ready)
@@ -282,6 +326,10 @@ func (r *RunnerReplicaSetReconciler) newRunner(rs v1alpha1.RunnerReplicaSet) (v1
 
 	objectMeta.GenerateName = rs.ObjectMeta.Name + "-"
 	objectMeta.Namespace = rs.ObjectMeta.Namespace
+	if objectMeta.Annotations == nil {
+		objectMeta.Annotations = map[string]string{}
+	}
+	objectMeta.Annotations[SyncTimeAnnotationKey] = time.Now().Format(time.RFC3339)
 
 	runner := v1alpha1.Runner{
 		TypeMeta:   metav1.TypeMeta{},
