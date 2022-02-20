@@ -176,6 +176,27 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Happens e.g. when dind is in runner and run completes
 	stopped := runnerPodOrContainerIsStopped(&pod)
 
+	ephemeral := runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
+
+	if stopped && ephemeral {
+		log.V(1).Info("Ephemeral runner has been stopped successfully. Marking this runner for deletion.")
+
+		// This is the key to make ephemeral runners to work reliably with webhook-based autoscale.
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/911#issuecomment-1046161384 for more context.
+		//
+		// In the next reconcilation loop, this triggers a runner unregistration.
+		// (Note that the unregistration can fail safely because an ephemeral runner usually unregisters itself from GitHub but we do it just for confirmation)
+		//
+		// See the code path above that is executed when `runner.ObjectMeta.DeletionTimestamp.IsZero()` isn't true,
+		// which handles the unregistrationa the removal of the completed pod, and so on.
+		if err := r.Delete(ctx, &runner); err != nil {
+			log.V(1).Error(err, "Retrying to mark this runner for deletion in 10 seconds.")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	restart := stopped
 
 	if registrationOnly && stopped {
