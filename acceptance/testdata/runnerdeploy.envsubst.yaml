@@ -28,6 +28,7 @@ spec:
       ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
       #dockerdWithinRunnerContainer: true
       #image: mumoshu/actions-runner-dind:dev
+      dockerdWithinRunnerContainer: ${RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER}
 
       #
       # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)

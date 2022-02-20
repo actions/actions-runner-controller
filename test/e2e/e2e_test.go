@@ -17,12 +17,15 @@ var (
 	controllerImageTag  = "e2e"
 	controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
 	runnerImageRepo     = "actionsrunnercontrollere2e/actions-runner"
+	runnerDindImageRepo = "actionsrunnercontrollere2e/actions-runner-dind"
 	runnerImageTag      = "e2e"
 	runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
+	runnerDindImage     = testing.Img(runnerDindImageRepo, runnerImageTag)
 
 	prebuildImages = []testing.ContainerImage{
 		controllerImage,
 		runnerImage,
+		runnerDindImage,
 	}
 
 	builds = []testing.DockerBuild{
@@ -35,6 +38,11 @@ var (
 			Dockerfile: "../../runner/Dockerfile",
 			Args:       []testing.BuildArg{},
 			Image:      runnerImage,
+		},
+		{
+			Dockerfile: "../../runner/Dockerfile.dindrunner",
+			Args:       []testing.BuildArg{},
+			Image:      runnerDindImage,
 		},
 	}
 
@@ -52,7 +60,6 @@ var (
 		"SYNC_PERIOD=" + "10s",
 		"NAME=" + controllerImageRepo,
 		"VERSION=" + controllerImageTag,
-		"RUNNER_NAME=" + runnerImageRepo,
 		"RUNNER_TAG=" + runnerImageTag,
 	}
 
@@ -173,6 +180,7 @@ type env struct {
 	githubTokenWebhook                                       string
 	testEnterprise                                           string
 	featureFlagEphemeral                                     bool
+	dockerdWithinRunnerContainer                             bool
 	testJobs                                                 []job
 }
 
@@ -202,6 +210,12 @@ func initTestEnv(t *testing.T) *env {
 	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 100)
 	ephemeral, _ := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL"))
 	e.featureFlagEphemeral = ephemeral
+
+	var err error
+	e.dockerdWithinRunnerContainer, err = strconv.ParseBool(testing.Getenv(t, "TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER", "false"))
+	if err != nil {
+		panic(fmt.Sprintf("unable to parse bool from TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER: %v", err))
+	}
 
 	return e
 }
@@ -258,6 +272,18 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"RUNNER_LABEL=" + e.runnerLabel,
 		"TEST_ID=" + e.testID,
 		fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", e.featureFlagEphemeral),
+	}
+
+	if e.dockerdWithinRunnerContainer {
+		varEnv = append(varEnv,
+			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=true",
+			"RUNNER_NAME="+runnerDindImageRepo,
+		)
+	} else {
+		varEnv = append(varEnv,
+			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=false",
+			"RUNNER_NAME="+runnerImageRepo,
+		)
 	}
 
 	scriptEnv = append(scriptEnv, varEnv...)
