@@ -58,5 +58,6 @@ spec:
   - githubEvent: {}
     amount: 1
     duration: "1m"
-  minReplicas: 0
+  minReplicas: ${RUNNER_MIN_REPLICAS}
   maxReplicas: 10
+  scaleDownDelaySecondsAfterScaleOut: ${RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT}

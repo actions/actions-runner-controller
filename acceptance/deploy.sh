@@ -83,7 +83,7 @@ else
 fi
 
 if [ -n "${TEST_ORG}" ]; then
-  cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ENTERPRISE= TEST_REPO= NAME=org-runnerdeploy envsubst | kubectl apply -f -
+  cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ENTERPRISE= TEST_REPO= RUNNER_MIN_REPLICAS=${ORG_RUNNER_MIN_REPLICAS} NAME=org-runnerdeploy envsubst | kubectl apply -f -
 
   if [ -n "${TEST_ORG_GROUP}" ]; then
     cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ENTERPRISE= TEST_REPO= TEST_GROUP=${TEST_ORG_GROUP} NAME=orggroup-runnerdeploy envsubst | kubectl apply -f -
