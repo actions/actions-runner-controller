@@ -110,6 +110,8 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Name:                        controllerName("runner"),
 			RegistrationRecheckInterval: time.Millisecond,
 			RegistrationRecheckJitter:   time.Millisecond,
+			UnregistrationTimeout:       1 * time.Second,
+			UnregistrationRetryDelay:    1 * time.Second,
 		}
 		err = runnerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runner controller")

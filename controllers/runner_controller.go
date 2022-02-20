@@ -72,6 +72,9 @@ type RunnerReconciler struct {
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
+
+	UnregistrationTimeout    time.Duration
+	UnregistrationRetryDelay time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -426,7 +429,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	updatedPod, res, err := tickRunnerGracefulStop(ctx, log, r.GitHubClient, r.Client, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name, &pod)
+	updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name, &pod)
 	if res != nil {
 		return *res, err
 	}
@@ -470,7 +473,7 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
 	if removed {
-		_, res, err := tickRunnerGracefulStop(ctx, log, r.GitHubClient, r.Client, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name, pod)
+		_, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name, pod)
 		if res != nil {
 			return *res, err
 		}
@@ -487,6 +490,24 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RunnerReconciler) unregistrationTimeout() time.Duration {
+	unregistrationTimeout := DefaultUnregistrationTimeout
+
+	if r.UnregistrationTimeout > 0 {
+		unregistrationTimeout = r.UnregistrationTimeout
+	}
+	return unregistrationTimeout
+}
+
+func (r *RunnerReconciler) unregistrationRetryDelay() time.Duration {
+	retryDelay := DefaultUnregistrationRetryDelay
+
+	if r.UnregistrationRetryDelay > 0 {
+		retryDelay = r.UnregistrationRetryDelay
+	}
+	return retryDelay
 }
 
 func (r *RunnerReconciler) processRunnerPodDeletion(ctx context.Context, runner v1alpha1.Runner, log logr.Logger, pod corev1.Pod) (reconcile.Result, error) {

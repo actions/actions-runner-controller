@@ -17,6 +17,16 @@ import (
 const (
 	unregistrationCompleteTimestamp = "unregistration-complete-timestamp"
 	unregistrationStartTimestamp    = "unregistration-start-timestamp"
+
+	// DefaultUnregistrationTimeout is the duration until ARC gives up retrying the combo of ListRunners API (to detect the runner ID by name)
+	// and RemoveRunner API (to actually unregister the runner) calls.
+	// This needs to be longer than 60 seconds because a part of the combo, the ListRunners API, seems to use the Cache-Control header of max-age=60s
+	// and that instructs our cache library httpcache to cache responses for 60 seconds, which results in ARC unable to see the runner in the ListRunners response
+	// up to 60 seconds (or even more depending on the situation).
+	DefaultUnregistrationTimeout = 60 * time.Second
+
+	// This can be any value but a larger value can make an unregistration timeout longer than configured in practice.
+	DefaultUnregistrationRetryDelay = 30 * time.Second
 )
 
 // tickRunnerGracefulStop reconciles the runner and the runner pod in a way so that
@@ -29,7 +39,7 @@ const (
 // This function is designed to complete a length graceful stop process in a unblocking way.
 // When it wants to be retried later, the function returns a non-nil *ctrl.Result as the second return value, may or may not populating the error in the second return value.
 // The caller is expected to return the returned ctrl.Result and error to postpone the current reconcilation loop and trigger a scheduled retry.
-func tickRunnerGracefulStop(ctx context.Context, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
+func tickRunnerGracefulStop(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
 	if pod != nil {
 		if _, ok := getAnnotation(pod, unregistrationStartTimestamp); !ok {
 			updated := pod.DeepCopy()
@@ -46,7 +56,7 @@ func tickRunnerGracefulStop(ctx context.Context, log logr.Logger, ghClient *gith
 		}
 	}
 
-	if res, err := ensureRunnerUnregistration(ctx, 10*time.Minute, 30*time.Second, log, ghClient, enterprise, organization, repository, runner, pod); res != nil {
+	if res, err := ensureRunnerUnregistration(ctx, unregistrationTimeout, retryDelay, log, ghClient, enterprise, organization, repository, runner, pod); res != nil {
 		return nil, res, err
 	}
 

@@ -47,6 +47,9 @@ type RunnerPodReconciler struct {
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
+
+	UnregistrationTimeout    time.Duration
+	UnregistrationRetryDelay time.Duration
 }
 
 const (
@@ -105,7 +108,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
 		if removed {
-			updatedPod, res, err := tickRunnerGracefulStop(ctx, log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+			updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
 			if res != nil {
 				return *res, err
 			}
@@ -348,7 +351,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	updated, res, err := tickRunnerGracefulStop(ctx, log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+	updated, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
 	if res != nil {
 		return *res, err
 	}
@@ -363,6 +366,24 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log.Info("Deleted runner pod", "name", runnerPod.Name)
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RunnerPodReconciler) unregistrationTimeout() time.Duration {
+	unregistrationTimeout := DefaultUnregistrationTimeout
+
+	if r.UnregistrationTimeout > 0 {
+		unregistrationTimeout = r.UnregistrationTimeout
+	}
+	return unregistrationTimeout
+}
+
+func (r *RunnerPodReconciler) unregistrationRetryDelay() time.Duration {
+	retryDelay := DefaultUnregistrationRetryDelay
+
+	if r.UnregistrationRetryDelay > 0 {
+		retryDelay = r.UnregistrationRetryDelay
+	}
+	return retryDelay
 }
 
 func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
