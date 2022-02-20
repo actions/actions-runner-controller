@@ -1,5 +1,6 @@
 #!/bin/bash
 
+RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
 LIGHTGREEN="\e[0;32m"
@@ -77,10 +78,12 @@ if [ ! -d "${RUNNER_HOME}" ]; then
 fi
 
 # if this is not a testing environment
-if [ -z "${UNITTEST:-}" ]; then
-  sudo chown -R runner:docker ${RUNNER_HOME}
-  # use cp over mv to avoid issues when /runnertmp and {RUNNER_HOME} are on different devices
-  cp -r /runnertmp/* ${RUNNER_HOME}/
+if [[ "${UNITTEST:-}" != '' ]]; then
+  sudo chown -R runner:docker "$RUNNER_HOME"
+  # use cp over mv to avoid issues when src and dst are on different devices
+  shopt -s dotglob
+  cp -r "$RUNNER_ASSETS_DIR"/* "$RUNNER_HOME"/
+  shopt -u dotglob
 fi
 
 cd ${RUNNER_HOME}
