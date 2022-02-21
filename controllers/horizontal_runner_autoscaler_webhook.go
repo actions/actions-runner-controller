@@ -792,10 +792,16 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 		copy.Spec.CapacityReservations = reservations
 	}
 
-	autoscaler.Log.Info(
+	before := len(target.HorizontalRunnerAutoscaler.Spec.CapacityReservations)
+	expired := before - len(capacityReservations)
+	after := len(copy.Spec.CapacityReservations)
+
+	autoscaler.Log.V(1).Info(
 		"Patching hra for capacityReservations update",
-		"before", target.HorizontalRunnerAutoscaler.Spec.CapacityReservations,
-		"after", copy.Spec.CapacityReservations,
+		"before", before,
+		"expired", expired,
+		"amount", amount,
+		"after", after,
 	)
 
 	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
