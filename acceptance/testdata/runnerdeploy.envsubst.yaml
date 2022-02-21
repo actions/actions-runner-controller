@@ -57,7 +57,7 @@ spec:
   scaleUpTriggers:
   - githubEvent: {}
     amount: 1
-    duration: "1m"
+    duration: "10m"
   minReplicas: ${RUNNER_MIN_REPLICAS}
   maxReplicas: 10
   scaleDownDelaySecondsAfterScaleOut: ${RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT}
