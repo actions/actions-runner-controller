@@ -144,6 +144,10 @@ env:
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
 
+## specify if you want to use `hostNetwork` in the controller pod. This is needed
+## to make webhook working in some environments, like Calico/AWS
+useHostNetwork: false
+
 ## specify additional volumes to mount in the manager container, this can be used
 ## to specify additional storage of material or to inject files from ConfigMaps
 ## into the running container
