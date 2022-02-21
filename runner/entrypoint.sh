@@ -78,7 +78,7 @@ if [ ! -d "${RUNNER_HOME}" ]; then
 fi
 
 # if this is not a testing environment
-if [[ "${UNITTEST:-}" != '' ]]; then
+if [[ "${UNITTEST:-}" == '' ]]; then
   sudo chown -R runner:docker "$RUNNER_HOME"
   # use cp over mv to avoid issues when src and dst are on different devices
   shopt -s dotglob
