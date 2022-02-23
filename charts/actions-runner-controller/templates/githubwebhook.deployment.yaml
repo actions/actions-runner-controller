@@ -23,7 +23,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      hostNetwork: true
+      hostNetwork: {{ .Values.useHostNetwork }}
       {{- with .Values.githubWebhookServer.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
