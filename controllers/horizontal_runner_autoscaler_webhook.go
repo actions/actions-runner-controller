@@ -351,9 +351,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx con
 			return nil, err
 		}
 
-		for _, d := range hraList.Items {
-			hras = append(hras, d)
-		}
+		hras = append(hras, hraList.Items...)
 	}
 
 	return hras, nil
@@ -791,7 +789,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 	}
 
 	autoscaler.Log.Info(
-		"Patching hra for capacityReservations update",
+		fmt.Sprintf("Patching hra %s for capacityReservations update", target.HorizontalRunnerAutoscaler.Name),
 		"before", target.HorizontalRunnerAutoscaler.Spec.CapacityReservations,
 		"after", copy.Spec.CapacityReservations,
 	)
@@ -829,6 +827,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
 
 		if hra.Spec.ScaleTargetRef.Name == "" {
+			autoscaler.Log.V(1).Info(fmt.Sprintf("scale target ref name not set for hra %s", hra.Name))
 			return nil
 		}
 
