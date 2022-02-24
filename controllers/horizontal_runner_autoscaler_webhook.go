@@ -650,6 +650,11 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroup
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleTarget(ctx context.Context, name string, labels []string) (*ScaleTarget, error) {
+	if len(labels) == 0 {
+		// No labels, can't be self-hosted runner
+		autoscaler.Log.V(1).Info(fmt.Sprintf("Skipping finding scale target for %s, because no labels", name))
+		return nil, nil
+	}
 	hras, err := autoscaler.findHRAsByKey(ctx, name)
 	if err != nil {
 		return nil, err
