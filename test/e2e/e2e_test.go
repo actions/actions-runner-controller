@@ -277,7 +277,9 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"TEST_ID=" + e.testID,
 		fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", e.featureFlagEphemeral),
 		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
+		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 	}
 
 	if e.dockerdWithinRunnerContainer {
