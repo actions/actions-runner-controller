@@ -56,13 +56,23 @@ if [ "${tool}" == "helm" ]; then
   # To prevent `CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: metadata.annotations: Too long: must have at most 262144 bytes`
   # errors
   kubectl create -f charts/actions-runner-controller/crds || kubectl replace -f charts/actions-runner-controller/crds
-  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
+  # This wait fails due to timeout when it's already in crashloopback and this update doesn't change the image tag.
+  # That's why we add `|| :`. With that we prevent stopping the script in case of timeout and
+  # proceed to delete (possibly in crashloopback and/or running with outdated image) pods so that they are recreated by K8s.
+  kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s || :
 else
   kubectl apply \
     -n actions-runner-system \
     -f release/actions-runner-controller.yaml
-  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available --timeout 120s
+  kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available --timeout 120s || :
 fi
+
+# Restart all ARC pods
+kubectl -n actions-runner-system delete po -l app.kubernetes.io/name=actions-runner-controller
+
+echo Waiting for all ARC pods to be up and running after restart
+
+kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 120s
 
 # Adhocly wait for some time until actions-runner-controller's admission webhook gets ready
 sleep 20
