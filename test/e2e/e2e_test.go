@@ -30,9 +30,10 @@ var (
 
 	builds = []testing.DockerBuild{
 		{
-			Dockerfile: "../../Dockerfile",
-			Args:       []testing.BuildArg{},
-			Image:      controllerImage,
+			Dockerfile:   "../../Dockerfile",
+			Args:         []testing.BuildArg{},
+			Image:        controllerImage,
+			EnableBuildX: true,
 		},
 		{
 			Dockerfile: "../../runner/Dockerfile",
