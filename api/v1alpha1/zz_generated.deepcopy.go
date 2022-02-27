@@ -932,6 +932,10 @@ func (in *RunnerSetList) DeepCopyObject() runtime.Object {
 func (in *RunnerSetSpec) DeepCopyInto(out *RunnerSetSpec) {
 	*out = *in
 	in.RunnerConfig.DeepCopyInto(&out.RunnerConfig)
+	if in.EffectiveTime != nil {
+		in, out := &in.EffectiveTime, &out.EffectiveTime
+		*out = (*in).DeepCopy()
+	}
 	in.StatefulSetSpec.DeepCopyInto(&out.StatefulSetSpec)
 }
 

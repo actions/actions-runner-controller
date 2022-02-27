@@ -356,6 +356,13 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return *res, err
 	}
 
+	if runnerPodOrContainerIsStopped(updated) {
+		log.Info("Detected runner to have successfully stopped", "name", runnerPod.Name)
+		return ctrl.Result{}, nil
+	} else {
+		log.Info("Runner can be safely deleted", "name", runnerPod.Name)
+	}
+
 	// Delete current pod if recreation is needed
 	if err := r.Delete(ctx, updated); err != nil {
 		log.Error(err, "Failed to delete pod resource")

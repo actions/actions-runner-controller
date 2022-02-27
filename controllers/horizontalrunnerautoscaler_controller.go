@@ -202,15 +202,38 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			}
 			currentDesiredReplicas := getIntOrDefault(replicas, defaultReplicas)
 
+			ephemeral := rs.Spec.Ephemeral == nil || *rs.Spec.Ephemeral
+
+			var effectiveTime *time.Time
+
+			for _, r := range hra.Spec.CapacityReservations {
+				t := r.EffectiveTime
+				if effectiveTime == nil || effectiveTime.Before(t.Time) {
+					effectiveTime = &t.Time
+				}
+			}
+
 			if currentDesiredReplicas != newDesiredReplicas {
 				copy := rs.DeepCopy()
 				v := int32(newDesiredReplicas)
 				copy.Spec.Replicas = &v
 
+				if ephemeral && effectiveTime != nil {
+					copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
+				}
+
+				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
+					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
+				}
+			} else if ephemeral && effectiveTime != nil {
+				copy := rs.DeepCopy()
+				copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
+
 				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
 					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
 				}
 			}
+
 			return nil
 		})
 	}
