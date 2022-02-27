@@ -72,6 +72,9 @@ type RunnerReconciler struct {
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
+
+	UnregistrationTimeout    time.Duration
+	UnregistrationRetryDelay time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -110,8 +113,23 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 	} else {
+		var p *corev1.Pod
+
+		{
+			var pod corev1.Pod
+			if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+				if !kerrors.IsNotFound(err) {
+					log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
+
+					return ctrl.Result{Requeue: true}, nil
+				}
+			} else {
+				p = &pod
+			}
+		}
+
 		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
-		return r.processRunnerDeletion(runner, ctx, log)
+		return r.processRunnerDeletion(runner, ctx, log, p)
 	}
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
@@ -159,20 +177,27 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// If pod has ended up succeeded we need to restart it
 	// Happens e.g. when dind is in runner and run completes
-	stopped := pod.Status.Phase == corev1.PodSucceeded
+	stopped := runnerPodOrContainerIsStopped(&pod)
 
-	if !stopped {
-		if pod.Status.Phase == corev1.PodRunning {
-			for _, status := range pod.Status.ContainerStatuses {
-				if status.Name != containerName {
-					continue
-				}
+	ephemeral := runner.Spec.Ephemeral == nil || *runner.Spec.Ephemeral
 
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
-					stopped = true
-				}
-			}
+	if stopped && ephemeral {
+		log.V(1).Info("Ephemeral runner has been stopped successfully. Marking this runner for deletion.")
+
+		// This is the key to make ephemeral runners to work reliably with webhook-based autoscale.
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/911#issuecomment-1046161384 for more context.
+		//
+		// In the next reconcilation loop, this triggers a runner unregistration.
+		// (Note that the unregistration can fail safely because an ephemeral runner usually unregisters itself from GitHub but we do it just for confirmation)
+		//
+		// See the code path above that is executed when `runner.ObjectMeta.DeletionTimestamp.IsZero()` isn't true,
+		// which handles the unregistrationa the removal of the completed pod, and so on.
+		if err := r.Delete(ctx, &runner); err != nil {
+			log.V(1).Error(err, "Retrying to mark this runner for deletion in 10 seconds.")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
+
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	restart := stopped
@@ -404,64 +429,53 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	// Try to delete current pod if recreation is needed
-	safeToDeletePod := false
-	ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-	if err != nil {
-		log.Error(err, "Failed to unregister runner before deleting the pod.", "runner", runner.Name)
-	} else {
-		// `r.unregisterRunner()` will returns `false, nil` if the runner is not found on GitHub.
-		if !ok {
-			log.Info("Runner no longer exists on GitHub", "runner", runner.Name)
-		}
-
-		safeToDeletePod = true
+	updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name, &pod)
+	if res != nil {
+		return *res, err
 	}
 
-	if safeToDeletePod {
-		// Only delete the pod if we successfully unregistered the runner or the runner is already deleted from the service.
-		// This should help us avoid race condition between runner pickup job after we think the runner is not busy.
-		if err := r.Delete(ctx, &pod); err != nil {
-			log.Error(err, "Failed to delete pod resource")
-			return ctrl.Result{}, err
-		}
-
-		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
-		log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
+	// Only delete the pod if we successfully unregistered the runner or the runner is already deleted from the service.
+	// This should help us avoid race condition between runner pickup job after we think the runner is not busy.
+	if err := r.Delete(ctx, updatedPod); err != nil {
+		log.Error(err, "Failed to delete pod resource")
+		return ctrl.Result{}, err
 	}
+
+	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
+	log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
 
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger) (reconcile.Result, error) {
+func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
+	// If pod has ended up succeeded we need to restart it
+	// Happens e.g. when dind is in runner and run completes
+	stopped := pod.Status.Phase == corev1.PodSucceeded
+
+	if !stopped {
+		if pod.Status.Phase == corev1.PodRunning {
+			for _, status := range pod.Status.ContainerStatuses {
+				if status.Name != containerName {
+					continue
+				}
+
+				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+					stopped = true
+				}
+			}
+		}
+	}
+
+	return stopped
+}
+
+func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger, pod *corev1.Pod) (reconcile.Result, error) {
 	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
 	if removed {
-		if len(runner.Status.Registration.Token) > 0 {
-			ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-			if err != nil {
-				if errors.Is(err, &gogithub.RateLimitError{}) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
-
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-				}
-
-				return ctrl.Result{}, err
-			}
-
-			if !ok {
-				log.V(1).Info("Runner no longer exists on GitHub")
-			}
-		} else {
-			log.V(1).Info("Runner was never registered on GitHub")
+		_, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name, pod)
+		if res != nil {
+			return *res, err
 		}
 
 		newRunner := runner.DeepCopy()
@@ -476,6 +490,24 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RunnerReconciler) unregistrationTimeout() time.Duration {
+	unregistrationTimeout := DefaultUnregistrationTimeout
+
+	if r.UnregistrationTimeout > 0 {
+		unregistrationTimeout = r.UnregistrationTimeout
+	}
+	return unregistrationTimeout
+}
+
+func (r *RunnerReconciler) unregistrationRetryDelay() time.Duration {
+	retryDelay := DefaultUnregistrationRetryDelay
+
+	if r.UnregistrationRetryDelay > 0 {
+		retryDelay = r.UnregistrationRetryDelay
+	}
+	return retryDelay
 }
 
 func (r *RunnerReconciler) processRunnerPodDeletion(ctx context.Context, runner v1alpha1.Runner, log logr.Logger, pod corev1.Pod) (reconcile.Result, error) {

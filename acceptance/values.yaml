@@ -1,7 +1,8 @@
 # Set actions-runner-controller settings for testing
 githubAPICacheDuration: 10s
+logLevel: "-3"
 githubWebhookServer:
-  logLevel: debug
+  logLevel: "-3"
   enabled: true
   labels: {}
   replicaCount: 1

@@ -28,6 +28,7 @@ spec:
       ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
       #dockerdWithinRunnerContainer: true
       #image: mumoshu/actions-runner-dind:dev
+      dockerdWithinRunnerContainer: ${RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER}
 
       #
       # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
@@ -56,6 +57,7 @@ spec:
   scaleUpTriggers:
   - githubEvent: {}
     amount: 1
-    duration: "1m"
-  minReplicas: 0
+    duration: "10m"
+  minReplicas: ${RUNNER_MIN_REPLICAS}
   maxReplicas: 10
+  scaleDownDelaySecondsAfterScaleOut: ${RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT}

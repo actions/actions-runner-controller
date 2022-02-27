@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation"
+	"github.com/go-logr/logr"
 	"github.com/google/go-github/v39/github"
+	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
 
@@ -28,6 +31,8 @@ type Config struct {
 	BasicauthUsername string `split_words:"true"`
 	BasicauthPassword string `split_words:"true"`
 	RunnerGitHubURL   string `split_words:"true"`
+
+	Log *logr.Logger
 }
 
 // Client wraps GitHub client with some additional
@@ -82,8 +87,11 @@ func (c *Config) NewClient() (*Client, error) {
 		transport = tr
 	}
 
-	transport = metrics.Transport{Transport: transport}
-	httpClient := &http.Client{Transport: transport}
+	cached := httpcache.NewTransport(httpcache.NewMemoryCache())
+	cached.Transport = transport
+	loggingTransport := logging.Transport{Transport: cached, Log: c.Log}
+	metricsTransport := metrics.Transport{Transport: loggingTransport}
+	httpClient := &http.Client{Transport: metricsTransport}
 
 	var client *github.Client
 	var githubBaseURL string

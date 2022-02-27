@@ -177,6 +177,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 	if currentDesiredReplicas != newDesiredReplicas {
 		newestSet.Spec.Replicas = &newDesiredReplicas
+		newestSet.Spec.EffectiveTime = rd.Spec.EffectiveTime
 
 		if err := r.Client.Update(ctx, newestSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
@@ -417,9 +418,10 @@ func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []str
 			Labels:       newRSTemplate.ObjectMeta.Labels,
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
-			Replicas: rd.Spec.Replicas,
-			Selector: newRSSelector,
-			Template: newRSTemplate,
+			Replicas:      rd.Spec.Replicas,
+			Selector:      newRSSelector,
+			Template:      newRSTemplate,
+			EffectiveTime: rd.Spec.EffectiveTime,
 		},
 	}
 

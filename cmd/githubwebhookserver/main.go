@@ -29,15 +29,14 @@ import (
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/controllers"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
-	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/exec"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -47,11 +46,6 @@ var (
 )
 
 const (
-	logLevelDebug = "debug"
-	logLevelInfo  = "info"
-	logLevelWarn  = "warn"
-	logLevelError = "error"
-
 	webhookSecretTokenEnvName = "GITHUB_WEBHOOK_SECRET_TOKEN"
 )
 
@@ -97,7 +91,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
-	flag.StringVar(&logLevel, "log-level", logLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
+	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&webhookSecretToken, "github-webhook-secret-token", "", "The personal access token of GitHub.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -126,23 +120,7 @@ func main() {
 		setupLog.Info("-watch-namespace is %q. Only HorizontalRunnerAutoscalers in %q are watched, cached, and considered as scale targets.")
 	}
 
-	logger := zap.New(func(o *zap.Options) {
-		switch logLevel {
-		case logLevelDebug:
-			o.Development = true
-			lvl := zaplib.NewAtomicLevelAt(-2) // maps to logr's V(2)
-			o.Level = &lvl
-		case logLevelInfo:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
-			o.Level = &lvl
-		case logLevelWarn:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.WarnLevel)
-			o.Level = &lvl
-		case logLevelError:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.ErrorLevel)
-			o.Level = &lvl
-		}
-	})
+	logger := logging.NewLogger(logLevel)
 
 	ctrl.SetLogger(logger)
 
@@ -152,6 +130,8 @@ func main() {
 	// That is, all runner groups managed by ARC are assumed to be visible to any repositories,
 	// which is wrong when you have one or more non-default runner groups in your organization or enterprise.
 	if len(c.Token) > 0 || (c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != "") || (len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0) {
+		c.Log = &logger
+
 		ghClient, err = c.NewClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)

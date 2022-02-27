@@ -45,6 +45,11 @@ spec:
             spec:
               description: RunnerReplicaSetSpec defines the desired state of RunnerReplicaSet
               properties:
+                effectiveTime:
+                  description: EffectiveTime is the time the upstream controller requested to sync Replicas. It is usually populated by the webhook-based autoscaler via HRA and RunnerDeployment. The value is used to prevent runnerreplicaset controller from unnecessarily recreating ephemeral runners based on potentially outdated Replicas value.
+                  format: date-time
+                  nullable: true
+                  type: string
                 replicas:
                   nullable: true
                   type: integer
