@@ -447,6 +447,20 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
+func runnerContainerExitCode(pod *corev1.Pod) *int32 {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name != containerName {
+			continue
+		}
+
+		if status.State.Terminated != nil {
+			return &status.State.Terminated.ExitCode
+		}
+	}
+
+	return nil
+}
+
 func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	// If pod has ended up succeeded we need to restart it
 	// Happens e.g. when dind is in runner and run completes
