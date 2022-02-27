@@ -99,6 +99,30 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 
 		log.Error(err, "Failed to unregister runner before deleting the pod.")
 
+		errRes := &gogithub.ErrorResponse{}
+		if errors.As(err, &errRes) {
+			code := runnerContainerExitCode(pod)
+
+			runner, _ := getRunner(ctx, ghClient, enterprise, organization, repository, runner)
+
+			var runnerID int64
+
+			if runner != nil && runner.ID != nil {
+				runnerID = *runner.ID
+			}
+
+			if errRes.Response.StatusCode == 422 && code != nil {
+				log.V(2).Info("Runner container has already stopped but the unregistration attempt failed. "+
+					"This can happen when the runner container crashed due to an unhandled error, OOM, etc. "+
+					"ARC terminates the pod anyway. You'd probably need to manually delete the runner later by calling the GitHub API",
+					"runnerExitCode", *code,
+					"runnerID", runnerID,
+				)
+
+				return nil, nil
+			}
+		}
+
 		return &ctrl.Result{}, err
 	} else if ok {
 		log.Info("Runner has just been unregistered. Removing the runner pod.")
@@ -204,22 +228,16 @@ func setAnnotation(pod *corev1.Pod, key, value string) {
 // The longer the grace period is, the earlier a cluster resource shortage can occur due to throttoled runner pod deletions,
 // while the shorter the grace period is, the more likely you may encounter the race issue.
 func unregisterRunner(ctx context.Context, client *github.Client, enterprise, org, repo, name string) (bool, error) {
-	runners, err := client.ListRunners(ctx, enterprise, org, repo)
+	runner, err := getRunner(ctx, client, enterprise, org, repo, name)
 	if err != nil {
 		return false, err
 	}
 
-	id := int64(0)
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			id = runner.GetID()
-			break
-		}
-	}
-
-	if id == int64(0) {
+	if runner == nil || runner.ID == nil {
 		return false, nil
 	}
+
+	id := *runner.ID
 
 	// For the record, historically ARC did not try to call RemoveRunner on a busy runner, but it's no longer true.
 	// The reason ARC did so was to let a runner running a job to not stop prematurely.
@@ -246,4 +264,19 @@ func unregisterRunner(ctx context.Context, client *github.Client, enterprise, or
 	}
 
 	return true, nil
+}
+
+func getRunner(ctx context.Context, client *github.Client, enterprise, org, repo, name string) (*gogithub.Runner, error) {
+	runners, err := client.ListRunners(ctx, enterprise, org, repo)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, runner := range runners {
+		if runner.GetName() == name {
+			return runner, nil
+		}
+	}
+
+	return nil, nil
 }
