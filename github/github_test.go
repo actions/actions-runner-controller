@@ -152,3 +152,10 @@ func TestCleanup(t *testing.T) {
 		t.Errorf("expired token still exists")
 	}
 }
+
+func TestUserAgent(t *testing.T) {
+	client := newTestClient()
+	if client.UserAgent != "actions-runner-controller" {
+		t.Errorf("UserAgent should be set to actions-runner-controller")
+	}
+}

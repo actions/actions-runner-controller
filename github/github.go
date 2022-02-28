@@ -51,7 +51,6 @@ type BasicAuthTransport struct {
 
 func (p BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.SetBasicAuth(p.Username, p.Password)
-	req.Header.Set("User-Agent", "actions-runner-controller")
 	return http.DefaultTransport.RoundTrip(req)
 }
 
@@ -135,6 +134,8 @@ func (c *Config) NewClient() (*Client, error) {
 			}
 		}
 	}
+
+	client.UserAgent = "actions-runner-controller"
 
 	return &Client{
 		Client:        client,
