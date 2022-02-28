@@ -17,12 +17,15 @@ var (
 	controllerImageTag  = "e2e"
 	controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
 	runnerImageRepo     = "actionsrunnercontrollere2e/actions-runner"
+	runnerDindImageRepo = "actionsrunnercontrollere2e/actions-runner-dind"
 	runnerImageTag      = "e2e"
 	runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
+	runnerDindImage     = testing.Img(runnerDindImageRepo, runnerImageTag)
 
 	prebuildImages = []testing.ContainerImage{
 		controllerImage,
 		runnerImage,
+		runnerDindImage,
 	}
 
 	builds = []testing.DockerBuild{
@@ -35,6 +38,11 @@ var (
 			Dockerfile: "../../runner/Dockerfile",
 			Args:       []testing.BuildArg{},
 			Image:      runnerImage,
+		},
+		{
+			Dockerfile: "../../runner/Dockerfile.dindrunner",
+			Args:       []testing.BuildArg{},
+			Image:      runnerDindImage,
 		},
 	}
 
@@ -52,7 +60,6 @@ var (
 		"SYNC_PERIOD=" + "10s",
 		"NAME=" + controllerImageRepo,
 		"VERSION=" + controllerImageTag,
-		"RUNNER_NAME=" + runnerImageRepo,
 		"RUNNER_TAG=" + runnerImageTag,
 	}
 
@@ -167,11 +174,15 @@ type env struct {
 	useRunnerSet bool
 
 	testID                                                   string
+	testName                                                 string
 	repoToCommit                                             string
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
 	githubTokenWebhook                                       string
 	testEnterprise                                           string
 	featureFlagEphemeral                                     bool
+	scaleDownDelaySecondsAfterScaleOut                       int64
+	minReplicas                                              int64
+	dockerdWithinRunnerContainer                             bool
 	testJobs                                                 []job
 }
 
@@ -184,11 +195,12 @@ func initTestEnv(t *testing.T) *env {
 
 	id := e.ID()
 
-	testID := t.Name() + " " + id
+	testName := t.Name() + " " + id
 
-	t.Logf("Using test id %s", testID)
+	t.Logf("Initializing test with name %s", testName)
 
-	e.testID = testID
+	e.testID = id
+	e.testName = testName
 	e.runnerLabel = "test-" + id
 	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
 	e.githubTokenWebhook = testing.Getenv(t, "WEBHOOK_GITHUB_TOKEN")
@@ -197,9 +209,17 @@ func initTestEnv(t *testing.T) *env {
 	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 10)
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 100)
 	ephemeral, _ := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL"))
 	e.featureFlagEphemeral = ephemeral
+	e.scaleDownDelaySecondsAfterScaleOut, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT", "10"), 10, 32)
+	e.minReplicas, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_MIN_REPLICAS", "1"), 10, 32)
+
+	var err error
+	e.dockerdWithinRunnerContainer, err = strconv.ParseBool(testing.Getenv(t, "TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER", "false"))
+	if err != nil {
+		panic(fmt.Sprintf("unable to parse bool from TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER: %v", err))
+	}
 
 	return e
 }
@@ -254,7 +274,22 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"GITHUB_TOKEN=" + e.githubToken,
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
+		"TEST_ID=" + e.testID,
 		fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", e.featureFlagEphemeral),
+		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
+		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+	}
+
+	if e.dockerdWithinRunnerContainer {
+		varEnv = append(varEnv,
+			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=true",
+			"RUNNER_NAME="+runnerDindImageRepo,
+		)
+	} else {
+		varEnv = append(varEnv,
+			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=false",
+			"RUNNER_NAME="+runnerImageRepo,
+		)
 	}
 
 	scriptEnv = append(scriptEnv, varEnv...)
@@ -273,7 +308,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testID, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
+	installActionsWorkflow(t, e.testName, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
 }
 
 func (e *env) verifyActionsWorkflowRun(t *testing.T) {
@@ -302,13 +337,13 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 
 const Branch = "main"
 
-func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	wfName := "E2E " + testID
+	wfName := "E2E " + testName
 	wf := testing.Workflow{
 		Name: wfName,
 		On: testing.On{

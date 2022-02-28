@@ -99,10 +99,32 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 		return r.reconcile(ctx, req, log, hra, st, func(newDesiredReplicas int) error {
 			currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
 
+			ephemeral := rd.Spec.Template.Spec.Ephemeral == nil || *rd.Spec.Template.Spec.Ephemeral
+
+			var effectiveTime *time.Time
+
+			for _, r := range hra.Spec.CapacityReservations {
+				t := r.EffectiveTime
+				if effectiveTime == nil || effectiveTime.Before(t.Time) {
+					effectiveTime = &t.Time
+				}
+			}
+
 			// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 			if currentDesiredReplicas != newDesiredReplicas {
 				copy := rd.DeepCopy()
 				copy.Spec.Replicas = &newDesiredReplicas
+
+				if ephemeral && effectiveTime != nil {
+					copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
+				}
+
+				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
+					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
+				}
+			} else if ephemeral && effectiveTime != nil {
+				copy := rd.DeepCopy()
+				copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
 
 				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
 					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)

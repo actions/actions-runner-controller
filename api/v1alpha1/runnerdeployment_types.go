@@ -31,6 +31,14 @@ type RunnerDeploymentSpec struct {
 	// +nullable
 	Replicas *int `json:"replicas,omitempty"`
 
+	// EffectiveTime is the time the upstream controller requested to sync Replicas.
+	// It is usually populated by the webhook-based autoscaler via HRA.
+	// The value is inherited to RunnerRepicaSet(s) and used to prevent ephemeral runners from unnecessarily recreated.
+	//
+	// +optional
+	// +nullable
+	EffectiveTime *metav1.Time `json:"effectiveTime"`
+
 	// +optional
 	// +nullable
 	Selector *metav1.LabelSelector `json:"selector"`

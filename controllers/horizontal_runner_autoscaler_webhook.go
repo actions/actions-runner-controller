@@ -768,8 +768,10 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 	capacityReservations := getValidCapacityReservations(copy)
 
 	if amount > 0 {
+		now := time.Now()
 		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-			ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
+			EffectiveTime:  metav1.Time{Time: now},
+			ExpirationTime: metav1.Time{Time: now.Add(target.ScaleUpTrigger.Duration.Duration)},
 			Replicas:       amount,
 		})
 	} else if amount < 0 {
@@ -788,10 +790,16 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 		copy.Spec.CapacityReservations = reservations
 	}
 
-	autoscaler.Log.Info(
+	before := len(target.HorizontalRunnerAutoscaler.Spec.CapacityReservations)
+	expired := before - len(capacityReservations)
+	after := len(copy.Spec.CapacityReservations)
+
+	autoscaler.Log.V(1).Info(
 		fmt.Sprintf("Patching hra %s for capacityReservations update", target.HorizontalRunnerAutoscaler.Name),
-		"before", target.HorizontalRunnerAutoscaler.Spec.CapacityReservations,
-		"after", copy.Spec.CapacityReservations,
+		"before", before,
+		"expired", expired,
+		"amount", amount,
+		"after", after,
 	)
 
 	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
