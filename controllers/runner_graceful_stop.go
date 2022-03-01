@@ -4,19 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	gogithub "github.com/google/go-github/v39/github"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
+	// unregistrationCompleteTimestamp is the annotation that is added onto the pod once the previously started unregistration process has been completed.
 	unregistrationCompleteTimestamp = "unregistration-complete-timestamp"
-	unregistrationStartTimestamp    = "unregistration-start-timestamp"
+
+	// unregistarionStartTimestamp is the annotation that contains the time that the requested unregistration process has been started
+	unregistrationStartTimestamp = "unregistration-start-timestamp"
+
+	// unregistrationRequestTimestamp is the annotation that contains the time that the unregistration has been requested.
+	// This doesn't immediately start the unregistration. Instead, ARC will first check if the runner has already been registered.
+	// If not, ARC will hold on until the registration to complete first, and only after that it starts the unregistration process.
+	// This is crucial to avoid a race between ARC marking the runner pod for deletion while the actions-runner registers itself to GitHub, leaving the assigned job
+	// hang like forever.
+	unregistrationRequestTimestamp = "unregistration-request-timestamp"
+
+	annotationKeyRunnerID = "runner-id"
 
 	// DefaultUnregistrationTimeout is the duration until ARC gives up retrying the combo of ListRunners API (to detect the runner ID by name)
 	// and RemoveRunner API (to actually unregister the runner) calls.
@@ -40,48 +54,61 @@ const (
 // When it wants to be retried later, the function returns a non-nil *ctrl.Result as the second return value, may or may not populating the error in the second return value.
 // The caller is expected to return the returned ctrl.Result and error to postpone the current reconcilation loop and trigger a scheduled retry.
 func tickRunnerGracefulStop(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
-	if pod != nil {
-		if _, ok := getAnnotation(pod, unregistrationStartTimestamp); !ok {
-			updated := pod.DeepCopy()
-			setAnnotation(updated, unregistrationStartTimestamp, time.Now().Format(time.RFC3339))
-			if err := c.Patch(ctx, updated, client.MergeFrom(pod)); err != nil {
-				log.Error(err, fmt.Sprintf("Failed to patch pod to have %s annotation", unregistrationStartTimestamp))
-				return nil, &ctrl.Result{}, err
-			}
-			pod = updated
-
-			log.Info("Runner has started unregistration")
-		} else {
-			log.Info("Runner has already started unregistration")
-		}
+	pod, err := annotatePodOnce(ctx, c, log, pod, unregistrationStartTimestamp, time.Now().Format(time.RFC3339))
+	if err != nil {
+		return nil, &ctrl.Result{}, err
 	}
 
 	if res, err := ensureRunnerUnregistration(ctx, unregistrationTimeout, retryDelay, log, ghClient, enterprise, organization, repository, runner, pod); res != nil {
 		return nil, res, err
 	}
 
-	if pod != nil {
-		if _, ok := getAnnotation(pod, unregistrationCompleteTimestamp); !ok {
-			updated := pod.DeepCopy()
-			setAnnotation(updated, unregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
-			if err := c.Patch(ctx, updated, client.MergeFrom(pod)); err != nil {
-				log.Error(err, fmt.Sprintf("Failed to patch pod to have %s annotation", unregistrationCompleteTimestamp))
-				return nil, &ctrl.Result{}, err
-			}
-			pod = updated
-
-			log.Info("Runner has completed unregistration")
-		} else {
-			log.Info("Runner has already completed unregistration")
-		}
+	pod, err = annotatePodOnce(ctx, c, log, pod, unregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
+	if err != nil {
+		return nil, &ctrl.Result{}, err
 	}
 
 	return pod, nil, nil
 }
 
+// annotatePodOnce annotates the pod if it wasn't.
+// Returns the provided pod as-is if it was already annotated.
+// Returns the updated pod if the pod was missing the annotation and the update to add the annotation succeeded.
+func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod *corev1.Pod, k, v string) (*corev1.Pod, error) {
+	if pod == nil {
+		return nil, nil
+	}
+
+	if _, ok := getAnnotation(&pod.ObjectMeta, k); ok {
+		return pod, nil
+	}
+
+	updated := pod.DeepCopy()
+	setAnnotation(&updated.ObjectMeta, k, v)
+	if err := c.Patch(ctx, updated, client.MergeFrom(pod)); err != nil {
+		log.Error(err, fmt.Sprintf("Failed to patch pod to have %s annotation", k))
+		return nil, err
+	}
+
+	log.V(2).Info("Annotated pod", "key", k, "value", v)
+
+	return updated, nil
+}
+
 // If the first return value is nil, it's safe to delete the runner pod.
 func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
-	ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, runner)
+	var runnerID *int64
+
+	if id, ok := getAnnotation(&pod.ObjectMeta, annotationKeyRunnerID); ok {
+		v, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			return &ctrl.Result{}, err
+		}
+
+		runnerID = &v
+	}
+
+	ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, runner, runnerID)
 	if err != nil {
 		if errors.Is(err, &gogithub.RateLimitError{}) {
 			// We log the underlying error when we failed calling GitHub API to list or unregisters,
@@ -125,7 +152,7 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 
 		return &ctrl.Result{}, err
 	} else if ok {
-		log.Info("Runner has just been unregistered. Removing the runner pod.")
+		log.Info("Runner has just been unregistered.")
 	} else if pod == nil {
 		// `r.unregisterRunner()` will returns `false, nil` if the runner is not found on GitHub.
 		// However, that doesn't always mean the pod can be safely removed.
@@ -174,22 +201,47 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 	return nil, nil
 }
 
-func getAnnotation(pod *corev1.Pod, key string) (string, bool) {
-	if pod.Annotations == nil {
+func ensureRunnerPodRegistered(ctx context.Context, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
+	_, hasRunnerID := getAnnotation(&pod.ObjectMeta, annotationKeyRunnerID)
+	if runnerPodOrContainerIsStopped(pod) || hasRunnerID {
+		return pod, nil, nil
+	}
+
+	r, err := getRunner(ctx, ghClient, enterprise, organization, repository, runner)
+	if err != nil {
+		return nil, &ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	}
+
+	if r == nil || r.ID == nil {
+		return nil, &ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	}
+
+	id := *r.ID
+
+	updated, err := annotatePodOnce(ctx, c, log, pod, annotationKeyRunnerID, fmt.Sprintf("%d", id))
+	if err != nil {
+		return nil, &ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	}
+
+	return updated, nil, nil
+}
+
+func getAnnotation(meta *metav1.ObjectMeta, key string) (string, bool) {
+	if meta.Annotations == nil {
 		return "", false
 	}
 
-	v, ok := pod.Annotations[key]
+	v, ok := meta.Annotations[key]
 
 	return v, ok
 }
 
-func setAnnotation(pod *corev1.Pod, key, value string) {
-	if pod.Annotations == nil {
-		pod.Annotations = map[string]string{}
+func setAnnotation(meta *metav1.ObjectMeta, key, value string) {
+	if meta.Annotations == nil {
+		meta.Annotations = map[string]string{}
 	}
 
-	pod.Annotations[key] = value
+	meta.Annotations[key] = value
 }
 
 // unregisterRunner unregisters the runner from GitHub Actions by name.
@@ -227,17 +279,19 @@ func setAnnotation(pod *corev1.Pod, key, value string) {
 // There isn't a single right grace period that works for everyone.
 // The longer the grace period is, the earlier a cluster resource shortage can occur due to throttoled runner pod deletions,
 // while the shorter the grace period is, the more likely you may encounter the race issue.
-func unregisterRunner(ctx context.Context, client *github.Client, enterprise, org, repo, name string) (bool, error) {
-	runner, err := getRunner(ctx, client, enterprise, org, repo, name)
-	if err != nil {
-		return false, err
-	}
+func unregisterRunner(ctx context.Context, client *github.Client, enterprise, org, repo, name string, id *int64) (bool, error) {
+	if id == nil {
+		runner, err := getRunner(ctx, client, enterprise, org, repo, name)
+		if err != nil {
+			return false, err
+		}
 
-	if runner == nil || runner.ID == nil {
-		return false, nil
-	}
+		if runner == nil || runner.ID == nil {
+			return false, nil
+		}
 
-	id := *runner.ID
+		id = runner.ID
+	}
 
 	// For the record, historically ARC did not try to call RemoveRunner on a busy runner, but it's no longer true.
 	// The reason ARC did so was to let a runner running a job to not stop prematurely.
@@ -259,7 +313,7 @@ func unregisterRunner(ctx context.Context, client *github.Client, enterprise, or
 	//   change from 60 seconds.
 	//
 	// TODO: Probably we can just remove the runner by ID without seeing if the runner is busy, by treating it as busy when a remove-runner call failed with 422?
-	if err := client.RemoveRunner(ctx, enterprise, org, repo, id); err != nil {
+	if err := client.RemoveRunner(ctx, enterprise, org, repo, *id); err != nil {
 		return false, err
 	}
 

@@ -102,9 +102,13 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 
+			log.V(2).Info("Added finalizer")
+
 			return ctrl.Result{}, nil
 		}
 	} else {
+		log.V(2).Info("Seen deletion-timestamp is already set")
+
 		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
 		if removed {
@@ -122,7 +126,9 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 
-			log.Info("Removed runner from GitHub", "repository", repo, "organization", org)
+			log.V(2).Info("Removed finalizer")
+
+			return ctrl.Result{}, nil
 		}
 
 		deletionTimeout := 1 * time.Minute
@@ -156,6 +162,35 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			// give kube manager a little time to forcefully delete the stuck pod
 			return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 		}
+
+		return ctrl.Result{}, nil
+	}
+
+	po, res, err := ensureRunnerPodRegistered(ctx, log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+	if res != nil {
+		return *res, err
+	}
+
+	runnerPod = *po
+
+	if _, unregistrationRequested := getAnnotation(&runnerPod.ObjectMeta, unregistrationRequestTimestamp); unregistrationRequested {
+		log.V(2).Info("Progressing unregistration because unregistration-request timestamp is set")
+
+		// At this point we're sure that DeletionTimestamp is not set yet, but the unregistration process is triggered by an upstream controller like runnerset-controller.
+		//
+		// In a standard scenario, ARC starts the unregistration process before marking the pod for deletion at all,
+		// so that it isn't subject to terminationGracePeriod and can safely take hours to finish it's work.
+		_, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+		if res != nil {
+			return *res, err
+		}
+
+		// At this point we are sure that the runner has successfully unregistered, hence is safe to be deleted.
+		// But we don't delete the pod here. Instead, let the upstream controller/parent object to delete this pod as
+		// a part of a cascade deletion.
+		// This is to avoid a parent object, like statefulset, to recreate the deleted pod.
+		// If the pod was recreated, it will start a registration process and that may race with the statefulset deleting the pod.
+		log.V(2).Info("Unregistration seems complete")
 
 		return ctrl.Result{}, nil
 	}
