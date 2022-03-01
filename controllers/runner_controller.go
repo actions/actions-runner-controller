@@ -602,7 +602,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 // - (false, err) when it postponed unregistration due to the runner being busy, or it tried to unregister the runner but failed due to
 //   an error returned by GitHub API.
 func (r *RunnerReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	return unregisterRunner(ctx, r.GitHubClient, enterprise, org, repo, name)
+	return unregisterRunner(ctx, r.GitHubClient, enterprise, org, repo, name, nil)
 }
 
 func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v1alpha1.Runner) (bool, error) {
