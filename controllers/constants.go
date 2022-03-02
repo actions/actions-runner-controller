@@ -11,22 +11,24 @@ const (
 	// See https://github.com/google/knative-gcp/issues/378
 	runnerPodFinalizerName = "actions.summerwind.dev/runner-pod"
 
+	annotationKeyPrefix = "actions/"
+
 	AnnotationKeyLastRegistrationCheckTime = "actions-runner-controller/last-registration-check-time"
 
 	// AnnotationKeyUnregistrationCompleteTimestamp is the annotation that is added onto the pod once the previously started unregistration process has been completed.
-	AnnotationKeyUnregistrationCompleteTimestamp = "unregistration-complete-timestamp"
+	AnnotationKeyUnregistrationCompleteTimestamp = annotationKeyPrefix + "unregistration-complete-timestamp"
 
 	// unregistarionStartTimestamp is the annotation that contains the time that the requested unregistration process has been started
-	AnnotationKeyUnregistrationStartTimestamp = "unregistration-start-timestamp"
+	AnnotationKeyUnregistrationStartTimestamp = annotationKeyPrefix + "unregistration-start-timestamp"
 
 	// AnnotationKeyUnregistrationRequestTimestamp is the annotation that contains the time that the unregistration has been requested.
 	// This doesn't immediately start the unregistration. Instead, ARC will first check if the runner has already been registered.
 	// If not, ARC will hold on until the registration to complete first, and only after that it starts the unregistration process.
 	// This is crucial to avoid a race between ARC marking the runner pod for deletion while the actions-runner registers itself to GitHub, leaving the assigned job
 	// hang like forever.
-	AnnotationKeyUnregistrationRequestTimestamp = "unregistration-request-timestamp"
+	AnnotationKeyUnregistrationRequestTimestamp = annotationKeyPrefix + "unregistration-request-timestamp"
 
-	AnnotationKeyRunnerID = "runner-id"
+	AnnotationKeyRunnerID = annotationKeyPrefix + "runner-id"
 
 	// DefaultUnregistrationTimeout is the duration until ARC gives up retrying the combo of ListRunners API (to detect the runner ID by name)
 	// and RemoveRunner API (to actually unregister the runner) calls.
