@@ -52,14 +52,6 @@ type RunnerPodReconciler struct {
 	UnregistrationRetryDelay time.Duration
 }
 
-const (
-	// This names requires at least one slash to work.
-	// See https://github.com/google/knative-gcp/issues/378
-	runnerPodFinalizerName = "actions.summerwind.dev/runner-pod"
-
-	AnnotationKeyLastRegistrationCheckTime = "actions-runner-controller/last-registration-check-time"
-)
-
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
@@ -173,7 +165,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	runnerPod = *po
 
-	if _, unregistrationRequested := getAnnotation(&runnerPod.ObjectMeta, unregistrationRequestTimestamp); unregistrationRequested {
+	if _, unregistrationRequested := getAnnotation(&runnerPod.ObjectMeta, AnnotationKeyUnregistrationRequestTimestamp); unregistrationRequested {
 		log.V(2).Info("Progressing unregistration because unregistration-request timestamp is set")
 
 		// At this point we're sure that DeletionTimestamp is not set yet, but the unregistration process is triggered by an upstream controller like runnerset-controller.
