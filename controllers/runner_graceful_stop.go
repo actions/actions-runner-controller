@@ -16,33 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	// unregistrationCompleteTimestamp is the annotation that is added onto the pod once the previously started unregistration process has been completed.
-	unregistrationCompleteTimestamp = "unregistration-complete-timestamp"
-
-	// unregistarionStartTimestamp is the annotation that contains the time that the requested unregistration process has been started
-	unregistrationStartTimestamp = "unregistration-start-timestamp"
-
-	// unregistrationRequestTimestamp is the annotation that contains the time that the unregistration has been requested.
-	// This doesn't immediately start the unregistration. Instead, ARC will first check if the runner has already been registered.
-	// If not, ARC will hold on until the registration to complete first, and only after that it starts the unregistration process.
-	// This is crucial to avoid a race between ARC marking the runner pod for deletion while the actions-runner registers itself to GitHub, leaving the assigned job
-	// hang like forever.
-	unregistrationRequestTimestamp = "unregistration-request-timestamp"
-
-	annotationKeyRunnerID = "runner-id"
-
-	// DefaultUnregistrationTimeout is the duration until ARC gives up retrying the combo of ListRunners API (to detect the runner ID by name)
-	// and RemoveRunner API (to actually unregister the runner) calls.
-	// This needs to be longer than 60 seconds because a part of the combo, the ListRunners API, seems to use the Cache-Control header of max-age=60s
-	// and that instructs our cache library httpcache to cache responses for 60 seconds, which results in ARC unable to see the runner in the ListRunners response
-	// up to 60 seconds (or even more depending on the situation).
-	DefaultUnregistrationTimeout = 60 * time.Second
-
-	// This can be any value but a larger value can make an unregistration timeout longer than configured in practice.
-	DefaultUnregistrationRetryDelay = 30 * time.Second
-)
-
 // tickRunnerGracefulStop reconciles the runner and the runner pod in a way so that
 // we can delete the runner pod without disrupting a workflow job.
 //
@@ -54,7 +27,7 @@ const (
 // When it wants to be retried later, the function returns a non-nil *ctrl.Result as the second return value, may or may not populating the error in the second return value.
 // The caller is expected to return the returned ctrl.Result and error to postpone the current reconcilation loop and trigger a scheduled retry.
 func tickRunnerGracefulStop(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
-	pod, err := annotatePodOnce(ctx, c, log, pod, unregistrationStartTimestamp, time.Now().Format(time.RFC3339))
+	pod, err := annotatePodOnce(ctx, c, log, pod, AnnotationKeyUnregistrationStartTimestamp, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return nil, &ctrl.Result{}, err
 	}
@@ -63,7 +36,7 @@ func tickRunnerGracefulStop(ctx context.Context, unregistrationTimeout time.Dura
 		return nil, res, err
 	}
 
-	pod, err = annotatePodOnce(ctx, c, log, pod, unregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
+	pod, err = annotatePodOnce(ctx, c, log, pod, AnnotationKeyUnregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return nil, &ctrl.Result{}, err
 	}
@@ -99,7 +72,7 @@ func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod 
 func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
 	var runnerID *int64
 
-	if id, ok := getAnnotation(&pod.ObjectMeta, annotationKeyRunnerID); ok {
+	if id, ok := getAnnotation(&pod.ObjectMeta, AnnotationKeyRunnerID); ok {
 		v, err := strconv.ParseInt(id, 10, 64)
 		if err != nil {
 			return &ctrl.Result{}, err
@@ -162,7 +135,7 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 		// In that case we can safely assume that the runner will never be registered.
 
 		log.Info("Runner was not found on GitHub and the runner pod was not found on Kuberntes.")
-	} else if pod.Annotations[unregistrationCompleteTimestamp] != "" {
+	} else if pod.Annotations[AnnotationKeyUnregistrationCompleteTimestamp] != "" {
 		// If it's already unregistered in the previous reconcilation loop,
 		// you can safely assume that it won't get registered again so it's safe to delete the runner pod.
 		log.Info("Runner pod is marked as already unregistered.")
@@ -174,7 +147,7 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 		// If pod has ended up succeeded we need to restart it
 		// Happens e.g. when dind is in runner and run completes
 		log.Info("Runner pod has been stopped with a successful status.")
-	} else if ts := pod.Annotations[unregistrationStartTimestamp]; ts != "" {
+	} else if ts := pod.Annotations[AnnotationKeyUnregistrationStartTimestamp]; ts != "" {
 		t, err := time.Parse(time.RFC3339, ts)
 		if err != nil {
 			return &ctrl.Result{RequeueAfter: retryDelay}, err
@@ -202,7 +175,7 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 }
 
 func ensureRunnerPodRegistered(ctx context.Context, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
-	_, hasRunnerID := getAnnotation(&pod.ObjectMeta, annotationKeyRunnerID)
+	_, hasRunnerID := getAnnotation(&pod.ObjectMeta, AnnotationKeyRunnerID)
 	if runnerPodOrContainerIsStopped(pod) || hasRunnerID {
 		return pod, nil, nil
 	}
@@ -218,7 +191,7 @@ func ensureRunnerPodRegistered(ctx context.Context, log logr.Logger, ghClient *g
 
 	id := *r.ID
 
-	updated, err := annotatePodOnce(ctx, c, log, pod, annotationKeyRunnerID, fmt.Sprintf("%d", id))
+	updated, err := annotatePodOnce(ctx, c, log, pod, AnnotationKeyRunnerID, fmt.Sprintf("%d", id))
 	if err != nil {
 		return nil, &ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	}
