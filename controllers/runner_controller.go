@@ -113,23 +113,17 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 	} else {
-		var p *corev1.Pod
+		var pod corev1.Pod
+		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
 
-		{
-			var pod corev1.Pod
-			if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
-				if !kerrors.IsNotFound(err) {
-					log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
-
-					return ctrl.Result{Requeue: true}, nil
-				}
-			} else {
-				p = &pod
+				return ctrl.Result{Requeue: true}, nil
 			}
 		}
 
 		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
-		return r.processRunnerDeletion(runner, ctx, log, p)
+		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
 
 	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
