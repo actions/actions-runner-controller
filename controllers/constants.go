@@ -11,7 +11,7 @@ const (
 	// See https://github.com/google/knative-gcp/issues/378
 	runnerPodFinalizerName = "actions.summerwind.dev/runner-pod"
 
-	annotationKeyPrefix = "actions/"
+	annotationKeyPrefix = "actions-runner/"
 
 	AnnotationKeyLastRegistrationCheckTime = "actions-runner-controller/last-registration-check-time"
 
@@ -28,7 +28,7 @@ const (
 	// hang like forever.
 	AnnotationKeyUnregistrationRequestTimestamp = annotationKeyPrefix + "unregistration-request-timestamp"
 
-	AnnotationKeyRunnerID = annotationKeyPrefix + "runner-id"
+	AnnotationKeyRunnerID = annotationKeyPrefix + "id"
 
 	// DefaultUnregistrationTimeout is the duration until ARC gives up retrying the combo of ListRunners API (to detect the runner ID by name)
 	// and RemoveRunner API (to actually unregister the runner) calls.
