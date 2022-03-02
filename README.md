@@ -1072,11 +1072,10 @@ spec:
 ```
 
 GitHub supports custom visilibity in a Runner Group to make it available to a specific set of repositories only. By default if no GitHub
-authentication is included in the GitHub webhook server it will be assumed that all runner groups to be usable in all repositories.
-Supporting custom visibility requires to do a few GitHub API calls to find out what are the potential runner groups that are visible to
-the webhook's repository, this may incur in increased API rate limiting when using github.com
+authentication is included in the webhook server ARC will be assumed that all runner groups to be usable in all repositories.
+Currently, GitHub do not include the repository runner group membership information in the workflow_job event (or any webhook). To make the ARC "runner group aware" additional GitHub API calls are needed to find out what runner groups are visible to the webhook's repository. This behaviour will impact your rate-limit budget and so the option needs to be explicitly configured by the end user.
 
-This option will be enabled when proper GitHub authentication options (token, app or basic auth is provided) in the GitHub webhook server and `useRunnerGroupsVisibility` is set to true, e.g.
+This option will be enabled when proper GitHub authentication options (token, app or basic auth) is provided in the webhook server and `useRunnerGroupsVisibility` is set to true, e.g.
 
 ```yaml
 githubWebhookServer:
