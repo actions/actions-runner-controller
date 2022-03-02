@@ -50,7 +50,7 @@ const (
 // if the runner is considered to have gracefully stopped, hence it's pod is safe for deletion.
 //
 // It's a "tick" operation so a graceful stop can take multiple calls to complete.
-// This function is designed to complete a length graceful stop process in a unblocking way.
+// This function is designed to complete a lengthy graceful stop process in a unblocking way.
 // When it wants to be retried later, the function returns a non-nil *ctrl.Result as the second return value, may or may not populating the error in the second return value.
 // The caller is expected to return the returned ctrl.Result and error to postpone the current reconcilation loop and trigger a scheduled retry.
 func tickRunnerGracefulStop(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
