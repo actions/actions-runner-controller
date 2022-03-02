@@ -16,7 +16,7 @@ jobs:
         run: echo ::set-output name=sha_short::${GITHUB_SHA::7}
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - uses: actions/setup-go@v3
         with:
