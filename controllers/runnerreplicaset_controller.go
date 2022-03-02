@@ -199,7 +199,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		n := current - desired
 
-		log.V(0).Info(fmt.Sprintf("Deleting %d runners", n), "desired", desired, "current", current, "ready", ready)
+		log.V(0).Info(fmt.Sprintf("Deleting %d runners from RunnerReplicaSet %s", n, req.NamespacedName), "desired", desired, "current", current, "ready", ready)
 
 		// get runners that are currently offline/not busy/timed-out to register
 		var deletionCandidates []v1alpha1.Runner
@@ -277,7 +277,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			r.Recorder.Event(&rs, corev1.EventTypeNormal, "RunnerDeleted", fmt.Sprintf("Deleted runner '%s'", deletionCandidates[i].Name))
-			log.Info("Deleted runner")
+			log.Info(fmt.Sprintf("Deleted runner %s", deletionCandidates[i].Name))
 		}
 	} else if desired > current {
 		n := desired - current
