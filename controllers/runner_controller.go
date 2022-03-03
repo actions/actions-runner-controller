@@ -116,8 +116,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {
-				log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
-
+				log.Info(fmt.Sprintf("Retrying soon as we failed to get runner pod: %v", err))
 				return ctrl.Result{Requeue: true}, nil
 			}
 		}
