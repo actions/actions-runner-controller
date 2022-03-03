@@ -27,10 +27,12 @@ ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT
 # We intentionally avoid `--mount=type=cache,mode=0777,target=/go/pkg/mod` in the `go mod download` and the `go build` runs
 # to avoid https://github.com/moby/buildkit/issues/2334
 # We can use docker layer cache so the build is fast enogh anyway
+# We also use per-platform GOCACHE for the same reason.
+env GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
 
 # Build
 RUN --mount=target=. \
-  --mount=type=cache,mode=0777,target=/root/.cache/go-build \
+  --mount=type=cache,mode=0777,target=${GOCACHE} \
   GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} \
   go build -o /out/manager main.go && go build -o /out/github-webhook-server ./cmd/githubwebhookserver
 
