@@ -139,6 +139,13 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Even though the error message includes "Forbidden", this error's reason is "Invalid".
 	// So we used to match these errors by using errors.IsInvalid. But that's another story...
 
+	// lastSyncTime becomes non-nil only when there are one or more statefulset(s) hence there are same number of runner pods.
+	// It's used to prevent runnerset-controller from recreating "completed ephemeral runners".
+	// This is needed to prevent runners from being terminated prematurely.
+	// See https://github.com/actions-runner-controller/actions-runner-controller/issues/911 for more context.
+	//
+	// This becomes nil when there are zero statefulset(s). That's fine because then there should be zero stateful(s) to be recreated either hence
+	// we don't need to guard with lastSyncTime.
 	var lastSyncTime *time.Time
 
 	for _, ss := range statefulsets {
