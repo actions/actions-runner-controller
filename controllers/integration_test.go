@@ -108,8 +108,8 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			RunnerImage:                 "example/runner:test",
 			DockerImage:                 "example/docker:test",
 			Name:                        controllerName("runner"),
-			RegistrationRecheckInterval: time.Millisecond,
-			RegistrationRecheckJitter:   time.Millisecond,
+			RegistrationRecheckInterval: time.Millisecond * 100,
+			RegistrationRecheckJitter:   time.Millisecond * 10,
 			UnregistrationTimeout:       1 * time.Second,
 			UnregistrationRetryDelay:    1 * time.Second,
 		}
