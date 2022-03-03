@@ -26,6 +26,7 @@ ToC:
     - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
   - [Additional Tweaks](#additional-tweaks)
+  - [Custom Volume mounts](#custom-volume-mounts)
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
   - [Runner Entrypoint Features](#runner-entrypoint-features)
@@ -1013,6 +1014,84 @@ spec:
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
       runtimeClassName: "runc"
+```
+
+### Custom Volume mounts
+You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME ssd, for
+i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
+
+** Ramdisk runner **
+Example how to place the runner work dir, docker sidecar and /tmp within the runner onto a ramdisk.
+```yaml
+kind: RunnerDeployment
+spec:
+  template:
+    spec:
+      dockerVolumeMounts:
+        - mountPath: /var/lib/docker
+          name: docker
+      volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      volumes:
+        - name: docker
+          emptyDir:
+            medium: Memory
+        - name: work # this volume gets automatically used up for the workdir
+          emptyDir:
+            medium: Memory
+        - name: tmp
+          emptyDir:
+            medium: Memory
+      emphemeral: true # recommended to not leak data between builds.
+```
+
+** NVME ssd runner **
+In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
+Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
+
+**Beware** that running these persistent backend volumes **leave data behind** between 2 different jobs on the workdir and /tmp with emphemeral: false.
+
+```yaml
+kind: RunnerDeployment
+spec:
+  template:
+    spec:
+      env:
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      dockerVolumeMounts:
+      - mountPath: /var/lib/docker
+        name: docker
+        subPathExpr: $(POD_NAME)-docker
+      - mountPath: /runner/_work
+        name: work
+        subPathExpr: $(POD_NAME)-work
+      volumeMounts:
+      - mountPath: /runner/_work
+        name: work
+        subPathExpr: $(POD_NAME)-work
+      - mountPath: /tmp
+        name: tmp
+        subPathExpr: $(POD_NAME)-tmp
+      dockerEnv:
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      volumes:
+      - hostPath:
+          path: /mnt/disks/ssd0
+        name: docker
+      - hostPath:
+          path: /mnt/disks/ssd0
+        name: work
+      - hostPath:
+          path: /mnt/disks/ssd0
+        name: tmp
+    emphemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
 ```
 
 ### Runner Labels
