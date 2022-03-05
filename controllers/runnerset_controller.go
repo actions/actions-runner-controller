@@ -259,11 +259,12 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.V(2).Info("Detected some current statefulsets", "creationTimestampFirst", timestampFirst, "creationTimestampLast", timestampLast, "statefulsets", names)
 	}
 
-	var pending, running int
+	var pending, running, regTimeout int
 
 	for _, ss := range currentStatefulSets {
 		pending += ss.pending
 		running += ss.running
+		regTimeout += ss.regTimeout
 	}
 
 	const defaultReplicas = 1
@@ -276,15 +277,23 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	newDesiredReplicas := getIntOrDefault(replicasOfDesiredStatefulSet, defaultReplicas)
 
-	log.V(2).Info("Found some pods across statefulset(s)", "pending", pending, "running", running, "desired", newDesiredReplicas, "statefulsets", len(statefulsets))
+	log.V(2).Info(
+		"Found some pods across statefulset(s)",
+		"pending", pending,
+		"running", running,
+		"regTimeout", regTimeout,
+		"desired", newDesiredReplicas,
+		"statefulsets", len(statefulsets),
+	)
 
 	effectiveTime := runnerSet.Spec.EffectiveTime
 	ephemeral := runnerSet.Spec.Ephemeral == nil || *runnerSet.Spec.Ephemeral
+	maybeRunning := pending + running
 
-	if newDesiredReplicas > pending+running && ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time) {
+	if newDesiredReplicas > maybeRunning && ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time) {
 		log.V(2).Info("Detected that some ephemeral runners have disappeared. Usually this is due to that ephemeral runner completions so ARC does not create new runners until EffectiveTime is updated.", "lastSyncTime", metav1.Time{Time: *lastSyncTime}, "effectiveTime", *effectiveTime, "desired", newDesiredReplicas, "pending", pending, "running", running)
-	} else if newDesiredReplicas > pending+running {
-		num := newDesiredReplicas - (pending + running)
+	} else if newDesiredReplicas > maybeRunning {
+		num := newDesiredReplicas - maybeRunning
 
 		for i := 0; i < num; i++ {
 			// Add more replicas
@@ -415,6 +424,7 @@ type podsForStatefulset struct {
 	completed    int
 	running      int
 	terminating  int
+	regTimeout   int
 	pending      int
 	templateHash string
 	statefulset  *appsv1.StatefulSet
@@ -429,7 +439,7 @@ func (r *RunnerSetReconciler) getPodsForStatefulset(ctx context.Context, log log
 		return nil, err
 	}
 
-	var completed, running, terminating, pending, total int
+	var completed, running, terminating, regTimeout, pending, total int
 
 	var pods []corev1.Pod
 
@@ -445,7 +455,21 @@ func (r *RunnerSetReconciler) getPodsForStatefulset(ctx context.Context, log log
 		if runnerPodOrContainerIsStopped(&pod) {
 			completed++
 		} else if pod.Status.Phase == corev1.PodRunning {
-			running++
+			if podRunnerID(&pod) == "" && podConditionTransitionTimeAfter(&pod, corev1.PodReady, registrationTimeout) {
+				log.Info(
+					"Runner failed to register itself to GitHub in timely manner. "+
+						"Recreating the pod to see if it resolves the issue. "+
+						"CAUTION: If you see this a lot, you should investigate the root cause. "+
+						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
+					"creationTimestamp", pod.CreationTimestamp,
+					"readyTransitionTime", podConditionTransitionTime(&pod, corev1.PodReady, corev1.ConditionTrue),
+					"configuredRegistrationTimeout", registrationTimeout,
+				)
+
+				regTimeout++
+			} else {
+				running++
+			}
 		} else if !pod.DeletionTimestamp.IsZero() {
 			terminating++
 		} else {
@@ -466,6 +490,7 @@ func (r *RunnerSetReconciler) getPodsForStatefulset(ctx context.Context, log log
 		completed:    completed,
 		running:      running,
 		terminating:  terminating,
+		regTimeout:   regTimeout,
 		pending:      pending,
 		templateHash: templateHash,
 		statefulset:  ss,
