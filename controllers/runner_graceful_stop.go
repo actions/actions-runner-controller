@@ -217,6 +217,30 @@ func setAnnotation(meta *metav1.ObjectMeta, key, value string) {
 	meta.Annotations[key] = value
 }
 
+func podConditionTransitionTime(pod *corev1.Pod, tpe corev1.PodConditionType, v corev1.ConditionStatus) *metav1.Time {
+	for _, c := range pod.Status.Conditions {
+		if c.Type == tpe && c.Status == v {
+			return &c.LastTransitionTime
+		}
+	}
+
+	return nil
+}
+
+func podConditionTransitionTimeAfter(pod *corev1.Pod, tpe corev1.PodConditionType, d time.Duration) bool {
+	c := podConditionTransitionTime(pod, tpe, corev1.ConditionTrue)
+	if c == nil {
+		return false
+	}
+
+	return c.Add(d).Before(time.Now())
+}
+
+func podRunnerID(pod *corev1.Pod) string {
+	id, _ := getAnnotation(&pod.ObjectMeta, AnnotationKeyRunnerID)
+	return id
+}
+
 // unregisterRunner unregisters the runner from GitHub Actions by name.
 //
 // This function returns:

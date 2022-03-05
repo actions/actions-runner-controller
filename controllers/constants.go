@@ -39,4 +39,10 @@ const (
 
 	// This can be any value but a larger value can make an unregistration timeout longer than configured in practice.
 	DefaultUnregistrationRetryDelay = 30 * time.Second
+
+	// registrationTimeout is the duration until a pod times out after it becomes Ready and Running.
+	// A pod that is timed out can be terminated if needed.
+	registrationTimeout = 10 * time.Minute
+
+	defaultRegistrationCheckInterval = time.Minute
 )
