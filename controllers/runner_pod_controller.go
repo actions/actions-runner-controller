@@ -165,7 +165,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	runnerPod = *po
 
-	if _, unregistrationRequested := getAnnotation(&runnerPod.ObjectMeta, AnnotationKeyUnregistrationRequestTimestamp); unregistrationRequested {
+	if _, unregistrationRequested := getAnnotation(&runnerPod, AnnotationKeyUnregistrationRequestTimestamp); unregistrationRequested {
 		log.V(2).Info("Progressing unregistration because unregistration-request timestamp is set")
 
 		// At this point we're sure that DeletionTimestamp is not set yet, but the unregistration process is triggered by an upstream controller like runnerset-controller.

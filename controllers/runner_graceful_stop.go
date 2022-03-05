@@ -52,7 +52,7 @@ func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod 
 		return nil, nil
 	}
 
-	if _, ok := getAnnotation(&pod.ObjectMeta, k); ok {
+	if _, ok := getAnnotation(pod, k); ok {
 		return pod, nil
 	}
 
@@ -72,7 +72,7 @@ func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod 
 func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
 	var runnerID *int64
 
-	if id, ok := getAnnotation(&pod.ObjectMeta, AnnotationKeyRunnerID); ok {
+	if id, ok := getAnnotation(pod, AnnotationKeyRunnerID); ok {
 		v, err := strconv.ParseInt(id, 10, 64)
 		if err != nil {
 			return &ctrl.Result{}, err
@@ -175,7 +175,7 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 }
 
 func ensureRunnerPodRegistered(ctx context.Context, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
-	_, hasRunnerID := getAnnotation(&pod.ObjectMeta, AnnotationKeyRunnerID)
+	_, hasRunnerID := getAnnotation(pod, AnnotationKeyRunnerID)
 	if runnerPodOrContainerIsStopped(pod) || hasRunnerID {
 		return pod, nil, nil
 	}
@@ -199,12 +199,12 @@ func ensureRunnerPodRegistered(ctx context.Context, log logr.Logger, ghClient *g
 	return updated, nil, nil
 }
 
-func getAnnotation(meta *metav1.ObjectMeta, key string) (string, bool) {
-	if meta.Annotations == nil {
+func getAnnotation(obj client.Object, key string) (string, bool) {
+	if obj.GetAnnotations() == nil {
 		return "", false
 	}
 
-	v, ok := meta.Annotations[key]
+	v, ok := obj.GetAnnotations()[key]
 
 	return v, ok
 }
@@ -237,7 +237,7 @@ func podConditionTransitionTimeAfter(pod *corev1.Pod, tpe corev1.PodConditionTyp
 }
 
 func podRunnerID(pod *corev1.Pod) string {
-	id, _ := getAnnotation(&pod.ObjectMeta, AnnotationKeyRunnerID)
+	id, _ := getAnnotation(pod, AnnotationKeyRunnerID)
 	return id
 }
 

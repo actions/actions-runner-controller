@@ -18,13 +18,10 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"reflect"
-	"sort"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -87,15 +84,6 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	metrics.SetRunnerSet(*runnerSet)
 
-	desiredStatefulSet, err := r.newStatefulSet(runnerSet)
-	if err != nil {
-		r.Recorder.Event(runnerSet, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
-
-		log.Error(err, "Could not create statefulset")
-
-		return ctrl.Result{}, err
-	}
-
 	var statefulsetList appsv1.StatefulSetList
 	if err := r.List(ctx, &statefulsetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
 		return ctrl.Result{}, err
@@ -108,6 +96,15 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	desiredStatefulSet, err := r.newStatefulSet(runnerSet)
+	if err != nil {
+		r.Recorder.Event(runnerSet, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+
+		log.Error(err, "Could not create statefulset")
+
+		return ctrl.Result{}, err
+	}
+
 	desiredTemplateHash, ok := getStatefulSetTemplateHash(desiredStatefulSet)
 	if !ok {
 		log.Info("Failed to get template hash of desired statefulset. It must be in an invalid state. Please manually delete the statefulset so that it is recreated")
@@ -115,157 +112,9 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	statefulsetsPerTemplateHash := map[string][]*podsForStatefulset{}
-
-	// # Why do we recreate statefulsets instead of updating their desired replicas?
-	//
-	// A statefulset cannot add more pods when not all the pods are running.
-	// Our ephemeral runners' pods that have finished running become Completed(Phase=Succeeded).
-	// So creating one statefulset per a batch of ephemeral runners is the only way for us to add more replicas.
-	//
-	// # Why do we recreate statefulsets instead of updating fields other than replicas?
-	//
-	// That's because Kubernetes doesn't allow updating anything other than replicas, template, and updateStrategy.
-	// And the nature of ephemeral runner pods requires you to create a statefulset per a batch of new runner pods so
-	// we have really no other choice.
-	//
-	// If you're curious, the below is the error message you will get when you tried to update forbidden StatefulSet field(s):
-	//
-	// 2021-06-13T07:19:52.760Z        ERROR   actions-runner-controller.runnerset     Failed to patch statefulset
-	// {"runnerset": "default/example-runnerset", "error": "StatefulSet.apps \"example-runnerset\" is invalid: s
-	// pec: Forbidden: updates to statefulset spec for fields other than 'replicas', 'template', and 'updateStrategy'
-	// are forbidden"}
-	//
-	// Even though the error message includes "Forbidden", this error's reason is "Invalid".
-	// So we used to match these errors by using errors.IsInvalid. But that's another story...
-
-	// lastSyncTime becomes non-nil only when there are one or more statefulset(s) hence there are same number of runner pods.
-	// It's used to prevent runnerset-controller from recreating "completed ephemeral runners".
-	// This is needed to prevent runners from being terminated prematurely.
-	// See https://github.com/actions-runner-controller/actions-runner-controller/issues/911 for more context.
-	//
-	// This becomes nil when there are zero statefulset(s). That's fine because then there should be zero stateful(s) to be recreated either hence
-	// we don't need to guard with lastSyncTime.
-	var lastSyncTime *time.Time
-
-	for _, ss := range statefulsets {
-		ss := ss
-
-		log := log.WithValues("statefulset", types.NamespacedName{Namespace: ss.Namespace, Name: ss.Name})
-
-		res, err := r.getPodsForStatefulset(ctx, log, &ss)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		// Statefulset termination process 4/4: Let Kubernetes cascade-delete the statefulset and the pods.
-		if !res.statefulset.DeletionTimestamp.IsZero() {
-			continue
-		}
-
-		// Statefulset termination process 3/4: Set the deletionTimestamp to let Kubernetes start a cascade deletion of the statefulset and the pods.
-		if _, ok := getAnnotation(&res.statefulset.ObjectMeta, AnnotationKeyUnregistrationCompleteTimestamp); ok {
-			if err := r.Client.Delete(ctx, res.statefulset); err != nil {
-				log.Error(err, "Failed to delete statefulset")
-				return ctrl.Result{}, err
-			}
-			continue
-		}
-
-		// Statefulset termination process 2/4: Set unregistrationCompleteTimestamp only if all the pods managed by the statefulset
-		// have either unregistered or being deleted.
-		if _, ok := getAnnotation(&res.statefulset.ObjectMeta, AnnotationKeyUnregistrationRequestTimestamp); ok {
-			var deletionSafe int
-			for _, po := range res.pods {
-				if _, ok := getAnnotation(&po.ObjectMeta, AnnotationKeyUnregistrationCompleteTimestamp); ok {
-					deletionSafe++
-				} else if !po.DeletionTimestamp.IsZero() {
-					deletionSafe++
-				}
-			}
-
-			log.V(2).Info("Marking statefulset for unregistration completion", "deletionSafe", deletionSafe, "total", res.total)
-
-			if deletionSafe == res.total {
-				if _, ok := getAnnotation(&res.statefulset.ObjectMeta, AnnotationKeyUnregistrationCompleteTimestamp); !ok {
-					updated := res.statefulset.DeepCopy()
-					setAnnotation(&updated.ObjectMeta, AnnotationKeyUnregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
-
-					if err := r.Client.Patch(ctx, updated, client.MergeFrom(res.statefulset)); err != nil {
-						log.Error(err, fmt.Sprintf("Failed to patch statefulset to have %s annotation", AnnotationKeyUnregistrationCompleteTimestamp))
-						return ctrl.Result{}, err
-					}
-
-					log.V(2).Info("Redundant statefulset has been annotated to start the deletion")
-				} else {
-					log.V(2).Info("BUG: Redundant statefulset was already annotated to start the deletion")
-				}
-			}
-
-			continue
-		}
-
-		if res.statefulset.Annotations != nil {
-			if a, ok := res.statefulset.Annotations[SyncTimeAnnotationKey]; ok {
-				t, err := time.Parse(time.RFC3339, a)
-				if err == nil {
-					if lastSyncTime == nil || lastSyncTime.Before(t) {
-						lastSyncTime = &t
-					}
-				}
-			}
-		}
-
-		statefulsetsPerTemplateHash[res.templateHash] = append(statefulsetsPerTemplateHash[res.templateHash], res)
-
-		// A completed statefulset or a completed pod can safely be deleted without
-		// a race condition so delete it here,
-		// so that the later process can be a bit simpler.
-		if res.total > 0 && res.total == res.completed {
-			if err := r.Client.Delete(ctx, &ss); err != nil {
-				log.Error(err, "Unable to delete statefulset")
-				return ctrl.Result{}, err
-			}
-
-			log.V(2).Info("Deleted completed statefulset")
-
-			return ctrl.Result{}, nil
-		}
-
-		var replicas int32 = 1
-		if ss.Spec.Replicas != nil {
-			replicas = *ss.Spec.Replicas
-		}
-
-		if ss.Status.Replicas != replicas {
-			log.V(2).Info("Waiting for statefulset to sync", "desiredReplicas", replicas, "currentReplicas", ss.Status.Replicas)
-			return ctrl.Result{}, nil
-		}
-	}
-
-	currentStatefulSets := statefulsetsPerTemplateHash[desiredTemplateHash]
-
-	sort.SliceStable(currentStatefulSets, func(i, j int) bool {
-		return currentStatefulSets[i].statefulset.CreationTimestamp.Before(&currentStatefulSets[j].statefulset.CreationTimestamp)
-	})
-
-	if len(currentStatefulSets) > 0 {
-		timestampFirst := currentStatefulSets[0].statefulset.CreationTimestamp
-		timestampLast := currentStatefulSets[len(currentStatefulSets)-1].statefulset.CreationTimestamp
-		var names []string
-		for _, ss := range currentStatefulSets {
-			names = append(names, ss.statefulset.Name)
-		}
-		log.V(2).Info("Detected some current statefulsets", "creationTimestampFirst", timestampFirst, "creationTimestampLast", timestampLast, "statefulsets", names)
-	}
-
-	var pending, running, regTimeout int
-
-	for _, ss := range currentStatefulSets {
-		pending += ss.pending
-		running += ss.running
-		regTimeout += ss.regTimeout
-	}
+	addedReplicas := int32(1)
+	create := desiredStatefulSet.DeepCopy()
+	create.Spec.Replicas = &addedReplicas
 
 	const defaultReplicas = 1
 
@@ -277,123 +126,28 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	newDesiredReplicas := getIntOrDefault(replicasOfDesiredStatefulSet, defaultReplicas)
 
-	log.V(2).Info(
-		"Found some pods across statefulset(s)",
-		"pending", pending,
-		"running", running,
-		"regTimeout", regTimeout,
-		"desired", newDesiredReplicas,
-		"statefulsets", len(statefulsets),
-	)
-
 	effectiveTime := runnerSet.Spec.EffectiveTime
 	ephemeral := runnerSet.Spec.Ephemeral == nil || *runnerSet.Spec.Ephemeral
-	maybeRunning := pending + running
 
-	if newDesiredReplicas > maybeRunning && ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time) {
-		log.V(2).Info("Detected that some ephemeral runners have disappeared. Usually this is due to that ephemeral runner completions so ARC does not create new runners until EffectiveTime is updated.", "lastSyncTime", metav1.Time{Time: *lastSyncTime}, "effectiveTime", *effectiveTime, "desired", newDesiredReplicas, "pending", pending, "running", running)
-	} else if newDesiredReplicas > maybeRunning {
-		num := newDesiredReplicas - maybeRunning
+	var owners []client.Object
 
-		for i := 0; i < num; i++ {
-			// Add more replicas
-			addedReplicas := int32(1)
-
-			create := desiredStatefulSet.DeepCopy()
-			create.Spec.Replicas = &addedReplicas
-			if err := r.Client.Create(ctx, create); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
-		log.V(2).Info("Created statefulset(s) to add more replicas", "num", num)
-
-		return ctrl.Result{}, nil
-	} else if newDesiredReplicas <= running {
-		var retained int
-
-		var delete []*podsForStatefulset
-		for i := len(currentStatefulSets) - 1; i >= 0; i-- {
-			ss := currentStatefulSets[i]
-
-			if ss.running == 0 || retained >= newDesiredReplicas {
-				// In case the desired replicas is satisfied until i-1, or this statefulset has no running pods,
-				// this statefulset can be considered safe for deletion.
-				// Note that we already waited on this statefulset to create pods by waiting for
-				// `ss.Status.Replicas`(=total number of pods managed by statefulset, regarldess of the runner is Running or Completed) to match the desired replicas in a previous step.
-				// So `ss.running == 0` means "the statefulset has created the desired number of pods before but all of them are completed now".
-				delete = append(delete, ss)
-			} else if retained < newDesiredReplicas {
-				retained += ss.running
-			}
-		}
-
-		if retained == newDesiredReplicas {
-			for _, ss := range delete {
-				log := log.WithValues("statefulset", types.NamespacedName{Namespace: ss.statefulset.Namespace, Name: ss.statefulset.Name})
-				// Statefulset termination process 1/4: Set unregistrationRequestTimestamp only after all the pods managed by the statefulset have
-				// started unregistreation process.
-				//
-				// NOTE: We just mark it instead of immediately starting the deletion process.
-				// Otherwise, the runner pod may hit termiationGracePeriod before the unregistration completes(the max terminationGracePeriod is limited to 1h by K8s and a job can be run for more than that),
-				// or actions/runner may potentially misbehave on SIGTERM immediately sent by K8s.
-				// We'd better unregister first and then start a pod deletion process.
-				// The annotation works as a mark to start the pod unregistration and deletion process of ours.
-				for _, po := range ss.pods {
-					if _, err := annotatePodOnce(ctx, r.Client, log, &po, AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339)); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-
-				if _, ok := getAnnotation(&ss.statefulset.ObjectMeta, AnnotationKeyUnregistrationRequestTimestamp); !ok {
-					updated := ss.statefulset.DeepCopy()
-					setAnnotation(&updated.ObjectMeta, AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339))
-
-					if err := r.Client.Patch(ctx, updated, client.MergeFrom(ss.statefulset)); err != nil {
-						log.Error(err, fmt.Sprintf("Failed to patch statefulset to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
-						return ctrl.Result{}, err
-					}
-
-					log.V(2).Info("Redundant statefulset has been annotated to start the unregistration before deletion")
-				} else {
-					log.V(2).Info("BUG: Redundant statefulset was already annotated")
-				}
-			}
-			return ctrl.Result{}, err
-		} else if retained > newDesiredReplicas {
-			log.V(2).Info("Waiting sync before scale down", "retained", retained, "newDesiredReplicas", newDesiredReplicas)
-
-			return ctrl.Result{}, nil
-		} else {
-			log.Info("Invalid state", "retained", retained, "newDesiredReplicas", newDesiredReplicas)
-			panic("crashed due to invalid state")
-		}
+	for _, ss := range statefulsets {
+		ss := ss
+		owners = append(owners, &ss)
 	}
 
-	for _, sss := range statefulsetsPerTemplateHash {
-		for _, ss := range sss {
-			if ss.templateHash != desiredTemplateHash {
-				if ss.statefulset.DeletionTimestamp.IsZero() {
-					if err := r.Client.Delete(ctx, ss.statefulset); err != nil {
-						log.Error(err, "Unable to delete statefulset")
-						return ctrl.Result{}, err
-					}
-
-					log.V(2).Info("Deleted redundant and outdated statefulset")
-				}
-
-				return ctrl.Result{}, nil
-			}
-		}
+	res, err := syncRunnerPodsOwners(ctx, r.Client, log, effectiveTime, newDesiredReplicas, desiredTemplateHash, create, ephemeral, owners)
+	if err != nil || res == nil {
+		return ctrl.Result{}, err
 	}
 
 	var statusReplicas, statusReadyReplicas, totalCurrentReplicas, updatedReplicas int
 
-	for _, ss := range currentStatefulSets {
-		statusReplicas += int(ss.statefulset.Status.Replicas)
-		statusReadyReplicas += int(ss.statefulset.Status.ReadyReplicas)
-		totalCurrentReplicas += int(ss.statefulset.Status.CurrentReplicas)
-		updatedReplicas += int(ss.statefulset.Status.UpdatedReplicas)
+	for _, ss := range res.currentObjects {
+		statusReplicas += int(ss.statefulSet.Status.Replicas)
+		statusReadyReplicas += int(ss.statefulSet.Status.ReadyReplicas)
+		totalCurrentReplicas += int(ss.statefulSet.Status.CurrentReplicas)
+		updatedReplicas += int(ss.statefulSet.Status.UpdatedReplicas)
 	}
 
 	status := runnerSet.Status.DeepCopy()
@@ -417,91 +171,6 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	return ctrl.Result{}, nil
-}
-
-type podsForStatefulset struct {
-	total        int
-	completed    int
-	running      int
-	terminating  int
-	regTimeout   int
-	pending      int
-	templateHash string
-	statefulset  *appsv1.StatefulSet
-	pods         []corev1.Pod
-}
-
-func (r *RunnerSetReconciler) getPodsForStatefulset(ctx context.Context, log logr.Logger, ss *appsv1.StatefulSet) (*podsForStatefulset, error) {
-	var podList corev1.PodList
-
-	if err := r.Client.List(ctx, &podList, client.MatchingLabels(ss.Spec.Template.ObjectMeta.Labels)); err != nil {
-		log.Error(err, "Failed to list pods managed by statefulset")
-		return nil, err
-	}
-
-	var completed, running, terminating, regTimeout, pending, total int
-
-	var pods []corev1.Pod
-
-	for _, pod := range podList.Items {
-		if owner := metav1.GetControllerOf(&pod); owner == nil || owner.Kind != "StatefulSet" || owner.Name != ss.Name {
-			continue
-		}
-
-		pods = append(pods, pod)
-
-		total++
-
-		if runnerPodOrContainerIsStopped(&pod) {
-			completed++
-		} else if pod.Status.Phase == corev1.PodRunning {
-			if podRunnerID(&pod) == "" && podConditionTransitionTimeAfter(&pod, corev1.PodReady, registrationTimeout) {
-				log.Info(
-					"Runner failed to register itself to GitHub in timely manner. "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. "+
-						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
-					"creationTimestamp", pod.CreationTimestamp,
-					"readyTransitionTime", podConditionTransitionTime(&pod, corev1.PodReady, corev1.ConditionTrue),
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
-
-				regTimeout++
-			} else {
-				running++
-			}
-		} else if !pod.DeletionTimestamp.IsZero() {
-			terminating++
-		} else {
-			// pending includes running but timedout runner's pod too
-			pending++
-		}
-	}
-
-	templateHash, ok := getStatefulSetTemplateHash(ss)
-	if !ok {
-		log.Info("Failed to get template hash of statefulset. It must be in an invalid state. Please manually delete the statefulset so that it is recreated")
-
-		return nil, nil
-	}
-
-	return &podsForStatefulset{
-		total:        total,
-		completed:    completed,
-		running:      running,
-		terminating:  terminating,
-		regTimeout:   regTimeout,
-		pending:      pending,
-		templateHash: templateHash,
-		statefulset:  ss,
-		pods:         pods,
-	}, nil
-}
-
-func getStatefulSetTemplateHash(rs *appsv1.StatefulSet) (string, bool) {
-	hash, ok := rs.Labels[LabelKeyRunnerTemplateHash]
-
-	return hash, ok
 }
 
 func getRunnerSetSelector(runnerSet *v1alpha1.RunnerSet) *metav1.LabelSelector {
