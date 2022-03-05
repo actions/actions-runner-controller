@@ -3,6 +3,9 @@ FROM --platform=$BUILDPLATFORM golang:1.17 as builder
 
 WORKDIR /workspace
 
+# Make it runnable on a distroless image/without libc
+ENV CGO_ENABLED=0
+
 # Copy the Go Modules manifests
 COPY go.mod go.sum ./
 
