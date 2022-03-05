@@ -218,6 +218,9 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		statefulsetsPerTemplateHash[res.templateHash] = append(statefulsetsPerTemplateHash[res.templateHash], res)
 
+		// A completed statefulset or a completed pod can safely be deleted without
+		// a race condition so delete it here,
+		// so that the later process can be a bit simpler.
 		if res.total > 0 && res.total == res.completed {
 			if err := r.Client.Delete(ctx, &ss); err != nil {
 				log.Error(err, "Unable to delete statefulset")
@@ -305,6 +308,11 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			ss := currentStatefulSets[i]
 
 			if ss.running == 0 || retained >= newDesiredReplicas {
+				// In case the desired replicas is satisfied until i-1, or this statefulset has no running pods,
+				// this statefulset can be considered safe for deletion.
+				// Note that we already waited on this statefulset to create pods by waiting for
+				// `ss.Status.Replicas`(=total number of pods managed by statefulset, regarldess of the runner is Running or Completed) to match the desired replicas in a previous step.
+				// So `ss.running == 0` means "the statefulset has created the desired number of pods before but all of them are completed now".
 				delete = append(delete, ss)
 			} else if retained < newDesiredReplicas {
 				retained += ss.running
@@ -441,6 +449,7 @@ func (r *RunnerSetReconciler) getPodsForStatefulset(ctx context.Context, log log
 		} else if !pod.DeletionTimestamp.IsZero() {
 			terminating++
 		} else {
+			// pending includes running but timedout runner's pod too
 			pending++
 		}
 	}

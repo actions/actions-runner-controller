@@ -104,6 +104,9 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
 		if removed {
+			// In a standard scenario, the upstream controller, like runnerset-controller, ensures this runner to be gracefully stopped before the deletion timestamp is set.
+			// But for the case that the user manually deleted it for whatever reason,
+			// we have to ensure it to gracefully stop now.
 			updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationTimeout(), r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
 			if res != nil {
 				return *res, err
