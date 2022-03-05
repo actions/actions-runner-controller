@@ -105,13 +105,6 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	desiredTemplateHash, ok := getStatefulSetTemplateHash(desiredStatefulSet)
-	if !ok {
-		log.Info("Failed to get template hash of desired statefulset. It must be in an invalid state. Please manually delete the statefulset so that it is recreated")
-
-		return ctrl.Result{}, nil
-	}
-
 	addedReplicas := int32(1)
 	create := desiredStatefulSet.DeepCopy()
 	create.Spec.Replicas = &addedReplicas
@@ -136,7 +129,7 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		owners = append(owners, &ss)
 	}
 
-	res, err := syncRunnerPodsOwners(ctx, r.Client, log, effectiveTime, newDesiredReplicas, desiredTemplateHash, create, ephemeral, owners)
+	res, err := syncRunnerPodsOwners(ctx, r.Client, log, effectiveTime, newDesiredReplicas, func() client.Object { return create.DeepCopy() }, ephemeral, owners)
 	if err != nil || res == nil {
 		return ctrl.Result{}, err
 	}
@@ -192,17 +185,12 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, l)
 	}
 
-	// This label selector is used by default when rd.Spec.Selector is empty.
-	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
-
-	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
-
 	template := corev1.Pod{
 		ObjectMeta: runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta,
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
+	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
 	if err != nil {
 		return nil, err
 	}

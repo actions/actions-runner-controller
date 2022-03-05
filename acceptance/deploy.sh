@@ -84,8 +84,7 @@ if [ -n "${TEST_REPO}" ]; then
     cat acceptance/testdata/runnerset.envsubst.yaml | TEST_ENTERPRISE= TEST_ORG= RUNNER_MIN_REPLICAS=${REPO_RUNNER_MIN_REPLICAS} NAME=repo-runnerset envsubst | kubectl apply -f -
   else
     echo 'Deploying runnerdeployment and hra. Set USE_RUNNERSET if you want to deploy runnerset instead.'
-    cat acceptance/testdata/repo.runnerdeploy.yaml | envsubst | kubectl apply -f -
-    cat acceptance/testdata/repo.hra.yaml | envsubst | kubectl apply -f -
+    cat acceptance/testdata/runnerdeploy.envsubst.yaml | TEST_ENTERPRISE= TEST_ORG= RUNNER_MIN_REPLICAS=${REPO_RUNNER_MIN_REPLICAS} NAME=repo-runnerdeploy envsubst | kubectl apply -f -
   fi
 else
   echo 'Skipped deploying runnerdeployment and hra. Set TEST_REPO to "yourorg/yourrepo" to deploy.'
