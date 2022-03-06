@@ -265,6 +265,8 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 
 	if e.useRunnerSet {
 		scriptEnv = append(scriptEnv, "USE_RUNNERSET=1")
+	} else {
+		scriptEnv = append(scriptEnv, "USE_RUNNERSET=false")
 	}
 
 	varEnv := []string{
