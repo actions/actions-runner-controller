@@ -581,9 +581,8 @@ To enable this feature, you firstly need to install the webhook server, currentl
 _[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
 
 ```console
-$ helm --upgrade install actions-runner-controller/actions-runner-controller \
-  githubWebhookServer.enabled=true \
-  githubWebhookServer.ports[0].nodePort=33080
+$ helm upgrade actions-runner-controller actions-runner-controller/actions-runner-controller \
+  --install --set githubWebhookServer.enabled=true --set githubWebhookServer.ports[0].nodePort=33080
 ```
 
 The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
