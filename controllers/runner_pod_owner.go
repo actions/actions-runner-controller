@@ -328,9 +328,31 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 
 	maybeRunning := pending + running
 
-	if newDesiredReplicas > maybeRunning && ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time) {
-		log.V(2).Info("Detected that some ephemeral runners have disappeared. Usually this is due to that ephemeral runner completions so ARC does not create new runners until EffectiveTime is updated.", "lastSyncTime", metav1.Time{Time: *lastSyncTime}, "effectiveTime", *effectiveTime, "desired", newDesiredReplicas, "pending", pending, "running", running)
-	} else if newDesiredReplicas > maybeRunning {
+	wantMoreRunners := newDesiredReplicas > maybeRunning
+	alreadySyncedAfterEffectiveTime := lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time)
+	runnerPodRecreationDelayAfterWebhookScale := lastSyncTime != nil && time.Now().Before(lastSyncTime.Add(DefaultRunnerPodRecreationDelayAfterWebhookScale))
+
+	log = log.WithValues(
+		"lastSyncTime", lastSyncTime,
+		"effectiveTime", effectiveTime,
+		"templateHashDesired", desiredTemplateHash,
+		"replicasDesired", newDesiredReplicas,
+		"replicasPending", pending,
+		"replicasRunning", running,
+		"replicasMaybeRunning", maybeRunning,
+		"templateHashObserved", hashes,
+	)
+
+	if wantMoreRunners && alreadySyncedAfterEffectiveTime && runnerPodRecreationDelayAfterWebhookScale {
+		log.V(2).Info(
+			"Detected that some ephemeral runners have disappeared. " +
+				"Usually this is due to that ephemeral runner completions " +
+				"so ARC does not create new runners until EffectiveTime is updated, or DefaultRunnerPodRecreationDelayAfterWebhookScale is elapsed.")
+	} else if wantMoreRunners {
+		if alreadySyncedAfterEffectiveTime && !runnerPodRecreationDelayAfterWebhookScale {
+			log.V(2).Info("Adding more replicas because DefaultRunnerPodRecreationDelayAfterWebhookScale has been passed")
+		}
+
 		num := newDesiredReplicas - maybeRunning
 
 		for i := 0; i < num; i++ {
@@ -342,10 +364,6 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 
 		log.V(1).Info("Created replica(s)",
 			"created", num,
-			"templateHashDesired", desiredTemplateHash,
-			"replicasDesired", newDesiredReplicas,
-			"replicasMaybeRunning", maybeRunning,
-			"templateHashObserved", hashes,
 		)
 
 		return nil, nil

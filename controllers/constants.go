@@ -45,4 +45,16 @@ const (
 	registrationTimeout = 10 * time.Minute
 
 	defaultRegistrationCheckInterval = time.Minute
+
+	// DefaultRunnerPodRecreationDelayAfterWebhookScale is the delay until syncing the runners with the desired replicas
+	// after a webhook-based scale up.
+	// This is used to prevent ARC from recreating completed runner pods that are deleted soon without being used at all.
+	// In other words, this is used as a timer to wait for the completed runner to emit the next `workflow_job` webhook event to decrease the desired replicas.
+	// So if we set 30 seconds for this, you are basically saying that you would assume GitHub and your installation of ARC to
+	// emit and propagate a workflow_job completion event down to the RunnerSet or RunnerReplicaSet, vha ARC's github webhook server and HRA, in approximately 30 seconds.
+	// In case it actually took more than DefaultRunnerPodRecreationDelayAfterWebhookScale for the workflow_job completion event to arrive,
+	// ARC will recreate the completed runner(s), assuming something went wrong in either GitHub, your K8s cluster, or ARC, so ARC needs to resync anyway.
+	//
+	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1180
+	DefaultRunnerPodRecreationDelayAfterWebhookScale = 10 * time.Minute
 )
