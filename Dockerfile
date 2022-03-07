@@ -36,8 +36,9 @@ env GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
 # Build
 RUN --mount=target=. \
   --mount=type=cache,mode=0777,target=${GOCACHE} \
-  GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} \
-  go build -o /out/manager main.go && go build -o /out/github-webhook-server ./cmd/githubwebhookserver
+  export GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} && \
+  go build -o /out/manager main.go && \
+  go build -o /out/github-webhook-server ./cmd/githubwebhookserver
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
