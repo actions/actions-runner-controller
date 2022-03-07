@@ -105,17 +105,16 @@ spec:
               key: github_app_private_key
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
-        {{- if .Values.authSecret.github_basicauth_username  }}
+        {{- if .Values.authSecret.github_basicauth_username }}
         - name: GITHUB_BASICAUTH_USERNAME
           value: {{ .Values.authSecret.github_basicauth_username }}
         {{- end }}
-        {{- if .Values.authSecret.github_basicauth_password }}
         - name: GITHUB_BASICAUTH_PASSWORD
           valueFrom:
             secretKeyRef:
               key: github_basicauth_password
               name: {{ include "actions-runner-controller.secretName" . }}
-        {{- end }}
+              optional: true
         {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}
