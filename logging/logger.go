@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	zaplib "go.uber.org/zap"
@@ -48,6 +49,7 @@ func NewLogger(logLevel string) logr.Logger {
 			atomicLevel := zaplib.NewAtomicLevelAt(level)
 			o.Level = &atomicLevel
 		}
+		o.TimeEncoder = zapcore.TimeEncoderOfLayout(time.RFC3339)
 	})
 
 	return log
