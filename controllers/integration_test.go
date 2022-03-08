@@ -270,7 +270,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2)
-				ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx, ns.Name, name, 1)
 			}
 
 			{
@@ -373,7 +372,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
-				ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx, ns.Name, name, 1)
 			}
 
 			{
@@ -1244,21 +1242,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 	})
 })
-
-func ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx context.Context, ns string, name string, value int, optionalDescriptions ...interface{}) {
-	EventuallyWithOffset(
-		1,
-		func() int {
-			var hra actionsv1alpha1.HorizontalRunnerAutoscaler
-
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, &hra)
-
-			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to get test HRA resource")
-
-			return len(hra.Status.CacheEntries)
-		},
-		time.Second*5, time.Millisecond*500).Should(Equal(value), optionalDescriptions...)
-}
 
 func ExpectHRADesiredReplicasEquals(ctx context.Context, ns, name string, desired int, optionalDescriptions ...interface{}) {
 	var rd actionsv1alpha1.HorizontalRunnerAutoscaler

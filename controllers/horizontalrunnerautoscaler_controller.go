@@ -307,7 +307,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 		return ctrl.Result{}, err
 	}
 
-	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, st, hra, minReplicas)
+	newDesiredReplicas, err := r.computeReplicasWithCache(log, now, st, hra, minReplicas)
 	if err != nil {
 		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -330,24 +330,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 		}
 
 		updated.Status.DesiredReplicas = &newDesiredReplicas
-	}
-
-	if computedReplicasFromCache == nil {
-		cacheEntries := getValidCacheEntries(updated, now)
-
-		var cacheDuration time.Duration
-
-		if r.CacheDuration > 0 {
-			cacheDuration = r.CacheDuration
-		} else {
-			cacheDuration = 10 * time.Minute
-		}
-
-		updated.Status.CacheEntries = append(cacheEntries, v1alpha1.CacheEntry{
-			Key:            v1alpha1.CacheEntryKeyDesiredReplicas,
-			Value:          computedReplicas,
-			ExpirationTime: metav1.Time{Time: time.Now().Add(cacheDuration)},
-		})
 	}
 
 	var overridesSummary string
@@ -382,18 +364,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func getValidCacheEntries(hra *v1alpha1.HorizontalRunnerAutoscaler, now time.Time) []v1alpha1.CacheEntry {
-	var cacheEntries []v1alpha1.CacheEntry
-
-	for _, ent := range hra.Status.CacheEntries {
-		if ent.ExpirationTime.After(now) {
-			cacheEntries = append(cacheEntries, ent)
-		}
-	}
-
-	return cacheEntries
 }
 
 func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -488,32 +458,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) getMinReplicas(log logr.Logger, n
 	return minReplicas, active, upcoming, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, int, *int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, error) {
 	var suggestedReplicas int
 
-	suggestedReplicasFromCache := r.fetchSuggestedReplicasFromCache(hra)
+	v, err := r.suggestDesiredReplicas(st, hra)
+	if err != nil {
+		return 0, err
+	}
 
-	var cached *int
-
-	if suggestedReplicasFromCache != nil {
-		cached = suggestedReplicasFromCache
-
-		if cached == nil {
-			suggestedReplicas = minReplicas
-		} else {
-			suggestedReplicas = *cached
-		}
+	if v == nil {
+		suggestedReplicas = minReplicas
 	} else {
-		v, err := r.suggestDesiredReplicas(st, hra)
-		if err != nil {
-			return 0, 0, nil, err
-		}
-
-		if v == nil {
-			suggestedReplicas = minReplicas
-		} else {
-			suggestedReplicas = *v
-		}
+		suggestedReplicas = *v
 	}
 
 	var reserved int
@@ -576,10 +532,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 		kvs = append(kvs, "max", *maxReplicas)
 	}
 
-	if cached != nil {
-		kvs = append(kvs, "cached", *cached)
-	}
-
 	if scaleDownDelayUntil != nil {
 		kvs = append(kvs, "last_scale_up_time", *hra.Status.LastSuccessfulScaleOutTime)
 		kvs = append(kvs, "scale_down_delay_until", scaleDownDelayUntil)
@@ -589,5 +541,5 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 		kvs...,
 	)
 
-	return newDesiredReplicas, suggestedReplicas, suggestedReplicasFromCache, nil
+	return newDesiredReplicas, nil
 }

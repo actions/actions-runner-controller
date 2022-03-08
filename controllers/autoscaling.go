@@ -7,7 +7,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/google/go-github/v39/github"
@@ -19,47 +18,6 @@ const (
 	defaultScaleUpFactor      = 1.3
 	defaultScaleDownFactor    = 0.7
 )
-
-func getValueAvailableAt(now time.Time, from, to *time.Time, reservedValue int) *int {
-	if to != nil && now.After(*to) {
-		return nil
-	}
-
-	if from != nil && now.Before(*from) {
-		return nil
-	}
-
-	return &reservedValue
-}
-
-func (r *HorizontalRunnerAutoscalerReconciler) fetchSuggestedReplicasFromCache(hra v1alpha1.HorizontalRunnerAutoscaler) *int {
-	var entry *v1alpha1.CacheEntry
-
-	for i := range hra.Status.CacheEntries {
-		ent := hra.Status.CacheEntries[i]
-
-		if ent.Key != v1alpha1.CacheEntryKeyDesiredReplicas {
-			continue
-		}
-
-		if !time.Now().Before(ent.ExpirationTime.Time) {
-			continue
-		}
-
-		entry = &ent
-
-		break
-	}
-
-	if entry != nil {
-		v := getValueAvailableAt(time.Now(), nil, &entry.ExpirationTime.Time, entry.Value)
-		if v != nil {
-			return v
-		}
-	}
-
-	return nil
-}
 
 func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	if hra.Spec.MinReplicas == nil {
