@@ -572,6 +572,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 		"min", minReplicas,
 	}
 
+	if maxReplicas := hra.Spec.MaxReplicas; maxReplicas != nil {
+		kvs = append(kvs, "max", *maxReplicas)
+	}
+
 	if cached != nil {
 		kvs = append(kvs, "cached", *cached)
 	}
@@ -579,10 +583,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 	if scaleDownDelayUntil != nil {
 		kvs = append(kvs, "last_scale_up_time", *hra.Status.LastSuccessfulScaleOutTime)
 		kvs = append(kvs, "scale_down_delay_until", scaleDownDelayUntil)
-	}
-
-	if maxReplicas := hra.Spec.MaxReplicas; maxReplicas != nil {
-		kvs = append(kvs, "max", *maxReplicas)
 	}
 
 	log.V(1).Info(fmt.Sprintf("Calculated desired replicas of %d", newDesiredReplicas),
