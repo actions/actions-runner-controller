@@ -1,5 +1,4 @@
 # Set actions-runner-controller settings for testing
-githubAPICacheDuration: 10s
 logLevel: "-3"
 githubWebhookServer:
   logLevel: "-3"
