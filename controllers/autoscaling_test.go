@@ -234,7 +234,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 			st := h.scaleTargetFromRD(context.Background(), rd)
 
-			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
+			got, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -502,7 +502,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 
 			st := h.scaleTargetFromRD(context.Background(), rd)
 
-			got, _, _, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
+			got, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
