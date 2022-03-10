@@ -256,8 +256,28 @@ spec:
       env: []
 ```
 
-There may be more places you need to tweak for MTU.
-Please consult issues like #651 for more information.
+If the issue still persists, you can set the `ARC_DOCKER_MTU_PROPAGATION` to propagate the host MTU to networks created
+by the GitHub Runner. For instance:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: github-runner
+  namespace: github-system
+spec:
+  replicas: 6
+  template:
+    spec:
+      dockerMTU: 1400
+      repository: $username/$repo
+      env:
+        - name: ARC_DOCKER_MTU_PROPAGATION
+          value: "true"
+```
+
+You can read the discussion regarding this issue in
+(#1406)[https://github.com/actions-runner-controller/actions-runner-controller/issues/1046].
 
 ## Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns
 
