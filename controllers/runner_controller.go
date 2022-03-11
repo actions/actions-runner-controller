@@ -53,6 +53,7 @@ const (
 	EnvVarOrg        = "RUNNER_ORG"
 	EnvVarRepo       = "RUNNER_REPO"
 	EnvVarEnterprise = "RUNNER_ENTERPRISE"
+	EnvVarEphemeral  = "RUNNER_EPHEMERAL"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -535,7 +536,7 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			Value: workDir,
 		},
 		{
-			Name:  "RUNNER_EPHEMERAL",
+			Name:  EnvVarEphemeral,
 			Value: fmt.Sprintf("%v", ephemeral),
 		},
 	}

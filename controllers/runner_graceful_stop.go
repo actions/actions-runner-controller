@@ -32,7 +32,7 @@ func tickRunnerGracefulStop(ctx context.Context, unregistrationTimeout time.Dura
 		return nil, &ctrl.Result{}, err
 	}
 
-	if res, err := ensureRunnerUnregistration(ctx, unregistrationTimeout, retryDelay, log, ghClient, enterprise, organization, repository, runner, pod); res != nil {
+	if res, err := ensureRunnerUnregistration(ctx, unregistrationTimeout, retryDelay, log, ghClient, c, enterprise, organization, repository, runner, pod); res != nil {
 		return nil, res, err
 	}
 
@@ -69,7 +69,7 @@ func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod 
 }
 
 // If the first return value is nil, it's safe to delete the runner pod.
-func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
+func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.Duration, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
 	var runnerID *int64
 
 	if id, ok := getAnnotation(pod, AnnotationKeyRunnerID); ok {
@@ -81,8 +81,25 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 		runnerID = &v
 	}
 
-	ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, runner, runnerID)
-	if err != nil {
+	code := runnerContainerExitCode(pod)
+
+	if pod != nil && pod.Annotations[AnnotationKeyUnregistrationCompleteTimestamp] != "" {
+		// If it's already unregistered in the previous reconcilation loop,
+		// you can safely assume that it won't get registered again so it's safe to delete the runner pod.
+		log.Info("Runner pod is marked as already unregistered.")
+	} else if pod != nil && runnerPodOrContainerIsStopped(pod) {
+		// If it's an ephemeral runner with the actions/runner container exited with 0,
+		// we can safely assume that it has unregistered itself from GitHub Actions
+		// so it's natural that RemoveRunner fails due to 404.
+
+		// If pod has ended up succeeded we need to restart it
+		// Happens e.g. when dind is in runner and run completes
+		log.Info("Runner pod has been stopped with a successful status.")
+	} else if pod != nil && pod.Annotations[AnnotationKeyRunnerCompletionWaitStartTimestamp] != "" {
+		log.Info("Runner pod is annotated to wait for completion")
+
+		return &ctrl.Result{RequeueAfter: retryDelay}, nil
+	} else if ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, runner, runnerID); err != nil {
 		if errors.Is(err, &gogithub.RateLimitError{}) {
 			// We log the underlying error when we failed calling GitHub API to list or unregisters,
 			// or the runner is still busy.
@@ -97,12 +114,12 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 			return &ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
 		}
 
-		log.Error(err, "Failed to unregister runner before deleting the pod.")
+		log.V(1).Info("Failed to unregister runner before deleting the pod.", "error", err)
+
+		var runnerBusy bool
 
 		errRes := &gogithub.ErrorResponse{}
 		if errors.As(err, &errRes) {
-			code := runnerContainerExitCode(pod)
-
 			runner, _ := getRunner(ctx, ghClient, enterprise, organization, repository, runner)
 
 			var runnerID int64
@@ -111,7 +128,9 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 				runnerID = *runner.ID
 			}
 
-			if errRes.Response.StatusCode == 422 && code != nil {
+			runnerBusy = errRes.Response.StatusCode == 422
+
+			if runnerBusy && code != nil {
 				log.V(2).Info("Runner container has already stopped but the unregistration attempt failed. "+
 					"This can happen when the runner container crashed due to an unhandled error, OOM, etc. "+
 					"ARC terminates the pod anyway. You'd probably need to manually delete the runner later by calling the GitHub API",
@@ -121,6 +140,28 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 
 				return nil, nil
 			}
+		}
+
+		if runnerBusy {
+			// We want to prevent spamming the deletion attemps but returning ctrl.Result with RequeueAfter doesn't
+			// work as the reconcilation can happen earlier due to pod status update.
+			// For ephemeral runners, we can expect it to stop and unregister itself on completion.
+			// So we can just wait for the completion without actively retrying unregistration.
+			ephemeral := getRunnerEnv(pod, EnvVarEphemeral)
+			if ephemeral == "true" {
+				pod, err = annotatePodOnce(ctx, c, log, pod, AnnotationKeyRunnerCompletionWaitStartTimestamp, time.Now().Format(time.RFC3339))
+				if err != nil {
+					return &ctrl.Result{}, err
+				}
+
+				return &ctrl.Result{}, nil
+			}
+
+			log.V(2).Info("Retrying runner unregistration because the static runner is still busy")
+			// Otherwise we may end up spamming 422 errors,
+			// each call consuming GitHub API rate limit
+			// https://github.com/actions-runner-controller/actions-runner-controller/pull/1167#issuecomment-1064213271
+			return &ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
 
 		return &ctrl.Result{}, err
@@ -135,18 +176,6 @@ func ensureRunnerUnregistration(ctx context.Context, unregistrationTimeout time.
 		// In that case we can safely assume that the runner will never be registered.
 
 		log.Info("Runner was not found on GitHub and the runner pod was not found on Kuberntes.")
-	} else if pod.Annotations[AnnotationKeyUnregistrationCompleteTimestamp] != "" {
-		// If it's already unregistered in the previous reconcilation loop,
-		// you can safely assume that it won't get registered again so it's safe to delete the runner pod.
-		log.Info("Runner pod is marked as already unregistered.")
-	} else if runnerPodOrContainerIsStopped(pod) {
-		// If it's an ephemeral runner with the actions/runner container exited with 0,
-		// we can safely assume that it has unregistered itself from GitHub Actions
-		// so it's natural that RemoveRunner fails due to 404.
-
-		// If pod has ended up succeeded we need to restart it
-		// Happens e.g. when dind is in runner and run completes
-		log.Info("Runner pod has been stopped with a successful status.")
 	} else if ts := pod.Annotations[AnnotationKeyUnregistrationStartTimestamp]; ts != "" {
 		t, err := time.Parse(time.RFC3339, ts)
 		if err != nil {
@@ -239,6 +268,19 @@ func podConditionTransitionTimeAfter(pod *corev1.Pod, tpe corev1.PodConditionTyp
 func podRunnerID(pod *corev1.Pod) string {
 	id, _ := getAnnotation(pod, AnnotationKeyRunnerID)
 	return id
+}
+
+func getRunnerEnv(pod *corev1.Pod, key string) string {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == containerName {
+			for _, e := range c.Env {
+				if e.Name == key {
+					return e.Value
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // unregisterRunner unregisters the runner from GitHub Actions by name.
