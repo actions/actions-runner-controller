@@ -18,6 +18,10 @@ const (
 	// AnnotationKeyUnregistrationCompleteTimestamp is the annotation that is added onto the pod once the previously started unregistration process has been completed.
 	AnnotationKeyUnregistrationCompleteTimestamp = annotationKeyPrefix + "unregistration-complete-timestamp"
 
+	// AnnotationKeyRunnerCompletionWaitStartTimestamp is the annotation that is added onto the pod when
+	// ARC decided to wait until the pod to complete by itself, without the need for ARC to unregister the corresponding runner.
+	AnnotationKeyRunnerCompletionWaitStartTimestamp = annotationKeyPrefix + "runner-completion-wait-start-timestamp"
+
 	// unregistarionStartTimestamp is the annotation that contains the time that the requested unregistration process has been started
 	AnnotationKeyUnregistrationStartTimestamp = annotationKeyPrefix + "unregistration-start-timestamp"
 
