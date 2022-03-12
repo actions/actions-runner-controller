@@ -61,4 +61,7 @@ const (
 	//
 	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1180
 	DefaultRunnerPodRecreationDelayAfterWebhookScale = 10 * time.Minute
+
+	EnvVarRunnerName  = "RUNNER_NAME"
+	EnvVarRunnerToken = "RUNNER_TOKEN"
 )
