@@ -2,6 +2,8 @@
 package logging
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -45,6 +47,19 @@ func (t Transport) log(req *http.Request, resp *http.Response) {
 		remaining := resp.Header.Get(headerRateLimitRemaining)
 
 		args = append(args, "ratelimit_remaining", remaining)
+	}
+
+	if t.Log.V(4).Enabled() {
+		var buf bytes.Buffer
+
+		if _, err := io.Copy(&buf, resp.Body); err != nil {
+			t.Log.V(3).Info("unable to copy http response", "error", err)
+		}
+		resp.Body.Close()
+
+		t.Log.V(4).Info("Logging HTTP round-trip", "method", req.Method, "requestHeader", req.Header, "statusCode", resp.StatusCode, "responseHeader", resp.Header, "responseBody", buf.String())
+
+		resp.Body = io.NopCloser(&buf)
 	}
 
 	t.Log.V(3).Info("Seen HTTP response", args...)
