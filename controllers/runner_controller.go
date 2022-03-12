@@ -453,19 +453,12 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	updated := pod.DeepCopy()
 
-	for i := range pod.Spec.Containers {
-		if pod.Spec.Containers[i].Name == "runner" {
-			updated.Spec.Containers[i].Env = append(updated.Spec.Containers[i].Env,
-				corev1.EnvVar{
-					Name:  "RUNNER_NAME",
-					Value: pod.ObjectMeta.Name,
-				},
-				corev1.EnvVar{
-					Name:  "RUNNER_TOKEN",
-					Value: token,
-				},
-			)
-		}
+	if getRunnerEnv(pod, EnvVarRunnerName) == "" {
+		setRunnerEnv(updated, EnvVarRunnerName, pod.ObjectMeta.Name)
+	}
+
+	if getRunnerEnv(pod, EnvVarRunnerToken) == "" {
+		setRunnerEnv(updated, EnvVarRunnerToken, token)
 	}
 
 	return updated
