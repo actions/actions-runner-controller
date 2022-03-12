@@ -186,7 +186,7 @@ type env struct {
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
 	githubTokenWebhook                                       string
 	testEnterprise                                           string
-	featureFlagEphemeral                                     bool
+	featureFlagEphemeral                                     *bool
 	scaleDownDelaySecondsAfterScaleOut                       int64
 	minReplicas                                              int64
 	dockerdWithinRunnerContainer                             bool
@@ -220,8 +220,11 @@ func initTestEnv(t *testing.T) *env {
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE")
 	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 100)
-	ephemeral, _ := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL", ""))
-	e.featureFlagEphemeral = ephemeral
+
+	if ephemeral, err := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL", "")); err == nil {
+		e.featureFlagEphemeral = &ephemeral
+	}
+
 	e.scaleDownDelaySecondsAfterScaleOut, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT", "10"), 10, 32)
 	e.minReplicas, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_MIN_REPLICAS", "1"), 10, 32)
 
@@ -285,11 +288,14 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
 		"TEST_ID=" + e.testID,
-		fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", e.featureFlagEphemeral),
 		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
 		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+	}
+
+	if e.featureFlagEphemeral != nil {
+		varEnv = append(varEnv, fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", *e.featureFlagEphemeral))
 	}
 
 	if e.useApp {
