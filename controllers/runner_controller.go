@@ -50,10 +50,12 @@ const (
 	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
 	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
 
-	EnvVarOrg        = "RUNNER_ORG"
-	EnvVarRepo       = "RUNNER_REPO"
-	EnvVarEnterprise = "RUNNER_ENTERPRISE"
-	EnvVarEphemeral  = "RUNNER_EPHEMERAL"
+	EnvVarOrg                        = "RUNNER_ORG"
+	EnvVarRepo                       = "RUNNER_REPO"
+	EnvVarEnterprise                 = "RUNNER_ENTERPRISE"
+	EnvVarEphemeral                  = "RUNNER_EPHEMERAL"
+	EnvVarRunnerFeatureFlagEphemeral = "RUNNER_FEATURE_FLAG_EPHEMERAL"
+	EnvVarTrue                       = "true"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -810,6 +812,12 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 		} else {
 			pod.Spec.Containers[dockerdContainerIndex] = *dockerdContainer
 		}
+	}
+
+	// TODO Remove this once we remove RUNNER_FEATURE_FLAG_EPHEMERAL from runner's entrypoint.sh
+	// and make --ephemeral the default option.
+	if getRunnerEnv(pod, EnvVarRunnerFeatureFlagEphemeral) == "" {
+		setRunnerEnv(pod, EnvVarRunnerFeatureFlagEphemeral, EnvVarTrue)
 	}
 
 	return *pod, nil

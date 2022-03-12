@@ -1310,13 +1310,29 @@ We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `Run
 
 ### Ephemeral Runners
 
-Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
+Every runner managed by ARC is "ephemeral" by default. We call it an ephemeral runner.
 
-When it is configured, it passes a `--once` flag to every runner.
+The life of an ephemeral runner managed by ARC looks like this- ARC creates a runner pod for the runner. As it's an ephemeral runner, the `--ephemeral` flag is passed to the `actions/runner` agent that runs within the `runner` container of the runner pod.
 
-`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. It has a known race condition issue that means the runner may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in issue [#466](https://github.com/actions-runner-controller/actions-runner-controller/issues/466).
+`--ephemeral` is an `actions/runner` feature that instructs the runner to stop and de-register itseulf after the first job run.
 
-Since the implementation of the `--once` flag GitHub have implemented the `--ephemeral` flag which has no known race conditions and is much more supported by GitHub, this is the prefered flag for ephemeral runners. To have your `RunnerDeployment` and `RunnerSet` kinds use this new flag instead of the `--once` flag set `RUNNER_FEATURE_FLAG_EPHEMERAL` to `"true"`. For example, a `RunnerSet` configured to use the new flag looks like:
+Once the ephemeral runner has completed running a workflow job, it stops with a status code of 0, hence the runner pod is marked as completed, removed by ARC.
+
+As it's removed after a workflow job run, the runner pod is never reused across multiple GitHub Actions workflow jobs, providing you a clean environment per each workflow job.
+
+Although not recommended, it's possible to disable passing `--ephemeral` flag by explicitly setting `ephemeral: false` in the `RunnerDeployment` or `RunnerSet` spec. When disabled, your runner becomes "static". A static runner does not stop after workflow job run, and `actions/runner` is known to clean only runner's work dir after each job. That means your runner's environment, including various actions cache, docker images stored in the `dind` and layer cache, is retained across multiple workflow job runs. It may worth trying only when you do want to prioritize job run speed more than job reliability and security.
+
+> In early days of the project, the flag passed to the runner when `ephemeral: true` was `--once` rather than `--ephemeral`.
+>
+> `--once` had a known race condition issue that means the runner may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This was tracked in issue [#466](https://github.com/actions-runner-controller/actions-runner-controller/issues/466).
+>
+> Later, GitHub have implemented the `--ephemeral` flag which has no known race conditions and was much more supported by GitHub, and it became the prefered flag for ephemeral runners.
+>
+> To leverage `--ephemeral`, ARC added an environment variable based feature flag to the runner image, `RUNNER_FEATURE_FLAG_EPHEMERAL`, in ARC 0.20.0. Once it was set to `"true"` via `RunnerDeployment` or `RunnerSet` spec, the runner was configured to use `--ephemeral` instead of `--once`.
+>
+> Since ARC 0.22.0, `--ephemeral` is used by default. Every runner without the `RUNNER_FEATURE_FLAG_EPHEMERAL` environment variable uses `--ephmeral`. You can still opt-out of it by setting the value to `"false"`, but we don't think there's real need to do. Therefore, the ability to opt-out will soon be dropped, maybe in ARC 0.23.0.
+
+If you're upgrading from pre-0.22.0, your RunnerDeployment and RunnerSet spec might look like below:
 
 ```yaml
 kind: RunnerSet
@@ -1337,9 +1353,7 @@ spec:
           value: "true"
 ```
 
-You should configure all your ephemeral runners to use the new flag unless you have a reason for needing to use the old flag.
-
-Once able, `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners and potentially remove `--once` entirely. It is likely that in the future the `--once` flag will be officially deprecated by GitHub and subsquently removed in `actions/runner`.
+Since 0.22.0, you can simply omit the `RUNNER_FEATURE_FLAG_EPHEMERAL` env, and your runner remains "ephemeral".
 
 ### Software Installed in the Runner Image
 
