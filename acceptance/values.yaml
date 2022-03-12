@@ -1,7 +1,7 @@
 # Set actions-runner-controller settings for testing
-logLevel: "-3"
+logLevel: "-4"
 githubWebhookServer:
-  logLevel: "-3"
+  logLevel: "-4"
   enabled: true
   labels: {}
   replicaCount: 1

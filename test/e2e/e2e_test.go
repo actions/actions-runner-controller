@@ -167,16 +167,22 @@ func TestE2ERunnerDeploy(t *testing.T) {
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
+
+	t.FailNow()
 }
 
 type env struct {
 	*testing.Env
 
 	useRunnerSet bool
+	// Uses GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, and GITHUB_APP_PRIVATE_KEY
+	// to let ARC authenticate as a GitHub App
+	useApp bool
 
 	testID                                                   string
 	testName                                                 string
 	repoToCommit                                             string
+	appID, appInstallationID, appPrivateKeyFile              string
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
 	githubTokenWebhook                                       string
 	testEnterprise                                           string
@@ -204,6 +210,9 @@ func initTestEnv(t *testing.T) *env {
 	e.testName = testName
 	e.runnerLabel = "test-" + id
 	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
+	e.appID = testing.Getenv(t, "GITHUB_APP_ID")
+	e.appInstallationID = testing.Getenv(t, "GITHUB_APP_INSTALLATION_ID")
+	e.appPrivateKeyFile = testing.Getenv(t, "GITHUB_APP_PRIVATE_KEY_FILE")
 	e.githubTokenWebhook = testing.Getenv(t, "WEBHOOK_GITHUB_TOKEN")
 	e.repoToCommit = testing.Getenv(t, "TEST_COMMIT_REPO")
 	e.testRepo = testing.Getenv(t, "TEST_REPO", "")
@@ -260,7 +269,6 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 	scriptEnv := []string{
 		"KUBECONFIG=" + e.Kubeconfig(),
 		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
-		"ACCEPTANCE_TEST_SECRET_TYPE=token",
 	}
 
 	if e.useRunnerSet {
@@ -274,7 +282,6 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"TEST_REPO=" + e.testRepo,
 		"TEST_ORG=" + e.testOrg,
 		"TEST_ORG_REPO=" + e.testOrgRepo,
-		"GITHUB_TOKEN=" + e.githubToken,
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
 		"TEST_ID=" + e.testID,
@@ -283,6 +290,20 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+	}
+
+	if e.useApp {
+		varEnv = append(varEnv,
+			"ACCEPTANCE_TEST_SECRET_TYPE=app",
+			"APP_ID="+e.appID,
+			"APP_INSTALLATION_ID="+e.appInstallationID,
+			"APP_PRIVATE_KEY_FILE="+e.appPrivateKeyFile,
+		)
+	} else {
+		varEnv = append(varEnv,
+			"ACCEPTANCE_TEST_SECRET_TYPE=token",
+			"GITHUB_TOKEN="+e.githubToken,
+		)
 	}
 
 	if e.dockerdWithinRunnerContainer {

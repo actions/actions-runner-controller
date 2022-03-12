@@ -6,7 +6,7 @@ tpe=${ACCEPTANCE_TEST_SECRET_TYPE}
 
 VALUES_FILE=${VALUES_FILE:-$(dirname $0)/values.yaml}
 
-kubectl delete secret controller-manager || :
+kubectl delete secret -n actions-runner-system controller-manager || :
 
 if [ "${tpe}" == "token" ]; then
   if ! kubectl get secret controller-manager -n actions-runner-system >/dev/null; then
@@ -18,8 +18,8 @@ elif [ "${tpe}" == "app" ]; then
   kubectl create secret generic controller-manager \
     -n actions-runner-system \
     --from-literal=github_app_id=${APP_ID:?must not be empty} \
-    --from-literal=github_app_installation_id=${INSTALLATION_ID:?must not be empty} \
-    --from-file=github_app_private_key=${PRIVATE_KEY_FILE_PATH:?must not be empty}
+    --from-literal=github_app_installation_id=${APP_INSTALLATION_ID:?must not be empty} \
+    --from-file=github_app_private_key=${APP_PRIVATE_KEY_FILE:?must not be empty}
 else
   echo "ACCEPTANCE_TEST_SECRET_TYPE must be set to either \"token\" or \"app\"" 1>&2
   exit 1
