@@ -329,7 +329,7 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 	maybeRunning := pending + running
 
 	wantMoreRunners := newDesiredReplicas > maybeRunning
-	alreadySyncedAfterEffectiveTime := lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time)
+	alreadySyncedAfterEffectiveTime := ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time)
 	runnerPodRecreationDelayAfterWebhookScale := lastSyncTime != nil && time.Now().Before(lastSyncTime.Add(DefaultRunnerPodRecreationDelayAfterWebhookScale))
 
 	log = log.WithValues(
@@ -344,6 +344,16 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 	)
 
 	if wantMoreRunners && alreadySyncedAfterEffectiveTime && runnerPodRecreationDelayAfterWebhookScale {
+		// This is our special handling of the situation for ephemeral runners only.
+		//
+		// Handling static runners this way results in scale-up to not work at all,
+		// because then any scale up attempts for static runenrs fall within this condition, for two reasons.
+		// First, static(persistent) runners will never restart on their own.
+		// Second, we don't update EffectiveTime for static runners.
+		//
+		// We do need to skip this condition for static runners, and that's why we take the `ephemeral` flag into account when
+		// computing `alreadySyncedAfterEffectiveTime``.
+
 		log.V(2).Info(
 			"Detected that some ephemeral runners have disappeared. " +
 				"Usually this is due to that ephemeral runner completions " +
