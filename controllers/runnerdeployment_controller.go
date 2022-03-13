@@ -222,15 +222,38 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		for i := range oldSets {
 			rs := oldSets[i]
 
+			rslog := log.WithValues("runnerreplicaset", rs.Name)
+
+			if rs.Status.Replicas != nil && *rs.Status.Replicas > 0 {
+				if rs.Spec.Replicas != nil && *rs.Spec.Replicas == 0 {
+					rslog.V(2).Info("Waiting for runnerreplicaset to scale to zero")
+
+					continue
+				}
+
+				updated := rs.DeepCopy()
+				zero := 0
+				updated.Spec.Replicas = &zero
+				if err := r.Client.Update(ctx, updated); err != nil {
+					rslog.Error(err, "Failed to scale runnerreplicaset to zero")
+
+					return ctrl.Result{}, err
+				}
+
+				rslog.Info("Scaled runnerreplicaset to zero")
+
+				continue
+			}
+
 			if err := r.Client.Delete(ctx, &rs); err != nil {
-				log.Error(err, "Failed to delete runnerreplicaset resource")
+				rslog.Error(err, "Failed to delete runnerreplicaset resource")
 
 				return ctrl.Result{}, err
 			}
 
 			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
 
-			log.Info("Deleted runnerreplicaset", "runnerdeployment", rd.ObjectMeta.Name, "runnerreplicaset", rs.Name)
+			rslog.Info("Deleted runnerreplicaset")
 		}
 	}
 
