@@ -302,9 +302,11 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 		log.V(2).Info("Detected some current object(s)", "creationTimestampFirst", timestampFirst, "creationTimestampLast", timestampLast, "names", names)
 	}
 
-	var pending, running, regTimeout int
+	var total, terminating, pending, running, regTimeout int
 
 	for _, ss := range currentObjects {
+		total += ss.total
+		terminating += ss.terminating
 		pending += ss.pending
 		running += ss.running
 		regTimeout += ss.regTimeout
@@ -319,6 +321,8 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 
 	log.V(2).Info(
 		"Found some pods across owner(s)",
+		"total", total,
+		"terminating", terminating,
 		"pending", pending,
 		"running", running,
 		"regTimeout", regTimeout,
@@ -329,7 +333,7 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 	maybeRunning := pending + running
 
 	wantMoreRunners := newDesiredReplicas > maybeRunning
-	alreadySyncedAfterEffectiveTime := lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time)
+	alreadySyncedAfterEffectiveTime := ephemeral && lastSyncTime != nil && effectiveTime != nil && lastSyncTime.After(effectiveTime.Time)
 	runnerPodRecreationDelayAfterWebhookScale := lastSyncTime != nil && time.Now().Before(lastSyncTime.Add(DefaultRunnerPodRecreationDelayAfterWebhookScale))
 
 	log = log.WithValues(
@@ -344,6 +348,16 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 	)
 
 	if wantMoreRunners && alreadySyncedAfterEffectiveTime && runnerPodRecreationDelayAfterWebhookScale {
+		// This is our special handling of the situation for ephemeral runners only.
+		//
+		// Handling static runners this way results in scale-up to not work at all,
+		// because then any scale up attempts for static runenrs fall within this condition, for two reasons.
+		// First, static(persistent) runners will never restart on their own.
+		// Second, we don't update EffectiveTime for static runners.
+		//
+		// We do need to skip this condition for static runners, and that's why we take the `ephemeral` flag into account when
+		// computing `alreadySyncedAfterEffectiveTime``.
+
 		log.V(2).Info(
 			"Detected that some ephemeral runners have disappeared. " +
 				"Usually this is due to that ephemeral runner completions " +
@@ -415,24 +429,26 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 				// or actions/runner may potentially misbehave on SIGTERM immediately sent by K8s.
 				// We'd better unregister first and then start a pod deletion process.
 				// The annotation works as a mark to start the pod unregistration and deletion process of ours.
+
+				if _, ok := getAnnotation(ss.owner, AnnotationKeyUnregistrationRequestTimestamp); ok {
+					log.V(2).Info("Still waiting for runner pod(s) unregistration to complete")
+
+					continue
+				}
+
 				for _, po := range ss.pods {
 					if _, err := annotatePodOnce(ctx, c, log, &po, AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339)); err != nil {
 						return nil, err
 					}
 				}
 
-				if _, ok := getAnnotation(ss.owner, AnnotationKeyUnregistrationRequestTimestamp); !ok {
-					updated := ss.owner.withAnnotation(AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339))
-
-					if err := c.Patch(ctx, updated, client.MergeFrom(ss.object)); err != nil {
-						log.Error(err, fmt.Sprintf("Failed to patch object to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
-						return nil, err
-					}
-
-					log.V(2).Info("Redundant object has been annotated to start the unregistration before deletion")
-				} else {
-					log.V(2).Info("BUG: Redundant object was already annotated")
+				updated := ss.owner.withAnnotation(AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339))
+				if err := c.Patch(ctx, updated, client.MergeFrom(ss.owner)); err != nil {
+					log.Error(err, fmt.Sprintf("Failed to patch owner to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
+					return nil, err
 				}
+
+				log.V(2).Info("Redundant owner has been annotated to start the unregistration before deletion")
 			}
 		} else if retained > newDesiredReplicas {
 			log.V(2).Info("Waiting sync before scale down", "retained", retained, "newDesiredReplicas", newDesiredReplicas)
@@ -508,6 +524,9 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				log.Error(err, "Failed to delete owner")
 				return nil, err
 			}
+
+			log.V(2).Info("Started deletion of owner")
+
 			continue
 		}
 
@@ -523,13 +542,13 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				}
 			}
 
-			log.V(2).Info("Marking owner for unregistration completion", "deletionSafe", deletionSafe, "total", res.total)
-
 			if deletionSafe == res.total {
+				log.V(2).Info("Marking owner for unregistration completion", "deletionSafe", deletionSafe, "total", res.total)
+
 				if _, ok := getAnnotation(res.owner, AnnotationKeyUnregistrationCompleteTimestamp); !ok {
 					updated := res.owner.withAnnotation(AnnotationKeyUnregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
 
-					if err := c.Patch(ctx, updated, client.MergeFrom(res.object)); err != nil {
+					if err := c.Patch(ctx, updated, client.MergeFrom(res.owner)); err != nil {
 						log.Error(err, fmt.Sprintf("Failed to patch owner to have %s annotation", AnnotationKeyUnregistrationCompleteTimestamp))
 						return nil, err
 					}
@@ -538,9 +557,9 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				} else {
 					log.V(2).Info("BUG: Redundant owner was already annotated to start the deletion")
 				}
-			}
 
-			continue
+				continue
+			}
 		}
 
 		if annotations := res.owner.GetAnnotations(); annotations != nil {

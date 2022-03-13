@@ -135,6 +135,7 @@ func TestE2ERunnerDeploy(t *testing.T) {
 	}
 
 	env := initTestEnv(t)
+	env.useApp = true
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -186,6 +187,7 @@ type env struct {
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
 	githubTokenWebhook                                       string
 	testEnterprise                                           string
+	testEphemeral                                            string
 	featureFlagEphemeral                                     *bool
 	scaleDownDelaySecondsAfterScaleOut                       int64
 	minReplicas                                              int64
@@ -218,8 +220,9 @@ func initTestEnv(t *testing.T) *env {
 	e.testRepo = testing.Getenv(t, "TEST_REPO", "")
 	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
-	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 100)
+	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
+	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 20)
 
 	if ephemeral, err := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL", "")); err == nil {
 		e.featureFlagEphemeral = &ephemeral
@@ -288,6 +291,7 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
 		"TEST_ID=" + e.testID,
+		"TEST_EPHEMERAL=" + e.testEphemeral,
 		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
 		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),

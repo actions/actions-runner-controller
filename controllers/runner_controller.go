@@ -73,7 +73,6 @@ type RunnerReconciler struct {
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
 
-	UnregistrationTimeout    time.Duration
 	UnregistrationRetryDelay time.Duration
 }
 
@@ -200,11 +199,11 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 		newRunner.ObjectMeta.Finalizers = finalizers
 
 		if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
-			log.Error(err, "Failed to update runner for finalizer removal")
+			log.Error(err, "Unable to remove finalizer")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository, "organization", runner.Spec.Organization)
+		log.Info("Removed finalizer")
 	}
 
 	return ctrl.Result{}, nil
@@ -212,7 +211,7 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 
 func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1alpha1.Runner, log logr.Logger) (reconcile.Result, error) {
 	if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: RetryDelayOnCreateRegistrationError}, nil
 	} else if updated {
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -254,6 +253,10 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 	rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 	if err != nil {
+		// An error can be a permanent, permission issue like the below:
+		//    POST https://api.github.com/enterprises/YOUR_ENTERPRISE/actions/runners/registration-token: 403 Resource not accessible by integration []
+		// In such case retrying in seconds might not make much sense.
+
 		r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
 		log.Error(err, "Failed to get new registration token")
 		return false, err

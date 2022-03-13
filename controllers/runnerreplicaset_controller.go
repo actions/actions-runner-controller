@@ -65,6 +65,10 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if !rs.ObjectMeta.DeletionTimestamp.IsZero() {
+		// RunnerReplicaSet cannot be gracefuly removed.
+		// That means any runner that is running a job can be prematurely terminated.
+		// To gracefully remove a RunnerReplicaSet, scale it down to zero first, observe RunnerReplicaSet's status replicas,
+		// and remove it only after the status replicas becomes zero.
 		return ctrl.Result{}, nil
 	}
 

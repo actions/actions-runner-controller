@@ -17,6 +17,8 @@ spec:
       image: ${RUNNER_NAME}:${RUNNER_TAG}
       imagePullPolicy: IfNotPresent
 
+      ephemeral: ${TEST_EPHEMERAL}
+
       # Whether to pass --ephemeral (true) or --once (false, deprecated)
       env:
       - name: RUNNER_FEATURE_FLAG_EPHEMERAL
