@@ -120,6 +120,15 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 
 		errRes := &gogithub.ErrorResponse{}
 		if errors.As(err, &errRes) {
+			if errRes.Response.StatusCode == 403 {
+				log.Error(err, "Unable to unregister due to permission error. "+
+					"Perhaps you've changed the permissions of PAT or GitHub App, or you updated authentication method of ARC in a wrong way? "+
+					"ARC considers it as already unregistered and continue removing the pod. "+
+					"You may need to remove the runner on GitHub UI.")
+
+				return nil, nil
+			}
+
 			runner, _ := getRunner(ctx, ghClient, enterprise, organization, repository, runner)
 
 			var runnerID int64
