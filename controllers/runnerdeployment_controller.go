@@ -118,6 +118,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
+		log.Info("Created runnerreplicaset", "runnerreplicaset", desiredRS.Name)
+
 		return ctrl.Result{}, nil
 	}
 
@@ -141,6 +143,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			return ctrl.Result{}, err
 		}
+
+		log.Info("Created runnerreplicaset", "runnerreplicaset", desiredRS.Name)
 
 		// We requeue in order to clean up old runner replica sets later.
 		// Otherwise, they aren't cleaned up until the next re-sync interval.
