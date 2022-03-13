@@ -135,6 +135,7 @@ func TestE2ERunnerDeploy(t *testing.T) {
 	}
 
 	env := initTestEnv(t)
+	env.useApp = true
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -219,7 +220,7 @@ func initTestEnv(t *testing.T) *env {
 	e.testRepo = testing.Getenv(t, "TEST_REPO", "")
 	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
-	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE")
+	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
 	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 20)
 
