@@ -199,11 +199,11 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 		newRunner.ObjectMeta.Finalizers = finalizers
 
 		if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
-			log.Error(err, "Failed to update runner for finalizer removal")
+			log.Error(err, "Unable to remove finalizer")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository, "organization", runner.Spec.Organization)
+		log.Info("Removed finalizer")
 	}
 
 	return ctrl.Result{}, nil
