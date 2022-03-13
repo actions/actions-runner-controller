@@ -434,12 +434,12 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 				if _, ok := getAnnotation(ss.owner, AnnotationKeyUnregistrationRequestTimestamp); !ok {
 					updated := ss.owner.withAnnotation(AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339))
 
-					if err := c.Patch(ctx, updated, client.MergeFrom(ss.object)); err != nil {
-						log.Error(err, fmt.Sprintf("Failed to patch object to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
+					if err := c.Patch(ctx, updated, client.MergeFrom(ss.owner)); err != nil {
+						log.Error(err, fmt.Sprintf("Failed to patch owner to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
 						return nil, err
 					}
 
-					log.V(2).Info("Redundant object has been annotated to start the unregistration before deletion")
+					log.V(2).Info("Redundant owner has been annotated to start the unregistration before deletion")
 				} else {
 					log.V(2).Info("BUG: Redundant object was already annotated")
 				}
@@ -539,7 +539,7 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				if _, ok := getAnnotation(res.owner, AnnotationKeyUnregistrationCompleteTimestamp); !ok {
 					updated := res.owner.withAnnotation(AnnotationKeyUnregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
 
-					if err := c.Patch(ctx, updated, client.MergeFrom(res.object)); err != nil {
+					if err := c.Patch(ctx, updated, client.MergeFrom(res.owner)); err != nil {
 						log.Error(err, fmt.Sprintf("Failed to patch owner to have %s annotation", AnnotationKeyUnregistrationCompleteTimestamp))
 						return nil, err
 					}
