@@ -429,24 +429,26 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 				// or actions/runner may potentially misbehave on SIGTERM immediately sent by K8s.
 				// We'd better unregister first and then start a pod deletion process.
 				// The annotation works as a mark to start the pod unregistration and deletion process of ours.
+
+				if _, ok := getAnnotation(ss.owner, AnnotationKeyUnregistrationRequestTimestamp); ok {
+					log.V(2).Info("Still waiting for runner pod(s) unregistration to complete")
+
+					continue
+				}
+
 				for _, po := range ss.pods {
 					if _, err := annotatePodOnce(ctx, c, log, &po, AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339)); err != nil {
 						return nil, err
 					}
 				}
 
-				if _, ok := getAnnotation(ss.owner, AnnotationKeyUnregistrationRequestTimestamp); !ok {
-					updated := ss.owner.withAnnotation(AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339))
-
-					if err := c.Patch(ctx, updated, client.MergeFrom(ss.owner)); err != nil {
-						log.Error(err, fmt.Sprintf("Failed to patch owner to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
-						return nil, err
-					}
-
-					log.V(2).Info("Redundant owner has been annotated to start the unregistration before deletion")
-				} else {
-					log.V(2).Info("BUG: Redundant object was already annotated")
+				updated := ss.owner.withAnnotation(AnnotationKeyUnregistrationRequestTimestamp, time.Now().Format(time.RFC3339))
+				if err := c.Patch(ctx, updated, client.MergeFrom(ss.owner)); err != nil {
+					log.Error(err, fmt.Sprintf("Failed to patch owner to have %s annotation", AnnotationKeyUnregistrationRequestTimestamp))
+					return nil, err
 				}
+
+				log.V(2).Info("Redundant owner has been annotated to start the unregistration before deletion")
 			}
 		} else if retained > newDesiredReplicas {
 			log.V(2).Info("Waiting sync before scale down", "retained", retained, "newDesiredReplicas", newDesiredReplicas)
@@ -555,9 +557,9 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				} else {
 					log.V(2).Info("BUG: Redundant owner was already annotated to start the deletion")
 				}
-			}
 
-			continue
+				continue
+			}
 		}
 
 		if annotations := res.owner.GetAnnotations(); annotations != nil {
