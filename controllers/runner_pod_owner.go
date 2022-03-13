@@ -434,7 +434,6 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 					log.V(2).Info("BUG: Redundant object was already annotated")
 				}
 			}
-			return nil, err
 		} else if retained > newDesiredReplicas {
 			log.V(2).Info("Waiting sync before scale down", "retained", retained, "newDesiredReplicas", newDesiredReplicas)
 
