@@ -34,15 +34,14 @@ const (
 
 	AnnotationKeyRunnerID = annotationKeyPrefix + "id"
 
-	// DefaultUnregistrationTimeout is the duration until ARC gives up retrying the combo of ListRunners API (to detect the runner ID by name)
-	// and RemoveRunner API (to actually unregister the runner) calls.
-	// This needs to be longer than 60 seconds because a part of the combo, the ListRunners API, seems to use the Cache-Control header of max-age=60s
-	// and that instructs our cache library httpcache to cache responses for 60 seconds, which results in ARC unable to see the runner in the ListRunners response
-	// up to 60 seconds (or even more depending on the situation).
-	DefaultUnregistrationTimeout = 60 * time.Second
-
 	// This can be any value but a larger value can make an unregistration timeout longer than configured in practice.
-	DefaultUnregistrationRetryDelay = 30 * time.Second
+	DefaultUnregistrationRetryDelay = time.Minute
+
+	// RetryDelayOnCreateRegistrationError is the delay between retry attempts for runner registration token creation.
+	// Usually, a retry in this case happens when e.g. your PAT has no access to certain scope of runners, like you're using repository admin's token
+	// for creating a broader scoped runner token, like organizationa or enterprise runner token.
+	// Such permission issue will never fixed automatically, so we don't need to retry so often, hence this value.
+	RetryDelayOnCreateRegistrationError = 3 * time.Minute
 
 	// registrationTimeout is the duration until a pod times out after it becomes Ready and Running.
 	// A pod that is timed out can be terminated if needed.
