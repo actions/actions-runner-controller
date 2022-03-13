@@ -518,6 +518,9 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				log.Error(err, "Failed to delete owner")
 				return nil, err
 			}
+
+			log.V(2).Info("Started deletion of owner")
+
 			continue
 		}
 
