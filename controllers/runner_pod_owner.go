@@ -302,9 +302,11 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 		log.V(2).Info("Detected some current object(s)", "creationTimestampFirst", timestampFirst, "creationTimestampLast", timestampLast, "names", names)
 	}
 
-	var pending, running, regTimeout int
+	var total, terminating, pending, running, regTimeout int
 
 	for _, ss := range currentObjects {
+		total += ss.total
+		terminating += ss.terminating
 		pending += ss.pending
 		running += ss.running
 		regTimeout += ss.regTimeout
@@ -319,6 +321,8 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 
 	log.V(2).Info(
 		"Found some pods across owner(s)",
+		"total", total,
+		"terminating", terminating,
 		"pending", pending,
 		"running", running,
 		"regTimeout", regTimeout,
