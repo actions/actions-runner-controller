@@ -536,9 +536,9 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 				}
 			}
 
-			log.V(2).Info("Marking owner for unregistration completion", "deletionSafe", deletionSafe, "total", res.total)
-
 			if deletionSafe == res.total {
+				log.V(2).Info("Marking owner for unregistration completion", "deletionSafe", deletionSafe, "total", res.total)
+
 				if _, ok := getAnnotation(res.owner, AnnotationKeyUnregistrationCompleteTimestamp); !ok {
 					updated := res.owner.withAnnotation(AnnotationKeyUnregistrationCompleteTimestamp, time.Now().Format(time.RFC3339))
 
