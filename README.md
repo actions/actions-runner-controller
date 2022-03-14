@@ -18,7 +18,7 @@ ToC:
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [RunnerDeployments](#runnerdeployments)
-  - [Stateful Runners](#stateful-runners)
+  - [RunnerSets](#runnersets)
   - [Autoscaling](#autoscaling)
     - [Anti-Flapping Configuration](#anti-flapping-configuration)
     - [Pull Driven Scaling](#pull-driven-scaling)
@@ -361,11 +361,11 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
-  ### Stateful Runners
+  ### RunnerSets
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
-For scenarios where you require the advantages of a StatefulSet, for example persistent storage, ARC implements a runner based on Kubernete's StaefulSets, the RunnerSet.
+For scenarios where you require the advantages of a `StatefulSet`, for example persistent storage, ARC implements a runner based on Kubernete's StatefulSets, the RunnerSet.
 
 A basic `RunnerSet` would look like this:
 
