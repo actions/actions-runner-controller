@@ -12,7 +12,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
-	"github.com/bradleyfalzon/ghinstallation"
+	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/go-logr/logr"
 	"github.com/google/go-github/v39/github"
 	"github.com/gregjones/httpcache"
