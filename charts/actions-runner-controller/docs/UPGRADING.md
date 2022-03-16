@@ -32,6 +32,9 @@ kubectl replace -f crds/
 2. Upgrade the Helm release
 
 ```shell
+# helm repo [command]
+helm repo update
+
 # helm upgrade [RELEASE] [CHART] [flags]
 helm upgrade actions-runner-controller \
   actions-runner-controller/actions-runner-controller \
