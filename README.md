@@ -453,6 +453,8 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 
 > Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
+> If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
+
 A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for cavaets of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
 **_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
