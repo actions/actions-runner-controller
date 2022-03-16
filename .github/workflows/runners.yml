@@ -15,7 +15,7 @@ on:
       - '!**.md'
 
 env:
-  RUNNER_VERSION: 2.287.1
+  RUNNER_VERSION: 2.288.1
   DOCKER_VERSION: 20.10.12
   DOCKERHUB_USERNAME: summerwind
 
@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Docker Environment
         id: vars

@@ -49,6 +49,9 @@ spec:
                   items:
                     description: CapacityReservation specifies the number of replicas temporarily added to the scale target until ExpirationTime.
                     properties:
+                      effectiveTime:
+                        format: date-time
+                        type: string
                       expirationTime:
                         format: date-time
                         type: string

@@ -13,6 +13,7 @@ enableLeaderElection: true
 # Must be unique if more than one controller installed onto the same namespace.
 #leaderElectionId: "actions-runner-controller"
 
+# DEPRECATED: This has been removed as unnecessary in #1192
 # The controller tries its best not to repeat the duplicate GitHub API call
 # within this duration.
 # Defaults to syncPeriod - 10s.
@@ -165,11 +166,17 @@ admissionWebHooks:
   {}
   #caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle containing the CA that signed the webhook's serving certificate>...tLS0K"
 
+# There may be alternatives to setting `hostNetwork: true`, see
+# https://github.com/actions-runner-controller/actions-runner-controller/issues/1005#issuecomment-993097155
+#hostNetwork: true
+
 githubWebhookServer:
   enabled: false
   replicaCount: 1
   syncPeriod: 10m
+  useRunnerGroupsVisibility: false
   secret:
+    enabled: false
     create: false
     name: "github-webhook-server"
     ### GitHub Webhook Configuration

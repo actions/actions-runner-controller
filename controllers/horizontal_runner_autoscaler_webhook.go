@@ -38,6 +38,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/simulator"
 )
 
 const (
@@ -92,7 +93,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			if err != nil {
 				msg := err.Error()
 				if written, err := w.Write([]byte(msg)); err != nil {
-					autoscaler.Log.Error(err, "failed writing http error response", "msg", msg, "written", written)
+					autoscaler.Log.V(1).Error(err, "failed writing http error response", "msg", msg, "written", written)
 				}
 			}
 		}
@@ -289,7 +290,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}
 
 	if target == nil {
-		log.Info(
+		log.V(1).Info(
 			"Scale target not found. If this is unexpected, ensure that there is exactly one repository-wide or organizational runner deployment that matches this webhook event",
 		)
 
@@ -350,9 +351,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx con
 			return nil, err
 		}
 
-		for _, d := range hraList.Items {
-			hras = append(hras, d)
-		}
+		hras = append(hras, hraList.Items...)
 	}
 
 	return hras, nil
@@ -476,95 +475,105 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		return nil, nil
 	}
 
-	// Search for organization runner HRAs in default runner group
-	if target, err := scaleTarget(owner); err != nil {
-		log.Error(err, "finding organizational runner", "organization", owner)
-		return nil, err
-	} else if target != nil {
-		log.Info("job scale up target is organizational runners", "organization", owner)
-		return target, nil
-	}
-
-	if enterprise != "" {
-		// Search for enterprise runner HRAs in default runner group
-		if target, err := scaleTarget(enterpriseKey(enterprise)); err != nil {
-			log.Error(err, "finding enterprise runner", "enterprise", enterprise)
-			return nil, err
-		} else if target != nil {
-			log.Info("scale up target is default enterprise runners", "enterprise", enterprise)
-			return target, nil
-		}
-	}
-
-	// At this point there were no default organization/enterprise runners available to use, try now
-	// searching in runner groups
-
-	// We need to get the potential runner groups first to avoid spending API queries needless. Once/if GitHub improves an
+	// Find the potential runner groups first to avoid spending API queries needless. Once/if GitHub improves an
 	// API to find related/linked runner groups from a specific repository this logic could be removed
-	availableEnterpriseGroups, availableOrganizationGroups, err := autoscaler.getPotentialGroupsFromHRAs(ctx, enterprise, owner)
+	managedRunnerGroups, err := autoscaler.getManagedRunnerGroupsFromHRAs(ctx, enterprise, owner)
 	if err != nil {
-		log.Error(err, "finding potential organization runner groups from HRAs", "organization", owner)
+		log.Error(err, "finding potential organization/enterprise runner groups from HRAs", "organization", owner)
 		return nil, err
 	}
-	if len(availableEnterpriseGroups) == 0 && len(availableOrganizationGroups) == 0 {
+	if managedRunnerGroups.IsEmpty() {
 		log.V(1).Info("no repository/organizational/enterprise runner found",
 			"repository", repositoryRunnerKey,
 			"organization", owner,
 			"enterprises", enterprise,
 		)
+	} else {
+		log.V(1).Info("Found some runner groups are managed by ARC", "groups", managedRunnerGroups)
 	}
 
-	var enterpriseGroups []string
-	var organizationGroups []string
+	var visibleGroups *simulator.VisibleRunnerGroups
 	if autoscaler.GitHubClient != nil {
+		simu := &simulator.Simulator{
+			Client: autoscaler.GitHubClient,
+		}
 		// Get available organization runner groups and enterprise runner groups for a repository
-		// These are the sum of runner groups with repository access = All repositories plus
-		// runner groups where owner/repo has access to
-		enterpriseGroups, organizationGroups, err = autoscaler.GitHubClient.GetRunnerGroupsFromRepository(ctx, owner, repositoryRunnerKey, availableEnterpriseGroups, availableOrganizationGroups)
-		log.V(1).Info("Searching in runner groups", "enterprise.groups", enterpriseGroups, "organization.groups", organizationGroups)
+		// These are the sum of runner groups with repository access = All repositories and runner groups
+		// where owner/repo has access to as well. The list will include default runner group also if it has access to
+		visibleGroups, err = simu.GetRunnerGroupsVisibleToRepository(ctx, owner, repositoryRunnerKey, managedRunnerGroups)
+		log.V(1).Info("Searching in runner groups", "groups", visibleGroups)
 		if err != nil {
 			log.Error(err, "Unable to find runner groups from repository", "organization", owner, "repository", repo)
-			return nil, nil
+			return nil, fmt.Errorf("error while finding visible runner groups: %v", err)
 		}
 	} else {
 		// For backwards compatibility if GitHub authentication is not configured, we assume all runner groups have
 		// visibility=all to honor the previous implementation, therefore any available enterprise/organization runner
-		// is a potential target for scaling
-		enterpriseGroups = availableEnterpriseGroups
-		organizationGroups = availableOrganizationGroups
+		// is a potential target for scaling. This will also avoid doing extra API calls caused by
+		// GitHubClient.GetRunnerGroupsVisibleToRepository in case users are not using custom visibility on their runner
+		// groups or they are using only default runner groups
+		visibleGroups = managedRunnerGroups
 	}
 
-	for _, group := range organizationGroups {
-		if target, err := scaleTarget(organizationalRunnerGroupKey(owner, group)); err != nil {
-			log.Error(err, "finding organizational runner group", "organization", owner)
-			return nil, err
-		} else if target != nil {
-			log.Info(fmt.Sprintf("job scale up target is organizational runner group %s", target.Name), "organization", owner)
-			return target, nil
+	scaleTargetKey := func(rg simulator.RunnerGroup) string {
+		switch rg.Kind {
+		case simulator.Default:
+			switch rg.Scope {
+			case simulator.Organization:
+				return owner
+			case simulator.Enterprise:
+				return enterpriseKey(enterprise)
+			}
+		case simulator.Custom:
+			switch rg.Scope {
+			case simulator.Organization:
+				return organizationalRunnerGroupKey(owner, rg.Name)
+			case simulator.Enterprise:
+				return enterpriseRunnerGroupKey(enterprise, rg.Name)
+			}
 		}
+		return ""
 	}
 
-	for _, group := range enterpriseGroups {
-		if target, err := scaleTarget(enterpriseRunnerGroupKey(enterprise, group)); err != nil {
-			log.Error(err, "finding enterprise runner group", "enterprise", owner)
-			return nil, err
-		} else if target != nil {
-			log.Info(fmt.Sprintf("job scale up target is enterprise runner group %s", target.Name), "enterprise", owner)
-			return target, nil
+	log.V(1).Info("groups", "groups", visibleGroups)
+
+	var t *ScaleTarget
+
+	traverseErr := visibleGroups.Traverse(func(rg simulator.RunnerGroup) (bool, error) {
+		key := scaleTargetKey(rg)
+
+		target, err := scaleTarget(key)
+
+		if err != nil {
+			log.Error(err, "finding runner group", "enterprise", enterprise, "organization", owner, "repository", repo, "key", key)
+			return false, err
+		} else if target == nil {
+			return false, nil
 		}
+
+		t = target
+		log.V(1).Info("job scale up target found", "enterprise", enterprise, "organization", owner, "repository", repo, "key", key)
+
+		return true, nil
+	})
+
+	if traverseErr != nil {
+		return nil, err
 	}
 
-	log.V(1).Info("no repository/organizational/enterprise runner found",
-		"repository", repositoryRunnerKey,
-		"organization", owner,
-		"enterprises", enterprise,
-	)
-	return nil, nil
+	if t == nil {
+		log.V(1).Info("no repository/organizational/enterprise runner found",
+			"repository", repositoryRunnerKey,
+			"organization", owner,
+			"enterprise", enterprise,
+		)
+	}
+
+	return t, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getPotentialGroupsFromHRAs(ctx context.Context, enterprise, org string) ([]string, []string, error) {
-	var enterpriseRunnerGroups []string
-	var orgRunnerGroups []string
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroupsFromHRAs(ctx context.Context, enterprise, org string) (*simulator.VisibleRunnerGroups, error) {
+	groups := simulator.NewVisibleRunnerGroups()
 	ns := autoscaler.Namespace
 
 	var defaultListOpts []client.ListOption
@@ -579,36 +588,63 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getPotentialGroupsFro
 
 	var hraList v1alpha1.HorizontalRunnerAutoscalerList
 	if err := autoscaler.List(ctx, &hraList, opts...); err != nil {
-		return orgRunnerGroups, enterpriseRunnerGroups, err
+		return groups, err
 	}
 
 	for _, hra := range hraList.Items {
-		switch hra.Spec.ScaleTargetRef.Kind {
+		var o, e, g string
+
+		kind := hra.Spec.ScaleTargetRef.Kind
+		switch kind {
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
 			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
-				return orgRunnerGroups, enterpriseRunnerGroups, err
+				return groups, err
 			}
-			if rs.Spec.Organization == org && rs.Spec.Group != "" {
-				orgRunnerGroups = append(orgRunnerGroups, rs.Spec.Group)
-			}
-			if rs.Spec.Enterprise == enterprise && rs.Spec.Group != "" {
-				enterpriseRunnerGroups = append(enterpriseRunnerGroups, rs.Spec.Group)
-			}
+			o, e, g = rs.Spec.Organization, rs.Spec.Enterprise, rs.Spec.Group
 		case "RunnerDeployment", "":
 			var rd v1alpha1.RunnerDeployment
 			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
-				return orgRunnerGroups, enterpriseRunnerGroups, err
+				return groups, err
 			}
-			if rd.Spec.Template.Spec.Organization == org && rd.Spec.Template.Spec.Group != "" {
-				orgRunnerGroups = append(orgRunnerGroups, rd.Spec.Template.Spec.Group)
-			}
-			if rd.Spec.Template.Spec.Enterprise == enterprise && rd.Spec.Template.Spec.Group != "" {
-				enterpriseRunnerGroups = append(enterpriseRunnerGroups, rd.Spec.Template.Spec.Group)
-			}
+			o, e, g = rd.Spec.Template.Spec.Organization, rd.Spec.Template.Spec.Enterprise, rd.Spec.Template.Spec.Group
+		default:
+			return nil, fmt.Errorf("unsupported scale target kind: %v", kind)
+		}
+
+		if g != "" && e == "" && o == "" {
+			autoscaler.Log.V(1).Info(
+				"invalid runner group config in scale target: spec.group must be set along with either spec.enterprise or spec.organization",
+				"scaleTargetKind", kind,
+				"group", g,
+				"enterprise", e,
+				"organization", o,
+			)
+
+			continue
+		}
+
+		if e != enterprise && o != org {
+			autoscaler.Log.V(1).Info(
+				"Skipped scale target irrelevant to event",
+				"eventOrganization", org,
+				"eventEnterprise", enterprise,
+				"scaleTargetKind", kind,
+				"scaleTargetGroup", g,
+				"scaleTargetEnterprise", e,
+				"scaleTargetOrganization", o,
+			)
+
+			continue
+		}
+
+		rg := simulator.NewRunnerGroupFromProperties(e, o, g)
+
+		if err := groups.Add(rg); err != nil {
+			return groups, fmt.Errorf("failed adding visible group from HRA %s/%s: %w", hra.Namespace, hra.Name, err)
 		}
 	}
-	return enterpriseRunnerGroups, orgRunnerGroups, nil
+	return groups, nil
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleTarget(ctx context.Context, name string, labels []string) (*ScaleTarget, error) {
@@ -732,8 +768,10 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 	capacityReservations := getValidCapacityReservations(copy)
 
 	if amount > 0 {
+		now := time.Now()
 		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-			ExpirationTime: metav1.Time{Time: time.Now().Add(target.ScaleUpTrigger.Duration.Duration)},
+			EffectiveTime:  metav1.Time{Time: now},
+			ExpirationTime: metav1.Time{Time: now.Add(target.ScaleUpTrigger.Duration.Duration)},
 			Replicas:       amount,
 		})
 	} else if amount < 0 {
@@ -752,10 +790,16 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 		copy.Spec.CapacityReservations = reservations
 	}
 
-	autoscaler.Log.Info(
-		"Patching hra for capacityReservations update",
-		"before", target.HorizontalRunnerAutoscaler.Spec.CapacityReservations,
-		"after", copy.Spec.CapacityReservations,
+	before := len(target.HorizontalRunnerAutoscaler.Spec.CapacityReservations)
+	expired := before - len(capacityReservations)
+	after := len(copy.Spec.CapacityReservations)
+
+	autoscaler.Log.V(1).Info(
+		fmt.Sprintf("Patching hra %s for capacityReservations update", target.HorizontalRunnerAutoscaler.Name),
+		"before", before,
+		"expired", expired,
+		"amount", amount,
+		"after", after,
 	)
 
 	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
@@ -791,6 +835,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
 
 		if hra.Spec.ScaleTargetRef.Name == "" {
+			autoscaler.Log.V(1).Info(fmt.Sprintf("scale target ref name not set for hra %s", hra.Name))
 			return nil
 		}
 
@@ -820,7 +865,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 					keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
 				}
 			}
-			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
+			autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
 			return keys
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
@@ -845,7 +890,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 					keys = append(keys, enterpriseRunnerGroupKey(enterprise, rs.Spec.Group)) // Enterprise runner groups
 				}
 			}
-			autoscaler.Log.V(1).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
+			autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
 			return keys
 		}
 

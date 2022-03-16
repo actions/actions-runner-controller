@@ -55,6 +55,11 @@ spec:
                   type: string
                 dockerdWithinRunnerContainer:
                   type: boolean
+                effectiveTime:
+                  description: EffectiveTime is the time the upstream controller requested to sync Replicas. It is usually populated by the webhook-based autoscaler via HRA. It is used to prevent ephemeral runners from unnecessarily recreated.
+                  format: date-time
+                  nullable: true
+                  type: string
                 enterprise:
                   pattern: ^[^/]+$
                   type: string

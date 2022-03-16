@@ -15,6 +15,7 @@ spec:
     metadata:
       {{- with .Values.githubWebhookServer.podAnnotations }}
       annotations:
+        kubectl.kubernetes.io/default-logs-container: "github-webhook-server"
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -69,42 +70,41 @@ spec:
         - name: GITHUB_UPLOAD_URL
           value: {{ .Values.githubUploadURL }}
         {{- end }}
-        {{- if .Values.authSecret.enabled }}
+        {{- if and .Values.githubWebhookServer.useRunnerGroupsVisibility .Values.githubWebhookServer.secret.enabled }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
               key: github_token
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         - name: GITHUB_APP_ID
           valueFrom:
             secretKeyRef:
               key: github_app_id
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         - name: GITHUB_APP_INSTALLATION_ID
           valueFrom:
             secretKeyRef:
               key: github_app_installation_id
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               key: github_app_private_key
-              name: {{ include "actions-runner-controller.secretName" . }}
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
-        {{- if .Values.authSecret.github_basicauth_username  }}
+        {{- if .Values.authSecret.github_basicauth_username }}
         - name: GITHUB_BASICAUTH_USERNAME
           value: {{ .Values.authSecret.github_basicauth_username }}
         {{- end }}
-        {{- if .Values.authSecret.github_basicauth_password }}
         - name: GITHUB_BASICAUTH_PASSWORD
           valueFrom:
             secretKeyRef:
               key: github_basicauth_password
               name: {{ include "actions-runner-controller.secretName" . }}
-        {{- end }}
+              optional: true
         {{- end }}
         {{- range $key, $val := .Values.githubWebhookServer.env }}
         - name: {{ $key }}
