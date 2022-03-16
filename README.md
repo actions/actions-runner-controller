@@ -55,8 +55,8 @@ Subsequent to this, install the custom resource definitions and actions-runner-c
 **Kubectl Deployment:**
 
 ```shell
-# REPLACE "v0.21.1" with the version you wish to deploy
-kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.21.1/actions-runner-controller.yaml
+# REPLACE "v0.22.0" with the version you wish to deploy
+kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.22.0/actions-runner-controller.yaml
 ```
 
 **Helm Deployment:**
