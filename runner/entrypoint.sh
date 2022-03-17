@@ -80,8 +80,10 @@ fi
 # if this is not a testing environment
 if [[ "${UNITTEST:-}" == '' ]]; then
   sudo chown -R runner:docker "$RUNNER_HOME"
-  # use cp over mv to avoid issues when src and dst are on different devices
+  # enable dotglob so we can copy a ".env" file to load in env vars as part of the service startup if one is provided
+  # loading a .env from the root of the service is part of the actions/runner logic
   shopt -s dotglob
+  # use cp instead of mv to avoid issues when src and dst are on different devices
   cp -r "$RUNNER_ASSETS_DIR"/* "$RUNNER_HOME"/
   shopt -u dotglob
 fi
