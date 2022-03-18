@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -22,8 +22,7 @@ error(){
 
 echo "$*" > runner_config
 success "I'm pretending the configuration is not successful"
-# increasing a counter to measure how many times we restarted
+# adding a counter to see how many times we've gone through the configuration step
 count=`cat counter 2>/dev/null|| echo "0"`
 count=$((count + 1))
 echo ${count} > counter
-

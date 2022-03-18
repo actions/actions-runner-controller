@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -21,11 +21,7 @@ error(){
 }
 
 success ""
-success "Running the service..."
-# SHOULD NOT HAPPEN
-# creating a file to show this script has run
-touch runsvc_ran
-success "...successful"
+success "Pretending to run service..."
+touch run_sh_ran
+success "Success"
 success ""
-
-

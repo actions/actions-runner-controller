@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -21,11 +21,7 @@ error(){
 }
 
 success ""
-success "Running the service..."
-# test if --once is present as a parameter
-echo "$*" | grep -q 'once' && error "Should not include --once in the parameters"
-success "...successful"
-touch runsvc_ran
+success "Pretending to run service..."
+touch run_sh_ran
+success "Success"
 success ""
-
-

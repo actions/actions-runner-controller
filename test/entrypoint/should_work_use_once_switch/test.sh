@@ -16,11 +16,12 @@ entrypoint_log() {
 
 log "Setting up the test"
 export UNITTEST=true
-export RUNNER_HOME=localhome
+export RUNNER_HOME=test
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
-export RUNNER_EPHEMERAL=false
+export RUNNER_FEATURE_FLAG_EPHEMERAL="false"
+export RUNNER_EPHEMERAL="true"
 
 mkdir -p ${RUNNER_HOME}/bin
 
@@ -38,15 +39,14 @@ cleanup() {
   unset RUNNER_REPO
   unset RUNNER_TOKEN
   unset RUNNER_EPHEMERAL
+  unset RUNNER_FEATURE_FLAG_EPHEMERAL
 }
-
-trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
 log "Running the entrypoint"
 log ""
 
 # Run the runner entrypoint script which as a final step runs this
-# unit tests run.sh as it was symlinked
+# unit tests run.sh as it was symlinked 
 ../../../runner/entrypoint.sh 2> >(entrypoint_log)
 
 if [ "$?" != "0" ]; then
@@ -63,6 +63,13 @@ if [ ${count} != "1" ]; then
   exit 1
 fi
 
+log "Testing if the configuration included the --once flag"
+if ! grep -q -- '--once' ${RUNNER_HOME}/runner_args; then
+  error "==============================================="
+  error "The configuration did not include the --once flag, config printed below:"
+  exit 1
+fi
+
 success "The configuration ran ${count} time(s)"
 
 log "Testing if run.sh ran"
@@ -75,3 +82,6 @@ success "The service ran"
 success ""
 success "==========================="
 success "Test completed successfully"
+
+# TODO: This needs to be a run at the end always() really
+trap cleanup SIGINT SIGTERM SIGQUIT EXIT

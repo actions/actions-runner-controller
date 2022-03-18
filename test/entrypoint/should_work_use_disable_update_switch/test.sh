@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# UNITTEST: should work as non ephemeral
-# Will simulate a scenario where ephemeral=false. expects:
+# UNITTEST: should work disable update
+# Will simulate a scneario where disableupdate=true. expects:
 # - the configuration step to be run exactly once
 # - the entrypoint script to exit with no error
-# - the runsvc.sh script to run without the --once flag
+# - the config.sh script to run with the --disableupdate flag set to 'true'.
 
 source ../logging.sh
 
@@ -16,17 +16,19 @@ entrypoint_log() {
 
 log "Setting up the test"
 export UNITTEST=true
-export RUNNER_HOME=localhome
+export RUNNER_HOME=test
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
-export RUNNER_EPHEMERAL=true
-export RUNNER_FEATURE_FLAG_EPHEMERAL=true
+export DISABLE_RUNNER_UPDATE="true"
 
 mkdir -p ${RUNNER_HOME}/bin
-# add up the config.sh and runsvc.sh
+
+# run.sh and config.sh get used by the runner's real entrypoint.sh
+# set the runner/entrypoint.sh to use this tests dummy versions via
+# a symlink
 ln -s ../config.sh ${RUNNER_HOME}/config.sh
-ln -s ../../runsvc.sh ${RUNNER_HOME}/bin/runsvc.sh
+ln -s ../../run.sh ${RUNNER_HOME}/bin/run.sh
 
 cleanup() {
   rm -rf ${RUNNER_HOME}
@@ -35,47 +37,47 @@ cleanup() {
   unset RUNNER_NAME
   unset RUNNER_REPO
   unset RUNNER_TOKEN
-  unset RUNNER_EPHEMERAL
-  unset RUNNER_FEATURE_FLAG_EPHEMERAL
 }
-
-trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
 log "Running the entrypoint"
 log ""
 
+# Run the runner entrypoint script which as a final step runs this
+# unit tests run.sh as it was symlinked
 ../../../runner/entrypoint.sh 2> >(entrypoint_log)
 
 if [ "$?" != "0" ]; then
-  error "==========================================="
-  error "Entrypoint script did not exit successfully"
+  error "=========================="
+  error "Test completed with errors"
   exit 1
 fi
 
-log "Testing if we went through the configuration step only once"
+log "Testing if the configuration step was run only once"
 count=`cat ${RUNNER_HOME}/counter || echo "not_found"`
 if [ ${count} != "1" ]; then
   error "==============================================="
   error "The configuration step was not run exactly once"
   exit 1
 fi
+success "The configuration ran ${count} time(s)"
 
-log "Testing if the configuration included the --ephemeral flag"
-if ! grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
+log "Testing if the configuration included the --disableupdate flag"
+if ! grep -q -- '--disableupdate' ${RUNNER_HOME}/runner_config; then
   error "==============================================="
-  error "The configuration did not include the --ephemeral flag"
+  error "The configuration should not include the --disableupdate flag"
   exit 1
 fi
 
-success "The configuration ran ${count} time(s)"
-
-log "Testing if runsvc ran"
-if [ ! -f "${RUNNER_HOME}/runsvc_ran" ]; then
+log "Testing if run.sh ran"
+if [ ! -f "${RUNNER_HOME}/run_sh_ran" ]; then
   error "=============================="
   error "The runner service has not run"
   exit 1
 fi
+
 success "The service ran"
 success ""
 success "==========================="
 success "Test completed successfully"
+
+trap cleanup SIGINT SIGTERM SIGQUIT EXIT

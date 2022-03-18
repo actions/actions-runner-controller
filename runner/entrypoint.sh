@@ -92,7 +92,7 @@ cd ${RUNNER_HOME}
 # past that point, it's all relative pathes from /runner
 
 config_args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   config_args+=(--ephemeral)
   echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
 fi
@@ -159,22 +159,16 @@ if [ -z "${UNITTEST:-}" ]; then
   mkdir ./externals
   # Hack due to the DinD volumes
   mv ./externalstmp/* ./externals/
-
-  for f in runsvc.sh RunnerService.js; do
-    diff {bin,patched}/${f} || :
-    sudo mv bin/${f}{,.bak}
-    sudo mv {patched,bin}/${f}
-  done
 fi
 
 args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   args+=(--once)
   echo "[WARNING] Passing --once is deprecated and will be removed as an option from the image and ARC at the release of 0.24.0."
   echo "[WARNING] Upgrade to GHES => 3.3 to continue using actions-runner-controller. If you are using github.com ignore this warning."
 fi
 
-unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
+unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS
 
 # Docker ignores PAM and thus never loads the system environment variables that
 # are meant to be set in every environment of every user. We emulate the PAM
@@ -182,5 +176,9 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
 #
 # https://github.com/actions-runner-controller/actions-runner-controller/issues/1135
 # https://github.com/actions/runner/issues/1703
-mapfile -t env </etc/environment
-exec env -- "${env[@]}" ./bin/runsvc.sh "${args[@]}"
+
+# If are running entrypoint unit tests don't mapfile /etc/environment or the unit tests will fail
+if [ -z "${UNITTEST:-}" ]; then
+  mapfile -t env </etc/environment
+fi
+exec env -- "${env[@]}" ./bin/run.sh "${args[@]}"

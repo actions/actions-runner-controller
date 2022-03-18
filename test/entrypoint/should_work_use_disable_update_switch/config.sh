@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 export LIGHTGREEN='\e[0;32m'
 export LIGHTRED='\e[0;31m'
@@ -19,9 +19,8 @@ error(){
 
 success "I'm configured normally"
 touch .runner
-echo "$*" > runner_config
+echo "$@" > runner_config
 success "created a dummy config file"
-success
 # Adding a counter to see how many times we've gone through the configuration step
 count=`cat counter 2>/dev/null|| echo "0"`
 count=$((count + 1))
