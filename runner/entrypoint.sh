@@ -1,5 +1,6 @@
 #!/bin/bash
 
+RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
 LIGHTGREEN="\e[0;32m"
@@ -24,6 +25,13 @@ if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
 
+if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
+    log "Docker enabled runner detected and Docker daemon wait is enabled"
+    log "Waiting until Docker is avaliable or the timeout is reached"
+    timeout 120s bash -c 'until docker ps ;do sleep 1; done'
+else
+  log "Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint"
+fi
 
 if [ -z "${GITHUB_URL}" ]; then
   log "Working with public GitHub"
@@ -70,9 +78,14 @@ if [ ! -d "${RUNNER_HOME}" ]; then
 fi
 
 # if this is not a testing environment
-if [ -z "${UNITTEST:-}" ]; then
-  sudo chown -R runner:docker ${RUNNER_HOME}
-  mv /runnertmp/* ${RUNNER_HOME}/
+if [[ "${UNITTEST:-}" == '' ]]; then
+  sudo chown -R runner:docker "$RUNNER_HOME"
+  # enable dotglob so we can copy a ".env" file to load in env vars as part of the service startup if one is provided
+  # loading a .env from the root of the service is part of the actions/runner logic
+  shopt -s dotglob
+  # use cp instead of mv to avoid issues when src and dst are on different devices
+  cp -r "$RUNNER_ASSETS_DIR"/* "$RUNNER_HOME"/
+  shopt -u dotglob
 fi
 
 cd ${RUNNER_HOME}
@@ -82,6 +95,10 @@ config_args=()
 if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
   config_args+=(--ephemeral)
   echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
+fi
+if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
+  config_args+=(--disableupdate)
+  echo "Passing --disableupdate to config.sh to disable automatic runner updates."
 fi
 
 retries_left=10
@@ -153,8 +170,17 @@ fi
 args=()
 if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
   args+=(--once)
-  echo "Passing --once to runsvc.sh to enable the legacy ephemeral runner."
+  echo "[WARNING] Passing --once is deprecated and will be removed as an option from the image and ARC at the release of 0.24.0."
+  echo "[WARNING] Upgrade to GHES => 3.3 to continue using actions-runner-controller. If you are using github.com ignore this warning."
 fi
 
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh "${args[@]}"
+
+# Docker ignores PAM and thus never loads the system environment variables that
+# are meant to be set in every environment of every user. We emulate the PAM
+# behavior by reading the environment variables without interpreting them.
+#
+# https://github.com/actions-runner-controller/actions-runner-controller/issues/1135
+# https://github.com/actions/runner/issues/1703
+mapfile -t env </etc/environment
+exec env -- "${env[@]}" ./bin/runsvc.sh "${args[@]}"

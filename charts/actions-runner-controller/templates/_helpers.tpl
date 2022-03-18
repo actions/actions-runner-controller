@@ -68,6 +68,10 @@ Create the name of the service account to use
 {{- default (include "actions-runner-controller.fullname" .) .Values.authSecret.name -}}
 {{- end }}
 
+{{- define "actions-runner-controller.githubWebhookServerSecretName" -}}
+{{- default (include "actions-runner-controller.fullname" .) .Values.githubWebhookServer.secret.name -}}
+{{- end }}
+
 {{- define "actions-runner-controller.leaderElectionRoleName" -}}
 {{- include "actions-runner-controller.fullname" . }}-leader-election
 {{- end }}
@@ -106,4 +110,8 @@ Create the name of the service account to use
 
 {{- define "actions-runner-controller.servingCertName" -}}
 {{- include "actions-runner-controller.fullname" . }}-serving-cert
+{{- end }}
+
+{{- define "actions-runner-controller.pdbName" -}}
+{{- include "actions-runner-controller.fullname" . | trunc 59 }}-pdb
 {{- end }}

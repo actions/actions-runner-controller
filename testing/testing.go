@@ -323,6 +323,11 @@ func (k *Kind) Start(ctx context.Context) error {
 		kindConfig := []byte(fmt.Sprintf(`kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: %s
+networking:
+  apiServerAddress: 0.0.0.0
+nodes:
+  - role: control-plane
+  - role: worker
 `, k.Name))
 
 		if err := os.WriteFile(f.Name(), kindConfig, 0644); err != nil {

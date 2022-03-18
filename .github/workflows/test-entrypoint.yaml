@@ -15,7 +15,7 @@ jobs:
     name: Test entrypoint
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Run unit tests for entrypoint.sh
       run: |
         cd test/entrypoint

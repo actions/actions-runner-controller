@@ -13,6 +13,7 @@ enableLeaderElection: true
 # Must be unique if more than one controller installed onto the same namespace.
 #leaderElectionId: "actions-runner-controller"
 
+# DEPRECATED: This has been removed as unnecessary in #1192
 # The controller tries its best not to repeat the duplicate GitHub API call
 # within this duration.
 # Defaults to syncPeriod - 10s.
@@ -21,9 +22,21 @@ enableLeaderElection: true
 # The URL of your GitHub Enterprise server, if you're using one.
 #githubEnterpriseServerURL: https://github.example.com
 
+# Override GitHub URLs in case of using proxy APIs
+#githubURL: ""
+#githubUploadURL: ""
+#runnerGithubURL: ""
+
 # Only 1 authentication method can be deployed at a time
 # Uncomment the configuration you are applying and fill in the details
+#
+# If authSecret.enabled=true these values are inherited to actions-runner-controller's controller-manager container's env.
+#
+# Do set authSecret.enabled=false and set env if you want full control over
+# the GitHub authn related envvars of the container.
+# See https://github.com/actions-runner-controller/actions-runner-controller/pull/937 for more details.
 authSecret:
+  enabled: true
   create: false
   name: "controller-manager"
   annotations: {}
@@ -34,6 +47,9 @@ authSecret:
   #github_app_private_key: |
   ### GitHub PAT Configuration
   #github_token: ""
+  ### Basic auth for github API proxy
+  #github_basicauth_username: ""
+  #github_basicauth_password: ""
 
 dockerRegistryMirror: ""
 image:
@@ -41,6 +57,9 @@ image:
   actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
+  # The default image-pull secrets name for self-hosted runner container.
+  # It's added to spec.ImagePullSecrets of self-hosted runner pods.
+  actionsRunnerImagePullSecrets: []
 
 imagePullSecrets: []
 nameOverride: ""
@@ -88,7 +107,7 @@ metrics:
     enabled: true
     image:
       repository: quay.io/brancz/kube-rbac-proxy
-      tag: v0.10.0
+      tag: v0.11.0
 
 resources:
   {}
@@ -109,6 +128,12 @@ tolerations: []
 
 affinity: {}
 
+# Only one of minAvailable or maxUnavailable can be set
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 3
+
 # Leverage a PriorityClass to ensure your pods survive resource shortages
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
@@ -120,6 +145,14 @@ env:
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
 
+## specify additional volumes to mount in the manager container, this can be used
+## to specify additional storage of material or to inject files from ConfigMaps
+## into the running container
+additionalVolumes: []
+
+## specify where the additional volumes are mounted in the manager container
+additionalVolumeMounts: []
+
 scope:
   # If true, the controller will only watch custom resources in a single namespace
   singleNamespace: false
@@ -127,11 +160,23 @@ scope:
   # The default value is "", which means the namespace of the controller
   watchNamespace: ""
 
+certManagerEnabled: true
+
+admissionWebHooks:
+  {}
+  #caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle containing the CA that signed the webhook's serving certificate>...tLS0K"
+
+# There may be alternatives to setting `hostNetwork: true`, see
+# https://github.com/actions-runner-controller/actions-runner-controller/issues/1005#issuecomment-993097155
+#hostNetwork: true
+
 githubWebhookServer:
   enabled: false
   replicaCount: 1
   syncPeriod: 10m
+  useRunnerGroupsVisibility: false
   secret:
+    enabled: false
     create: false
     name: "github-webhook-server"
     ### GitHub Webhook Configuration
@@ -168,14 +213,22 @@ githubWebhookServer:
         #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
   ingress:
     enabled: false
-    annotations:
-      {}
+    ingressClassName: ""
+    annotations: {}
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
     hosts:
       - host: chart-example.local
         paths: []
+        #  - path: /*
+        #    pathType: ImplementationSpecific
     tls: []
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+
+  # Only one of minAvailable or maxUnavailable can be set
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 3

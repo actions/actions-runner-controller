@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/google/go-github/v37/github"
+	"github.com/go-logr/logr"
+	"github.com/google/go-github/v39/github"
+	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
 
@@ -23,6 +26,13 @@ type Config struct {
 	AppInstallationID int64  `split_words:"true"`
 	AppPrivateKey     string `split_words:"true"`
 	Token             string
+	URL               string `split_words:"true"`
+	UploadURL         string `split_words:"true"`
+	BasicauthUsername string `split_words:"true"`
+	BasicauthPassword string `split_words:"true"`
+	RunnerGitHubURL   string `split_words:"true"`
+
+	Log *logr.Logger
 }
 
 // Client wraps GitHub client with some additional
@@ -34,10 +44,22 @@ type Client struct {
 	GithubBaseURL string
 }
 
+type BasicAuthTransport struct {
+	Username string
+	Password string
+}
+
+func (p BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(p.Username, p.Password)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
 // NewClient creates a Github Client
 func (c *Config) NewClient() (*Client, error) {
 	var transport http.RoundTripper
-	if len(c.Token) > 0 {
+	if len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0 {
+		transport = BasicAuthTransport{Username: c.BasicauthUsername, Password: c.BasicauthPassword}
+	} else if len(c.Token) > 0 {
 		transport = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.Token})).Transport
 	} else {
 		var tr *ghinstallation.Transport
@@ -63,8 +85,12 @@ func (c *Config) NewClient() (*Client, error) {
 		}
 		transport = tr
 	}
-	transport = metrics.Transport{Transport: transport}
-	httpClient := &http.Client{Transport: transport}
+
+	cached := httpcache.NewTransport(httpcache.NewMemoryCache())
+	cached.Transport = transport
+	loggingTransport := logging.Transport{Transport: cached, Log: c.Log}
+	metricsTransport := metrics.Transport{Transport: loggingTransport}
+	httpClient := &http.Client{Transport: metricsTransport}
 
 	var client *github.Client
 	var githubBaseURL string
@@ -78,7 +104,38 @@ func (c *Config) NewClient() (*Client, error) {
 	} else {
 		client = github.NewClient(httpClient)
 		githubBaseURL = "https://github.com/"
+
+		if len(c.URL) > 0 {
+			baseUrl, err := url.Parse(c.URL)
+			if err != nil {
+				return nil, fmt.Errorf("github client creation failed: %v", err)
+			}
+			if !strings.HasSuffix(baseUrl.Path, "/") {
+				baseUrl.Path += "/"
+			}
+			client.BaseURL = baseUrl
+		}
+
+		if len(c.UploadURL) > 0 {
+			uploadUrl, err := url.Parse(c.UploadURL)
+			if err != nil {
+				return nil, fmt.Errorf("github client creation failed: %v", err)
+			}
+			if !strings.HasSuffix(uploadUrl.Path, "/") {
+				uploadUrl.Path += "/"
+			}
+			client.UploadURL = uploadUrl
+		}
+
+		if len(c.RunnerGitHubURL) > 0 {
+			githubBaseURL = c.RunnerGitHubURL
+			if !strings.HasSuffix(githubBaseURL, "/") {
+				githubBaseURL += "/"
+			}
+		}
 	}
+
+	client.UserAgent = "actions-runner-controller"
 
 	return &Client{
 		Client:        client,
@@ -103,7 +160,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 		return rt, nil
 	}
 
-	enterprise, owner, repo, err := getEnterpriseOrganisationAndRepo(enterprise, org, repo)
+	enterprise, owner, repo, err := getEnterpriseOrganizationAndRepo(enterprise, org, repo)
 
 	if err != nil {
 		return rt, err
@@ -129,7 +186,7 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 
 // RemoveRunner removes a runner with specified runner ID from repository.
 func (c *Client) RemoveRunner(ctx context.Context, enterprise, org, repo string, runnerID int64) error {
-	enterprise, owner, repo, err := getEnterpriseOrganisationAndRepo(enterprise, org, repo)
+	enterprise, owner, repo, err := getEnterpriseOrganizationAndRepo(enterprise, org, repo)
 
 	if err != nil {
 		return err
@@ -150,7 +207,7 @@ func (c *Client) RemoveRunner(ctx context.Context, enterprise, org, repo string,
 
 // ListRunners returns a list of runners of specified owner/repository name.
 func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) ([]*github.Runner, error) {
-	enterprise, owner, repo, err := getEnterpriseOrganisationAndRepo(enterprise, org, repo)
+	enterprise, owner, repo, err := getEnterpriseOrganizationAndRepo(enterprise, org, repo)
 
 	if err != nil {
 		return nil, err
@@ -174,6 +231,49 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	}
 
 	return runners, nil
+}
+
+// ListOrganizationRunnerGroups returns all the runner groups defined in the organization and
+// inherited to the organization from an enterprise.
+func (c *Client) ListOrganizationRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
+	var runnerGroups []*github.RunnerGroup
+
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.Client.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
+		if err != nil {
+			return runnerGroups, fmt.Errorf("failed to list organization runner groups: %w", err)
+		}
+
+		runnerGroups = append(runnerGroups, list.RunnerGroups...)
+		if res.NextPage == 0 {
+			break
+		}
+		opts.Page = res.NextPage
+	}
+
+	return runnerGroups, nil
+}
+
+func (c *Client) ListRunnerGroupRepositoryAccesses(ctx context.Context, org string, runnerGroupId int64) ([]*github.Repository, error) {
+	var repos []*github.Repository
+
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.Client.Actions.ListRepositoryAccessRunnerGroup(ctx, org, runnerGroupId, &opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list repository access for runner group: %w", err)
+		}
+
+		repos = append(repos, list.Repositories...)
+		if res.NextPage == 0 {
+			break
+		}
+
+		opts.Page = res.NextPage
+	}
+
+	return repos, nil
 }
 
 // cleanup removes expired registration tokens.
@@ -267,8 +367,8 @@ func (c *Client) listRepositoryWorkflowRuns(ctx context.Context, user string, re
 	return workflowRuns, nil
 }
 
-// Validates enterprise, organisation and repo arguments. Both are optional, but at least one should be specified
-func getEnterpriseOrganisationAndRepo(enterprise, org, repo string) (string, string, string, error) {
+// Validates enterprise, organization and repo arguments. Both are optional, but at least one should be specified
+func getEnterpriseOrganizationAndRepo(enterprise, org, repo string) (string, string, string, error) {
 	if len(repo) > 0 {
 		owner, repository, err := splitOwnerAndRepo(repo)
 		return "", owner, repository, err
@@ -337,7 +437,7 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 	for _, runner := range runners {
 		if runner.GetName() == name {
 			if runner.GetStatus() == "offline" {
-				return false, &RunnerOffline{runnerName: name}
+				return runner.GetBusy(), &RunnerOffline{runnerName: name}
 			}
 			return runner.GetBusy(), nil
 		}
