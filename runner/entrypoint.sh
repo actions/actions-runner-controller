@@ -1,5 +1,6 @@
 #!/bin/bash
 
+RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
 LIGHTGREEN="\e[0;32m"
@@ -77,10 +78,14 @@ if [ ! -d "${RUNNER_HOME}" ]; then
 fi
 
 # if this is not a testing environment
-if [ -z "${UNITTEST:-}" ]; then
-  sudo chown -R runner:docker ${RUNNER_HOME}
-  # use cp over mv to avoid issues when /runnertmp and {RUNNER_HOME} are on different devices
-  cp -r /runnertmp/* ${RUNNER_HOME}/
+if [[ "${UNITTEST:-}" == '' ]]; then
+  sudo chown -R runner:docker "$RUNNER_HOME"
+  # enable dotglob so we can copy a ".env" file to load in env vars as part of the service startup if one is provided
+  # loading a .env from the root of the service is part of the actions/runner logic
+  shopt -s dotglob
+  # use cp instead of mv to avoid issues when src and dst are on different devices
+  cp -r "$RUNNER_ASSETS_DIR"/* "$RUNNER_HOME"/
+  shopt -u dotglob
 fi
 
 cd ${RUNNER_HOME}
@@ -170,4 +175,12 @@ if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != 
 fi
 
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh "${args[@]}"
+
+# Docker ignores PAM and thus never loads the system environment variables that
+# are meant to be set in every environment of every user. We emulate the PAM
+# behavior by reading the environment variables without interpreting them.
+#
+# https://github.com/actions-runner-controller/actions-runner-controller/issues/1135
+# https://github.com/actions/runner/issues/1703
+mapfile -t env </etc/environment
+exec env -- "${env[@]}" ./bin/runsvc.sh "${args[@]}"
