@@ -598,10 +598,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
 								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
-									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{
-										Status:       "queued",
-										Repositories: []string{"valid", "foo", "bar"},
-									},
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
 								},
 								Amount:   1,
 								Duration: metav1.Duration{Duration: time.Minute},
@@ -619,14 +616,14 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas on first workflow_job.queued webhook event
 			{
-				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				env.SendWorkflowJobEvent("test", "valid", "queued")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
 			}
 
 			// Scale-up to 3 replicas on second workflow_job.queued webhook event
 			{
-				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				env.SendWorkflowJobEvent("test", "valid", "queued")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 			}
@@ -634,7 +631,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			// Do not scale-up on third workflow_job.queued webhook event
 			// repo "example" doesn't match our Spec
 			{
-				env.SendWorkflowJobEvent("test", "example", "queued", []string{"self-hosted"})
+				env.SendWorkflowJobEvent("test", "example", "queued")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after third webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
 			}
@@ -1251,7 +1248,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas on first workflow_job webhook event
 			{
-				env.SendWorkflowJobEvent("test", "valid", "pending", "created", []string{"self-hosted"})
+				env.SendWorkflowJobEvent("test", "valid", "pending")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
@@ -1333,7 +1330,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas on first workflow_job webhook event
 			{
-				env.SendWorkflowJobEvent("test", "valid", "pending", "created", []string{"custom-label"})
+				env.SendWorkflowJobEvent("test", "valid", "pending")
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
@@ -1414,12 +1411,9 @@ func (env *testEnvironment) SendOrgCheckRunEvent(org, repo, status, action strin
 	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
 }
 
-func (env *testEnvironment) SendWorkflowJobEvent(org, repo, status_and_action string, labels []string) {
+func (env *testEnvironment) SendWorkflowJobEvent(org, repo, status_and_action string) {
 	resp, err := sendWebhook(env.webhookServer, "workflow_job", &github.WorkflowJobEvent{
-		WorkflowJob: &github.WorkflowJob{
-			Status: github.String(status_and_action),
-			Labels: labels,
-		},
+		WorkflowJob: &github.WorkflowJob{},
 		Org: &github.Organization{
 			Login: github.String(org),
 		},
@@ -1480,28 +1474,6 @@ func (env *testEnvironment) SendUserCheckRunEvent(owner, repo, status, action st
 	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
 }
 
-func (env *testEnvironment) SendWorkflowJobEvent(owner, repo, status, action string, labels []string) {
-	resp, err := sendWebhook(env.webhookServer, "workflow_job", &github.WorkflowJobEvent{
-		Org: &github.Organization{
-			Name: github.String(owner),
-		},
-		WorkflowJob: &github.WorkflowJob{
-			Labels: labels,
-		},
-		Action: github.String("queued"),
-		Repo: &github.Repository{
-			Name: github.String(repo),
-			Owner: &github.User{
-				Login: github.String(owner),
-				Type:  github.String("Organization"),
-			},
-		},
-	})
-
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send check_run event")
-
-	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
-}
 func (env *testEnvironment) SyncRunnerRegistrations() {
 	var runnerList actionsv1alpha1.RunnerList
 
