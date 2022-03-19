@@ -97,13 +97,13 @@ ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
-    
-COPY modprobe startup.sh /usr/local/bin/
+
+COPY startup.sh /usr/local/bin/
 COPY supervisor/ /etc/supervisor/conf.d/
 COPY logger.sh /opt/bash-utils/logger.sh
 COPY entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/startup.sh /usr/local/bin/entrypoint.sh /usr/local/bin/modprobe
+RUN chmod +x /usr/local/bin/startup.sh /usr/local/bin/entrypoint.sh
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
