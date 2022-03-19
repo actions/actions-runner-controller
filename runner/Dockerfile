@@ -110,7 +110,9 @@ RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
-COPY entrypoint.sh /
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
+COPY entrypoint.sh logger.bash /usr/bin/
 COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 # Add the Python "User Script Directory" to the PATH
@@ -120,4 +122,4 @@ ENV ImageOS=ubuntu20
 USER runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
-CMD ["/entrypoint.sh"]
+CMD ["entrypoint.sh"]

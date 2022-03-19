@@ -97,13 +97,11 @@ ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
-    
-COPY modprobe startup.sh /usr/local/bin/
-COPY supervisor/ /etc/supervisor/conf.d/
-COPY logger.sh /opt/bash-utils/logger.sh
-COPY entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/startup.sh /usr/local/bin/entrypoint.sh /usr/local/bin/modprobe
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
+COPY modprobe entrypoint.sh startup.sh logger.bash /usr/bin/
+COPY supervisor/ /etc/supervisor/conf.d/
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
