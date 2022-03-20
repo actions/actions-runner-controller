@@ -168,7 +168,8 @@ if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" == 
   echo "[WARNING] Upgrade to GHES => 3.3 to continue using actions-runner-controller. If you are using github.com ignore this warning."
 fi
 
-unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS
+# Unset entrypoint environment variables so they don't leak into the runner environment
+unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT_FOR_DOCKER
 
 # Docker ignores PAM and thus never loads the system environment variables that
 # are meant to be set in every environment of every user. We emulate the PAM
