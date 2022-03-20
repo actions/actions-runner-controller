@@ -16,7 +16,7 @@ entrypoint_log() {
 
 log "Setting up test area"
 export RUNNER_HOME=testarea
-mkdir -p ${RUNNER_HOME}/bin
+mkdir -p ${RUNNER_HOME}
 
 log "Setting up the test config"
 export UNITTEST=true
@@ -29,7 +29,7 @@ export RUNNER_TOKEN="xxxxxxxxxxxxx"
 # We change symlink dummy versions so the entrypoint.sh can run allowing us to test the real entrypoint.sh
 log "Symlink dummy config.sh and run.sh"
 ln -s ../../assets/config.sh ${RUNNER_HOME}/config.sh
-ln -s ../../../assets/run.sh ${RUNNER_HOME}/bin/run.sh
+ln -s ../../assets/run.sh ${RUNNER_HOME}/run.sh
 
 cleanup() {
   rm -rf ${RUNNER_HOME}

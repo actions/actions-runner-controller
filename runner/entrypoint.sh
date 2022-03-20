@@ -181,4 +181,4 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS
 if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
-exec env -- "${env[@]}" ./bin/run.sh "${args[@]}"
+exec env -- "${env[@]}" ./run.sh "${args[@]}"
