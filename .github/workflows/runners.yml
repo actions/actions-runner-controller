@@ -2,7 +2,7 @@ name: Runners
 
 on:
   pull_request:
-    types: 
+    types:
       - opened
       - synchronize
       - reopened
@@ -34,11 +34,9 @@ jobs:
           - name: actions-runner
             os-name: ubuntu
             os-version: 20.04
-            dockerfile: Dockerfile
           - name: actions-runner-dind
             os-name: ubuntu
             os-version: 20.04
-            dockerfile: Dockerfile.dindrunner
 
     steps:
       - name: Checkout
@@ -47,7 +45,7 @@ jobs:
       - name: Setup Docker Environment
         id: vars
         uses: ./.github/actions/setup-docker-environment
-        with: 
+        with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
           ghcr_username: ${{ github.actor }}
@@ -57,7 +55,7 @@ jobs:
         uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
         with:
           context: ./runner
-          file: ./runner/${{ matrix.dockerfile }}
+          file: ./runner/${{ matrix.name }}.dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
           build-args: |
