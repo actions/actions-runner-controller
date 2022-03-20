@@ -1109,7 +1109,7 @@ spec:
 You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME ssd, for
 i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
 
-**RAM Disk Runner**
+**RAM Disk Runner**<br />
 Example how to place the runner work dir, docker sidecar and /tmp within the runner onto a ramdisk.
 ```yaml
 kind: RunnerDeployment
@@ -1135,7 +1135,7 @@ spec:
       emphemeral: true # recommended to not leak data between builds.
 ```
 
-**NVME SSD Runner**
+**NVME SSD Runner**<br />
 In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
 Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
 
