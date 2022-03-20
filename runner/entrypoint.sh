@@ -150,11 +150,6 @@ cat .runner
 #     -H "Authorization: bearer ${GITHUB_TOKEN}"
 #     https://api.github.com/repos/USER/REPO/actions/runners/171
 
-if [ -n "${RUNNER_REGISTRATION_ONLY}" ]; then
-  success "This runner is configured to be registration-only. Exiting without starting the runner service..."
-  exit 0
-fi
-
 if [ -z "${UNITTEST:-}" ]; then
   mkdir ./externals
   # Hack due to the DinD volumes
