@@ -18,8 +18,13 @@ error(){
 }
 
 success "I'm configured normally"
-touch .runner
-echo "$*" > runner_config
+
+# Condition for should_retry_configuring test
+if [ -z "${FAIL_RUNNER_CONFIG_SETUP}" ]; then
+  touch .runner
+fi
+
+echo "$@" > runner_config
 success "created a dummy config file"
 # adding a counter to see how many times we've gone through the configuration step
 count=`cat counter 2>/dev/null|| echo "0"`

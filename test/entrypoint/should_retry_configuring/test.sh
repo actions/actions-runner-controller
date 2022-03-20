@@ -6,7 +6,7 @@
 # - the entrypoint script to exit with error code 2
 # - the run.sh script to never run.
 
-source ../logging.sh
+source ../assets/logging.sh
 
 entrypoint_log() {
   while read I; do
@@ -14,19 +14,22 @@ entrypoint_log() {
   done
 }
 
-log "Setting up the test"
+log "Setting up test area"
+export RUNNER_HOME=testarea
+mkdir -p ${RUNNER_HOME}/bin
+
+log "Setting up the test config"
 export UNITTEST=true
-export RUNNER_HOME=test
+export FAIL_RUNNER_CONFIG_SETUP=true
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
 
-mkdir -p ${RUNNER_HOME}/bin
-# run.sh and config.sh get used by the runner's real entrypoint.sh
-# set the runner/entrypoint.sh to use this tests dummy versions via
-# a symlink
-ln -s ../config.sh ${RUNNER_HOME}/config.sh
-ln -s ../../run.sh ${RUNNER_HOME}/bin/run.sh
+# run.sh and config.sh get used by the runner's real entrypoint.sh and are part of actions/runner.
+# We change symlink dummy versions so the entrypoint.sh can run allowing us to test the real entrypoint.sh
+log "Symlink dummy config.sh and run.sh"
+ln -s ../../assets/config.sh ${RUNNER_HOME}/config.sh
+ln -s ../../../assets/run.sh ${RUNNER_HOME}/bin/run.sh
 
 cleanup() {
   rm -rf ${RUNNER_HOME}
@@ -35,8 +38,10 @@ cleanup() {
   unset RUNNER_NAME
   unset RUNNER_REPO
   unset RUNNER_TOKEN
+  unset FAIL_RUNNER_CONFIG_SETUP
 }
 
+# Always run cleanup when test ends regardless of how it ends
 trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
 log "Running the entrypoint"
@@ -48,30 +53,29 @@ log ""
 
 if [ "$?" != "2" ]; then
   error "========================================="
-  error "Configuration should have thrown an error"
+  error "FAIL | Configuration should have thrown an error"
   exit 1
 fi
-success "Entrypoint didn't complete successfully"
-success ""
+
+success "PASS | Entrypoint didn't complete successfully"
 
 log "Checking the counter, should have 10 iterations"
 count=`cat ${RUNNER_HOME}/counter || "notfound"`
 if [ "${count}" != "10" ]; then
   error "============================================="
-  error "The retry loop should have done 10 iterations"
+  error "FAIL | The retry loop should have done 10 iterations"
   exit 1
 fi
-success "Retry loop went up to 10"
-success
+success "PASS | Retry loop went up to 10"
 
 log "Checking that run.sh never ran"
 if [ -f ${RUNNER_HOME}/run_sh_ran ]; then
   error "================================================================="
-  error "run.sh was invoked, entrypoint.sh should have failed before that."
+  error "FAIL | run.sh was invoked, entrypoint.sh should have failed before that."
   exit 1
 fi
 
-success "run.sh never ran"
+success "PASS | run.sh never ran"
 success
 success "==========================="
 success "Test completed successfully"

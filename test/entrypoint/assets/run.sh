@@ -20,9 +20,9 @@ error(){
   exit 1
 }
 
-echo "$*" > runner_config
-success "I'm pretending the configuration is not successful"
-# adding a counter to see how many times we've gone through the configuration step
-count=`cat counter 2>/dev/null|| echo "0"`
-count=$((count + 1))
-echo ${count} > counter
+log "Dumping set runner arguments"
+echo "$@" > runner_args
+success "Pretending to run service..."
+touch run_sh_ran
+success "Success"
+success ""
