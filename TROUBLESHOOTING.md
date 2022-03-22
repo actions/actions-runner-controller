@@ -3,6 +3,7 @@
 * [Invalid header field value](#invalid-header-field-value)
 * [Runner coming up before network available](#runner-coming-up-before-network-available)
 * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
+* [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
 
 ## Invalid header field value
 
@@ -97,4 +98,29 @@ NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].netw
 # 3) Get the master source ip block
 SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
 gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
+```
+
+## Outgoing network action hangs indefinitely
+
+**Problem**
+
+Some random outgoing network actions hangs indefinitely. This could be because your cluster does not give Docker the standard MTU of 1500, you can check this out by running `ip link` in a pod that encounters the problem and reading the outgoing interface's MTU value. If it is smaller than 1500, then try the following.
+
+**Solution**
+
+Add a `dockerMTU` key in your runner's spec with the value you read on the outgoing interface. For instance:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: github-runner
+  namespace: github-system
+spec:
+  replicas: 6
+  template:
+    spec:
+      dockerMTU: 1400
+      repository: $username/$repo
+      env: []
 ```
