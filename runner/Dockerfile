@@ -111,7 +111,6 @@ RUN mkdir /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
 COPY entrypoint.sh /
-COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
