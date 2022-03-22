@@ -558,7 +558,7 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    # IMPORTANT : If your HRA is targeting a RunnerSet you must specify the kind in the scaleTargetRef:, uncomment the below
     #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
@@ -842,7 +842,7 @@ spec:
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
+The regular `RunnerDeployment` / `RunnerSet` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
 The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` kind. To scale from 0 whilst still being able to provision runners as jobs are queued we must use the `HorizontalRunnerAutoscaler` with only certain scaling configurations, only the below configurations support scaling from 0 whilst also being able to provision runners as jobs are queued:
 
@@ -1109,7 +1109,7 @@ spec:
 You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME ssd, for
 i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
 
-** Ramdisk runner **
+**RAM Disk Runner**<br />
 Example how to place the runner work dir, docker sidecar and /tmp within the runner onto a ramdisk.
 ```yaml
 kind: RunnerDeployment
@@ -1135,7 +1135,7 @@ spec:
       emphemeral: true # recommended to not leak data between builds.
 ```
 
-** NVME ssd runner **
+**NVME SSD Runner**<br />
 In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
 Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
 
