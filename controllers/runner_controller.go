@@ -106,15 +106,16 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 	} else {
+		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {
 				log.Info(fmt.Sprintf("Retrying soon as we failed to get runner pod: %v", err))
 				return ctrl.Result{Requeue: true}, nil
 			}
+			// Pod was not found
+			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
-
-		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
 
