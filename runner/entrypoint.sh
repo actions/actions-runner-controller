@@ -3,6 +3,12 @@
 RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
+if [ "${RUNNER_CUSTOM_RBAC:-}" == "true" ]; then
+  # Let runner execute these hooks
+  export ACTIONS_RUNNER_HOOK_JOB_STARTED=/job_start.sh
+  export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/job_end.sh
+fi
+
 LIGHTGREEN="\e[0;32m"
 LIGHTRED="\e[0;31m"
 WHITE="\e[0;97m"
@@ -101,6 +107,8 @@ if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
   echo "Passing --disableupdate to config.sh to disable automatic runner updates."
 fi
 
+/update_status.sh "Registering"
+
 retries_left=10
 while [[ ${retries_left} -gt 0 ]]; do
   log "Configuring the runner."
@@ -178,4 +186,5 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT
 if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
+/update_status.sh "Idle"
 exec env -- "${env[@]}" ./run.sh "${args[@]}"

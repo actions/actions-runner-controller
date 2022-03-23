@@ -65,6 +65,9 @@ spec:
         {{- if .Values.runnerGithubURL  }}
         - "--runner-github-url={{ .Values.runnerGithubURL }}"
         {{- end }}
+        {{- if .Values.useCustomRunnersRBAC  }}
+        - "--use-custom-runners-rbac"
+        {{- end }}
         command:
         - "/manager"
         env:

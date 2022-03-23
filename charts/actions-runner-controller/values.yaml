@@ -64,6 +64,7 @@ image:
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+useCustomRunnersRBAC: false
 
 serviceAccount:
   # Specifies whether a service account should be created

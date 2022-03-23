@@ -70,6 +70,7 @@ func main() {
 
 		metricsAddr          string
 		enableLeaderElection bool
+		useCustomRunnersRBAC bool
 		leaderElectionId     string
 		syncPeriod           time.Duration
 
@@ -110,6 +111,7 @@ func main() {
 	flag.StringVar(&c.BasicauthUsername, "github-basicauth-username", c.BasicauthUsername, "Username for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
+	flag.BoolVar(&useCustomRunnersRBAC, "use-custom-runners-rbac", false, "Use custom RBAC for runners (role, role binding and service account).")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "DEPRECATED: The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change.")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
@@ -150,6 +152,7 @@ func main() {
 		GitHubClient:         ghClient,
 		DockerImage:          dockerImage,
 		DockerRegistryMirror: dockerRegistryMirror,
+		ConfigureRunnersRBAC: useCustomRunnersRBAC,
 		// Defaults for self-hosted runner containers
 		RunnerImage:            runnerImage,
 		RunnerImagePullSecrets: runnerImagePullSecrets,
@@ -195,6 +198,7 @@ func main() {
 		// Defaults for self-hosted runner containers
 		RunnerImage:            runnerImage,
 		RunnerImagePullSecrets: runnerImagePullSecrets,
+		ConfigureRunnersRBAC:   useCustomRunnersRBAC,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {

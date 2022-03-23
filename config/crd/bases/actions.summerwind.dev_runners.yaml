@@ -30,6 +30,9 @@ spec:
         - jsonPath: .status.phase
           name: Status
           type: string
+        - jsonPath: .status.message
+          name: Message
+          type: string
         - jsonPath: .metadata.creationTimestamp
           name: Age
           type: date

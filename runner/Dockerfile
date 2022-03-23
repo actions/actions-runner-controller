@@ -110,7 +110,8 @@ RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
-COPY entrypoint.sh /
+COPY entrypoint.sh job_start.sh job_end.sh update_status.sh /
+RUN chmod 755 entrypoint.sh job_start.sh job_end.sh update_status.sh
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"

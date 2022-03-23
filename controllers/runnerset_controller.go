@@ -51,6 +51,7 @@ type RunnerSetReconciler struct {
 	RunnerImagePullSecrets []string
 	DockerImage            string
 	DockerRegistryMirror   string
+	ConfigureRunnersRBAC   bool
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
@@ -190,7 +191,7 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
+	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false, r.ConfigureRunnersRBAC)
 	if err != nil {
 		return nil, err
 	}
