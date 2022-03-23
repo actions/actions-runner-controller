@@ -116,6 +116,9 @@ COPY entrypoint.sh /
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
 
+RUN echo "PATH=${PATH}" > /etc/environment \
+    && echo "ImageOS=${ImageOS}" >> /etc/environment
+
 USER runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
