@@ -1,5 +1,6 @@
 #!/bin/bash
 
+RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
 LIGHTGREEN="\e[0;32m"
@@ -77,17 +78,21 @@ if [ ! -d "${RUNNER_HOME}" ]; then
 fi
 
 # if this is not a testing environment
-if [ -z "${UNITTEST:-}" ]; then
-  sudo chown -R runner:docker ${RUNNER_HOME}
-  # use cp over mv to avoid issues when /runnertmp and {RUNNER_HOME} are on different devices
-  cp -r /runnertmp/* ${RUNNER_HOME}/
+if [[ "${UNITTEST:-}" == '' ]]; then
+  sudo chown -R runner:docker "$RUNNER_HOME"
+  # enable dotglob so we can copy a ".env" file to load in env vars as part of the service startup if one is provided
+  # loading a .env from the root of the service is part of the actions/runner logic
+  shopt -s dotglob
+  # use cp instead of mv to avoid issues when src and dst are on different devices
+  cp -r "$RUNNER_ASSETS_DIR"/* "$RUNNER_HOME"/
+  shopt -u dotglob
 fi
 
 cd ${RUNNER_HOME}
 # past that point, it's all relative pathes from /runner
 
 config_args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   config_args+=(--ephemeral)
   echo "Passing --ephemeral to config.sh to enable the ephemeral runner."
 fi
@@ -145,29 +150,32 @@ cat .runner
 #     -H "Authorization: bearer ${GITHUB_TOKEN}"
 #     https://api.github.com/repos/USER/REPO/actions/runners/171
 
-if [ -n "${RUNNER_REGISTRATION_ONLY}" ]; then
-  success "This runner is configured to be registration-only. Exiting without starting the runner service..."
-  exit 0
-fi
-
 if [ -z "${UNITTEST:-}" ]; then
   mkdir ./externals
   # Hack due to the DinD volumes
   mv ./externalstmp/* ./externals/
-
-  for f in runsvc.sh RunnerService.js; do
-    diff {bin,patched}/${f} || :
-    sudo mv bin/${f}{,.bak}
-    sudo mv {patched,bin}/${f}
-  done
 fi
 
 args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" != "false" ]; then
+if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   args+=(--once)
   echo "[WARNING] Passing --once is deprecated and will be removed as an option from the image and ARC at the release of 0.24.0."
   echo "[WARNING] Upgrade to GHES => 3.3 to continue using actions-runner-controller. If you are using github.com ignore this warning."
 fi
 
-unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN
-exec ./bin/runsvc.sh "${args[@]}"
+# Unset entrypoint environment variables so they don't leak into the runner environment
+unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT_FOR_DOCKER
+
+# Docker ignores PAM and thus never loads the system environment variables that
+# are meant to be set in every environment of every user. We emulate the PAM
+# behavior by reading the environment variables without interpreting them.
+#
+# https://github.com/actions-runner-controller/actions-runner-controller/issues/1135
+# https://github.com/actions/runner/issues/1703
+
+# /etc/environment may not exist when running unit tests depending on the platform being used
+# (e.g. Mac OS) so we just skip the mapping entirely
+if [ -z "${UNITTEST:-}" ]; then
+  mapfile -t env </etc/environment
+fi
+exec env -- "${env[@]}" ./run.sh "${args[@]}"

@@ -55,8 +55,8 @@ Subsequent to this, install the custom resource definitions and actions-runner-c
 **Kubectl Deployment:**
 
 ```shell
-# REPLACE "v0.21.1" with the version you wish to deploy
-kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.21.1/actions-runner-controller.yaml
+# REPLACE "v0.22.0" with the version you wish to deploy
+kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.22.0/actions-runner-controller.yaml
 ```
 
 **Helm Deployment:**
@@ -448,11 +448,12 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
 
 ### Autoscaling
 
 > Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
+
+> If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
 
 A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for cavaets of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
@@ -557,7 +558,7 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    # IMPORTANT : If your HRA is targeting a RunnerSet you must specify the kind in the scaleTargetRef:, uncomment the below
     #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
@@ -841,7 +842,7 @@ spec:
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
+The regular `RunnerDeployment` / `RunnerSet` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
 The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` kind. To scale from 0 whilst still being able to provision runners as jobs are queued we must use the `HorizontalRunnerAutoscaler` with only certain scaling configurations, only the below configurations support scaling from 0 whilst also being able to provision runners as jobs are queued:
 
@@ -1108,7 +1109,7 @@ spec:
 You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME ssd, for
 i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
 
-** Ramdisk runner **
+**RAM Disk Runner**<br />
 Example how to place the runner work dir, docker sidecar and /tmp within the runner onto a ramdisk.
 ```yaml
 kind: RunnerDeployment
@@ -1134,7 +1135,7 @@ spec:
       emphemeral: true # recommended to not leak data between builds.
 ```
 
-** NVME ssd runner **
+**NVME SSD Runner**<br />
 In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
 Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
 

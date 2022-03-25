@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 export LIGHTGREEN='\e[0;32m'
 export LIGHTRED='\e[0;31m'
