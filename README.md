@@ -226,14 +226,16 @@ By default the controller will look for runners in all namespaces, the watch nam
 
 This feature is configured via the controller's `--watch-namespace` flag. When a namespace is provided via this flag, the controller will only monitor runners in that namespace.
 
-If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources unique to each stack. In the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
+You can deploy multiple controllers either in a single shared namespace, or in a unique namespace per controller.
 
-Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
+If you plan on installing all instances of the controller stack into a single namespace there are a few things you need to do for this to work.
 
-When you go to the route of sharing the namespace while giving each a unique Helm release name, you must also ensure the following values are configured correctly:
+1. All resources per stack must have a unique, in the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
+2. `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
+3. `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock and resulting in only one stack working concurrently. Your controller will be stuck with a log message something like this `attempting to acquire leader lease arc-controllers/actions-runner-controller...`
+4. The stacks MutatingWebhookConfiguration must include a namespace selector for the stacks the corresponding runners, this is again part of the helm chart and so is already taken care of if you are deploying using the chart.
 
-- `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
-- `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock and resulting in only one stack working concurrently.
+Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding these potential pitfalls.
 
 ## Usage
 
