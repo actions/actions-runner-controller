@@ -213,9 +213,11 @@ func main() {
 		"Initializing actions-runner-controller",
 		"github-api-cache-duration", gitHubAPICacheDuration,
 		"sync-period", syncPeriod,
-		"runner-image", runnerImage,
-		"docker-image", dockerImage,
+		"default-runner-image", runnerImage,
+		"default-docker-image", dockerImage,
 		"common-runnner-labels", commonRunnerLabels,
+		"leader-election-enabled", enableLeaderElection,
+		"leader-election-id", leaderElectionId,
 		"watch-namespace", namespace,
 	)
 
