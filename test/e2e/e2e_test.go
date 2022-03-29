@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
@@ -16,24 +17,33 @@ var (
 	controllerImageTag  = "e2e"
 	controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
 	runnerImageRepo     = "actionsrunnercontrollere2e/actions-runner"
+	runnerDindImageRepo = "actionsrunnercontrollere2e/actions-runner-dind"
 	runnerImageTag      = "e2e"
 	runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
+	runnerDindImage     = testing.Img(runnerDindImageRepo, runnerImageTag)
 
 	prebuildImages = []testing.ContainerImage{
 		controllerImage,
 		runnerImage,
+		runnerDindImage,
 	}
 
 	builds = []testing.DockerBuild{
 		{
-			Dockerfile: "../../Dockerfile",
-			Args:       []testing.BuildArg{},
-			Image:      controllerImage,
+			Dockerfile:   "../../Dockerfile",
+			Args:         []testing.BuildArg{},
+			Image:        controllerImage,
+			EnableBuildX: true,
 		},
 		{
 			Dockerfile: "../../runner/Dockerfile",
 			Args:       []testing.BuildArg{},
 			Image:      runnerImage,
+		},
+		{
+			Dockerfile: "../../runner/Dockerfile.dindrunner",
+			Args:       []testing.BuildArg{},
+			Image:      runnerDindImage,
 		},
 	}
 
@@ -51,7 +61,6 @@ var (
 		"SYNC_PERIOD=" + "10s",
 		"NAME=" + controllerImageRepo,
 		"VERSION=" + controllerImageTag,
-		"RUNNER_NAME=" + runnerImageRepo,
 		"RUNNER_TAG=" + runnerImageTag,
 	}
 
@@ -126,6 +135,7 @@ func TestE2ERunnerDeploy(t *testing.T) {
 	}
 
 	env := initTestEnv(t)
+	env.useApp = true
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -158,15 +168,30 @@ func TestE2ERunnerDeploy(t *testing.T) {
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
+
+	t.FailNow()
 }
 
 type env struct {
 	*testing.Env
 
 	useRunnerSet bool
+	// Uses GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, and GITHUB_APP_PRIVATE_KEY
+	// to let ARC authenticate as a GitHub App
+	useApp bool
 
 	testID                                                   string
+	testName                                                 string
+	repoToCommit                                             string
+	appID, appInstallationID, appPrivateKeyFile              string
 	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
+	githubTokenWebhook                                       string
+	testEnterprise                                           string
+	testEphemeral                                            string
+	featureFlagEphemeral                                     *bool
+	scaleDownDelaySecondsAfterScaleOut                       int64
+	minReplicas                                              int64
+	dockerdWithinRunnerContainer                             bool
 	testJobs                                                 []job
 }
 
@@ -179,17 +204,38 @@ func initTestEnv(t *testing.T) *env {
 
 	id := e.ID()
 
-	testID := t.Name() + " " + id
+	testName := t.Name() + " " + id
 
-	t.Logf("Using test id %s", testID)
+	t.Logf("Initializing test with name %s", testName)
 
-	e.testID = testID
+	e.testID = id
+	e.testName = testName
 	e.runnerLabel = "test-" + id
 	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
-	e.testRepo = testing.Getenv(t, "TEST_REPO")
-	e.testOrg = testing.Getenv(t, "TEST_ORG")
-	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 2)
+	e.appID = testing.Getenv(t, "GITHUB_APP_ID")
+	e.appInstallationID = testing.Getenv(t, "GITHUB_APP_INSTALLATION_ID")
+	e.appPrivateKeyFile = testing.Getenv(t, "GITHUB_APP_PRIVATE_KEY_FILE")
+	e.githubTokenWebhook = testing.Getenv(t, "WEBHOOK_GITHUB_TOKEN")
+	e.repoToCommit = testing.Getenv(t, "TEST_COMMIT_REPO")
+	e.testRepo = testing.Getenv(t, "TEST_REPO", "")
+	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
+	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
+	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
+	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 20)
+
+	if ephemeral, err := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL", "")); err == nil {
+		e.featureFlagEphemeral = &ephemeral
+	}
+
+	e.scaleDownDelaySecondsAfterScaleOut, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT", "10"), 10, 32)
+	e.minReplicas, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_MIN_REPLICAS", "1"), 10, 32)
+
+	var err error
+	e.dockerdWithinRunnerContainer, err = strconv.ParseBool(testing.Getenv(t, "TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER", "false"))
+	if err != nil {
+		panic(fmt.Sprintf("unable to parse bool from TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER: %v", err))
+	}
 
 	return e
 }
@@ -229,19 +275,57 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 	scriptEnv := []string{
 		"KUBECONFIG=" + e.Kubeconfig(),
 		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
-		"ACCEPTANCE_TEST_SECRET_TYPE=token",
 	}
 
 	if e.useRunnerSet {
 		scriptEnv = append(scriptEnv, "USE_RUNNERSET=1")
+	} else {
+		scriptEnv = append(scriptEnv, "USE_RUNNERSET=false")
 	}
 
 	varEnv := []string{
+		"TEST_ENTERPRISE=" + e.testEnterprise,
 		"TEST_REPO=" + e.testRepo,
 		"TEST_ORG=" + e.testOrg,
 		"TEST_ORG_REPO=" + e.testOrgRepo,
-		"GITHUB_TOKEN=" + e.githubToken,
+		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
 		"RUNNER_LABEL=" + e.runnerLabel,
+		"TEST_ID=" + e.testID,
+		"TEST_EPHEMERAL=" + e.testEphemeral,
+		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
+		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+	}
+
+	if e.featureFlagEphemeral != nil {
+		varEnv = append(varEnv, fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", *e.featureFlagEphemeral))
+	}
+
+	if e.useApp {
+		varEnv = append(varEnv,
+			"ACCEPTANCE_TEST_SECRET_TYPE=app",
+			"APP_ID="+e.appID,
+			"APP_INSTALLATION_ID="+e.appInstallationID,
+			"APP_PRIVATE_KEY_FILE="+e.appPrivateKeyFile,
+		)
+	} else {
+		varEnv = append(varEnv,
+			"ACCEPTANCE_TEST_SECRET_TYPE=token",
+			"GITHUB_TOKEN="+e.githubToken,
+		)
+	}
+
+	if e.dockerdWithinRunnerContainer {
+		varEnv = append(varEnv,
+			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=true",
+			"RUNNER_NAME="+runnerDindImageRepo,
+		)
+	} else {
+		varEnv = append(varEnv,
+			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=false",
+			"RUNNER_NAME="+runnerImageRepo,
+		)
 	}
 
 	scriptEnv = append(scriptEnv, varEnv...)
@@ -260,7 +344,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testID, e.runnerLabel, testResultCMNamePrefix, e.testRepo, e.testJobs)
+	installActionsWorkflow(t, e.testName, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
 }
 
 func (e *env) verifyActionsWorkflowRun(t *testing.T) {
@@ -287,18 +371,20 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 	return testJobs
 }
 
-func installActionsWorkflow(t *testing.T, testID, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
+const Branch = "main"
+
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	wfName := "E2E " + testID
+	wfName := "E2E " + testName
 	wf := testing.Workflow{
 		Name: wfName,
 		On: testing.On{
 			Push: &testing.Push{
-				Branches: []string{"master"},
+				Branches: []string{Branch},
 			},
 		},
 		Jobs: map[string]testing.Job{},
@@ -346,6 +432,7 @@ kubectl create cm %s$id --from-literal=status=ok
 			".github/workflows/workflow.yaml": wfContent,
 			"test.sh":                         script,
 		},
+		Branch: Branch,
 	}
 
 	if err := g.Sync(ctx); err != nil {

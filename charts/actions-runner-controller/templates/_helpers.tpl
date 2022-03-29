@@ -68,6 +68,10 @@ Create the name of the service account to use
 {{- default (include "actions-runner-controller.fullname" .) .Values.authSecret.name -}}
 {{- end }}
 
+{{- define "actions-runner-controller.githubWebhookServerSecretName" -}}
+{{- default (include "actions-runner-controller.fullname" .) .Values.githubWebhookServer.secret.name -}}
+{{- end }}
+
 {{- define "actions-runner-controller.leaderElectionRoleName" -}}
 {{- include "actions-runner-controller.fullname" . }}-leader-election
 {{- end }}

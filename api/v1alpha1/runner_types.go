@@ -82,6 +82,9 @@ type RunnerPodSpec struct {
 	DockerVolumeMounts []corev1.VolumeMount `json:"dockerVolumeMounts,omitempty"`
 
 	// +optional
+	DockerEnv []corev1.EnvVar `json:"dockerEnv,omitempty"`
+
+	// +optional
 	Containers []corev1.Container `json:"containers,omitempty"`
 
 	// +optional

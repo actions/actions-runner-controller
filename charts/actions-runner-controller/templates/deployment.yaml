@@ -14,6 +14,7 @@ spec:
     metadata:
       {{- with .Values.podAnnotations }}
       annotations:
+        kubectl.kubernetes.io/default-logs-container: "manager"
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -46,6 +47,9 @@ spec:
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
         - "--runner-image={{ .Values.image.actionsRunnerRepositoryAndTag }}"
+        {{- range .Values.image.actionsRunnerImagePullSecrets }}
+        - "--runner-image-pull-secret={{ . }}"
+        {{- end }}
         {{- if .Values.dockerRegistryMirror }}
         - "--docker-registry-mirror={{ .Values.dockerRegistryMirror }}"
         {{- end }}
@@ -58,6 +62,9 @@ spec:
         {{- if .Values.logLevel }}
         - "--log-level={{ .Values.logLevel }}"
         {{- end }}
+        {{- if .Values.runnerGithubURL  }}
+        - "--runner-github-url={{ .Values.runnerGithubURL }}"
+        {{- end }}
         command:
         - "/manager"
         env:
@@ -65,6 +72,15 @@ spec:
         - name: GITHUB_ENTERPRISE_URL
           value: {{ .Values.githubEnterpriseServerURL }}
         {{- end }}
+        {{- if .Values.githubURL  }}
+        - name: GITHUB_URL
+          value: {{ .Values.githubURL }}
+        {{- end }}
+        {{- if .Values.githubUploadURL  }}
+        - name: GITHUB_UPLOAD_URL
+          value: {{ .Values.githubUploadURL }}
+        {{- end }}
+        {{- if .Values.authSecret.enabled }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
@@ -84,7 +100,22 @@ spec:
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
-          value: /etc/actions-runner-controller/github_app_private_key
+          valueFrom:
+            secretKeyRef:
+              key: github_app_private_key
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        {{- if .Values.authSecret.github_basicauth_username }}
+        - name: GITHUB_BASICAUTH_USERNAME
+          value: {{ .Values.authSecret.github_basicauth_username }}
+        {{- end }}
+        - name: GITHUB_BASICAUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: github_basicauth_password
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        {{- end }}
         {{- range $key, $val := .Values.env }}
         - name: {{ $key }}
           value: {{ $val | quote }}
@@ -106,16 +137,18 @@ spec:
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
         volumeMounts:
+        {{- if .Values.authSecret.enabled }}
         - mountPath: "/etc/actions-runner-controller"
           name: secret
           readOnly: true
+        {{- end }}
         - mountPath: /tmp
           name: tmp
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
         {{- if .Values.additionalVolumeMounts }}
-          {{- toYaml .Values.additionalVolumeMounts | nindent 10 }} 
+          {{- toYaml .Values.additionalVolumeMounts | nindent 8 }} 
         {{- end }}
       {{- if .Values.metrics.proxy.enabled }}
       - args:
@@ -136,9 +169,11 @@ spec:
       {{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
+      {{- if .Values.authSecret.enabled }}
       - name: secret
         secret:
           secretName: {{ include "actions-runner-controller.secretName" . }}
+      {{- end }}
       - name: cert
         secret:
           defaultMode: 420
@@ -146,7 +181,7 @@ spec:
       - name: tmp
         emptyDir: {}
       {{- if .Values.additionalVolumes }}
-        {{- toYaml .Values.additionalVolumes | nindent 8}}
+        {{- toYaml .Values.additionalVolumes | nindent 6}}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -163,4 +198,7 @@ spec:
       {{- with .Values.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: {{ .Values.hostNetwork }}
       {{- end }}

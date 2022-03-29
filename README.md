@@ -18,6 +18,7 @@ ToC:
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [RunnerDeployments](#runnerdeployments)
+  - [RunnerSets](#runnersets)
   - [Autoscaling](#autoscaling)
     - [Anti-Flapping Configuration](#anti-flapping-configuration)
     - [Pull Driven Scaling](#pull-driven-scaling)
@@ -26,13 +27,15 @@ ToC:
     - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
   - [Additional Tweaks](#additional-tweaks)
+  - [Custom Volume mounts](#custom-volume-mounts)
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
+  - [Runner Entrypoint Features](#runner-entrypoint-features)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
-  - [Stateful Runners](#stateful-runners)
-  - [Ephemeral Runners](#ephemeral-runners)
+  - [Persistent Runners](#persistent-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
-  - [Common Errors](#common-errors)
+  - [Using without cert-manager](#using-without-cert-manager)
+- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
 ## Motivation
@@ -43,7 +46,7 @@ ToC:
 
 ## Installation
 
-actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
+By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for cert-manager can be found below.
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
@@ -52,8 +55,8 @@ Subsequent to this, install the custom resource definitions and actions-runner-c
 **Kubectl Deployment:**
 
 ```shell
-# REPLACE "v0.20.2" with the version you wish to deploy
-kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.20.2/actions-runner-controller.yaml
+# REPLACE "v0.22.0" with the version you wish to deploy
+kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.22.0/actions-runner-controller.yaml
 ```
 
 **Helm Deployment:**
@@ -68,11 +71,11 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 ### GitHub Enterprise Support
 
-The solution supports both GitHub Enterprise Cloud and Server editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deploying this solution into a GitHub Enterprise Server environment then you will need version >= [3.0.0](https://docs.github.com/en/enterprise-server@3.0/admin/release-notes#3.0.0).
+If you are deploying this solution into a GHES environment then you will need to be running version >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes).
 
-When deploying the solution for a GitHub Enterprise Server environment you need to provide an additional environment variable as part of the controller deployment:
+When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
 
 ```shell
 kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
@@ -89,7 +92,7 @@ There are two ways for actions-runner-controller to authenticate with the GitHub
 
 Functionality wise, there isn't much of a difference between the 2 authentication methods. The primarily benefit of authenticating via a GitHub App is an [increased API quota](https://docs.github.com/en/developers/apps/rate-limits-for-github-apps).
 
-If you are deploying the solution for a GitHub Enterprise Server environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GitHub Enterprise Cloud or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
+If you are deploying the solution for a GHES environment you are able to [configure your rate limit settings](https://docs.github.com/en/enterprise-server@3.0/admin/configuration/configuring-rate-limits) making the main benefit irrelevant. If you're deploying the solution for a GHEC or regular GitHub environment and you run into rate limit issues, consider deploying the solution using the GitHub App authentication method instead.
 
 ### Deploying Using GitHub App Authentication
 
@@ -223,14 +226,16 @@ By default the controller will look for runners in all namespaces, the watch nam
 
 This feature is configured via the controller's `--watch-namespace` flag. When a namespace is provided via this flag, the controller will only monitor runners in that namespace.
 
-If you plan on installing all instances of the controller stack into a single namespace you will need to make the names of the resources unique to each stack. In the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
+You can deploy multiple controllers either in a single shared namespace, or in a unique namespace per controller.
 
-Alternatively, you can install each controller stack into its own unique namespace (relative to other controller stacks in the cluster), avoiding the need to uniquely prefix resources.
+If you plan on installing all instances of the controller stack into a single namespace there are a few things you need to do for this to work.
 
-When you go to the route of sharing the namespace while giving each a unique Helm release name, you must also ensure the following values are configured correctly:
+1. All resources per stack must have a unique, in the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
+2. `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
+3. `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock resulting in only one stack working concurrently. Your controller will be stuck with a log message something like this `attempting to acquire leader lease arc-controllers/actions-runner-controller...`
+4. The MutatingWebhookConfiguration in each stack must include a namespace selector for that stacks corresponding runners namespace, this is already configured in the helm chart.
 
-- `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
-- `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock and resulting in only one stack working concurrently.
+Alternatively, you can install each controller stack into a unique namespace (relative to other controller stacks in the cluster), avoiding these potential pitfalls.
 
 ## Usage
 
@@ -358,11 +363,103 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
+  ### RunnerSets
+
+> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+
+For scenarios where you require the advantages of a `StatefulSet`, for example persistent storage, ARC implements a runner based on Kubernete's StatefulSets, the RunnerSet.
+
+A basic `RunnerSet` would look like this:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  ephemeral: false
+  replicas: 2
+  repository: mumoshu/actions-runner-controller-ci
+  # Other mandatory fields from StatefulSet
+  selector:
+    matchLabels:
+      app: example
+  serviceName: example
+  template:
+    metadata:
+      labels:
+        app: example
+```
+
+As it is based on `StatefulSet`, `selector` and `template.medatada.labels` needs to be defined and have the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
+
+Runner-related fields like `ephemeral`, `repository`, `organization`, `enterprise`, and so on should be written directly under `spec`.
+
+Fields like `volumeClaimTemplates` that originates from `StatefulSet` should also be written directly under `spec`.
+
+Pod-related fields like security contexts and volumes are written under `spec.template.spec` like `StatefulSet`.
+
+Similarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a dockerd.
+
+For a more complex example, see the below:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  ephemeral: false
+  replicas: 2
+  repository: mumoshu/actions-runner-controller-ci
+  dockerdWithinRunnerContainer: true
+  template:
+    spec:
+      securityContext:
+        # All level/role/type/user values will vary based on your SELinux policies.
+        # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
+        seLinuxOptions: 
+          level: "s0"
+          role: "system_r"
+          type: "super_t"
+          user: "system_u"
+      containers:
+      - name: runner
+        env: []
+        resources:
+          limits:
+            cpu: "4.0"
+            memory: "8Gi"
+          requests:
+            cpu: "2.0"
+            memory: "4Gi"
+      - name: docker
+        resources:
+          limits:
+            cpu: "4.0"
+            memory: "8Gi"
+          requests:
+            cpu: "2.0"
+            memory: "4Gi"
+```
+
+You can also read the design and usage documentation written in the original pull request that introduced `RunnerSet` for more information [#629](https://github.com/actions-runner-controller/actions-runner-controller/pull/629).
+
+Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A statefulset is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each statefulset-managed pod gets the same persistent volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
+
+**Limitations**
+
+* For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
+
 ### Autoscaling
 
-> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployments` / `RunnerSets` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
+> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to setup.
 
-A `RunnerDeployment` or `RunnerSet` (see [stateful runners](#stateful-runners) for more details on this kind) can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for cavaets of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
+> If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
+
+A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for cavaets of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
+
+**_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
 #### Anti-Flapping Configuration
 
@@ -387,10 +484,13 @@ kind: HorizontalRunnerAutoscaler
 metadata:
   name: example-runner-deployment-autoscaler
 spec:
-  # Runners in the targeted RunnerDeployment won't be scaled down for 5 minutes instead of the default 10 minutes now
+  # Runners in the targeted RunnerDeployment won't be scaled down
+  # for 5 minutes instead of the default 10 minutes now
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -416,6 +516,8 @@ spec:
   scaleTargetRef:
     # Your RunnerDeployment Here
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
@@ -441,8 +543,6 @@ The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all p
 
 Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
-**_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_**
-
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
@@ -460,6 +560,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # IMPORTANT : If your HRA is targeting a RunnerSet you must specify the kind in the scaleTargetRef:, uncomment the below
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -484,8 +586,6 @@ The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in t
 
 Examples of each scaling type implemented with a `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
-**_Important!!! We no longer include the attribute `replicas` in our `RunnerDeployment` if we are configuring autoscaling!_**
-
 ```yaml
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -495,6 +595,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -514,6 +616,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -541,6 +645,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -562,13 +668,13 @@ The primary benefit of autoscaling on Webhook compared to the pull driven scalin
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
-To enable this feature, you firstly need to install the webhook server, currently, only our Helm chart has the ability install it:
+To enable this feature, you first need to install the GitHub webhook server. To install via our Helm chart,
 _[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
 
 ```console
-$ helm --upgrade install actions-runner-controller/actions-runner-controller \
-  githubWebhookServer.enabled=true \
-  githubWebhookServer.ports[0].nodePort=33080
+$ helm upgrade --install --namespace actions-runner-system --create-namespace \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+             --set "githubWebhookServer.enabled=true,githubWebhookServer.ports[0].nodePort=33080"
 ```
 
 The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
@@ -584,9 +690,13 @@ by learning the following configuration examples.
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 - [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
 
+**Note:** All these examples should have **minReplicas** & **maxReplicas** as mandatory parameter even for webhook driven scaling. 
+
 ##### Example 1: Scale on each `workflow_job` event
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+
+_Note: GitHub does not include the runner group information of a repository in the payload of `workflow_job` event in the initial `queued` event. The runner group information is only include for `workflow_job` events when the job has already been allocated to a runner (events with a status of `in_progress` or `completed`). Please do raise feature requests against [GitHub](https://support.github.com/tickets/personal/0) for this information to be included in the initial `queued` event if this would improve autoscaling runners for you._
 
 The most flexible webhook GitHub offers is the `workflow_job` webhook, it includes the `runs-on` information in the payload allowing scaling based on runner labels.
 
@@ -605,10 +715,14 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent: {}
     duration: "30m"
 ```
+
+This webhook requires you to explicitly set the labels in the RunnerDeployment / RunnerSet if you are using them in your workflow to match the agents (field `runs-on`). Only `self-hosted` will be considered as included by default.
 
 You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
 
@@ -633,6 +747,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -657,6 +773,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -685,6 +803,8 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       pullRequest:
@@ -711,19 +831,20 @@ kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
     name: example-runners
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       push:
     amount: 1
     duration: "5m"
 ```
+
 #### Autoscaling to/from 0
 
 > This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
 
-_Note: The controller creates a "registration-only" runner per RunnerReplicaSet when it is being scaled to zero and retains it until there are one or more runners available. This is a deprecated feature for GitHub Cloud as "registration-only" runners are no longer needed due to GitHub changing their runner [routing logic](https://docs.github.com/en/enterprise-cloud@latest/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#routing-precedence-for-self-hosted-runners) to no longer fail a workflow run if it targets a runner label that there are no registered runners for._
-
-The regular `RunnerDeployment` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
+The regular `RunnerDeployment` / `RunnerSet` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
 The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` kind. To scale from 0 whilst still being able to provision runners as jobs are queued we must use the `HorizontalRunnerAutoscaler` with only certain scaling configurations, only the below configurations support scaling from 0 whilst also being able to provision runners as jobs are queued:
 
@@ -735,6 +856,8 @@ The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` ki
 `PercentageRunnersBusy` can't be used alone as, by its definition, it needs one or more GitHub runners to become `busy` to be able to scale. If there isn't a runner to pick up a job and enter a `busy` state then the controller will never know to provision a runner to begin with as this metric has no knowledge of the job queue and is relying using the number of busy runners as a means for calculating the desired replica count.
 
 If a HorizontalRunnerAutoscaler is configured with a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` then be aware that the controller will check the primary metric of `PercentageRunnersBusy` first and will only use the secondary metric to calculate the desired replica count if the primary metric returns 0 desired replicas.
+
+Webhook-based autoscaling is the best option as it is relatively easy to configure and also it can scale scale quickly.
 
 #### Scheduled Overrides
 
@@ -755,6 +878,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 100 only between 2021-06-01T00:00:00+09:00 and 2021-06-03T00:00:00+09:00
   - startTime: "2021-06-01T00:00:00+09:00"
@@ -775,6 +900,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: example-runner-deployment
+    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
+    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 0 only between 0am sat to 0am mon
   - startTime: "2021-05-01T00:00:00+09:00"
@@ -915,6 +1042,11 @@ spec:
       # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
       # true = No docker sidecar container is deployed in the runner pod but docker can be used within the runner container instead. The image summerwind/actions-runner-dind is used by default.
       dockerdWithinRunnerContainer: true
+      #Optional environement variables for docker container
+      # Valid only when dockerdWithinRunnerContainer=false
+      dockerEnv:
+        - name: HTTP_PROXY
+          value: http://example.com      
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
@@ -975,6 +1107,84 @@ spec:
       runtimeClassName: "runc"
 ```
 
+### Custom Volume mounts
+You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME ssd, for
+i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
+
+**RAM Disk Runner**<br />
+Example how to place the runner work dir, docker sidecar and /tmp within the runner onto a ramdisk.
+```yaml
+kind: RunnerDeployment
+spec:
+  template:
+    spec:
+      dockerVolumeMounts:
+        - mountPath: /var/lib/docker
+          name: docker
+      volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      volumes:
+        - name: docker
+          emptyDir:
+            medium: Memory
+        - name: work # this volume gets automatically used up for the workdir
+          emptyDir:
+            medium: Memory
+        - name: tmp
+          emptyDir:
+            medium: Memory
+      emphemeral: true # recommended to not leak data between builds.
+```
+
+**NVME SSD Runner**<br />
+In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
+Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
+
+**Beware** that running these persistent backend volumes **leave data behind** between 2 different jobs on the workdir and /tmp with emphemeral: false.
+
+```yaml
+kind: RunnerDeployment
+spec:
+  template:
+    spec:
+      env:
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      dockerVolumeMounts:
+      - mountPath: /var/lib/docker
+        name: docker
+        subPathExpr: $(POD_NAME)-docker
+      - mountPath: /runner/_work
+        name: work
+        subPathExpr: $(POD_NAME)-work
+      volumeMounts:
+      - mountPath: /runner/_work
+        name: work
+        subPathExpr: $(POD_NAME)-work
+      - mountPath: /tmp
+        name: tmp
+        subPathExpr: $(POD_NAME)-tmp
+      dockerEnv:
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      volumes:
+      - hostPath:
+          path: /mnt/disks/ssd0
+        name: docker
+      - hostPath:
+          path: /mnt/disks/ssd0
+        name: work
+      - hostPath:
+          path: /mnt/disks/ssd0
+        name: tmp
+    emphemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
+```
+
 ### Runner Labels
 
 To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:
@@ -1031,6 +1241,52 @@ spec:
       group: NewGroup
 ```
 
+GitHub supports custom visilibity in a Runner Group to make it available to a specific set of repositories only. By default if no GitHub
+authentication is included in the webhook server ARC will be assumed that all runner groups to be usable in all repositories.
+Currently, GitHub do not include the repository runner group membership information in the workflow_job event (or any webhook). To make the ARC "runner group aware" additional GitHub API calls are needed to find out what runner groups are visible to the webhook's repository. This behaviour will impact your rate-limit budget and so the option needs to be explicitly configured by the end user.
+
+This option will be enabled when proper GitHub authentication options (token, app or basic auth) is provided in the webhook server and `useRunnerGroupsVisibility` is set to true, e.g.
+
+```yaml
+githubWebhookServer:
+  enabled: false
+  replicaCount: 1
+  useRunnerGroupsVisibility: true
+```
+
+### Runner Entrypoint Features
+
+> Environment variable values must all be strings
+
+The entrypoint script is aware of a few environment variables for configuring features:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      env:
+        # Issues a sleep command at the start of the entrypoint
+        - name: STARTUP_DELAY_IN_SECONDS
+          value: "2"
+        # Disables the wait for the docker daemon to be available check
+        - name: DISABLE_WAIT_FOR_DOCKER
+          value: "true"
+        # Disables automatic runner updates
+        - name: DISABLE_RUNNER_UPDATE
+          value: "true"
+        # Configure runner with --ephemeral instead of --once flag
+        # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
+        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA 
+        # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
+        # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
+        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+          value: "true"
+```
+
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
 > This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
@@ -1056,154 +1312,19 @@ spec:
         fsGroup: 1000
 ```
 
+### Persistent Runners
 
-### Use with Istio
+Every runner managed by ARC is "ephemeral" by default. The life of an ephemeral runner managed by ARC looks like this- ARC creates a runner pod for the runner. As it's an ephemeral runner, the `--ephemeral` flag is passed to the `actions/runner` agent that runs within the `runner` container of the runner pod.
 
-Istio 1.7.0 or greater has `holdApplicationUntilProxyStarts` added in https://github.com/istio/istio/pull/24737, which enables you to delay the `runner` container startup until the injected `istio-proxy` container finish starting. Try using it if you need to use Istio. Otherwise the runner is unlikely to work, because it fails to call any GitHub API to register itself due to `istio-proxy` being not up and running yet.
+`--ephemeral` is an `actions/runner` feature that instructs the runner to stop and de-register itself after the first job run.
 
-Note that there's no official Istio integration in actions-runner-controller. It should work, but it isn't covered by our acceptance test (a contribution to resolve this is welcomed). In addition to that, none of the actions-runner-controller maintainers use Istio daily. If you need more information, or have any issues using it, refer to the following links:
+Once the ephemeral runner has completed running a workflow job, it stops with a status code of 0, hence the runner pod is marked as completed, removed by ARC.
 
-- https://github.com/actions-runner-controller/actions-runner-controller/issues/591
-- https://github.com/actions-runner-controller/actions-runner-controller/pull/592
-- https://github.com/istio/istio/issues/11130
+As it's removed after a workflow job run, the runner pod is never reused across multiple GitHub Actions workflow jobs, providing you a clean environment per each workflow job.
 
-### Stateful Runners
+Although not recommended, it's possible to disable passing `--ephemeral` flag by explicitly setting `ephemeral: false` in the `RunnerDeployment` or `RunnerSet` spec. When disabled, your runner becomes "persistent". A persistent runner does not stop after workflow job ends, and in this mode `actions/runner` is known to clean only runner's work dir after each job. That means your runner's environment, including various actions cache, docker images stored in the `dind` and layer cache, is retained across multiple workflow job runs.
 
-> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
-
-`actions-runner-controller` supports `RunnerSet` API that let you deploy stateful runners. A stateful runner is designed to be able to store some data persists across GitHub Actions workflow and job runs. You might find it useful, for example, to speed up your docker builds by persisting the docker layer cache.
-
-A basic `RunnerSet` would look like this:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerSet
-metadata:
-  name: example
-spec:
-  ephemeral: false
-  replicas: 2
-  repository: mumoshu/actions-runner-controller-ci
-  # Other mandatory fields from StatefulSet
-  selector:
-    matchLabels:
-      app: example
-  serviceName: example
-  template:
-    metadata:
-      labels:
-        app: example
-```
-
-As it is based on `StatefulSet`, `selector` and `template.medatada.labels` needs to be defined and have the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
-
-Runner-related fields like `ephemeral`, `repository`, `organization`, `enterprise`, and so on should be written directly under `spec`.
-
-Fields like `volumeClaimTemplates` that originates from `StatefulSet` should also be written directly under `spec`.
-
-Pod-related fields like security contexts and volumes are written under `spec.template.spec` like `StatefulSet`.
-
-Similarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a dockerd.
-
-For a more complex example, see the below:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerSet
-metadata:
-  name: example
-spec:
-  # NOTE: RunnerSet supports non-ephemeral runners only today
-  ephemeral: false
-  replicas: 2
-  repository: mumoshu/actions-runner-controller-ci
-  dockerdWithinRunnerContainer: true
-  template:
-    spec:
-      securityContext:
-        #All level/role/type/user values will vary based on your SELinux policies.
-        #See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
-          level: "s0"
-          role: "system_r"
-          type: "super_t"
-          user: "system_u"
-      containers:
-      - name: runner
-        env: []
-        resources:
-          limits:
-            cpu: "4.0"
-            memory: "8Gi"
-          requests:
-            cpu: "2.0"
-            memory: "4Gi"
-      - name: docker
-        resources:
-          limits:
-            cpu: "4.0"
-            memory: "8Gi"
-          requests:
-            cpu: "2.0"
-            memory: "4Gi"
-```
-
-You can also read the design and usage documentation written in the original pull request that introduced `RunnerSet` for more information.
-
-https://github.com/actions-runner-controller/actions-runner-controller/pull/629
-
-Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A statefulset is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each statefulset-managed pod gets the same persistent volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
-
-We envision that `RunnerSet` will eventually replace `RunnerDeployment`, as `RunnerSet` provides a more standard API that is easy to learn and use because it is based on `StatefulSet`, and it has a support for `volumeClaimTemplates` which is crucial to manage dynamically provisioned persistent volumes.
-
-**Limitations**
-
-* For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* For autoscaling the `RunnerSet` kind doesn't support the [registration-only runner](#autoscaling-tofrom-0)
-* A known down-side of relying on `StatefulSet` is that it misses a support for `maxUnavailable`. A `StatefulSet` basically works like `maxUnavailable: 1` in `Deployment`, which means that it can take down only one pod concurrently while doing a rolling-update of pods. Kubernetes 1.22 doesn't support customizing it yet so probably it takes more releases to arrive. See https://github.com/kubernetes/kubernetes/issues/68397 for more information.
-
-### Ephemeral Runners
-
-Both `RunnerDeployment` and `RunnerSet` has ability to configure `ephemeral: true` in the spec.
-
-When it is configured, it passes a `--once` flag to every runner.
-
-`--once` is an experimental `actions/runner` feature that instructs the runner to stop after the first job run. But it is a known race issue that may fetch a job even when it's being terminated. If a runner fetched a job while terminating, the job is very likely to fail because the terminating runner doesn't wait for the job to complete. This is tracked in #466.
-
-> The below feature depends on an unreleased GitHub feature
-
-GitHub seems to be adding an another flag called `--ephemeral` that is race-free. The pull request to add it to `actions/runner` can be found at https://github.com/actions/runner/pull/660.
-
-`actions-runner-controller` has a feature flag backend by an environment variable to enable using `--ephemeral` instead of `--once`. The environment variable is `RUNNER_FEATURE_FLAG_EPHEMERAL`. You can se it to `true` on runner containers in your runner pods to enable the feature.
-
-> At the time of writing this, you need to wait until GitHub rolls out the server-side feature for `--ephemeral`, AND you need to include your own `actions/runner` binary built from https://github.com/actions/runner/pull/660 into the runner container image to test this feature.
->
-> Please see comments in [`runner/Dockerfile`](/runner/Dockerfile) for more information about how to build a custom image using your own `actions/runner` binary.
-
-For example, a `RunnerSet` config with the flag enabled looks like:
-
-```yaml
-kind: RunnerSet
-metadata:
-  name: example-runnerset
-spec:
-  # ...
-  template:
-    metadata:
-      labels:
-        app: example-runnerset
-    spec:
-      containers:
-      - name: runner
-        imagePullPolicy: IfNotPresent
-        env:
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
-          value: "true"
-```
-
-Note that once https://github.com/actions/runner/pull/660 becomes generally available on GitHub, you no longer need to build a custom runner image to use this feature. Just set `RUNNER_FEATURE_FLAG_EPHEMERAL` and it should use `--ephemeral`.
-
-In the future, `--once` might get removed in `actions/runner`. `actions-runner-controller` will make `--ephemeral` the default option for `ephemeral: true` runners until the legacy flag is removed.
+Persistent runners are available as an option for some edge cases however they are not preferred as they can create challenges around providing a deterministic and secure environment.
 
 ### Software Installed in the Runner Image
 
@@ -1213,7 +1334,7 @@ The project supports being deployed on the various cloud Kubernetes platforms (e
 **Bundled Software**<br />
 The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintain a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
 
-This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. Older images are maintained whilst GitHub also provides them as an option. These images do not contain all of the software installed on the GitHub runners. It contains the following subset of packages from the GitHub runners:
+This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
 - git
@@ -1244,67 +1365,38 @@ spec:
   image: YOUR_CUSTOM_DOCKER_IMAGE
 ```
 
-### Common Errors
+### Using without cert-manager
 
-#### invalid header field value
+Assuming you are installing in the default namespace, ensure your certificate has SANs:
 
-```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
-{
-  "controller": "runner",
-  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
-  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
-}
+* `webhook-service.actions-runner-system.svc`
+* `webhook-service.actions-runner-system.svc.cluster.local`
+
+It is possible to use a self-signed certificate by following a guide like
+[this one](https://mariadb.com/docs/security/encryption/in-transit/create-self-signed-certificates-keys-openssl/)
+using `openssl`.
+
+Install your certificate as a TLS secret:
+
+```shell
+$ kubectl create secret tls webhook-server-cert \
+  -n actions-runner-system \
+  --cert=path/to/cert/file \
+  --key=path/to/key/file
 ```
 
-**Solution**
+Set the Helm chart values as follows:
 
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
-* `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documented flags
-
-#### Runner coming up before network available
-
-If you're running your action runners on a service mesh like Istio, you might
-have problems with runner configuration accompanied by logs like:
-
-```
-....
-runner Starting Runner listener with startup type: service
-runner Started listener process
-runner An error occurred: Not configured
-runner Runner listener exited with error code 2
-runner Runner listener exit with retryable error, re-launch runner in 5 seconds.
-....
+```shell
+$ CA_BUNDLE=$(cat path/to/ca.pem | base64)
+$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+  certManagerEnabled=false \
+  admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
 
-This is because the `istio-proxy` has not completed configuring itself when the
-configuration script tries to communicate with the network.
+# Troubleshooting
 
-**Solution**<br />
-
-> Added originally to help users with older istio instances.
-> Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
-> Please read the discussion in [#592](https://github.com/actions-runner-controller/actions-runner-controller/pull/592) for more information.
-
-_Note: Prior to the runner version v2.279.0, the environment variable referenced below was called `STARTUP_DELAY`._
-
-You can add a delay to the runner's entrypoint script by setting the `STARTUP_DELAY_IN_SECONDS` environment
-variable for the runner pod. This will cause the script to sleep X seconds, this works with any runner kind.
-
-*Example `RunnerDeployment` with a 2 second startup delay:*
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runnerdeployment-with-sleep
-spec:
-  template:
-    spec:
-      env:
-        - name: STARTUP_DELAY_IN_SECONDS
-          value: "2" # Remember! env var values must be strings.
-```
+See [troubleshooting guide](TROUBLESHOOTING.md) for solutions to various problems people have ran into consistently.
 
 # Contributing
 

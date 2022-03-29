@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
-	"github.com/google/go-github/v37/github"
+	"github.com/google/go-github/v39/github"
 )
 
 var server *httptest.Server
@@ -150,5 +150,12 @@ func TestCleanup(t *testing.T) {
 	}
 	if _, ok := client.regTokens["expired"]; ok {
 		t.Errorf("expired token still exists")
+	}
+}
+
+func TestUserAgent(t *testing.T) {
+	client := newTestClient()
+	if client.UserAgent != "actions-runner-controller" {
+		t.Errorf("UserAgent should be set to actions-runner-controller")
 	}
 }

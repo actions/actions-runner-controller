@@ -1,17 +1,17 @@
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
-  name: example-runnerset
+  name: ${NAME}
 spec:
   # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
   #   missing required field "selector" in dev.summerwind.actions.v1alpha1.RunnerSet.spec
   selector:
     matchLabels:
-      app: example-runnerset
+      app: ${NAME}
 
   # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
   # missing required field "serviceName" in dev.summerwind.actions.v1alpha1.RunnerSet.spec]
-  serviceName: example-runnerset
+  serviceName: ${NAME}
 
   #replicas: 1
 
@@ -20,16 +20,23 @@ spec:
   # result in queued jobs hanging forever.
   ephemeral: ${TEST_EPHEMERAL}
 
+  enterprise: ${TEST_ENTERPRISE}
+  group: ${TEST_GROUP}
+  organization: ${TEST_ORG}
   repository: ${TEST_REPO}
+
   #
   # Custom runner image
   #
   image: ${RUNNER_NAME}:${RUNNER_TAG}
+
   #
   # dockerd within runner container
   #
   ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
   #dockerdWithinRunnerContainer: true
+  dockerdWithinRunnerContainer: ${RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER}
+
   #
   # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
   #
@@ -47,7 +54,7 @@ spec:
   template:
     metadata:
       labels:
-        app: example-runnerset
+        app: ${NAME}
     spec:
       containers:
       - name: runner
@@ -57,3 +64,19 @@ spec:
           value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
       #- name: docker
       #  #image: mumoshu/actions-runner-dind:dev
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: ${NAME}
+spec:
+  scaleTargetRef:
+    kind: RunnerSet
+    name: ${NAME}
+  scaleUpTriggers:
+  - githubEvent: {}
+    amount: 1
+    duration: "10m"
+  minReplicas: ${RUNNER_MIN_REPLICAS}
+  maxReplicas: 10
+  scaleDownDelaySecondsAfterScaleOut: ${RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT}

@@ -15,7 +15,7 @@ import (
 
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v37/github"
+	"github.com/google/go-github/v39/github"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -253,6 +253,145 @@ func TestWebhookWorkflowJob(t *testing.T) {
 	})
 }
 
+func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
+	setupTest := func() github.WorkflowJobEvent {
+		f, err := os.Open("testdata/org_webhook_workflow_job_with_self_hosted_label_payload.json")
+		if err != nil {
+			t.Fatalf("could not open the fixture: %s", err)
+		}
+		defer f.Close()
+		var e github.WorkflowJobEvent
+		if err := json.NewDecoder(f).Decode(&e); err != nil {
+			t.Fatalf("invalid json: %s", err)
+		}
+
+		return e
+	}
+	t.Run("Successful", func(t *testing.T) {
+		e := setupTest()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"label1"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"scaled test-name by 1",
+			initObjs,
+		)
+	})
+	t.Run("WrongLabels", func(t *testing.T) {
+		e := setupTest()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"bad-label"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"no horizontalrunnerautoscaler to scale for this github event",
+			initObjs,
+		)
+	})
+	// This test verifies that the old way of matching labels doesn't work anymore
+	t.Run("OldLabels", func(t *testing.T) {
+		e := setupTest()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"label1": "label1",
+						},
+					},
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"bad-label"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"no horizontalrunnerautoscaler to scale for this github event",
+			initObjs,
+		)
+	})
+}
+
 func TestGetRequest(t *testing.T) {
 	hra := HorizontalRunnerAutoscalerGitHubWebhook{}
 	request, _ := http.NewRequest(http.MethodGet, "/", nil)
@@ -306,12 +445,14 @@ func TestGetValidCapacityReservations(t *testing.T) {
 func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.Buffer {
 	logs := &bytes.Buffer{}
 
-	log := testLogger{
+	sink := &testLogSink{
 		name:   "testlog",
 		writer: logs,
 	}
 
-	webhook.Log = &log
+	log := logr.New(sink)
+
+	webhook.Log = log
 
 	return logs
 }
@@ -398,18 +539,22 @@ func sendWebhook(server *httptest.Server, eventType string, event interface{}) (
 	return http.DefaultClient.Do(req)
 }
 
-// testLogger is a sample logr.Logger that logs in-memory.
+// testLogSink is a sample logr.Logger that logs in-memory.
 // It's only for testing log outputs.
-type testLogger struct {
+type testLogSink struct {
 	name      string
 	keyValues map[string]interface{}
 
 	writer io.Writer
 }
 
-var _ logr.Logger = &testLogger{}
+var _ logr.LogSink = &testLogSink{}
 
-func (l *testLogger) Info(msg string, kvs ...interface{}) {
+func (l *testLogSink) Init(_ logr.RuntimeInfo) {
+
+}
+
+func (l *testLogSink) Info(_ int, msg string, kvs ...interface{}) {
 	fmt.Fprintf(l.writer, "%s] %s\t", l.name, msg)
 	for k, v := range l.keyValues {
 		fmt.Fprintf(l.writer, "%s=%+v ", k, v)
@@ -420,28 +565,24 @@ func (l *testLogger) Info(msg string, kvs ...interface{}) {
 	fmt.Fprintf(l.writer, "\n")
 }
 
-func (_ *testLogger) Enabled() bool {
+func (_ *testLogSink) Enabled(level int) bool {
 	return true
 }
 
-func (l *testLogger) Error(err error, msg string, kvs ...interface{}) {
+func (l *testLogSink) Error(err error, msg string, kvs ...interface{}) {
 	kvs = append(kvs, "error", err)
-	l.Info(msg, kvs...)
+	l.Info(0, msg, kvs...)
 }
 
-func (l *testLogger) V(_ int) logr.InfoLogger {
-	return l
-}
-
-func (l *testLogger) WithName(name string) logr.Logger {
-	return &testLogger{
+func (l *testLogSink) WithName(name string) logr.LogSink {
+	return &testLogSink{
 		name:      l.name + "." + name,
 		keyValues: l.keyValues,
 		writer:    l.writer,
 	}
 }
 
-func (l *testLogger) WithValues(kvs ...interface{}) logr.Logger {
+func (l *testLogSink) WithValues(kvs ...interface{}) logr.LogSink {
 	newMap := make(map[string]interface{}, len(l.keyValues)+len(kvs)/2)
 	for k, v := range l.keyValues {
 		newMap[k] = v
@@ -449,7 +590,7 @@ func (l *testLogger) WithValues(kvs ...interface{}) logr.Logger {
 	for i := 0; i < len(kvs); i += 2 {
 		newMap[kvs[i].(string)] = kvs[i+1]
 	}
-	return &testLogger{
+	return &testLogSink{
 		name:      l.name,
 		keyValues: newMap,
 		writer:    l.writer,

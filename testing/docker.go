@@ -3,8 +3,11 @@ package testing
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing/runtime"
 )
@@ -14,9 +17,10 @@ type Docker struct {
 }
 
 type DockerBuild struct {
-	Dockerfile string
-	Args       []BuildArg
-	Image      ContainerImage
+	Dockerfile   string
+	Args         []BuildArg
+	Image        ContainerImage
+	EnableBuildX bool
 }
 
 type BuildArg struct {
@@ -25,12 +29,7 @@ type BuildArg struct {
 
 func (k *Docker) Build(ctx context.Context, builds []DockerBuild) error {
 	for _, build := range builds {
-		var args []string
-		args = append(args, "--build-arg=TARGETPLATFORM="+"linux/amd64")
-		for _, buildArg := range build.Args {
-			args = append(args, "--build-arg="+buildArg.Name+"="+buildArg.Value)
-		}
-		_, err := k.CombinedOutput(k.dockerBuildCmd(ctx, build.Dockerfile, build.Image.Repo, build.Image.Tag, args))
+		_, err := k.dockerBuildCombinedOutput(ctx, build)
 
 		if err != nil {
 			return fmt.Errorf("failed building %v: %w", build, err)
@@ -40,10 +39,35 @@ func (k *Docker) Build(ctx context.Context, builds []DockerBuild) error {
 	return nil
 }
 
-func (k *Docker) dockerBuildCmd(ctx context.Context, dockerfile, repo, tag string, args []string) *exec.Cmd {
+func (k *Docker) dockerBuildCombinedOutput(ctx context.Context, build DockerBuild) (string, error) {
+	var args []string
+
+	args = append(args, "--build-arg=TARGETPLATFORM="+"linux/amd64")
+	for _, buildArg := range build.Args {
+		args = append(args, "--build-arg="+buildArg.Name+"="+buildArg.Value)
+	}
+
+	dockerfile := build.Dockerfile
+	repo := build.Image.Repo
+	tag := build.Image.Tag
+
 	buildContext := filepath.Dir(dockerfile)
+
+	docker := "docker"
+	env := os.Environ()
 	args = append([]string{"build", "--tag", repo + ":" + tag, "-f", dockerfile, buildContext}, args...)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	return cmd
+	if build.EnableBuildX {
+		args = append([]string{"buildx"}, args...)
+		args = append(args, "--load")
+
+		env = append(env, "DOCKER_BUILDKIT=1")
+	}
+
+	cmd := exec.CommandContext(ctx, docker, args...)
+	cmd.Env = env
+
+	log.Printf("%s %s", docker, strings.Join(args, " "))
+
+	return k.CombinedOutput(cmd)
 }

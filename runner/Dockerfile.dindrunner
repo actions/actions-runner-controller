@@ -1,9 +1,9 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.280.3
+ARG RUNNER_VERSION=2.287.1
 ARG DOCKER_CHANNEL=stable
-ARG DOCKER_VERSION=19.03.13
+ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
 
 RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
@@ -114,11 +114,12 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 VOLUME /var/lib/docker
 
-COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
-
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
+
+RUN echo "PATH=${PATH}" > /etc/environment \
+    && echo "ImageOS=${ImageOS}" >> /etc/environment
 
 # No group definition, as that makes it harder to run docker.
 USER runner

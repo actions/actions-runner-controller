@@ -1,9 +1,9 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.280.3
+ARG RUNNER_VERSION=2.287.1
 ARG DOCKER_CHANNEL=stable
-ARG DOCKER_VERSION=20.10.8
+ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
 
 RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
@@ -83,7 +83,7 @@ ENV HOME=/home/runner
 #
 # If you're willing to uncomment the following line, you'd also need to comment-out the
 #   && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
-# line in the next `RUN` command in this Dockerfile, to avoid overwiding this runner.tar.gz with a remote one.
+# line in the next `RUN` command in this Dockerfile, to avoid overwiting this runner.tar.gz with a remote one.
 
 # COPY actions-runner-linux-x64-2.280.3.tar.gz /runnertmp/runner.tar.gz
 
@@ -111,11 +111,13 @@ RUN mkdir /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
 COPY entrypoint.sh /
-COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
+
+RUN echo "PATH=${PATH}" > /etc/environment \
+    && echo "ImageOS=${ImageOS}" >> /etc/environment
 
 USER runner
 

@@ -162,6 +162,10 @@ func NewServer(opts ...Option) *httptest.Server {
 		},
 
 		// For RemoveRunner
+		"/repos/test/valid/actions/runners/0": &Handler{
+			Status: http.StatusNoContent,
+			Body:   "",
+		},
 		"/repos/test/valid/actions/runners/1": &Handler{
 			Status: http.StatusNoContent,
 			Body:   "",

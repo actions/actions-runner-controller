@@ -5,12 +5,22 @@ kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: {{ include "actions-runner-controller.fullname" . }}-mutating-webhook-configuration
+  {{- if .Values.certManagerEnabled }}
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+  {{- end }}
 webhooks:
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -30,7 +40,15 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -50,7 +68,15 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -70,7 +96,15 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -96,12 +130,22 @@ kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: {{ include "actions-runner-controller.fullname" . }}-validating-webhook-configuration
+  {{- if .Values.certManagerEnabled }}
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+  {{- end }}
 webhooks:
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -121,7 +165,15 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
@@ -141,7 +193,15 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
       namespace: {{ .Release.Namespace }}
