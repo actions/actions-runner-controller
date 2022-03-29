@@ -668,7 +668,7 @@ The primary benefit of autoscaling on Webhook compared to the pull driven scalin
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
-To enable this feature, you firstly need to install the webhook server, currently, only our Helm chart has the ability install it:
+To enable this feature, you first need to install the GitHub webhook server. To install via our Helm chart,
 _[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
 
 ```console
