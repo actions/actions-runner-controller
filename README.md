@@ -233,9 +233,9 @@ If you plan on installing all instances of the controller stack into a single na
 1. All resources per stack must have a unique, in the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
 2. `authSecret.name` needs be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to narrowly scoped.
 3. `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock resulting in only one stack working concurrently. Your controller will be stuck with a log message something like this `attempting to acquire leader lease arc-controllers/actions-runner-controller...`
-4. The MutatingWebhookConfiguration in each stack must include a namespace selector for that stacks corresponding runners namespace, this is already configured in the helm chart.
+4. The MutatingWebhookConfiguration in each stack must include a namespace selector for that stacks corresponding runner namespace, this is already configured in the helm chart.
 
-Alternatively, you can install each controller stack into a unique namespace (relative to other controller stacks in the cluster), avoiding these potential pitfalls.
+Alternatively, you can install each controller stack into a unique namespace (relative to other controller stacks in the cluster). Implementing ARC this way avoids the first, second and third pitfalls (you still need to set the corresponding namespace selector for each stacks mutating webhook)
 
 ## Usage
 
