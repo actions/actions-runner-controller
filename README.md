@@ -452,7 +452,7 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* Whilst `RunnerSets` support all runner modes as well as autoscaling, currently PVs are **NOT** automatically cleaned up as they are still bound to their respective PVCs when a runner is deleted by the controller. This has **major** implications when using `RunnerSets` in the standard runner mode, `ephemeral: true`, see [persistent runners](#persistent-runners) for more details. As a result of this, using the default ephemeral configuration or implementing autoscaling for your `RunnerSets`, you will get a build up of PVCs and PVs if you deploy RunnerSets as ephemeral runners without some sort of custom solution for cleaning up the PVCs.
+* Whilst `RunnerSets` support all runner modes as well as autoscaling, currently PVs are **NOT** automatically cleaned up as they are still bound to their respective PVCs when a runner is deleted by the controller. This has **major** implications when using `RunnerSets` in the standard runner mode, `ephemeral: true`, see [persistent runners](#persistent-runners) for more details. As a result of this, using the default ephemeral configuration or implementing autoscaling for your `RunnerSets`, you will get a build up of PVCs and PVs without some sort of custom solution for cleaning up.
 
 ### Persistent Runners
 
