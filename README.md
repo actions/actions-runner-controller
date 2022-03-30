@@ -33,7 +33,6 @@ ToC:
   - [Runner Groups](#runner-groups)
   - [Runner Entrypoint Features](#runner-entrypoint-features)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
-
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Using without cert-manager](#using-without-cert-manager)
 - [Troubleshooting](#troubleshooting)
