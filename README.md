@@ -367,7 +367,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
-__Ensure you see the limitations before using this kind!!!!!__
+_Ensure you see the limitations before using this kind!!!!!_
 
 For scenarios where you require the advantages of a `StatefulSet`, for example persistent storage, ARC implements a runner based on Kubernete's StatefulSets, the RunnerSet.
 
