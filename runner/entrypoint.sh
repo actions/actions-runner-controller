@@ -153,9 +153,7 @@ cat .runner
 if [ -z "${UNITTEST:-}" ]; then
   mkdir -p ./externals
   # Hack due to the DinD volumes
-  if [ -d ./externalstmp ]; then
-    mv ./externalstmp/* ./externals/
-  fi
+  mv ./externalstmp/* ./externals/
 fi
 
 args=()
