@@ -151,7 +151,7 @@ cat .runner
 #     https://api.github.com/repos/USER/REPO/actions/runners/171
 
 if [ -z "${UNITTEST:-}" ]; then
-  mkdir ./externals
+  mkdir -p ./externals
   # Hack due to the DinD volumes
   mv ./externalstmp/* ./externals/
 fi
