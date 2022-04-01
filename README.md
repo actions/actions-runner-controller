@@ -464,7 +464,7 @@ Once the ephemeral runner has completed running a workflow job, it stops with a 
 
 As it's removed after a workflow job run, the runner pod is never reused across multiple GitHub Actions workflow jobs, providing you a clean environment per each workflow job.
 
-Although not generally recommended, it's possible to disable passing `--ephemeral` flag by explicitly setting `ephemeral: false` in the `RunnerDeployment` or `RunnerSet` spec. When disabled, your runner becomes "persistent". A persistent runner does not stop after workflow job ends, and in this mode `actions/runner` is known to clean only runner's work dir after each job. That means your runner's environment, including various actions cache, docker images stored in the `dind` and layer cache, is retained across multiple workflow job runs.
+Although not generally recommended, it's possible to disable passing `--ephemeral` flag by explicitly setting `ephemeral: false` in the `RunnerDeployment` or `RunnerSet` spec. When disabled, your runner becomes "persistent". A persistent runner does not stop after workflow job ends, and in this mode `actions/runner` is known to clean only runner's work dir after each job. Whilst this can seem helpful it creates a non-deterministic environment which is not ideal for a CI/CD environment. Between runs your actions cache, docker images stored in the `dind` and layer cache, globally installed packages etc are retained across multiple workflow job runs which can cause issues which are hard to debug and inconsistent.
 
 Persistent runners are available as an option for some edge cases however they are not preferred as they can create challenges around providing a deterministic and secure environment.
 
