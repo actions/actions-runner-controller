@@ -37,7 +37,7 @@ spec:
       http:
         paths:
           {{- if .extraPaths }}
-          {{ toYaml .extraPaths | indent 10 }}
+          {{ toYaml .extraPaths | nindent 10 }}
           {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
