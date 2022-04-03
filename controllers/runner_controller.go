@@ -132,7 +132,9 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		phase = "Created"
 	}
 
-	if runner.Status.Phase != phase {
+	ready := runnerPodReady(&pod)
+
+	if runner.Status.Phase != phase || runner.Status.Ready != ready {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
@@ -143,6 +145,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		updated := runner.DeepCopy()
 		updated.Status.Phase = phase
+		updated.Status.Ready = ready
 		updated.Status.Reason = pod.Status.Reason
 		updated.Status.Message = pod.Status.Message
 
@@ -153,6 +156,18 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func runnerPodReady(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type != corev1.PodReady {
+			continue
+		}
+
+		return c.Status == corev1.ConditionTrue
+	}
+
+	return false
 }
 
 func runnerContainerExitCode(pod *corev1.Pod) *int32 {

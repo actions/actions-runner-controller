@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -20,12 +20,9 @@ error(){
   exit 1
 }
 
+log "Dumping set runner arguments"
+echo "$@" > runner_args
+success "Pretending to run service..."
+touch run_sh_ran
+success "Success"
 success ""
-success "Running the service..."
-# test if --once is present as a parameter
-echo "$*" | grep -q 'once' || error "Should include --once in the parameters"j
-success "...successful"
-touch runsvc_ran
-success ""
-
-

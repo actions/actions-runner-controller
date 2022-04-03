@@ -26,7 +26,7 @@ import (
 )
 
 // log is for logging in this package.
-var runenrDeploymentLog = logf.Log.WithName("runnerdeployment-resource")
+var runnerDeploymentLog = logf.Log.WithName("runnerdeployment-resource")
 
 func (r *RunnerDeployment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -49,13 +49,13 @@ var _ webhook.Validator = &RunnerDeployment{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *RunnerDeployment) ValidateCreate() error {
-	runenrDeploymentLog.Info("validate resource to be created", "name", r.Name)
+	runnerDeploymentLog.Info("validate resource to be created", "name", r.Name)
 	return r.Validate()
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *RunnerDeployment) ValidateUpdate(old runtime.Object) error {
-	runenrDeploymentLog.Info("validate resource to be updated", "name", r.Name)
+	runnerDeploymentLog.Info("validate resource to be updated", "name", r.Name)
 	return r.Validate()
 }
 

@@ -153,8 +153,18 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 	key := getRegistrationKey(org, repo, enterprise)
 	rt, ok := c.regTokens[key]
 
-	// we like to give runners a chance that are just starting up and may miss the expiration date by a bit
-	runnerStartupTimeout := 3 * time.Minute
+	// We'd like to allow the runner just starting up to miss the expiration date by a bit.
+	// Note that this means that we're going to cache Creation Registraion Token API response longer than the
+	// recommended cache duration.
+	//
+	// https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-a-repository
+	// https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-an-organization
+	// https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-an-enterprise
+	// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#conditional-requests
+	//
+	// This is currently set to 30 minutes as the result of the discussion took place at the following issue:
+	// https://github.com/actions-runner-controller/actions-runner-controller/issues/1295
+	runnerStartupTimeout := 30 * time.Minute
 
 	if ok && rt.GetExpiresAt().After(time.Now().Add(runnerStartupTimeout)) {
 		return rt, nil

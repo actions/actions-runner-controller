@@ -37,13 +37,23 @@ var (
 		},
 		{
 			Dockerfile: "../../runner/Dockerfile",
-			Args:       []testing.BuildArg{},
-			Image:      runnerImage,
+			Args: []testing.BuildArg{
+				{
+					Name:  "RUNNER_VERSION",
+					Value: "2.289.2",
+				},
+			},
+			Image: runnerImage,
 		},
 		{
 			Dockerfile: "../../runner/Dockerfile.dindrunner",
-			Args:       []testing.BuildArg{},
-			Image:      runnerDindImage,
+			Args: []testing.BuildArg{
+				{
+					Name:  "RUNNER_VERSION",
+					Value: "2.289.2",
+				},
+			},
+			Image: runnerDindImage,
 		},
 	}
 
@@ -58,7 +68,7 @@ var (
 	}
 
 	commonScriptEnv = []string{
-		"SYNC_PERIOD=" + "10s",
+		"SYNC_PERIOD=" + "30m",
 		"NAME=" + controllerImageRepo,
 		"VERSION=" + controllerImageTag,
 		"RUNNER_TAG=" + runnerImageTag,
