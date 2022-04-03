@@ -19,6 +19,7 @@ ToC:
   - [Enterprise Runners](#enterprise-runners)
   - [RunnerDeployments](#runnerdeployments)
   - [RunnerSets](#runnersets)
+  - [Persistent Runners](#persistent-runners)  
   - [Autoscaling](#autoscaling)
     - [Anti-Flapping Configuration](#anti-flapping-configuration)
     - [Pull Driven Scaling](#pull-driven-scaling)
@@ -32,7 +33,6 @@ ToC:
   - [Runner Groups](#runner-groups)
   - [Runner Entrypoint Features](#runner-entrypoint-features)
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
-  - [Persistent Runners](#persistent-runners)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Using without cert-manager](#using-without-cert-manager)
 - [Troubleshooting](#troubleshooting)
@@ -367,6 +367,8 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
+_Ensure you see the limitations before using this kind!!!!!_
+
 For scenarios where you require the advantages of a `StatefulSet`, for example persistent storage, ARC implements a runner based on Kubernete's StatefulSets, the RunnerSet.
 
 A basic `RunnerSet` would look like this:
@@ -450,6 +452,21 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
+* Whilst `RunnerSets` support all runner modes as well as autoscaling, currently PVs are **NOT** automatically cleaned up as they are still bound to their respective PVCs when a runner is deleted by the controller. This has **major** implications when using `RunnerSets` in the standard runner mode, `ephemeral: true`, see [persistent runners](#persistent-runners) for more details. As a result of this, using the default ephemeral configuration or implementing autoscaling for your `RunnerSets`, you will get a build up of PVCs and PVs without some sort of custom solution for cleaning up.
+
+### Persistent Runners
+
+Every runner managed by ARC is "ephemeral" by default. The life of an ephemeral runner managed by ARC looks like this- ARC creates a runner pod for the runner. As it's an ephemeral runner, the `--ephemeral` flag is passed to the `actions/runner` agent that runs within the `runner` container of the runner pod.
+
+`--ephemeral` is an `actions/runner` feature that instructs the runner to stop and de-register itself after the first job run.
+
+Once the ephemeral runner has completed running a workflow job, it stops with a status code of 0, hence the runner pod is marked as completed, removed by ARC.
+
+As it's removed after a workflow job run, the runner pod is never reused across multiple GitHub Actions workflow jobs, providing you a clean environment per each workflow job.
+
+Although not generally recommended, it's possible to disable passing `--ephemeral` flag by explicitly setting `ephemeral: false` in the `RunnerDeployment` or `RunnerSet` spec. When disabled, your runner becomes "persistent". A persistent runner does not stop after workflow job ends, and in this mode `actions/runner` is known to clean only runner's work dir after each job. Whilst this can seem helpful it creates a non-deterministic environment which is not ideal for a CI/CD environment. Between runs your actions cache, docker images stored in the `dind` and layer cache, globally installed packages etc are retained across multiple workflow job runs which can cause issues which are hard to debug and inconsistent.
+
+Persistent runners are available as an option for some edge cases however they are not preferred as they can create challenges around providing a deterministic and secure environment.
 
 ### Autoscaling
 
@@ -1311,21 +1328,6 @@ spec:
       securityContext:
         fsGroup: 1000
 ```
-
-### Persistent Runners
-
-Every runner managed by ARC is "ephemeral" by default. The life of an ephemeral runner managed by ARC looks like this- ARC creates a runner pod for the runner. As it's an ephemeral runner, the `--ephemeral` flag is passed to the `actions/runner` agent that runs within the `runner` container of the runner pod.
-
-`--ephemeral` is an `actions/runner` feature that instructs the runner to stop and de-register itself after the first job run.
-
-Once the ephemeral runner has completed running a workflow job, it stops with a status code of 0, hence the runner pod is marked as completed, removed by ARC.
-
-As it's removed after a workflow job run, the runner pod is never reused across multiple GitHub Actions workflow jobs, providing you a clean environment per each workflow job.
-
-Although not recommended, it's possible to disable passing `--ephemeral` flag by explicitly setting `ephemeral: false` in the `RunnerDeployment` or `RunnerSet` spec. When disabled, your runner becomes "persistent". A persistent runner does not stop after workflow job ends, and in this mode `actions/runner` is known to clean only runner's work dir after each job. That means your runner's environment, including various actions cache, docker images stored in the `dind` and layer cache, is retained across multiple workflow job runs.
-
-Persistent runners are available as an option for some edge cases however they are not preferred as they can create challenges around providing a deterministic and secure environment.
-
 ### Software Installed in the Runner Image
 
 **Cloud Tooling**<br />
