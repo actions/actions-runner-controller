@@ -12,6 +12,11 @@ metadata:
 webhooks:
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
@@ -35,6 +40,11 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ .Values.admissionWebHooks.caBundle }}
@@ -58,6 +68,11 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ .Values.admissionWebHooks.caBundle }}
@@ -81,6 +96,11 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ .Values.admissionWebHooks.caBundle }}
@@ -117,6 +137,11 @@ metadata:
 webhooks:
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ .Values.admissionWebHooks.caBundle }}
@@ -140,6 +165,11 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ .Values.admissionWebHooks.caBundle }}
@@ -163,6 +193,11 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
     caBundle: {{ .Values.admissionWebHooks.caBundle }}

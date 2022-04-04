@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -64,9 +65,19 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	var envvars []corev1.EnvVar
+	for _, container := range runnerPod.Spec.Containers {
+		if container.Name == "runner" {
+			envvars = container.Env
+		}
+	}
+
+	if len(envvars) == 0 {
+		return ctrl.Result{}, errors.New("Could not determine env vars for runner Pod")
+	}
+
 	var enterprise, org, repo string
 
-	envvars := runnerPod.Spec.Containers[0].Env
 	for _, e := range envvars {
 		switch e.Name {
 		case EnvVarEnterprise:
