@@ -143,9 +143,9 @@ fi
 args=()
 if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   args+=(--once)
-  log.warning 'Passing --once is deprecated and will be removed as an option ' \
-    'from the image and actions-runner-controller at the release of 0.24.0. ' \
-    'Upgrade to GHES => 3.3 to continue using actions-runner-controller. If ' \
+  log.warning 'Passing --once is deprecated and will be removed as an option' \
+    'from the image and actions-runner-controller at the release of 0.24.0.' \
+    'Upgrade to GHES => 3.3 to continue using actions-runner-controller. If' \
     'you are using github.com ignore this warning.'
 fi
 
