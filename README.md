@@ -685,8 +685,9 @@ The primary benefit of autoscaling on Webhook compared to the pull driven scalin
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
-To enable this feature, you first need to install the GitHub webhook server. To install via our Helm chart,
-_[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
+##### Install with Helm
+
+To enable this feature, you first need to install the GitHub webhook server. To install via our Helm chart, [see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)
 
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
@@ -697,6 +698,41 @@ $ helm upgrade --install --namespace actions-runner-system --create-namespace \
 The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
 external loadbalancer targeted to the node port, and register the hostname or the IP address of the external loadbalancer
 to the GitHub Webhook.
+
+##### Install with Kustomize
+
+To install this feature using Kustomize, add the resource to your `kustomization.yaml` file as in the example below:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- github.com/actions-runner-controller/actions-runner-controller/config//github-webhook-server?ref=v0.22.2
+```
+
+Finally, you will have to configure an ingress so that you may configure the webhook in github. An example of such ingress can be find below:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: actions-runners-webhook-server
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          service:
+            name: github-webhook-server
+            port:
+              number: 80
+        pathType: Exact
+
+```
+
+---
 
 Once you were able to confirm that the Webhook server is ready and running from GitHub - this is usually verified by the
 GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
