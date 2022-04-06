@@ -137,9 +137,9 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		phase = "Created"
 	}
 
-  ready := runnerPodReady(&pod)
+	ready := runnerPodReady(&pod)
 
-  if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.ConfigureRunnersRBAC || runner.Status.Phase == "" && r.ConfigureRunnersRBAC {
+	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.ConfigureRunnersRBAC || runner.Status.Phase == "" && r.ConfigureRunnersRBAC {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
