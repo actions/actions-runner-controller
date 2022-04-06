@@ -23,7 +23,7 @@
       "fileMatch": [
         "runner/Makefile"
       ],
-      "matchStrings": ["RUNNER_VERSION \?= +(?<currentValue>.*?)\\n"],
+      "matchStrings": ["RUNNER_VERSION \\?= +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
       "datasourceTemplate": "github-releases"
     },
