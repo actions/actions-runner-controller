@@ -505,7 +505,9 @@ spec:
 
 > To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
 
-The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of 10 minutes. The default value is set to 10 minutes to prevent default deployments rate limiting themselves from the GitHub API, you will most likely want to adjust this.
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes. 
+
+Be aware that the shorter the sync period the quicker you will consume your rate limit budget, depending on your environment this may or may not be a risk. Consider monitoring ARCs rate limit budget when configuring thsi feature to find the optimal performance to rate limit budget for your environment.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
