@@ -188,7 +188,7 @@ func runnerContainerExitCode(pod *corev1.Pod) *int32 {
 func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	// If pod has ended up succeeded we need to restart it
 	// Happens e.g. when dind is in runner and run completes
-	stopped := pod.Status.Phase == corev1.PodSucceeded
+	stopped := pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed
 
 	if !stopped {
 		if pod.Status.Phase == corev1.PodRunning {
@@ -197,7 +197,7 @@ func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 					continue
 				}
 
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+				if status.State.Terminated != nil {
 					stopped = true
 				}
 			}
