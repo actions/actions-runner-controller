@@ -27,7 +27,7 @@ fi
 
 if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
     log "Docker enabled runner detected and Docker daemon wait is enabled"
-    log "Waiting until Docker is avaliable or the timeout is reached"
+    log "Waiting until Docker is available or the timeout is reached"
     timeout 120s bash -c 'until docker ps ;do sleep 1; done'
 else
   log "Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint"
