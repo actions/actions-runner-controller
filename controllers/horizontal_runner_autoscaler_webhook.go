@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -378,6 +379,7 @@ func matchTriggerConditionAgainstEvent(types []string, eventAction *string) bool
 type ScaleTarget struct {
 	v1alpha1.HorizontalRunnerAutoscaler
 	v1alpha1.ScaleUpTrigger
+	mu sync.Mutex
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
@@ -756,6 +758,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 	if target == nil {
 		return nil
 	}
+
+	target.mu.Lock()
+	defer target.mu.Unlock()
 
 	copy := target.HorizontalRunnerAutoscaler.DeepCopy()
 
