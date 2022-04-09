@@ -313,10 +313,16 @@ func (c *Client) ListRunnerGroupRepositoryAccesses(ctx context.Context, org stri
 //
 // GitHub API docs: https://docs.github.com/en/rest/reference/actions#list-self-hosted-runner-groups-for-an-organization
 func (c *Client) listOrganizationRunnerGroupsVisibleToRepo(ctx context.Context, org, repo string, opts *github.ListOptions) (*github.RunnerGroups, *github.Response, error) {
-	u := fmt.Sprintf("orgs/%v/actions/runner-groups?visible_to_repository=%v&per_page=%v", org, repo, opts.PerPage)
+	u := fmt.Sprintf("orgs/%v/actions/runner-groups?visible_to_repository=%v", org, repo)
 
-	if opts.Page > 0 {
-		u = fmt.Sprintf("orgs/%v/actions/runner-groups?visible_to_repository=%v&per_page=%v&page=%v", org, repo, opts.PerPage, opts.Page)
+	if opts != nil {
+		if opts.PerPage > 0 {
+			u = fmt.Sprintf("%v&per_page=%v", u, opts.PerPage)
+		}
+
+		if opts.Page > 0 {
+			u = fmt.Sprintf("%v&page=%v", u, opts.Page)
+		}
 	}
 
 	req, err := c.Client.NewRequest("GET", u, nil)
