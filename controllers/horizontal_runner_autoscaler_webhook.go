@@ -49,6 +49,8 @@ const (
 	keyRunnerGroup      = "/group/"
 )
 
+var mu sync.Mutex
+
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
 // GitHub Webhook received
 type HorizontalRunnerAutoscalerGitHubWebhook struct {
@@ -165,6 +167,15 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		autoscaler.Log.Error(err, "could not parse webhook payload for extracting enterprise slug", "webhookType", webhookType, "payload", s)
 	}
 	enterpriseSlug := enterpriseEvent.Enterprise.Slug
+
+	// the next steps will patch the kubernetes resource.
+	// which contains a race condition where 2 github webhooks read the same state and add a capacityReservation
+	// and then write the same result. which yields 1 runner instead of 2 runners.
+	// as a temporary workaround a mutex is added here
+	// for further information see: https://github.com/actions-runner-controller/actions-runner-controller/issues/1321
+
+	mu.Lock()
+	defer mu.Unlock()
 
 	switch e := event.(type) {
 	case *gogithub.PushEvent:
@@ -758,9 +769,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 	if target == nil {
 		return nil
 	}
-
-	target.mu.Lock()
-	defer target.mu.Unlock()
 
 	copy := target.HorizontalRunnerAutoscaler.DeepCopy()
 
