@@ -66,7 +66,6 @@ RUN set -vx; \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
 ENV HOME=/home/runner
 
 # Uncomment the below COPY to use your own custom build of actions-runner.
@@ -92,6 +91,7 @@ ENV HOME=/home/runner
 # libyaml-dev is required for ruby/setup-ruby action.
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
+ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
