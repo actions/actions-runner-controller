@@ -246,7 +246,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			if target != nil {
 				if e.GetAction() == "queued" {
 					target.Amount = 1
-				} else if e.GetAction() == "completed" {
+				} else if e.GetAction() == "completed" && e.GetConclusion() != "skipped" {
 					// A nagative amount is processed in the tryScale func as a scale-down request,
 					// that erasese the oldest CapacityReservation with the same amount.
 					// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
