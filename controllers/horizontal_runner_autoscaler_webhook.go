@@ -245,7 +245,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			if target == nil {
 				break
 			}
-	
+
 			if e.GetAction() == "queued" {
 				target.Amount = 1
 				break
@@ -258,7 +258,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				break
 			}
 			// If the conclusion is "skipped", we will ignore it and fallthrough to the default case.
-			fallthrough	
+			fallthrough
 		default:
 			ok = true
 
