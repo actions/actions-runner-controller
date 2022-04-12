@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: github-webhook-server
+    app.kubernetes.io/part-of: actions-runner-controller
+  name: github-webhook-server
+spec:
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/component: github-webhook-server
+    app.kubernetes.io/part-of: actions-runner-controller

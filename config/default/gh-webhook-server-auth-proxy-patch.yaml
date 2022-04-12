@@ -1,0 +1,23 @@
+# This patch injects an HTTP proxy sidecar container that performs RBAC
+# authorization against the Kubernetes API using SubjectAccessReviews.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-webhook-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: kube-rbac-proxy
+          image: quay.io/brancz/kube-rbac-proxy:v0.10.0
+          args:
+            - '--secure-listen-address=0.0.0.0:8443'
+            - '--upstream=http://127.0.0.1:8080/'
+            - '--logtostderr=true'
+            - '--v=10'
+          ports:
+            - containerPort: 8443
+              name: https
+        - name: github-webhook-server
+          args:
+            - '--metrics-addr=127.0.0.1:8080'

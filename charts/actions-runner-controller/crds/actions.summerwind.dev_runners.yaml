@@ -5124,6 +5124,9 @@ spec:
                   type: string
                 phase:
                   type: string
+                ready:
+                  description: Turns true only if the runner pod is ready.
+                  type: boolean
                 reason:
                   type: string
                 registration:

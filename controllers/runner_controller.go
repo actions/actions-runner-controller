@@ -106,15 +106,16 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 		}
 	} else {
+		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {
 				log.Info(fmt.Sprintf("Retrying soon as we failed to get runner pod: %v", err))
 				return ctrl.Result{Requeue: true}, nil
 			}
+			// Pod was not found
+			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
-
-		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
 
@@ -132,7 +133,9 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		phase = "Created"
 	}
 
-	if runner.Status.Phase != phase {
+	ready := runnerPodReady(&pod)
+
+	if runner.Status.Phase != phase || runner.Status.Ready != ready {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
@@ -143,6 +146,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		updated := runner.DeepCopy()
 		updated.Status.Phase = phase
+		updated.Status.Ready = ready
 		updated.Status.Reason = pod.Status.Reason
 		updated.Status.Message = pod.Status.Message
 
@@ -153,6 +157,18 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func runnerPodReady(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type != corev1.PodReady {
+			continue
+		}
+
+		return c.Status == corev1.ConditionTrue
+	}
+
+	return false
 }
 
 func runnerContainerExitCode(pod *corev1.Pod) *int32 {
@@ -172,7 +188,7 @@ func runnerContainerExitCode(pod *corev1.Pod) *int32 {
 func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	// If pod has ended up succeeded we need to restart it
 	// Happens e.g. when dind is in runner and run completes
-	stopped := pod.Status.Phase == corev1.PodSucceeded
+	stopped := pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed
 
 	if !stopped {
 		if pod.Status.Phase == corev1.PodRunning {
@@ -181,7 +197,7 @@ func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 					continue
 				}
 
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+				if status.State.Terminated != nil {
 					stopped = true
 				}
 			}

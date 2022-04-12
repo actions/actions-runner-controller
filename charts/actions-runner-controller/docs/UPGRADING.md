@@ -18,7 +18,7 @@ Due to the above you can't just do a `helm upgrade` to release the latest versio
 
 ## Steps
 
-1. Upgrade CRDs
+1. Upgrade CRDs, this isn't optional, the CRDs you are using must be those that correspond with the version of the controller you are installing
 
 ```shell
 # REMEMBER TO UPDATE THE CHART_VERSION TO RELEVANT CHART VERISON!!!!
