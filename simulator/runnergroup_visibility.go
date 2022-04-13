@@ -11,14 +11,14 @@ type Simulator struct {
 	Client *github.Client
 }
 
-func (c *Simulator) GetRunnerGroupsVisibleToRepository(ctx context.Context, org, repo string, managed *VisibleRunnerGroups) (*VisibleRunnerGroups, error) {
+func (c *Simulator) GetRunnerGroupsVisibleToRepository(ctx context.Context, org, repo string, managed *VisibleRunnerGroups, optimized bool) (*VisibleRunnerGroups, error) {
 	visible := NewVisibleRunnerGroups()
 
 	if org == "" {
 		panic(fmt.Sprintf("BUG: owner should not be empty in this context. repo=%v", repo))
 	}
 
-	if c.Client.GithubBaseURL == "https://github.com/" {
+	if optimized {
 		runnerGroups, err := c.Client.ListOrganizationRunnerGroupsForRepository(ctx, org, repo)
 		if err != nil {
 			return visible, err

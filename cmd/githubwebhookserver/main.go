@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -46,7 +47,8 @@ var (
 )
 
 const (
-	webhookSecretTokenEnvName = "GITHUB_WEBHOOK_SECRET_TOKEN"
+	webhookSecretTokenEnvName                  = "GITHUB_WEBHOOK_SECRET_TOKEN"
+	optimizeRunnerGroupsVisibilityCheckEnvName = "GITHUB_OPTIMIZE_RUNNER_GROUPS_VISIBILITY_CHECK"
 )
 
 func init() {
@@ -69,9 +71,10 @@ func main() {
 
 		watchNamespace string
 
-		enableLeaderElection bool
-		syncPeriod           time.Duration
-		logLevel             string
+		enableLeaderElection                bool
+		syncPeriod                          time.Duration
+		logLevel                            string
+		optimizeRunnerGroupsVisibilityCheck bool
 
 		ghClient *github.Client
 	)
@@ -84,6 +87,10 @@ func main() {
 	}
 
 	webhookSecretTokenEnv = os.Getenv(webhookSecretTokenEnvName)
+
+	if optimizeRunnerGroupsVisibilityCheck, err = strconv.ParseBool(os.Getenv(optimizeRunnerGroupsVisibilityCheckEnvName)); err != nil {
+		optimizeRunnerGroupsVisibilityCheck = false
+	}
 
 	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -164,6 +171,9 @@ func main() {
 		SecretKeyBytes: []byte(webhookSecretToken),
 		Namespace:      watchNamespace,
 		GitHubClient:   ghClient,
+		FeatureFlags: map[string]bool{
+			controllers.OptimizeRunnerGroupsVisibilityCheckFeatureName: optimizeRunnerGroupsVisibilityCheck,
+		},
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
