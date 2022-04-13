@@ -238,6 +238,18 @@ func main() {
 		GitHubClient: ghClient,
 	}
 
+	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolume"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	runnerPersistentVolumeClaimReconciler := &controllers.RunnerPersistentVolumeClaimReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolumeclaim"),
+		Scheme: mgr.GetScheme(),
+	}
+
 	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "RunnerPod")
 		os.Exit(1)
@@ -245,6 +257,16 @@ func main() {
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
 		os.Exit(1)
 	}
 

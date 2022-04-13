@@ -58,6 +58,7 @@ type RunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
@@ -127,6 +128,12 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	for _, ss := range statefulsets {
 		ss := ss
 		owners = append(owners, &ss)
+	}
+
+	if res, err := syncVolumes(ctx, r.Client, log, req.Namespace, runnerSet, statefulsets); err != nil {
+		return ctrl.Result{}, err
+	} else if res != nil {
+		return *res, nil
 	}
 
 	res, err := syncRunnerPodsOwners(ctx, r.Client, log, effectiveTime, newDesiredReplicas, func() client.Object { return create.DeepCopy() }, ephemeral, owners)

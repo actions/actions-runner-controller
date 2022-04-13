@@ -1,3 +1,11 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -61,6 +69,38 @@ spec:
         imagePullPolicy: IfNotPresent
       #- name: docker
       #  #image: mumoshu/actions-runner-dind:dev
+  volumeClaimTemplates:
+  - metadata:
+      name: vol1
+      labels:
+        runnerset-volume-id: ${NAME}-vol1
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}
+      ## Dunno which provider supports auto-provisioning with selector.
+      ## At least the rancher local path provider stopped with:
+      ##  waiting for a volume to be created, either by external provisioner "rancher.io/local-path" or manually created by system administrator
+      # selector:
+      #    matchLabels:
+      #      runnerset-volume-id: ${NAME}-vol1
+  - metadata:
+      name: vol2
+      labels:
+        runnerset-volume-id: ${NAME}-vol2
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}
+      # selector:
+      #    matchLabels:
+      #      runnerset-volume-id: ${NAME}-vol2
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
