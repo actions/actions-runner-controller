@@ -175,7 +175,6 @@ githubWebhookServer:
   replicaCount: 1
   syncPeriod: 10m
   useRunnerGroupsVisibility: false
-  optimizeRunnerGroupsVisibilityCheck: false
   secret:
     enabled: false
     create: false

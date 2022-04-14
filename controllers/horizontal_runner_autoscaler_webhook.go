@@ -46,8 +46,6 @@ const (
 
 	keyPrefixEnterprise = "enterprises/"
 	keyRunnerGroup      = "/group/"
-
-	OptimizeRunnerGroupsVisibilityCheckFeatureName = "OPTIMIZE_RUNNER_GROUPS_VISIBILITY_CHECK"
 )
 
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
@@ -70,9 +68,6 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// Set to empty for letting it watch for all namespaces.
 	Namespace string
 	Name      string
-
-	// FeatureFlags is a map of feature flags to enable or disable features for HorizontalRunnerAutoscalerGitHubWebhook.
-	FeatureFlags map[string]bool
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -505,7 +500,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 		// Get available organization runner groups and enterprise runner groups for a repository
 		// These are the sum of runner groups with repository access = All repositories and runner groups
 		// where owner/repo has access to as well. The list will include default runner group also if it has access to
-		visibleGroups, err = simu.GetRunnerGroupsVisibleToRepository(ctx, owner, repositoryRunnerKey, managedRunnerGroups, autoscaler.FeatureFlags[OptimizeRunnerGroupsVisibilityCheckFeatureName])
+		visibleGroups, err = simu.GetRunnerGroupsVisibleToRepository(ctx, owner, repositoryRunnerKey, managedRunnerGroups)
 		log.V(1).Info("Searching in runner groups", "groups", visibleGroups)
 		if err != nil {
 			log.Error(err, "Unable to find runner groups from repository", "organization", owner, "repository", repo)

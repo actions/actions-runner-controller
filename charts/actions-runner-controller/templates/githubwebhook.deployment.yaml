@@ -95,10 +95,6 @@ spec:
               key: github_app_private_key
               name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
               optional: true
-        {{- if .Values.githubWebhookServer.optimizeRunnerGroupsVisibilityCheck }}
-        - name: GITHUB_OPTIMIZE_RUNNER_GROUPS_VISIBILITY_CHECK
-          value: "true"
-        {{- end }}
         {{- if .Values.authSecret.github_basicauth_username }}
         - name: GITHUB_BASICAUTH_USERNAME
           value: {{ .Values.authSecret.github_basicauth_username }}
