@@ -14,8 +14,25 @@
       // use https://github.com/actions/runner/releases
       "fileMatch": [
         ".github/workflows/runners.yml"
-        ],
+      ],
       "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [
+        "runner/Makefile"
+      ],
+      "matchStrings": ["RUNNER_VERSION \\?= +(?<currentValue>.*?)\\n"],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": [
+        "runner/Dockerfile",
+        "runner/Dockerfile.dindrunner"
+      ],
+      "matchStrings": ["RUNNER_VERSION=+(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
       "datasourceTemplate": "github-releases"
     }

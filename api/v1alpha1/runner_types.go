@@ -181,6 +181,9 @@ func (rs *RunnerSpec) ValidateRepository() error {
 
 // RunnerStatus defines the observed state of Runner
 type RunnerStatus struct {
+	// Turns true only if the runner pod is ready.
+	// +optional
+	Ready bool `json:"ready"`
 	// +optional
 	Registration RunnerStatusRegistration `json:"registration"`
 	// +optional
