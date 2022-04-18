@@ -720,6 +720,7 @@ The most flexible webhook GitHub offers is the `workflow_job` webhook, it includ
 This webhook should cover most people's needs, please experiment with this webhook first before considering the others.
 
 ```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
    name: example-runners
@@ -728,7 +729,10 @@ spec:
     spec:
       repository: example/myrepo
 ---
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
+metadata:
+   name: example-runners
 spec:
   scaleTargetRef:
     name: example-runners
