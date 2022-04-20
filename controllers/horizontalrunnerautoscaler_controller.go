@@ -47,13 +47,13 @@ const (
 // HorizontalRunnerAutoscalerReconciler reconciles a HorizontalRunnerAutoscaler object
 type HorizontalRunnerAutoscalerReconciler struct {
 	client.Client
-	GitHubClient *github.Client
-	Log          logr.Logger
-	Recorder     record.EventRecorder
-	Scheme       *runtime.Scheme
-
-	CacheDuration time.Duration
-	Name          string
+	GitHubClient          *github.Client
+	Log                   logr.Logger
+	Recorder              record.EventRecorder
+	Scheme                *runtime.Scheme
+	CacheDuration         time.Duration
+	DefaultScaleDownDelay time.Duration
+	Name                  string
 }
 
 const defaultReplicas = 1
@@ -497,7 +497,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 	if hra.Spec.ScaleDownDelaySecondsAfterScaleUp != nil {
 		scaleDownDelay = time.Duration(*hra.Spec.ScaleDownDelaySecondsAfterScaleUp) * time.Second
 	} else {
-		scaleDownDelay = DefaultScaleDownDelay
+		scaleDownDelay = r.DefaultScaleDownDelay
 	}
 
 	var scaleDownDelayUntil *time.Time
