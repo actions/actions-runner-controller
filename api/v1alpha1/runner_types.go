@@ -153,7 +153,7 @@ type RunnerPodSpec struct {
 	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 
 	// +optional
-	DnsConfig []corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
 }
 
 // ValidateRepository validates repository field.

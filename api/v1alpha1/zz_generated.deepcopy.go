@@ -738,10 +738,8 @@ func (in *RunnerPodSpec) DeepCopyInto(out *RunnerPodSpec) {
 	}
 	if in.DnsConfig != nil {
 		in, out := &in.DnsConfig, &out.DnsConfig
-		*out = make([]v1.PodDNSConfig, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+		*out = new(v1.PodDNSConfig)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
