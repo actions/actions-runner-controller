@@ -33,7 +33,8 @@ docker-push-ubuntu:
 	docker push ${DIND_RUNNER_NAME}:${TAG}
 
 docker-buildx-ubuntu:
-	export DOCKER_CLI_EXPERIMENTAL=enabled
+	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
+    export DOCKER_BUILDKIT=1
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
