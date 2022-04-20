@@ -40,6 +40,10 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
 )
 
+const (
+	DefaultScaleDownDelay = 10 * time.Minute
+)
+
 // HorizontalRunnerAutoscalerReconciler reconciles a HorizontalRunnerAutoscaler object
 type HorizontalRunnerAutoscalerReconciler struct {
 	client.Client
