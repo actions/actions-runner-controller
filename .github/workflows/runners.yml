@@ -11,6 +11,7 @@ on:
       - 'master'
     paths:
       - 'runner/**'
+      - '!runner/Makefile'
       - .github/workflows/runners.yml
       - '!**.md'
 
