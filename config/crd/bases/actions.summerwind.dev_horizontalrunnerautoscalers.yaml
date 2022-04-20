@@ -141,6 +141,7 @@ spec:
                               status:
                                 type: string
                               types:
+                                description: 'One of: created, rerequested, or completed'
                                 items:
                                   type: string
                                 type: array
@@ -159,6 +160,9 @@ spec:
                             type: object
                           push:
                             description: PushSpec is the condition for triggering scale-up on push event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+                            type: object
+                          workflowJob:
+                            description: https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job
                             type: object
                         type: object
                     type: object

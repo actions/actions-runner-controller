@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.287.1
+ARG RUNNER_VERSION=2.290.1
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
@@ -10,10 +10,10 @@ RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
-    && apt install -y software-properties-common \
+    && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
-    && apt update -y \
-    && apt install -y --no-install-recommends \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
@@ -74,7 +74,6 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 	dockerd --version; \
 	docker --version
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
 ENV HOME=/home/runner
 
 # Runner download supports amd64 as x64
@@ -82,6 +81,7 @@ ENV HOME=/home/runner
 # libyaml-dev is required for ruby/setup-ruby action.
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
+ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
@@ -97,13 +97,12 @@ ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
-    
-COPY modprobe startup.sh /usr/local/bin/
-COPY supervisor/ /etc/supervisor/conf.d/
-COPY logger.sh /opt/bash-utils/logger.sh
-COPY entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/startup.sh /usr/local/bin/entrypoint.sh /usr/local/bin/modprobe
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
+COPY entrypoint.sh logger.bash startup.sh /usr/bin/
+COPY supervisor/ /etc/supervisor/conf.d/
+RUN chmod +x /usr/bin/startup.sh /usr/bin/entrypoint.sh
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \

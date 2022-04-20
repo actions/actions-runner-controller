@@ -242,18 +242,23 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				enterpriseSlug,
 				labels,
 			)
-
-			if target != nil {
-				if e.GetAction() == "queued" {
-					target.Amount = 1
-				} else if e.GetAction() == "completed" {
-					// A nagative amount is processed in the tryScale func as a scale-down request,
-					// that erasese the oldest CapacityReservation with the same amount.
-					// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
-					// so that the resulting desired replicas decreases by 1.
-					target.Amount = -1
-				}
+			if target == nil {
+				break
 			}
+
+			if e.GetAction() == "queued" {
+				target.Amount = 1
+				break
+			} else if e.GetAction() == "completed" && e.GetWorkflowJob().GetConclusion() != "skipped" {
+				// A nagative amount is processed in the tryScale func as a scale-down request,
+				// that erasese the oldest CapacityReservation with the same amount.
+				// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
+				// so that the resulting desired replicas decreases by 1.
+				target.Amount = -1
+				break
+			}
+			// If the conclusion is "skipped", we will ignore it and fallthrough to the default case.
+			fallthrough
 		default:
 			ok = true
 
