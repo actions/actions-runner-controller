@@ -1248,7 +1248,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas on first workflow_job webhook event
 			{
-				env.SendWorkflowJobEvent("test", "valid", "pending", []string{"self-hosted"})
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
@@ -1330,7 +1330,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 			// Scale-up to 2 replicas on first workflow_job webhook event
 			{
-				env.SendWorkflowJobEvent("test", "valid", "pending", []string{"custom-label"})
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"custom-label"})
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
