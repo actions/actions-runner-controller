@@ -12,14 +12,14 @@ ToC:
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
-- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
+- [Deploying Multiple Controllers](#deploying-multiple-controllers)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [RunnerDeployments](#runnerdeployments)
   - [RunnerSets](#runnersets)
-  - [Persistent Runners](#persistent-runners)  
+  - [Persistent Runners](#persistent-runners)
   - [Autoscaling](#autoscaling)
     - [Anti-Flapping Configuration](#anti-flapping-configuration)
     - [Pull Driven Scaling](#pull-driven-scaling)
@@ -198,7 +198,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 _Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one time configuration step, this  only needs to be done once after which it is permanent for that runner group._
 
-_Note: GitHub do not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and amy not be 100% accurate._ 
+_Note: GitHub do not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and amy not be 100% accurate._
 
 ---
 
@@ -420,7 +420,7 @@ spec:
       securityContext:
         # All level/role/type/user values will vary based on your SELinux policies.
         # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
+        seLinuxOptions:
           level: "s0"
           role: "system_r"
           type: "super_t"
@@ -538,7 +538,7 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
-  metrics: [] 
+  metrics: []
 ```
 
 **Metric Options:**
@@ -707,7 +707,7 @@ by learning the following configuration examples.
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 - [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
 
-**Note:** All these examples should have **minReplicas** & **maxReplicas** as mandatory parameter even for webhook driven scaling. 
+**Note:** All these examples should have **minReplicas** & **maxReplicas** as mandatory parameter even for webhook driven scaling.
 
 ##### Example 1: Scale on each `workflow_job` event
 
@@ -723,17 +723,24 @@ This webhook should cover most people's needs, please experiment with this webho
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
-   name: example-runners
+  name: example-runners
+  namespace: actions-runner-system
 spec:
   template:
     spec:
+      labels:
+        - self-hosted
       repository: example/myrepo
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
-   name: example-runners
+  name: example-runners
+  namespace: actions-runner-system
 spec:
+  scaleDownDelaySecondsAfterScaleOut: 300
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -1067,7 +1074,7 @@ spec:
       # Valid only when dockerdWithinRunnerContainer=false
       dockerEnv:
         - name: HTTP_PROXY
-          value: http://example.com      
+          value: http://example.com
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
@@ -1301,7 +1308,7 @@ spec:
           value: "true"
         # Configure runner with --ephemeral instead of --once flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA 
+        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA
         # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
         # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
         - name: RUNNER_FEATURE_FLAG_EPHEMERAL
