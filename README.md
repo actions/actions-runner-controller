@@ -474,7 +474,7 @@ Persistent runners are available as an option for some edge cases however they a
 
 > If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
 
-A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [stateful runners](#stateful-runners) for caveats of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
+A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [RunnerSets](#runnersets) for caveats of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
 **_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
