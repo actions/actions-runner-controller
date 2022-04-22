@@ -691,16 +691,71 @@ _[see the values documentation for all configuration options](https://github.com
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
-             --set "githubWebhookServer.enabled=true,githubWebhookServer.ports[0].nodePort=33080"
+             --set "githubWebhookServer.enabled=true"
 ```
 
-The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
-external loadbalancer targeted to the node port, and register the hostname or the IP address of the external loadbalancer
-to the GitHub Webhook.
+The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
 
-Once you were able to confirm that the Webhook server is ready and running from GitHub - this is usually verified by the
-GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
-by learning the following configuration examples.
+Now we need to expose this service with a TSL protected Ingress so that Github can reach it, so in a file named `arc-webhook-server.yaml`
+write the following code:
+
+> Note: This step assumes you already have a configured cert-manager and domain name for your cluster.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: actions-runner-controller-github-webhook-server
+  namespace: actions-runner-system
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  tls:
+  - hosts:
+    - your.domain.com
+    secretName: your-tls-secret-name
+  rules:
+    - http:
+        paths:
+          - path: /actions-runner-controller-github-webhook-server
+            pathType: Prefix
+            backend:
+              service:
+                name: actions-runner-controller-github-webhook-server
+                port:
+                  number: 80
+```
+
+Then create this resource on your cluster with the following command:
+
+```bash
+kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
+```
+
+To configure Github to start sending you webhooks, go to the settings page of your repository
+or organization then click on Webhooks, then Add webhook.
+
+There set the "Payload URL" with
+
+- https://your.domain.com/actions-runner-controller-github-webhook-server
+
+Then click on "let me select individual events" and choose:
+
+- Check runs
+- Pushes
+- Pull Requests
+- Workflow Jobs
+
+Later you can remove any of these you are not using to reduce the amount of data sent to your server.
+
+Then click on "Add Webhook".
+
+Github will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
+alongside your webhook on the Settings -> Webhooks page.
+
+Once you were able to confirm that the Webhook server is ready and running from GitHub create or update your
+`HorizontalRunnerAutoscaler` resources by learning the following configuration examples.
 
 - [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
 - [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
