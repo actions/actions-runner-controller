@@ -29,10 +29,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTa
 	metrics := hra.Spec.Metrics
 	numMetrics := len(metrics)
 	if numMetrics == 0 {
-		if len(hra.Spec.ScaleUpTriggers) == 0 {
-			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, nil)
-		}
-
+		// We don't default to anything since ARC 0.23.0
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/728
 		return nil, nil
 	} else if numMetrics > 2 {
 		return nil, fmt.Errorf("too many autoscaling metrics configured: It must be 0 to 2, but got %d", numMetrics)

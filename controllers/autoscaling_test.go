@@ -221,6 +221,11 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				Spec: v1alpha1.HorizontalRunnerAutoscalerSpec{
 					MaxReplicas: tc.max,
 					MinReplicas: tc.min,
+					Metrics: []v1alpha1.MetricSpec{
+						{
+							Type: "TotalNumberOfQueuedAndInProgressWorkflowRuns",
+						},
+					},
 				},
 				Status: v1alpha1.HorizontalRunnerAutoscalerStatus{
 					DesiredReplicas:            tc.sReplicas,
