@@ -1,7 +1,7 @@
 image:
   repository: summerwind/actions-runner
   tag: 2.290.1
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 # Create runner for an organization or a repository
 # Set only one of the two either organization or repository
@@ -10,7 +10,7 @@ organization: test
 # repository: mumoshu/actions-runner-controller-ci
 
 # Labels you want to add in your runner
-labels:
+runnerLabels:
   - test
 
 # If you enable Autoscaler, then it will not be used
@@ -21,7 +21,7 @@ autoscaler:
   minReplicas: 1
   maxReplicas: 5
   scaleDownDelaySecondsAfterScaleOut: 120
-  # Use either metrics (pull method) or scaleUpTriggers (push method)
+  # metrics (pull method) / scaleUpTriggers (push method)
   # https://github.com/actions-runner-controller/actions-runner-controller#pull-driven-scaling
   # https://github.com/actions-runner-controller/actions-runner-controller#webhook-driven-scaling
   metrics:

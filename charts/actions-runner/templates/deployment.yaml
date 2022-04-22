@@ -9,7 +9,7 @@ items:
     labels:
       {{- include "actions-runner.labels" . | nindent 6 }}
   spec:
-    {{ if not .Values.autoscaler.enabled }}
+    {{- if not .Values.autoscaler.enabled }}
     replicas: {{ .Values.replicaCount }}
     {{- end }}
     selector:
@@ -45,7 +45,7 @@ items:
         {{- if .Values.repository }}
         repository: {{ .Values.repository }}
         {{- end }}
-        {{- with .Values.labels }}
+        {{- with .Values.runnerLabels }}
         labels:
           {{- toYaml . | nindent 10 }}
         {{- end }}
