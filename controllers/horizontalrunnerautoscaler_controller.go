@@ -159,6 +159,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			org:        rs.Spec.Organization,
 			repo:       rs.Spec.Repository,
 			replicas:   replicas,
+			labels:     rs.Spec.RunnerConfig.Labels,
 			getRunnerMap: func() (map[string]struct{}, error) {
 				// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 				var runnerPodList corev1.PodList
@@ -251,6 +252,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) scaleTargetFromRD(ctx context.Con
 		org:        rd.Spec.Template.Spec.Organization,
 		repo:       rd.Spec.Template.Spec.Repository,
 		replicas:   rd.Spec.Replicas,
+		labels:     rd.Spec.Template.Spec.RunnerConfig.Labels,
 		getRunnerMap: func() (map[string]struct{}, error) {
 			// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 			var runnerList v1alpha1.RunnerList
@@ -293,6 +295,7 @@ type scaleTarget struct {
 	st, kind              string
 	enterprise, repo, org string
 	replicas              *int
+	labels                []string
 
 	getRunnerMap func() (map[string]struct{}, error)
 }
