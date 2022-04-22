@@ -191,9 +191,10 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			client := newGithubClient(server)
 
 			h := &HorizontalRunnerAutoscalerReconciler{
-				Log:          log,
-				GitHubClient: client,
-				Scheme:       scheme,
+				Log:                   log,
+				GitHubClient:          client,
+				Scheme:                scheme,
+				DefaultScaleDownDelay: DefaultScaleDownDelay,
 			}
 
 			rd := v1alpha1.RunnerDeployment{
@@ -441,9 +442,10 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			client := newGithubClient(server)
 
 			h := &HorizontalRunnerAutoscalerReconciler{
-				Log:          log,
-				Scheme:       scheme,
-				GitHubClient: client,
+				Log:                   log,
+				Scheme:                scheme,
+				GitHubClient:          client,
+				DefaultScaleDownDelay: DefaultScaleDownDelay,
 			}
 
 			rd := v1alpha1.RunnerDeployment{

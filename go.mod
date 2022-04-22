@@ -15,7 +15,7 @@ require (
 	github.com/onsi/gomega v1.17.0
 	github.com/prometheus/client_golang v1.12.1
 	github.com/stretchr/testify v1.7.0
-	github.com/teambition/rrule-go v1.7.2
+	github.com/teambition/rrule-go v1.8.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a
 	gomodules.xyz/jsonpatch/v2 v2.2.0
