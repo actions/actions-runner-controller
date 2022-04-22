@@ -32,17 +32,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 // RunnerReplicaSetReconciler reconciles a Runner object
 type RunnerReplicaSetReconciler struct {
 	client.Client
-	Log          logr.Logger
-	Recorder     record.EventRecorder
-	Scheme       *runtime.Scheme
-	GitHubClient *github.Client
-	Name         string
+	Log      logr.Logger
+	Recorder record.EventRecorder
+	Scheme   *runtime.Scheme
+	Name     string
 }
 
 const (

@@ -71,6 +71,17 @@ type RunnerConfig struct {
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
 	// +optional
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
+
+	// +optional
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom"`
+}
+
+type GitHubAPICredentialsFrom struct {
+	SecretRef SecretReference `json:"secretRef,omitempty"`
+}
+
+type SecretReference struct {
+	Name string `json:"name"`
 }
 
 // RunnerPodSpec defines the desired pod spec fields of the runner pod

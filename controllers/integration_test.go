@@ -99,12 +99,14 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			return fmt.Sprintf("%s%s", ns.Name, name)
 		}
 
+		multiClient := NewMultiGitHubClient(mgr.GetClient(), env.ghClient)
+
 		runnerController := &RunnerReconciler{
 			Client:                      mgr.GetClient(),
 			Scheme:                      scheme.Scheme,
 			Log:                         logf.Log,
 			Recorder:                    mgr.GetEventRecorderFor("runnerreplicaset-controller"),
-			GitHubClient:                env.ghClient,
+			GitHubClient:                multiClient,
 			RunnerImage:                 "example/runner:test",
 			DockerImage:                 "example/docker:test",
 			Name:                        controllerName("runner"),
@@ -116,12 +118,11 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runner controller")
 
 		replicasetController := &RunnerReplicaSetReconciler{
-			Client:       mgr.GetClient(),
-			Scheme:       scheme.Scheme,
-			Log:          logf.Log,
-			Recorder:     mgr.GetEventRecorderFor("runnerreplicaset-controller"),
-			GitHubClient: env.ghClient,
-			Name:         controllerName("runnerreplicaset"),
+			Client:   mgr.GetClient(),
+			Scheme:   scheme.Scheme,
+			Log:      logf.Log,
+			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Name:     controllerName("runnerreplicaset"),
 		}
 		err = replicasetController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runnerreplicaset controller")
@@ -140,7 +141,7 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Client:        mgr.GetClient(),
 			Scheme:        scheme.Scheme,
 			Log:           logf.Log,
-			GitHubClient:  env.ghClient,
+			GitHubClient:  multiClient,
 			Recorder:      mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
 			CacheDuration: 1 * time.Second,
 			Name:          controllerName("horizontalrunnerautoscaler"),
@@ -149,12 +150,13 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler controller")
 
 		autoscalerWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{
-			Client:    mgr.GetClient(),
-			Scheme:    scheme.Scheme,
-			Log:       logf.Log,
-			Recorder:  mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
-			Name:      controllerName("horizontalrunnerautoscalergithubwebhook"),
-			Namespace: ns.Name,
+			Client:       mgr.GetClient(),
+			Scheme:       scheme.Scheme,
+			Log:          logf.Log,
+			Recorder:     mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Name:         controllerName("horizontalrunnerautoscalergithubwebhook"),
+			Namespace:    ns.Name,
+			GitHubClient: env.ghClient,
 		}
 		err = autoscalerWebhook.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler webhook")

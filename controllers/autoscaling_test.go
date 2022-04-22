@@ -192,7 +192,6 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 			h := &HorizontalRunnerAutoscalerReconciler{
 				Log:                   log,
-				GitHubClient:          client,
 				Scheme:                scheme,
 				DefaultScaleDownDelay: DefaultScaleDownDelay,
 			}
@@ -235,7 +234,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 
 			st := h.scaleTargetFromRD(context.Background(), rd)
 
-			got, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
+			got, err := h.computeReplicasWithCache(client, log, metav1Now.Time, st, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)
@@ -444,7 +443,6 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			h := &HorizontalRunnerAutoscalerReconciler{
 				Log:                   log,
 				Scheme:                scheme,
-				GitHubClient:          client,
 				DefaultScaleDownDelay: DefaultScaleDownDelay,
 			}
 
@@ -504,7 +502,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 
 			st := h.scaleTargetFromRD(context.Background(), rd)
 
-			got, err := h.computeReplicasWithCache(log, metav1Now.Time, st, hra, minReplicas)
+			got, err := h.computeReplicasWithCache(client, log, metav1Now.Time, st, hra, minReplicas)
 			if err != nil {
 				if tc.err == "" {
 					t.Fatalf("unexpected error: expected none, got %v", err)

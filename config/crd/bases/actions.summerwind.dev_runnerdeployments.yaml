@@ -2413,6 +2413,16 @@ spec:
                               - name
                             type: object
                           type: array
+                        githubAPICredentialsFrom:
+                          properties:
+                            secretRef:
+                              properties:
+                                name:
+                                  type: string
+                              required:
+                                - name
+                              type: object
+                          type: object
                         group:
                           type: string
                         hostAliases:

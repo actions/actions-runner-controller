@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	arcgithub "github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/google/go-github/v39/github"
 )
 
@@ -19,7 +20,7 @@ const (
 	defaultScaleDownFactor    = 0.7
 )
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
 	if hra.Spec.MinReplicas == nil {
 		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing minReplicas", hra.Namespace, hra.Name)
 	} else if hra.Spec.MaxReplicas == nil {
@@ -30,7 +31,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTa
 	numMetrics := len(metrics)
 	if numMetrics == 0 {
 		if len(hra.Spec.ScaleUpTriggers) == 0 {
-			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, nil)
+			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(ghc, st, hra, nil)
 		}
 
 		return nil, nil
@@ -48,9 +49,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTa
 
 	switch primaryMetricType {
 	case v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns:
-		suggested, err = r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, &primaryMetric)
+		suggested, err = r.suggestReplicasByQueuedAndInProgressWorkflowRuns(ghc, st, hra, &primaryMetric)
 	case v1alpha1.AutoscalingMetricTypePercentageRunnersBusy:
-		suggested, err = r.suggestReplicasByPercentageRunnersBusy(st, hra, primaryMetric)
+		suggested, err = r.suggestReplicasByPercentageRunnersBusy(ghc, st, hra, primaryMetric)
 	default:
 		return nil, fmt.Errorf("validating autoscaling metrics: unsupported metric type %q", primaryMetric)
 	}
@@ -83,11 +84,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(st scaleTa
 		)
 	}
 
-	return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(st, hra, &fallbackMetric)
+	return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(ghc, st, hra, &fallbackMetric)
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics *v1alpha1.MetricSpec) (*int, error) {
-
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgressWorkflowRuns(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics *v1alpha1.MetricSpec) (*int, error) {
 	var repos [][]string
 	repoID := st.repo
 	if repoID == "" {
@@ -126,7 +126,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 		opt := github.ListWorkflowJobsOptions{ListOptions: github.ListOptions{PerPage: 50}}
 		var allJobs []*github.WorkflowJob
 		for {
-			jobs, resp, err := r.GitHubClient.Actions.ListWorkflowJobs(context.TODO(), user, repoName, runID, &opt)
+			jobs, resp, err := ghc.Actions.ListWorkflowJobs(context.TODO(), user, repoName, runID, &opt)
 			if err != nil {
 				r.Log.Error(err, "Error listing workflow jobs")
 				return //err
@@ -162,7 +162,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 
 	for _, repo := range repos {
 		user, repoName := repo[0], repo[1]
-		workflowRuns, err := r.GitHubClient.ListRepositoryWorkflowRuns(context.TODO(), user, repoName)
+		workflowRuns, err := ghc.ListRepositoryWorkflowRuns(context.TODO(), user, repoName)
 		if err != nil {
 			return nil, err
 		}
@@ -204,12 +204,17 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	return &necessaryReplicas, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec) (*int, error) {
 	ctx := context.Background()
 	scaleUpThreshold := defaultScaleUpThreshold
 	scaleDownThreshold := defaultScaleDownThreshold
 	scaleUpFactor := defaultScaleUpFactor
 	scaleDownFactor := defaultScaleDownFactor
+
+	ghc, err := r.GitHubClient.Init(ctx, hra)
+	if err != nil {
+		return nil, err
+	}
 
 	if metrics.ScaleUpThreshold != "" {
 		sut, err := strconv.ParseFloat(metrics.ScaleUpThreshold, 64)
@@ -273,7 +278,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	)
 
 	// ListRunners will return all runners managed by GitHub - not restricted to ns
-	runners, err := r.GitHubClient.ListRunners(
+	runners, err := ghc.ListRunners(
 		ctx,
 		enterprise,
 		organization,

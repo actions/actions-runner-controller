@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	"gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -29,7 +28,7 @@ type PodRunnerTokenInjector struct {
 	Name         string
 	Log          logr.Logger
 	Recorder     record.EventRecorder
-	GitHubClient *github.Client
+	GitHubClient *MultiGitHubClient
 	decoder      *admission.Decoder
 }
 
@@ -66,7 +65,12 @@ func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Reque
 		return newEmptyResponse()
 	}
 
-	rt, err := t.GitHubClient.GetRegistrationToken(context.Background(), enterprise, org, repo, pod.Name)
+	ghc, err := t.GitHubClient.Init(ctx, pod)
+	if err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	rt, err := ghc.GetRegistrationToken(context.Background(), enterprise, org, repo, pod.Name)
 	if err != nil {
 		t.Log.Error(err, "Failed to get new registration token")
 		return admission.Errored(http.StatusInternalServerError, err)

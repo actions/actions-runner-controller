@@ -65,6 +65,16 @@ spec:
                   type: string
                 ephemeral:
                   type: boolean
+                githubAPICredentialsFrom:
+                  properties:
+                    secretRef:
+                      properties:
+                        name:
+                          type: string
+                      required:
+                        - name
+                      type: object
+                  type: object
                 group:
                   type: string
                 image:

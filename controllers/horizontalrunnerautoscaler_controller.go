@@ -24,7 +24,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,6 +37,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
+	arcgithub "github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 const (
@@ -47,7 +47,7 @@ const (
 // HorizontalRunnerAutoscalerReconciler reconciles a HorizontalRunnerAutoscaler object
 type HorizontalRunnerAutoscalerReconciler struct {
 	client.Client
-	GitHubClient          *github.Client
+	GitHubClient          *MultiGitHubClient
 	Log                   logr.Logger
 	Recorder              record.EventRecorder
 	Scheme                *runtime.Scheme
@@ -307,7 +307,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 		return ctrl.Result{}, err
 	}
 
-	newDesiredReplicas, err := r.computeReplicasWithCache(log, now, st, hra, minReplicas)
+	ghc, err := r.GitHubClient.Init(context.Background(), hra)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	newDesiredReplicas, err := r.computeReplicasWithCache(ghc, log, now, st, hra, minReplicas)
 	if err != nil {
 		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -458,10 +463,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) getMinReplicas(log logr.Logger, n
 	return minReplicas, active, upcoming, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(ghc *arcgithub.Client, log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, error) {
 	var suggestedReplicas int
 
-	v, err := r.suggestDesiredReplicas(st, hra)
+	v, err := r.suggestDesiredReplicas(ghc, st, hra)
 	if err != nil {
 		return 0, err
 	}
