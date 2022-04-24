@@ -737,7 +737,8 @@ spec:
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
     #kind: RunnerSet
   scaleUpTriggers:
-  - githubEvent: {}
+  - githubEvent:
+      workflowJob: {}
     duration: "30m"
 ```
 
