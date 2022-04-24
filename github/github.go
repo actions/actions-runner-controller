@@ -265,6 +265,29 @@ func (c *Client) ListOrganizationRunnerGroups(ctx context.Context, org string) (
 	return runnerGroups, nil
 }
 
+// ListOrganizationRunnerGroupsForRepository returns all the runner groups defined in the organization and
+// inherited to the organization from an enterprise.
+// We can remove this when google/go-github library is updated to support this.
+func (c *Client) ListOrganizationRunnerGroupsForRepository(ctx context.Context, org, repo string) ([]*github.RunnerGroup, error) {
+	var runnerGroups []*github.RunnerGroup
+
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.listOrganizationRunnerGroupsVisibleToRepo(ctx, org, repo, &opts)
+		if err != nil {
+			return runnerGroups, fmt.Errorf("failed to list organization runner groups: %w", err)
+		}
+
+		runnerGroups = append(runnerGroups, list.RunnerGroups...)
+		if res.NextPage == 0 {
+			break
+		}
+		opts.Page = res.NextPage
+	}
+
+	return runnerGroups, nil
+}
+
 func (c *Client) ListRunnerGroupRepositoryAccesses(ctx context.Context, org string, runnerGroupId int64) ([]*github.Repository, error) {
 	var repos []*github.Repository
 
@@ -284,6 +307,42 @@ func (c *Client) ListRunnerGroupRepositoryAccesses(ctx context.Context, org stri
 	}
 
 	return repos, nil
+}
+
+// listOrganizationRunnerGroupsVisibleToRepo lists all self-hosted runner groups configured in an organization which can be used by the repository.
+//
+// GitHub API docs: https://docs.github.com/en/rest/reference/actions#list-self-hosted-runner-groups-for-an-organization
+func (c *Client) listOrganizationRunnerGroupsVisibleToRepo(ctx context.Context, org, repo string, opts *github.ListOptions) (*github.RunnerGroups, *github.Response, error) {
+	repoName := repo
+	parts := strings.Split(repo, "/")
+	if len(parts) == 2 {
+		repoName = parts[1]
+	}
+
+	u := fmt.Sprintf("orgs/%v/actions/runner-groups?visible_to_repository=%v", org, repoName)
+
+	if opts != nil {
+		if opts.PerPage > 0 {
+			u = fmt.Sprintf("%v&per_page=%v", u, opts.PerPage)
+		}
+
+		if opts.Page > 0 {
+			u = fmt.Sprintf("%v&page=%v", u, opts.Page)
+		}
+	}
+
+	req, err := c.Client.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	groups := &github.RunnerGroups{}
+	resp, err := c.Client.Do(ctx, req, &groups)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return groups, resp, nil
 }
 
 // cleanup removes expired registration tokens.
