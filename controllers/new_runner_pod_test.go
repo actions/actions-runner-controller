@@ -106,10 +106,6 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "DOCKER_CERT_PATH",
 							Value: "/certs/client",
 						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -228,10 +224,6 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
 						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -308,10 +300,6 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 						{
 							Name:  "RUNNER_EPHEMERAL",
-							Value: "true",
-						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
 							Value: "true",
 						},
 					},
@@ -533,10 +521,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "/certs/client",
 						},
 						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
-						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -670,10 +654,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "true",
 						},
 						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
-						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -768,10 +748,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 						{
 							Name:  "RUNNER_EPHEMERAL",
-							Value: "true",
-						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
 							Value: "true",
 						},
 						{
