@@ -4,9 +4,12 @@ import (
 	"testing"
 
 	arcv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 func TestNewRunnerPod(t *testing.T) {
@@ -415,6 +418,521 @@ func TestNewRunnerPod(t *testing.T) {
 		tc := testcases[i]
 		t.Run(tc.description, func(t *testing.T) {
 			got, err := newRunnerPod("runner", tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, false)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestNewRunnerPodFromRunnerController(t *testing.T) {
+	type testcase struct {
+		description string
+
+		runner arcv1alpha1.Runner
+		want   corev1.Pod
+	}
+
+	boolPtr := func(v bool) *bool {
+		return &v
+	}
+
+	base := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "runner",
+			Labels: map[string]string{
+				"actions-runner-controller/inject-registration-token": "true",
+				"pod-template-hash": "8857b86c7",
+				"runnerset-name":    "runner",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "actions.summerwind.dev/v1alpha1",
+					Kind:               "Runner",
+					Name:               "runner",
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "runner",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "certs-client",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			Containers: []corev1.Container{
+				{
+					Name:  "runner",
+					Image: "default-runner-image",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "RUNNER_ORG",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_REPO",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_ENTERPRISE",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_LABELS",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_GROUP",
+							Value: "",
+						},
+						{
+							Name:  "DOCKER_ENABLED",
+							Value: "true",
+						},
+						{
+							Name:  "DOCKERD_IN_RUNNER",
+							Value: "false",
+						},
+						{
+							Name:  "GITHUB_URL",
+							Value: "api.github.com",
+						},
+						{
+							Name:  "RUNNER_WORKDIR",
+							Value: "/runner/_work",
+						},
+						{
+							Name:  "RUNNER_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "DOCKER_HOST",
+							Value: "tcp://localhost:2376",
+						},
+						{
+							Name:  "DOCKER_TLS_VERIFY",
+							Value: "1",
+						},
+						{
+							Name:  "DOCKER_CERT_PATH",
+							Value: "/certs/client",
+						},
+						{
+							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "RUNNER_NAME",
+							Value: "runner",
+						},
+						{
+							Name:  "RUNNER_TOKEN",
+							Value: "",
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "runner",
+							MountPath: "/runner",
+						},
+						{
+							Name:      "work",
+							MountPath: "/runner/_work",
+						},
+						{
+							Name:      "certs-client",
+							MountPath: "/certs/client",
+							ReadOnly:  true,
+						},
+					},
+					ImagePullPolicy: corev1.PullAlways,
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: func() *bool { v := false; return &v }(),
+					},
+				},
+				{
+					Name:  "docker",
+					Image: "default-docker-image",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "DOCKER_TLS_CERTDIR",
+							Value: "/certs",
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "runner",
+							MountPath: "/runner",
+						},
+						{
+							Name:      "certs-client",
+							MountPath: "/certs/client",
+						},
+						{
+							Name:      "work",
+							MountPath: "/runner/_work",
+						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: func(b bool) *bool { return &b }(true),
+					},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyOnFailure,
+		},
+	}
+
+	dinrBase := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "runner",
+			Labels: map[string]string{
+				"actions-runner-controller/inject-registration-token": "true",
+				"pod-template-hash": "8857b86c7",
+				"runnerset-name":    "runner",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "actions.summerwind.dev/v1alpha1",
+					Kind:               "Runner",
+					Name:               "runner",
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "runner",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			Containers: []corev1.Container{
+				{
+					Name:  "runner",
+					Image: "default-runner-image",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "RUNNER_ORG",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_REPO",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_ENTERPRISE",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_LABELS",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_GROUP",
+							Value: "",
+						},
+						{
+							Name:  "DOCKER_ENABLED",
+							Value: "true",
+						},
+						{
+							Name:  "DOCKERD_IN_RUNNER",
+							Value: "true",
+						},
+						{
+							Name:  "GITHUB_URL",
+							Value: "api.github.com",
+						},
+						{
+							Name:  "RUNNER_WORKDIR",
+							Value: "/runner/_work",
+						},
+						{
+							Name:  "RUNNER_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "RUNNER_NAME",
+							Value: "runner",
+						},
+						{
+							Name:  "RUNNER_TOKEN",
+							Value: "",
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "runner",
+							MountPath: "/runner",
+						},
+					},
+					ImagePullPolicy: corev1.PullAlways,
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: boolPtr(true),
+					},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyOnFailure,
+		},
+	}
+
+	dockerDisabled := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "runner",
+			Labels: map[string]string{
+				"actions-runner-controller/inject-registration-token": "true",
+				"pod-template-hash": "8857b86c7",
+				"runnerset-name":    "runner",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "actions.summerwind.dev/v1alpha1",
+					Kind:               "Runner",
+					Name:               "runner",
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "runner",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			Containers: []corev1.Container{
+				{
+					Name:  "runner",
+					Image: "default-runner-image",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "RUNNER_ORG",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_REPO",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_ENTERPRISE",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_LABELS",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_GROUP",
+							Value: "",
+						},
+						{
+							Name:  "DOCKER_ENABLED",
+							Value: "false",
+						},
+						{
+							Name:  "DOCKERD_IN_RUNNER",
+							Value: "false",
+						},
+						{
+							Name:  "GITHUB_URL",
+							Value: "api.github.com",
+						},
+						{
+							Name:  "RUNNER_WORKDIR",
+							Value: "/runner/_work",
+						},
+						{
+							Name:  "RUNNER_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "RUNNER_NAME",
+							Value: "runner",
+						},
+						{
+							Name:  "RUNNER_TOKEN",
+							Value: "",
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "runner",
+							MountPath: "/runner",
+						},
+					},
+					ImagePullPolicy: corev1.PullAlways,
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: boolPtr(false),
+					},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyOnFailure,
+		},
+	}
+
+	newTestPod := func(base corev1.Pod, f func(*corev1.Pod)) corev1.Pod {
+		pod := base.DeepCopy()
+		if f != nil {
+			f(pod)
+		}
+		return *pod
+	}
+
+	testcases := []testcase{
+		{
+			description: "it should have unprivileged runner and privileged sidecar docker container",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerConfig: arcv1alpha1.RunnerConfig{},
+				},
+			},
+			want: newTestPod(base, nil),
+		},
+		{
+			description: "dockerdWithinRunnerContainer=true should set privileged=true and omit the dind sidecar container",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerConfig: arcv1alpha1.RunnerConfig{
+						DockerdWithinRunnerContainer: boolPtr(true),
+					},
+				},
+			},
+			want: newTestPod(dinrBase, nil),
+		},
+		{
+			description: "in the default config you should provide both dockerdWithinRunnerContainer=true and runnerImage",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerConfig: arcv1alpha1.RunnerConfig{
+						DockerdWithinRunnerContainer: boolPtr(true),
+						Image:                        "dind-runner-image",
+					},
+				},
+			},
+			want: newTestPod(dinrBase, func(p *corev1.Pod) {
+				p.Spec.Containers[0].Image = "dind-runner-image"
+			}),
+		},
+		{
+			description: "dockerEnabled=false should have no effect when dockerdWithinRunnerContainer=true",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerConfig: arcv1alpha1.RunnerConfig{
+						DockerdWithinRunnerContainer: boolPtr(true),
+						DockerEnabled:                boolPtr(false),
+					},
+				},
+			},
+			want: newTestPod(dinrBase, nil),
+		},
+		{
+			description: "dockerEnabled=false should omit the dind sidecar and set privileged=false and envvars DOCKER_ENABLED=false and DOCKERD_IN_RUNNER=false",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerConfig: arcv1alpha1.RunnerConfig{
+						DockerEnabled: boolPtr(false),
+					},
+				},
+			},
+			want: newTestPod(dockerDisabled, nil),
+		},
+		{
+			description: "TODO: dockerEnabled=false results in privileged=false by default but you can override it",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerConfig: arcv1alpha1.RunnerConfig{
+						DockerEnabled: boolPtr(false),
+					},
+					RunnerPodSpec: arcv1alpha1.RunnerPodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "runner",
+								SecurityContext: &corev1.SecurityContext{
+									Privileged: boolPtr(true),
+								},
+							},
+						},
+					},
+				},
+			},
+
+			want: newTestPod(dockerDisabled, func(p *corev1.Pod) {
+				// p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
+			}),
+		},
+	}
+
+	var (
+		defaultRunnerImage            = "default-runner-image"
+		defaultRunnerImagePullSecrets = []string{}
+		defaultDockerImage            = "default-docker-image"
+		defaultDockerRegistryMirror   = ""
+		githubBaseURL                 = "api.github.com"
+	)
+
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = arcv1alpha1.AddToScheme(scheme)
+
+	for i := range testcases {
+		tc := testcases[i]
+		t.Run(tc.description, func(t *testing.T) {
+			r := &RunnerReconciler{
+				RunnerImage:            defaultRunnerImage,
+				RunnerImagePullSecrets: defaultRunnerImagePullSecrets,
+				DockerImage:            defaultDockerImage,
+				DockerRegistryMirror:   defaultDockerRegistryMirror,
+				GitHubClient:           &github.Client{GithubBaseURL: githubBaseURL},
+				Scheme:                 scheme,
+			}
+			got, err := r.newPod(tc.runner)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
