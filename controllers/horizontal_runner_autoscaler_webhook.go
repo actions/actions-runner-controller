@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +48,8 @@ const (
 	keyPrefixEnterprise = "enterprises/"
 	keyRunnerGroup      = "/group/"
 )
+
+var mu sync.Mutex
 
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
 // GitHub Webhook received
@@ -164,6 +167,15 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		autoscaler.Log.Error(err, "could not parse webhook payload for extracting enterprise slug", "webhookType", webhookType, "payload", s)
 	}
 	enterpriseSlug := enterpriseEvent.Enterprise.Slug
+
+	// the next steps will patch the kubernetes resource.
+	// which contains a race condition where 2 github webhooks read the same state and add a capacityReservation
+	// and then write the same result. which yields 1 runner instead of 2 runners.
+	// as a temporary workaround a mutex is added here
+	// for further information see: https://github.com/actions-runner-controller/actions-runner-controller/issues/1321
+
+	mu.Lock()
+	defer mu.Unlock()
 
 	switch e := event.(type) {
 	case *gogithub.PushEvent:
@@ -383,6 +395,7 @@ func matchTriggerConditionAgainstEvent(types []string, eventAction *string) bool
 type ScaleTarget struct {
 	v1alpha1.HorizontalRunnerAutoscaler
 	v1alpha1.ScaleUpTrigger
+	mu sync.Mutex
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
