@@ -1298,13 +1298,6 @@ spec:
         # Disables automatic runner updates
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
-        # Configure runner with --ephemeral instead of --once flag
-        # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA 
-        # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
-        # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
-          value: "true"
 ```
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
