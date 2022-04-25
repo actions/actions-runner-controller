@@ -400,8 +400,7 @@ func TestNewRunnerPod(t *testing.T) {
 				DockerEnabled: boolPtr(false),
 			},
 			want: newTestPod(dockerDisabled, func(p *corev1.Pod) {
-				// TODO
-				// p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
+				p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
 			}),
 		},
 	}
@@ -904,7 +903,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 			},
 
 			want: newTestPod(dockerDisabled, func(p *corev1.Pod) {
-				// p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
+				p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
 			}),
 		},
 	}
