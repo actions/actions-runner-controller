@@ -6,7 +6,7 @@ labels: {}
 
 replicaCount: 1
 
-syncPeriod: 10m
+syncPeriod: 1m
 
 enableLeaderElection: true
 # Specifies the controller id for leader election.
