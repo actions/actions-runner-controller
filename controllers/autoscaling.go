@@ -140,17 +140,23 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 		} else {
 		JOB:
 			for _, job := range allJobs {
-				labels := make(map[string]struct{}, len(job.Labels))
-				for _, l := range job.Labels {
-					labels[l] = struct{}{}
+				runnerLabels := make(map[string]struct{}, len(st.labels))
+				for _, l := range st.labels {
+					runnerLabels[l] = struct{}{}
 				}
 
-				if _, ok := labels["self-hosted"]; !ok {
+				if len(job.Labels) == 0 {
+					// This shouldn't usually happen
+					r.Log.Info("Detected job with no labels, which is not supported by ARC. Skipping anyway.", "labels", job.Labels, "run_id", job.GetRunID(), "job_id", job.GetID())
 					continue JOB
 				}
 
-				for _, l := range st.labels {
-					if _, ok := labels[l]; !ok {
+				for _, l := range job.Labels {
+					if l == "self-hosted" {
+						continue
+					}
+
+					if _, ok := runnerLabels[l]; !ok {
 						continue JOB
 					}
 				}
