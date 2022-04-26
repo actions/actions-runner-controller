@@ -1,4 +1,4 @@
-# actions-runner-controller
+# actions-runner-controller (ARC)
 
 [![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
 
@@ -6,7 +6,8 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 
 ToC:
 
-- [Motivation](#motivation)
+- [Status](#status)
+- [About](#about)
 - [Installation](#installation)
   - [GitHub Enterprise Support](#github-enterprise-support)
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
@@ -38,12 +39,20 @@ ToC:
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
-## Motivation
+
+## Status
+
+Even though actions-runner-controller is used in production environments, it is still in its early stage of development, hence versioned 0.x.
+
+actions-runner-controller complies to Semantic Versioning 2.0.0 in which v0.x means that there could be backward-incompatible changes for every release.
+
+The documentation is kept inline with master@HEAD, we do our best to highlight any features that require a specific ARC version or higher however this is not always easily done due to there being many moving parts. Additionally, we actively do not retain compatibly with every GitHub Enterprise Server version nor every Kubernetes version so you will need to ensure you stay current within a reasonable timespan.
+
+## About
 
 [GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
 
 **actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
-
 ## Installation
 
 By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for the cert-manager can be found below.
