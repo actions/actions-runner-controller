@@ -5,6 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 VERSION ?= latest
+RUNNER_VERSION ?= 2.290.1
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -109,13 +110,9 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
-# Build the docker image
-docker-build:
-	docker build -t ${NAME}:${VERSION} .
-	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=${TARGETPLATFORM} runner
-
 docker-buildx:
-	export DOCKER_CLI_EXPERIMENTAL=enabled
+	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
+	export DOCKER_BUILDKIT=1
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
