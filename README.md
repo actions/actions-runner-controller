@@ -1298,6 +1298,12 @@ spec:
         # Disables automatic runner updates
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
+        # Configure runner with legacy --once instead of --ephemeral flag
+        # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
+        # IN A FUTURE VERSION OF ARC.
+        # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
+        - name: RUNNER_FEATURE_FLAG_ONCE
+          value: "true"
 ```
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
