@@ -112,7 +112,7 @@ generate: controller-gen
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
-    export DOCKER_BUILDKIT=1
+	export DOCKER_BUILDKIT=1
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
