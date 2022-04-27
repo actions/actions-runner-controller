@@ -696,10 +696,18 @@ $ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
 
-Now we need to expose this service with a TSL protected Ingress so that Github can reach it, so in a file named `arc-webhook-server.yaml`
-write the following code:
+Now we need to expose this service so that Github can send these webhooks over the network with TSL protection.
+
+You can do it in any way you prefer, here we'll suggest doing it with a k8s Ingress.
+For the sake of this example we'll expose this service on the following URL:
+
+- https://your.domain.com/actions-runner-controller-github-webhook-server
+
+Where `your.domain.com` should be replaced by your own domain.
 
 > Note: This step assumes you already have a configured cert-manager and domain name for your cluster.
+
+Let's start by creating an Ingress file called `arc-webhook-server.yaml` with the following contents:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -727,18 +735,26 @@ spec:
                   number: 80
 ```
 
+Make sure to set the `spec.tls.secretName` to the name of your TLS secret and
+`spec.tls.hosts[0]` to your own domain.
+
 Then create this resource on your cluster with the following command:
 
 ```bash
 kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
 ```
 
-To configure Github to start sending you webhooks, go to the settings page of your repository
-or organization then click on Webhooks, then Add webhook.
+After this step your webhook server should be ready to start receiving webhooks from Github.
 
-There set the "Payload URL" with
+To configure Github to start sending you webhooks, go to the settings page of your repository
+or organization then click on `Webhooks`, then on `Add webhook`.
+
+There set the "Payload URL" field with the webhook URL you just created,
+if you followed the example ingress above the URL would be something like this:
 
 - https://your.domain.com/actions-runner-controller-github-webhook-server
+
+> Remember to replace `your.domain.com` with your own domain.
 
 Then click on "let me select individual events" and choose:
 
@@ -749,7 +765,7 @@ Then click on "let me select individual events" and choose:
 
 Later you can remove any of these you are not using to reduce the amount of data sent to your server.
 
-Then click on "Add Webhook".
+Then click on `Add Webhook`.
 
 Github will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
 alongside your webhook on the Settings -> Webhooks page.
