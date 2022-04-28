@@ -489,9 +489,14 @@ A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `min
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. 
 
-This configuration has the final say on if a runner can be scaled down or not regardless of the chosen scaling method. Depending on your requirements, you may want to consider adjusting this by setting the `scaleDownDelaySecondsAfterScaleOut:` attribute.
+This anti-flap configuration also has the final say on if a runner can be scaled down or not regardless of the chosen scaling method.
+
+This delay is configurable via 2 methods:
+
+1. By setting a new default via the controller's `--default-scale-down-delay` flag
+2. By setting by setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
 Below is a complete basic example of one of the pull driven scaling metrics.
 
