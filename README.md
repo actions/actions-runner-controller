@@ -560,7 +560,7 @@ The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all p
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server-side.
-2. Scales the runner count based on the depth of the job queue meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
+2. Scales the runner count based on the depth of the job queue meaning a 1:1 scaling of runners to queued jobs.
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
 
 **Drawbacks of this metric**
