@@ -124,7 +124,7 @@ body:
       # Grab the pod name and set it to $POD_NAME
       kubectl -n $NS get po
 
-      kubectl -n $NS $POD_NAME > arc.log
+      kubectl -n $NS logs $POD_NAME > arc.log
 
       Upload it to e.g. https://gist.github.com/ and paste the link to it here.
   validations:
