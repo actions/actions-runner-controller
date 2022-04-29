@@ -144,7 +144,8 @@ body:
       # Grab the name of the problematic runner pod and set it to $POD_NAME
       kubectl -n $NS get po
 
-      kubectl -n $NS $POD_NAME > runnerpod.log
+      kubectl -n $NS logs $POD_NAME -c runner > runnerpod_runner.log
+      kubectl -n $NS logs $POD_NAME -c docker > runnerpod_docker.log
 
       Upload it to e.g. https://gist.github.com/ and paste the link to it here.
   validations:
