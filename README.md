@@ -489,9 +489,14 @@ A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `min
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. 
 
-This configuration has the final say on if a runner can be scaled down or not regardless of the chosen scaling method. Depending on your requirements, you may want to consider adjusting this by setting the `scaleDownDelaySecondsAfterScaleOut:` attribute.
+This anti-flap configuration also has the final say on if a runner can be scaled down or not regardless of the chosen scaling method.
+
+This delay is configurable via 2 methods:
+
+1. By setting a new default via the controller's `--default-scale-down-delay` flag
+2. By setting by setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
 Below is a complete basic example of one of the pull driven scaling metrics.
 
@@ -560,14 +565,13 @@ The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all p
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server-side.
-2. Scales the runner count based on the depth of the job queue meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
+2. Scales the runner count based on the depth of the job queue meaning a 1:1 scaling of runners to queued jobs.
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. A list of repositories must be included within the scaling metric. Maintaining a list of repositories may not be viable in larger environments or self-serve environments.
 2. May not scale quickly enough for some users' needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 3. Relatively large amounts of API requests are required to maintain this metric, you may run into API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is.
-4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub-hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to the required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
 
 Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
