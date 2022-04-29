@@ -16,7 +16,7 @@ on:
       - '!**.md'
 
 env:
-  RUNNER_VERSION: 2.290.1
+  RUNNER_VERSION: 2.291.1
   DOCKER_VERSION: 20.10.12
   DOCKERHUB_USERNAME: summerwind
 
