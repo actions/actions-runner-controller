@@ -47,7 +47,7 @@ body:
   id: resource-definitions
   attributes:
     label: Resource Definitions
-    description: "Add copy(s) of your resourec definition(s) (RunnerDeployment or RunnerSet, and HorizontalRunnerAutoscaler. If RunnerSet, also include the StorageClass being used)"
+    description: "Add copy(s) of your resource definition(s) (RunnerDeployment or RunnerSet, and HorizontalRunnerAutoscaler. If RunnerSet, also include the StorageClass being used)"
     render: yaml
     placeholder: |
       apiVersion: actions.summerwind.dev/v1alpha1
