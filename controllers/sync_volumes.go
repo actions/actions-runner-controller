@@ -44,6 +44,7 @@ func syncVolumes(ctx context.Context, c client.Client, log logr.Logger, ns strin
 				if err := c.Update(ctx, updated); err != nil {
 					return nil, err
 				}
+				log.V(1).Info("Added runner-statefulset-name label to PVC", "sts", sts.Name, "pvc", pvcName)
 			}
 		}
 	}
@@ -109,6 +110,9 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 
 		log.Info("Scheduling to unset PV's claimRef", "pv", pv.Name)
 
+		// Apparently K8s doesn't reconcile PV immediately after PVC deletion.
+		// So we start a relatively busy loop of PV reconcilation slightly before the PVC deletion,
+		// so that PV can be unbound as soon as possible after the PVC got deleted.
 		if err := c.Update(ctx, pvCopy); err != nil {
 			return nil, err
 		}
@@ -121,7 +125,8 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 			return nil, err
 		}
 
-		// At this point, the PV becomes Released
+		// At this point, the PV is still "Bound", but we are ready to unset pv.spec.claimRef in pv controller.
+		// Once the pv controller unsets claimRef, the PV becomes "Released", hence available for reuse by another eligible PVC.
 	}
 
 	return nil, nil
