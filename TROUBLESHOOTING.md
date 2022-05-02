@@ -84,8 +84,8 @@ context deadline exceeded
 
 To fix this, you may either:
 
-1. Configure the webhook to use port 443 or 10250, [each of which allow traffic
-   by default](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules).
+1. Configure the webhook to use another port, such as 443 or 10250, [each of
+   which allow traffic by default](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules).
 2. Set up a firewall rule to allow the master node to connect to the default
    webhook port. The exact way to do this may vary, but the following script
    should point you in the right direction:
