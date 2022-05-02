@@ -6,6 +6,7 @@ labels: {}
 
 replicaCount: 1
 
+webhookPort: 9443
 syncPeriod: 1m
 defaultScaleDownDelay: 10m
 
@@ -91,8 +92,6 @@ securityContext:
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
   # runAsUser: 1000
-
-webhookPort: 9443
 
 # Webhook service resource
 service:
