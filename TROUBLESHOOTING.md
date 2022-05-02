@@ -82,19 +82,24 @@ context deadline exceeded
 
 **Solution**<br />
 
-To fix this, you need to set up a firewall rule to allow the master node to connect to the webhook port.
-The exact way to do this may wary, but the following script should point you in the right direction:
+To fix this, you may either:
 
-```
-# 1) Retrieve the network tag automatically given to the worker nodes
-# NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
-WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
+1. Configure the webhook to use port 443 or 10250 (rather than 9443), [each of
+   which allow traffic by default](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules).
+2. Set up a firewall rule to allow the master node to connect to the webhook
+   port. The exact way to do this may vary, but the following script should
+   point you in the right direction:
 
-# 2) Take note of the VPC network in which you deployed your cluster
-# NOTE this only works if you have only one network in which you deploy your clusters
-NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
+   ```
+   # 1) Retrieve the network tag automatically given to the worker nodes
+   # NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
+   WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
 
-# 3) Get the master source ip block
-SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
-gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
-```
+   # 2) Take note of the VPC network in which you deployed your cluster
+   # NOTE this only works if you have only one network in which you deploy your clusters
+   NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
+
+   # 3) Get the master source ip block
+   SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
+   gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
+   ```
