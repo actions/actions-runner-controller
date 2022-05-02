@@ -90,7 +90,7 @@ To fix this, you may either:
    webhook port. The exact way to do this may vary, but the following script
    should point you in the right direction:
 
-   ```
+   ```sh
    # 1) Retrieve the network tag automatically given to the worker nodes
    # NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
    WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
