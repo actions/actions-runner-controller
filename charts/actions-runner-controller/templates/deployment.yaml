@@ -44,6 +44,7 @@ spec:
         {{- if .Values.leaderElectionId }}
         - "--leader-election-id={{ .Values.leaderElectionId }}"
         {{- end }}
+        - "--port={{ .Values.webhookPort }}"
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--default-scale-down-delay={{ .Values.defaultScaleDownDelay }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
