@@ -92,6 +92,8 @@ securityContext:
   # runAsNonRoot: true
   # runAsUser: 1000
 
+webhookPort: 9443
+
 # Webhook service resource
 service:
   type: ClusterIP
