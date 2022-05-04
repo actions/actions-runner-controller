@@ -22,7 +22,7 @@ Due to the above you can't just do a `helm upgrade` to release the latest versio
 
 ```shell
 # REMEMBER TO UPDATE THE CHART_VERSION TO RELEVANT CHART VERISON!!!!
-CHART_VERSION=0.17.0
+CHART_VERSION=0.18.0
 
 curl -L https://github.com/actions-runner-controller/actions-runner-controller/releases/download/actions-runner-controller-${CHART_VERSION}/actions-runner-controller-${CHART_VERSION}.tgz | tar zxv --strip 1 actions-runner-controller/crds
 
