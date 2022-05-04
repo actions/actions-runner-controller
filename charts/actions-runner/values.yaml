@@ -1,6 +1,6 @@
 image:
   repository: summerwind/actions-runner
-  tag: 2.290.1
+  tag: v2.290.1-ubuntu-20.04
   pullPolicy: IfNotPresent
 
 # Create runner for an organization or a repository
