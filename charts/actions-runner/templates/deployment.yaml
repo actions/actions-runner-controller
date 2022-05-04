@@ -45,6 +45,7 @@ items:
         {{- if .Values.repository }}
         repository: {{ .Values.repository }}
         {{- end }}
+        group: {{ .Values.group | default "Default" }}
         {{- with .Values.runnerLabels }}
         labels:
           {{- toYaml . | nindent 10 }}
