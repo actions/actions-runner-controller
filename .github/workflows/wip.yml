@@ -42,7 +42,7 @@ jobs:
       # Considered unstable builds
       # See Issue #285, PR #286, and PR #323 for more information
       - name: Build and Push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
