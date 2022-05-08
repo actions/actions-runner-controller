@@ -3,7 +3,7 @@
 * [Invalid header field value](#invalid-header-field-value)
 * [Runner coming up before network available](#runner-coming-up-before-network-available)
 * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
-
+* [My runner kind and / or runner's backing pod is stuck](#stuck-runner-kind-andor-backing-pod)
 ## Invalid header field value
 
 **Problem**
@@ -98,3 +98,18 @@ NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].netw
 SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
 gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
 ```
+
+## Stuck runner kind and / or backing pod
+
+Sometimes a runner's backing pod can get stuck in a terminating state for various reasons. You can get the pod unstuck by removing its finaliser using something like this:
+
+```
+# Get all pods that are stuck terminating and remove the finalizer
+$ kubectl -n get pods | grep Terminating | awk {'print $1'} | xargs kubectl patch pod -p '{"metadata":{"finalizers":null}}'
+
+# Get all kind runners and remove the finalizer
+$ kubectl get runners --no-headers | awk {'print $1'} | xargs kubectl patch runner --type merge -p '{"metadata":{"finalizers":null}}'
+```
+
+_Note the code assumes you have already selected the namespace your runners are in and that they 
+are in a dedicated namespace_
