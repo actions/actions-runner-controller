@@ -113,9 +113,27 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		// Happens e.g. when dind is in runner and run completes
 		log.Info("Runner pod has been stopped with a successful status.")
 	} else if pod != nil && pod.Annotations[AnnotationKeyRunnerCompletionWaitStartTimestamp] != "" {
-		log.Info("Runner pod is annotated to wait for completion")
+		ct := ephemeralRunnerContainerStatus(pod)
+		if ct == nil {
+			log.Info("Runner pod is annotated to wait for completion, and the runner container is not ephemeral")
 
-		return &ctrl.Result{RequeueAfter: retryDelay}, nil
+			return &ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
+
+		lts := ct.LastTerminationState.Terminated
+		if lts == nil {
+			log.Info("Runner pod is annotated to wait for completion, and the runner container is not restarting")
+
+			return &ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
+
+		// Prevent runner pod from stucking in Terminating.
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/1369
+		log.Info("Deleting runner pod anyway because it has stopped prematurely. This may leave a dangling runner resource in GitHub Actions",
+			"lastState.exitCode", lts.ExitCode,
+			"lastState.message", lts.Message,
+			"pod.phase", pod.Status.Phase,
+		)
 	} else if ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, runner, *runnerID); err != nil {
 		if errors.Is(err, &gogithub.RateLimitError{}) {
 			// We log the underlying error when we failed calling GitHub API to list or unregisters,
