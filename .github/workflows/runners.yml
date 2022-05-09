@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@d0651293c4a5a52e711f25b41b05b2212f385d28
 
       - name: Setup Docker Environment
         id: vars
@@ -54,7 +54,7 @@ jobs:
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Versioned Tags
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@ac9327eae2b366085ac7f6a2d02df8aa8ead720a
         with:
           context: ./runner
           file: ./runner/${{ matrix.dockerfile }}

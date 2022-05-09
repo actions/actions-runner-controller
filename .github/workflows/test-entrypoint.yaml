@@ -9,13 +9,16 @@ on:
       - 'test/entrypoint/**'
       - '!**.md'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     name: Test entrypoint
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@d0651293c4a5a52e711f25b41b05b2212f385d28
     - name: Run unit tests for entrypoint.sh
       run: |
         make acceptance/runner/entrypoint
