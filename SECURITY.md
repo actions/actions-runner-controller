@@ -4,7 +4,7 @@
 
 This project is maintained by a small team of two and therefore lacks the resource to provide security fixes in a timely manner.
 
-If you have important business(es) that relis on this project, please consider sponsoring the project so that manitainer(s) can commit to provide such service.
+If you have important business(es) that relies on this project, please consider sponsoring the project so that the maintainer(s) can commit to providing such service.
 
 Please refer to https://github.com/sponsors/actions-runner-controller for available tiers.
 
