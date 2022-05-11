@@ -24,7 +24,7 @@ jobs:
     name: Test
     steps:
     - name: Checkout
-      uses: actions/checkout@d0651293c4a5a52e711f25b41b05b2212f385d28
+      uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
     - uses: actions/setup-go@f6164bd8c8acb4a71fb2791a8b6c4024ff038dab
       with:
         go-version: '1.17.7'
