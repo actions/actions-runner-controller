@@ -21,7 +21,8 @@
     },
     {
       "fileMatch": [
-        "runner/Makefile"
+        "runner/Makefile",
+        "Makefile"
       ],
       "matchStrings": ["RUNNER_VERSION \\?= +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",

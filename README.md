@@ -1,4 +1,4 @@
-# actions-runner-controller
+# actions-runner-controller (ARC)
 
 [![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
 
@@ -6,7 +6,8 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 
 ToC:
 
-- [Motivation](#motivation)
+- [Status](#status)
+- [About](#about)
 - [Installation](#installation)
   - [GitHub Enterprise Support](#github-enterprise-support)
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
@@ -38,19 +39,27 @@ ToC:
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
-## Motivation
+
+## Status
+
+Even though actions-runner-controller is used in production environments, it is still in its early stage of development, hence versioned 0.x.
+
+actions-runner-controller complies to Semantic Versioning 2.0.0 in which v0.x means that there could be backward-incompatible changes for every release.
+
+The documentation is kept inline with master@HEAD, we do our best to highlight any features that require a specific ARC version or higher however this is not always easily done due to there being many moving parts. Additionally, we actively do not retain compatibly with every GitHub Enterprise Server version nor every Kubernetes version so you will need to ensure you stay current within a reasonable timespan.
+
+## About
 
 [GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
 
 **actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
-
 ## Installation
 
 By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for the cert-manager can be found below.
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
-Subsequent to this, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
+After installing cert-manager, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 **Kubectl Deployment:**
 
@@ -480,9 +489,14 @@ A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `min
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. 
 
-This configuration has the final say on if a runner can be scaled down or not regardless of the chosen scaling method. Depending on your requirements, you may want to consider adjusting this by setting the `scaleDownDelaySecondsAfterScaleOut:` attribute.
+This anti-flap configuration also has the final say on if a runner can be scaled down or not regardless of the chosen scaling method.
+
+This delay is configurable via 2 methods:
+
+1. By setting a new default via the controller's `--default-scale-down-delay` flag
+2. By setting by setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
 Below is a complete basic example of one of the pull driven scaling metrics.
 
@@ -522,7 +536,9 @@ spec:
 
 > To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
 
-The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of 10 minutes. The default value is set to 10 minutes to prevent default deployments from rate-limiting themselves on the GitHub API, you will most likely want to adjust this.
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes. 
+
+Be aware that the shorter the sync period the quicker you will consume your rate limit budget, depending on your environment this may or may not be a risk. Consider monitoring ARCs rate limit budget when configuring this feature to find the optimal performance sync period.
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -549,14 +565,13 @@ The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all p
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server-side.
-2. Scales the runner count based on the depth of the job queue meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
+2. Scales the runner count based on the depth of the job queue meaning a 1:1 scaling of runners to queued jobs.
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. A list of repositories must be included within the scaling metric. Maintaining a list of repositories may not be viable in larger environments or self-serve environments.
 2. May not scale quickly enough for some users' needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 3. Relatively large amounts of API requests are required to maintain this metric, you may run into API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is.
-4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub-hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to the required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
 
 Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
@@ -815,7 +830,8 @@ spec:
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
     #kind: RunnerSet
   scaleUpTriggers:
-  - githubEvent: {}
+  - githubEvent:
+      workflowJob: {}
     duration: "30m"
 ```
 
@@ -1383,12 +1399,10 @@ spec:
         # Disables automatic runner updates
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
-        # Configure runner with --ephemeral instead of --once flag
+        # Configure runner with legacy --once instead of --ephemeral flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA
-        # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
-        # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+        # IN A FUTURE VERSION OF ARC. SEE ISSUE #1196 FOR DETAILS
+        - name: RUNNER_FEATURE_FLAG_ONCE
           value: "true"
 ```
 

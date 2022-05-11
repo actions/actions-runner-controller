@@ -668,16 +668,29 @@ HRA:
 
 		if len(hra.Spec.ScaleUpTriggers) > 1 {
 			autoscaler.Log.V(1).Info("Skipping this HRA as it has too many ScaleUpTriggers to be used in workflow_job based scaling", "hra", hra.Name)
+			continue
+		}
+
+		if len(hra.Spec.ScaleUpTriggers) == 0 {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has no ScaleUpTriggers configured", "hra", hra.Name)
+			continue
+		}
+
+		scaleUpTrigger := hra.Spec.ScaleUpTriggers[0]
+
+		if scaleUpTrigger.GitHubEvent == nil {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has no `githubEvent` scale trigger configured", "hra", hra.Name)
 
 			continue
 		}
 
-		var duration metav1.Duration
+		if scaleUpTrigger.GitHubEvent.WorkflowJob == nil {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has no `githubEvent.workflowJob` scale trigger configured", "hra", hra.Name)
 
-		if len(hra.Spec.ScaleUpTriggers) > 0 {
-			duration = hra.Spec.ScaleUpTriggers[0].Duration
+			continue
 		}
 
+		duration := scaleUpTrigger.Duration
 		if duration.Duration <= 0 {
 			// Try to release the reserved capacity after at least 10 minutes by default,
 			// we won't end up in the reserved capacity remained forever in case GitHub somehow stopped sending us "completed" workflow_job events.
