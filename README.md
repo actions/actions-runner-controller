@@ -59,7 +59,7 @@ By default, actions-runner-controller uses [cert-manager](https://cert-manager.i
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
-Subsequent to this, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
+After installing cert-manager, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 **Kubectl Deployment:**
 
