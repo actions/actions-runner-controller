@@ -3,7 +3,7 @@
 * [Invalid header field value](#invalid-header-field-value)
 * [Runner coming up before network available](#runner-coming-up-before-network-available)
 * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
-* [My runner kind and / or runner's backing pod is stuck](#stuck-runner-kind-andor-backing-pod)
+* [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
 * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
 ## Invalid header field value
 
@@ -100,7 +100,7 @@ SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | g
 gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
 ```
 
-## Stuck runner kind and / or backing pod
+## Stuck runner kind or backing pod
 
 Sometimes either the runner kind (`kubectl get runners`) or it's underlying pod can get stuck in a terminating state for various reasons. You can get the kind unstuck by removing its finaliser using something like this:
 
