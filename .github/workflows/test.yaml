@@ -15,19 +15,22 @@ on:
       - '**.md'
       - '.gitignore'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     name: Test
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
-    - uses: actions/setup-go@v3
+      uses: actions/checkout@d0651293c4a5a52e711f25b41b05b2212f385d28
+    - uses: actions/setup-go@f6164bd8c8acb4a71fb2791a8b6c4024ff038dab
       with:
         go-version: '1.17.7'
         check-latest: false
     - run: go version
-    - uses: actions/cache@v3
+    - uses: actions/cache@730dc31003a72af3c3b4bf51268c167ad4c67ad6
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
