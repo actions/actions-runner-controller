@@ -59,9 +59,6 @@ spec:
       containers:
       - name: runner
         imagePullPolicy: IfNotPresent
-        env:
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
-          value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
       #- name: docker
       #  #image: mumoshu/actions-runner-dind:dev
 ---
