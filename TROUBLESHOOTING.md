@@ -146,8 +146,6 @@ spec:
     spec:
       ...
       env:
-        # This runner's entrypoint script will have a 5 seconds delay 
-        # as a first action within the entrypoint script
         - name: STARTUP_DELAY_IN_SECONDS
           value: "5"
 ```
