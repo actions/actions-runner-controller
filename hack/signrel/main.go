@@ -13,11 +13,35 @@ import (
 )
 
 func main() {
-	var (
-		tag = os.Getenv("TAG")
-	)
-
 	a := &githubReleaseAsset{}
+
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, "Invalid command: %v\n", os.Args)
+		fmt.Fprintf(os.Stderr, "USAGE: signrel [list-tags|sign-assets]\n")
+		os.Exit(2)
+	}
+
+	switch cmd := os.Args[1]; cmd {
+	case "tags":
+		listTags(a)
+	case "sign":
+		tag := os.Getenv("TAG")
+		sign(a, tag)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command %s\n", cmd)
+		os.Exit(2)
+	}
+}
+
+func listTags(a *githubReleaseAsset) {
+	_, err := a.getRecentReleases(owner, repo)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+func sign(a *githubReleaseAsset, tag string) {
 	if err := a.Download(tag, "downloads"); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
@@ -93,6 +117,38 @@ func (a *githubReleaseAsset) Download(tag string, dstDir string) error {
 	}
 
 	return nil
+}
+
+func (a *githubReleaseAsset) getRecentReleases(owner, repo string) (*Release, error) {
+	reqURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
+
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if gt := os.Getenv("GITHUB_TOKEN"); gt != "" {
+		req.Header = make(http.Header)
+		req.Header.Add("authorization", "token "+gt)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: %s", reqURL, res.Status)
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintf(os.Stdout, "%s\n", string(body))
+
+	return nil, nil
 }
 
 func (a *githubReleaseAsset) getReleaseByTag(owner, repo, tag string) (*Release, error) {
