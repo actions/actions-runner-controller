@@ -1,5 +1,6 @@
 # Troubleshooting
 
+* [Tools](#tools)
 * [Installation](#installation)
   * [Invalid header field value](#invalid-header-field-value)
   * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
@@ -8,7 +9,16 @@
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
   * [Runner coming up before network available](#runner-coming-up-before-network-available)
 
+
+## Tools
+
+A list of tools which are helpful for troubleshooting
+
+* https://github.com/rewanthtammana/kubectl-fields Kubernetes resources hierarchy parsing tool
+* https://github.com/stern/stern Multi pod and container log tailing for Kubernetes
+
 ## Installation
+
 ### Invalid header field value
 
 **Problem**
@@ -61,6 +71,7 @@ gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --
 ```
 
 ## Operations
+
 ### Stuck runner kind or backing pod
 
 **Problem**
