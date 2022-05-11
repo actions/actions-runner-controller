@@ -1311,12 +1311,11 @@ spec:
         # Disables automatic runner updates
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
-        # Configure runner with --ephemeral instead of --once flag
+        # Configure runner with legacy --once instead of --ephemeral flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA 
-        # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
+        # IN A FUTURE VERSION OF ARC.
         # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+        - name: RUNNER_FEATURE_FLAG_ONCE
           value: "true"
 ```
 
