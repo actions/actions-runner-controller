@@ -4,6 +4,7 @@
 * [Runner coming up before network available](#runner-coming-up-before-network-available)
 * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
 * [My runner kind and / or runner's backing pod is stuck](#stuck-runner-kind-andor-backing-pod)
+* [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
 ## Invalid header field value
 
 **Problem**
@@ -101,15 +102,19 @@ gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --
 
 ## Stuck runner kind and / or backing pod
 
-Sometimes a runner's backing pod can get stuck in a terminating state for various reasons. You can get the pod unstuck by removing its finaliser using something like this:
+Sometimes either the runner kind (`kubectl get runners`) or it's underlying pod can get stuck in a terminating state for various reasons. You can get the kind unstuck by removing its finaliser using something like this:
 
 ```
-# Get all pods that are stuck terminating and remove the finalizer
-$ kubectl -n get pods | grep Terminating | awk {'print $1'} | xargs kubectl patch pod -p '{"metadata":{"finalizers":null}}'
-
 # Get all kind runners and remove the finalizer
 $ kubectl get runners --no-headers | awk {'print $1'} | xargs kubectl patch runner --type merge -p '{"metadata":{"finalizers":null}}'
+
+# Get all pods that are stuck terminating and remove the finalizer
+$ kubectl -n get pods | grep Terminating | awk {'print $1'} | xargs kubectl patch pod -p '{"metadata":{"finalizers":null}}'
 ```
 
 _Note the code assumes you have already selected the namespace your runners are in and that they 
-are in a dedicated namespace_
+are in a namespace not shared with anything else_
+
+## Delay in jobs being allocated to runners
+
+ARC isn't involved in jobs actually getting allocated to a runner. ARC is responsible for orchestrating runners and the runner lifecycle. Why some people see large delays in job allocation is not clear however it has been https://github.com/actions-runner-controller/actions-runner-controller/issues/1387#issuecomment-1122593984 that this is caused from the self-update process and the workaround is to disable runners from self-updating by setting the environment variable `DISABLE_RUNNER_UPDATE: true` in your runner specs.
