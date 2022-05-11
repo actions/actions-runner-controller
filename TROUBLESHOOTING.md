@@ -19,6 +19,8 @@ A list of tools which are helpful for troubleshooting
 
 ## Installation
 
+Troubeshooting runbooks that relate to ARC installation problems
+
 ### Invalid header field value
 
 **Problem**
@@ -71,6 +73,8 @@ gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --
 ```
 
 ## Operations
+
+Troubeshooting runbooks that relate to ARC operational problems
 
 ### Stuck runner kind or backing pod
 
