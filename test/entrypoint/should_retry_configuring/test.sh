@@ -1,12 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # UNITTEST: retry config
 # Will simulate a configuration failure and expects:
 # - the configuration step to be run 10 times
 # - the entrypoint script to exit with error code 2
-# - the runsvc.sh script to never run.
+# - the run.sh script to never run.
 
-source ../logging.sh
+source ../assets/logging.sh
 
 entrypoint_log() {
   while read I; do
@@ -14,17 +14,22 @@ entrypoint_log() {
   done
 }
 
-log "Setting up the test"
+log "Setting up test area"
+export RUNNER_HOME=testarea
+mkdir -p ${RUNNER_HOME}
+
+log "Setting up the test config"
 export UNITTEST=true
-export RUNNER_HOME=localhome
+export FAIL_RUNNER_CONFIG_SETUP=true
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
 
-mkdir -p ${RUNNER_HOME}/bin
-# add up the config.sh and runsvc.sh
-ln -s ../config.sh ${RUNNER_HOME}/config.sh
-ln -s ../../runsvc.sh ${RUNNER_HOME}/bin/runsvc.sh
+# run.sh and config.sh get used by the runner's real entrypoint.sh and are part of actions/runner.
+# We change symlink dummy versions so the entrypoint.sh can run allowing us to test the real entrypoint.sh
+log "Symlink dummy config.sh and run.sh"
+ln -s ../../assets/config.sh ${RUNNER_HOME}/config.sh
+ln -s ../../assets/run.sh ${RUNNER_HOME}/run.sh
 
 cleanup() {
   rm -rf ${RUNNER_HOME}
@@ -33,41 +38,44 @@ cleanup() {
   unset RUNNER_NAME
   unset RUNNER_REPO
   unset RUNNER_TOKEN
+  unset FAIL_RUNNER_CONFIG_SETUP
 }
 
+# Always run cleanup when test ends regardless of how it ends
 trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
 log "Running the entrypoint"
 log ""
 
+# Run the runner entrypoint script which as a final step runs this
+# unit tests run.sh as it was symlinked
 ../../../runner/entrypoint.sh 2> >(entrypoint_log)
 
 if [ "$?" != "2" ]; then
   error "========================================="
-  error "Configuration should have thrown an error"
+  error "FAIL | Configuration should have thrown an error"
   exit 1
 fi
-success "Entrypoint didn't complete successfully"
-success ""
+
+success "PASS | Entrypoint didn't complete successfully"
 
 log "Checking the counter, should have 10 iterations"
 count=`cat ${RUNNER_HOME}/counter || "notfound"`
 if [ "${count}" != "10" ]; then
   error "============================================="
-  error "The retry loop should have done 10 iterations"
+  error "FAIL | The retry loop should have done 10 iterations"
   exit 1
 fi
-success "Retry loop went up to 10"
-success
+success "PASS | Retry loop went up to 10"
 
-log "Checking that runsvc never ran"
-if [ -f ${RUNNER_HOME}/runsvc_ran ]; then
+log "Checking that run.sh never ran"
+if [ -f ${RUNNER_HOME}/run_sh_ran ]; then
   error "================================================================="
-  error "runsvc was invoked, entrypoint.sh should have failed before that."
+  error "FAIL | run.sh was invoked, entrypoint.sh should have failed before that."
   exit 1
 fi
 
-success "runsvc.sh never ran"
+success "PASS | run.sh never ran"
 success
 success "==========================="
 success "Test completed successfully"

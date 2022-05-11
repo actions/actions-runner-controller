@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.287.1
+ARG RUNNER_VERSION=2.291.1
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
@@ -10,10 +10,10 @@ RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
-    && apt install -y software-properties-common \
+    && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
-    && apt update -y \
-    && apt install -y --no-install-recommends \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
@@ -66,7 +66,6 @@ RUN set -vx; \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
 ENV HOME=/home/runner
 
 # Uncomment the below COPY to use your own custom build of actions-runner.
@@ -83,7 +82,7 @@ ENV HOME=/home/runner
 #
 # If you're willing to uncomment the following line, you'd also need to comment-out the
 #   && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
-# line in the next `RUN` command in this Dockerfile, to avoid overwiding this runner.tar.gz with a remote one.
+# line in the next `RUN` command in this Dockerfile, to avoid overwiting this runner.tar.gz with a remote one.
 
 # COPY actions-runner-linux-x64-2.280.3.tar.gz /runnertmp/runner.tar.gz
 
@@ -92,6 +91,7 @@ ENV HOME=/home/runner
 # libyaml-dev is required for ruby/setup-ruby action.
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
+ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
@@ -110,14 +110,18 @@ RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
-COPY entrypoint.sh /
-COPY --chown=runner:docker patched $RUNNER_ASSETS_DIR/patched
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
+COPY entrypoint.sh logger.bash /usr/bin/
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
 
+RUN echo "PATH=${PATH}" > /etc/environment \
+    && echo "ImageOS=${ImageOS}" >> /etc/environment
+
 USER runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
-CMD ["/entrypoint.sh"]
+CMD ["entrypoint.sh"]

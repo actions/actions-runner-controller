@@ -19,11 +19,6 @@ spec:
 
       ephemeral: ${TEST_EPHEMERAL}
 
-      # Whether to pass --ephemeral (true) or --once (false, deprecated)
-      env:
-      - name: RUNNER_FEATURE_FLAG_EPHEMERAL
-        value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
-
       #
       # dockerd within runner container
       #
