@@ -52,7 +52,7 @@ jobs:
               --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@98f2ad02fd48d057ee3b4d4f66525b231c3e52b6
+      - uses: actions/setup-python@c57f79353baa47cac20975f0a134915e0a8c18bf
         with:
           python-version: 3.7
 
