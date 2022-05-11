@@ -63,7 +63,13 @@ gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --
 ## Operations
 ### Stuck runner kind or backing pod
 
+**Problem**
+
 Sometimes either the runner kind (`kubectl get runners`) or it's underlying pod can get stuck in a terminating state for various reasons. You can get the kind unstuck by removing its finaliser using something like this:
+
+**Solution**
+
+Remove the finaliser from the relevent runner kind or pod
 
 ```
 # Get all kind runners and remove the finalizer
@@ -78,7 +84,27 @@ are in a namespace not shared with anything else_
 
 ### Delay in jobs being allocated to runners
 
-ARC isn't involved in jobs actually getting allocated to a runner. ARC is responsible for orchestrating runners and the runner lifecycle. Why some people see large delays in job allocation is not clear however it has been https://github.com/actions-runner-controller/actions-runner-controller/issues/1387#issuecomment-1122593984 that this is caused from the self-update process and the workaround is to disable runners from self-updating by setting the environment variable `DISABLE_RUNNER_UPDATE: true` in your runner specs.
+**Problem**
+
+ARC isn't involved in jobs actually getting allocated to a runner. ARC is responsible for orchestrating runners and the runner lifecycle. Why some people see large delays in job allocation is not clear however it has been https://github.com/actions-runner-controller/actions-runner-controller/issues/1387#issuecomment-1122593984 that this is caused from the self-update process somehow.
+
+**Solution**
+
+Disable the self-update process in your runner manifests
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment-with-sleep
+spec:
+  template:
+    spec:
+      ...
+      env:
+        - name: DISABLE_RUNNER_UPDATE
+          value: "true"
+```
 
 ### Runner coming up before network available
 
@@ -118,6 +144,7 @@ metadata:
 spec:
   template:
     spec:
+      ...
       env:
         # This runner's entrypoint script will have a 5 seconds delay 
         # as a first action within the entrypoint script
