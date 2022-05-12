@@ -14,7 +14,7 @@ jobs:
       pull-requests: write  # for actions/stale to close stale PRs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@428b0ed64d74596742200dc98805bb90f39ef9f0
+      - uses: actions/stale@65d24b70926a596b0f0098d7e1eb572175d73bc1
         with:
           stale-issue-message: 'This issue is stale because it has been open 30 days with no activity. Remove stale label or comment or this will be closed in 5 days.'
           # turn off stale for both issues and PRs
