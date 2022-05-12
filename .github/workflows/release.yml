@@ -51,7 +51,7 @@ jobs:
           version: latest
 
       - name: Login to DockerHub
-        uses: docker/login-action@dd4fa0671be5250ee6f50aedf4cb05514abda2c7
+        uses: docker/login-action@d398f07826957cd0a18ea1b059cf1207835e60bc
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
