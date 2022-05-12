@@ -1,13 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-source logging.sh
+source assets/logging.sh
 
 for unittest in ./should*; do
   log "**********************************"
   log " UNIT TEST: ${unittest}"
   log "**********************************"
   log ""
-
   cd ${unittest}
   ./test.sh
   ret_code=$?

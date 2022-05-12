@@ -5,6 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 VERSION ?= latest
+RUNNER_VERSION ?= 2.291.1
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -12,9 +13,8 @@ TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
 TEST_ORG ?=
 TEST_ORG_REPO ?=
 TEST_EPHEMERAL ?= false
-SYNC_PERIOD ?= 5m
+SYNC_PERIOD ?= 1m
 USE_RUNNERSET ?=
-RUNNER_FEATURE_FLAG_EPHEMERAL ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
@@ -109,13 +109,9 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
-# Build the docker image
-docker-build:
-	docker build -t ${NAME}:${VERSION} .
-	docker build -t ${RUNNER_NAME}:${RUNNER_TAG} --build-arg TARGETPLATFORM=${TARGETPLATFORM} runner
-
 docker-buildx:
-	export DOCKER_CLI_EXPERIMENTAL=enabled
+	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
+	export DOCKER_BUILDKIT=1
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
@@ -191,11 +187,13 @@ acceptance/deploy:
 	TEST_ORG=${TEST_ORG} TEST_ORG_REPO=${TEST_ORG_REPO} SYNC_PERIOD=${SYNC_PERIOD} \
 	USE_RUNNERSET=${USE_RUNNERSET} \
 	TEST_EPHEMERAL=${TEST_EPHEMERAL} \
-	RUNNER_FEATURE_FLAG_EPHEMERAL=${RUNNER_FEATURE_FLAG_EPHEMERAL} \
 	acceptance/deploy.sh
 
 acceptance/tests:
 	acceptance/checks.sh
+
+acceptance/runner/entrypoint:
+	cd test/entrypoint/ && bash test.sh
 
 # We use -count=1 instead of `go clean -testcache`
 # See https://terratest.gruntwork.io/docs/testing-best-practices/avoid-test-caching/
