@@ -66,7 +66,7 @@ jobs:
         run: ct lint --config charts/.ci/ct-config.yaml
 
       - name: Create kind cluster
-        uses: helm/kind-action@94729529f85113b88f4f819c17ce61382e6d8478
+        uses: helm/kind-action@deab45fc8df9de5090a604e8ec11778eea7170bd
         if: steps.list-changed.outputs.changed == 'true'
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist
