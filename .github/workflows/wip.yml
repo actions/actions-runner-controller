@@ -32,7 +32,7 @@ jobs:
 
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@f211e3e9ded2d9377c8cadc4489a4e38014bc4c9
+        uses: docker/setup-buildx-action@91cb32d715c128e5f0ede915cd7e196ab7799b83
         with:
           version: latest
 
