@@ -206,6 +206,24 @@ func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	return stopped
 }
 
+func ephemeralRunnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
+	if getRunnerEnv(pod, "RUNNER_EPHEMERAL") != "true" {
+		return nil
+	}
+
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name != containerName {
+			continue
+		}
+
+		status := status
+
+		return &status
+	}
+
+	return nil
+}
+
 func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger, pod *corev1.Pod) (reconcile.Result, error) {
 	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
