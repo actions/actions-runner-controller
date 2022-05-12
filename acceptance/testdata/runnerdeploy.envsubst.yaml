@@ -52,7 +52,8 @@ spec:
   scaleTargetRef:
     name: ${NAME}
   scaleUpTriggers:
-  - githubEvent: {}
+  - githubEvent:
+      workflowJob: {}
     amount: 1
     duration: "10m"
   minReplicas: ${RUNNER_MIN_REPLICAS}
