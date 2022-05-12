@@ -42,7 +42,7 @@ jobs:
         run: make github-release
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@27d0a4f181a40b142cce983c5393082c365d1480
+        uses: docker/setup-qemu-action@0522dcd2bf084920c411162fde334a308be75015
 
       - name: Set up Docker Buildx
         id: buildx
