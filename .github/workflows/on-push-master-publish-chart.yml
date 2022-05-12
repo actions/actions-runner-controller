@@ -119,7 +119,7 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@fc23f249f75decd5edf254c6b4401532cef093c3
+        uses: helm/chart-releaser-action@a3454e46a6f5ac4811069a381e646961dda2e1bf
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
