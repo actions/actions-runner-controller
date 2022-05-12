@@ -444,6 +444,17 @@ spec:
           requests:
             cpu: "2.0"
             memory: "4Gi"
+        # This is an advanced configuration. Don't touch it unless you know what you're doing.
+        securityContext:
+          # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
+          # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
+          # just specified `privileged: true` like this.
+          # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+          # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
+          # like firecracker and kata. Basically they run containers within dedicated micro vms and so
+          # it's more like you can use `privileged: true` safer with those runtimes.
+          #
+          # privileged: true
       - name: docker
         resources:
           limits:
@@ -1138,6 +1149,18 @@ spec:
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
       runtimeClassName: "runc"
+      # This is an advanced configuration. Don't touch it unless you know what you're doing.
+      containers:
+      - name: runner
+        # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
+        # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
+        # just specified `privileged: true` like this.
+        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+        # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
+        # like firecracker and kata. Basically they run containers within dedicated micro vms and so
+        # it's more like you can use `privileged: true` safer with those runtimes.
+        #
+        # privileged: true
 ```
 
 ### Custom Volume mounts
