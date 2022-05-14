@@ -78,9 +78,7 @@ func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Reque
 
 	updated.Annotations[AnnotationKeyTokenExpirationDate] = ts
 
-	if pod.Spec.RestartPolicy != corev1.RestartPolicyOnFailure {
-		updated.Spec.RestartPolicy = corev1.RestartPolicyOnFailure
-	}
+	forceRunnerPodRestartPolicyNever(updated)
 
 	buf, err := json.Marshal(updated)
 	if err != nil {

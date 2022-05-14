@@ -155,7 +155,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -237,7 +237,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -315,7 +315,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -576,7 +576,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -673,7 +673,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -770,7 +770,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
