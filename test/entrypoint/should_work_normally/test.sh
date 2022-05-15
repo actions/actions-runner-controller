@@ -1,12 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # UNITTEST: should work normally
 # Will simulate a normal execution scenario. expects:
 # - the configuration step to be run exactly once
 # - the entrypoint script to exit with no error
-# - the runsvc.sh script to run with the --once flag activated.
+# - the run.sh script to run with the --once flag activated.
 
-source ../logging.sh
+source ../assets/logging.sh
 
 entrypoint_log() {
   while read I; do
@@ -14,17 +14,21 @@ entrypoint_log() {
   done
 }
 
+log "Setting up test area"
+export RUNNER_HOME=testarea
+mkdir -p ${RUNNER_HOME}
+
 log "Setting up the test"
 export UNITTEST=true
-export RUNNER_HOME=localhome
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
 
-mkdir -p ${RUNNER_HOME}/bin
-# add up the config.sh and runsvc.sh
-ln -s ../config.sh ${RUNNER_HOME}/config.sh
-ln -s ../../runsvc.sh ${RUNNER_HOME}/bin/runsvc.sh
+# run.sh and config.sh get used by the runner's real entrypoint.sh and are part of actions/runner.
+# We change symlink dummy versions so the entrypoint.sh can run allowing us to test the real entrypoint.sh
+log "Symlink dummy config.sh and run.sh"
+ln -s ../../assets/config.sh ${RUNNER_HOME}/config.sh
+ln -s ../../assets/run.sh ${RUNNER_HOME}/run.sh
 
 cleanup() {
   rm -rf ${RUNNER_HOME}
@@ -35,11 +39,14 @@ cleanup() {
   unset RUNNER_TOKEN
 }
 
+# Always run cleanup when test ends regardless of how it ends
 trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
 log "Running the entrypoint"
 log ""
 
+# Run the runner entrypoint script which as a final step runs this
+# unit tests run.sh as it was symlinked
 ../../../runner/entrypoint.sh 2> >(entrypoint_log)
 
 if [ "$?" != "0" ]; then
@@ -52,26 +59,29 @@ log "Testing if the configuration step was run only once"
 count=`cat ${RUNNER_HOME}/counter || echo "not_found"`
 if [ ${count} != "1" ]; then
   error "==============================================="
-  error "The configuration step was not run exactly once"
+  error "FAIL | The configuration step was not run exactly once"
   exit 1
 fi
-success "The configuration ran ${count} time(s)"
+
+success "PASS | The configuration ran ${count} time(s)"
 
 log "Testing if the configuration included the --ephemeral flag"
 if grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
   error "==============================================="
-  error "The configuration should not include the --ephemeral flag"
+  error "FAIL | The configuration should not include the --ephemeral flag"
   exit 1
 fi
 
-log "Testing if runsvc ran"
-if [ ! -f "${RUNNER_HOME}/runsvc_ran" ]; then
+success "PASS | The --ephemeral switch was included in the configuration"
+
+log "Testing if run.sh ran"
+if [ ! -f "${RUNNER_HOME}/run_sh_ran" ]; then
   error "=============================="
-  error "The runner service has not run"
+  error "FAIL | The runner service has not run"
   exit 1
 fi
 
-success "The service ran"
+success "PASS | run.sh ran"
 success ""
 success "==========================="
 success "Test completed successfully"

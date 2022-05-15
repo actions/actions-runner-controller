@@ -45,6 +45,7 @@ spec:
         - "--leader-election-id={{ .Values.leaderElectionId }}"
         {{- end }}
         - "--sync-period={{ .Values.syncPeriod }}"
+        - "--default-scale-down-delay={{ .Values.defaultScaleDownDelay }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
         - "--runner-image={{ .Values.image.actionsRunnerRepositoryAndTag }}"
         {{- range .Values.image.actionsRunnerImagePullSecrets }}

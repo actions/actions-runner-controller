@@ -138,6 +138,13 @@ func TestWebhookWorkflowJob(t *testing.T) {
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
 				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
+				},
 			},
 		}
 
@@ -176,6 +183,13 @@ func TestWebhookWorkflowJob(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -216,6 +230,13 @@ func TestWebhookWorkflowJob(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -277,6 +298,13 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
 				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
+				},
 			},
 		}
 
@@ -315,6 +343,13 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -355,6 +390,13 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
