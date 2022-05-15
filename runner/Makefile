@@ -4,7 +4,7 @@ DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
-RUNNER_VERSION ?= 2.289.1
+RUNNER_VERSION ?= 2.291.1
 DOCKER_VERSION ?= 20.10.12
 
 # default list of platforms for which multiarch image is built
@@ -33,7 +33,8 @@ docker-push-ubuntu:
 	docker push ${DIND_RUNNER_NAME}:${TAG}
 
 docker-buildx-ubuntu:
-	export DOCKER_CLI_EXPERIMENTAL=enabled
+	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
+    export DOCKER_BUILDKIT=1
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi

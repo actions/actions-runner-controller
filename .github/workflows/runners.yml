@@ -11,11 +11,12 @@ on:
       - 'master'
     paths:
       - 'runner/**'
+      - '!runner/Makefile'
       - .github/workflows/runners.yml
       - '!**.md'
 
 env:
-  RUNNER_VERSION: 2.289.2
+  RUNNER_VERSION: 2.291.1
   DOCKER_VERSION: 20.10.12
   DOCKERHUB_USERNAME: summerwind
 
@@ -41,7 +42,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
 
       - name: Setup Docker Environment
         id: vars
@@ -53,7 +54,7 @@ jobs:
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Versioned Tags
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
         with:
           context: ./runner
           file: ./runner/${{ matrix.dockerfile }}

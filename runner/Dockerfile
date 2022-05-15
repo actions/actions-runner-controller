@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.289.1
+ARG RUNNER_VERSION=2.291.1
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
@@ -10,10 +10,10 @@ RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
-    && apt install -y software-properties-common \
+    && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
-    && apt update -y \
-    && apt install -y --no-install-recommends \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
@@ -66,7 +66,6 @@ RUN set -vx; \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
 ENV HOME=/home/runner
 
 # Uncomment the below COPY to use your own custom build of actions-runner.
@@ -92,6 +91,7 @@ ENV HOME=/home/runner
 # libyaml-dev is required for ruby/setup-ruby action.
 # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
 # to avoid rerunning apt-update on its own.
+ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
@@ -110,8 +110,13 @@ RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
-COPY entrypoint.sh job_start.sh job_end.sh update_status.sh /
-RUN chmod 755 entrypoint.sh job_start.sh job_end.sh update_status.sh
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
+COPY entrypoint.sh logger.bash /usr/bin/
+RUN chmod 755 entrypoint.sh
+
+COPY job_start.sh job_end.sh update_status.sh /
+RUN chmod 755 job_start.sh job_end.sh update_status.sh
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
@@ -123,4 +128,4 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 USER runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
-CMD ["/entrypoint.sh"]
+CMD ["entrypoint.sh"]

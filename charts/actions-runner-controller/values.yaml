@@ -6,7 +6,8 @@ labels: {}
 
 replicaCount: 1
 
-syncPeriod: 10m
+syncPeriod: 1m
+defaultScaleDownDelay: 10m
 
 enableLeaderElection: true
 # Specifies the controller id for leader election.
@@ -108,7 +109,7 @@ metrics:
     enabled: true
     image:
       repository: quay.io/brancz/kube-rbac-proxy
-      tag: v0.11.0
+      tag: v0.12.0
 
 resources:
   {}
