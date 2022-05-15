@@ -11,6 +11,7 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
   {{- with .Values.githubWebhookServer.ingress.annotations }}
