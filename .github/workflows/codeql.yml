@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3.0.2
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2.1.0
+        uses: github/codeql-action/init@v2.1.10
         with:
           languages: go
       - name: Autobuild
