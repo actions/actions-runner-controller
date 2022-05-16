@@ -404,7 +404,7 @@ func TestNewRunnerPod(t *testing.T) {
 	for i := range testcases {
 		tc := testcases[i]
 		t.Run(tc.description, func(t *testing.T) {
-			got, err := newRunnerPod("runner", tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, false)
+			got, err := newRunnerPod("runner", tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})

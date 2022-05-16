@@ -1,3 +1,48 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}
+# In kind environments, the provider writes:
+#   /var/lib/docker/volumes/KIND_NODE_CONTAINER_VOL_ID/_data/local-path-provisioner/PV_NAME
+# It can be hundreds of gigabytes depending on what you cache in the test workflow. Beware to not encounter `no space left on device` errors!
+# If you did encounter no space errorrs try:
+#   docker system prune
+#   docker buildx prune #=> frees up /var/lib/docker/volumes/buildx_buildkit_container-builder0_state
+#   sudo rm -rf /var/lib/docker/volumes/KIND_NODE_CONTAINER_VOL_ID/_data/local-path-provisioner #=> frees up local-path-provisioner's data
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-var-lib-docker
+  labels:
+    content: ${NAME}-var-lib-docker
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-cache
+  labels:
+    content: ${NAME}-cache
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-runner-tool-cache
+  labels:
+    content: ${NAME}-runner-tool-cache
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -59,8 +104,108 @@ spec:
       containers:
       - name: runner
         imagePullPolicy: IfNotPresent
-      #- name: docker
-      #  #image: mumoshu/actions-runner-dind:dev
+        env:
+        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+          value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
+        - name: GOMODCACHE
+          value: "/home/runner/.cache/go-mod"
+        volumeMounts:
+        # Cache docker image layers, in case dockerdWithinRunnerContainer=true
+        - name: var-lib-docker
+          mountPath: /var/lib/docker
+        # Cache go modules and builds
+        # - name: gocache
+        #   # Run `goenv | grep GOCACHE` to verify the path is correct for your env
+        #   mountPath: /home/runner/.cache/go-build
+        # - name: gomodcache
+        #   # Run `goenv | grep GOMODCACHE` to verify the path is correct for your env
+        #   # mountPath: /home/runner/go/pkg/mod
+        - name: cache
+          # go: could not create module cache: stat /home/runner/.cache/go-mod: permission denied
+          mountPath: "/home/runner/.cache"
+        - name: runner-tool-cache
+          # This corresponds to our runner image's default setting of RUNNER_TOOL_CACHE=/opt/hostedtoolcache.
+          #
+          # In case you customize the envvar in both runner and docker containers of the runner pod spec,
+          # You'd need to change this mountPath accordingly.
+          #
+          # The tool cache directory is defined in actions/toolkit's tool-cache module:
+          # https://github.com/actions/toolkit/blob/2f164000dcd42fb08287824a3bc3030dbed33687/packages/tool-cache/src/tool-cache.ts#L621-L638
+          #
+          # Many setup-* actions like setup-go utilizes the tool-cache module to download and cache installed binaries:
+          # https://github.com/actions/setup-go/blob/56a61c9834b4a4950dbbf4740af0b8a98c73b768/src/installer.ts#L144
+          mountPath: "/opt/hostedtoolcache"
+      # Valid only when dockerdWithinRunnerContainer=false
+      - name: docker
+        volumeMounts:
+        # Cache docker image layers, in case dockerdWithinRunnerContainer=false
+        - name: var-lib-docker
+          mountPath: /var/lib/docker
+        # image: mumoshu/actions-runner-dind:dev
+
+        # For buildx cache
+        - name: cache
+          mountPath: "/home/runner/.cache"
+  volumeClaimTemplates:
+  - metadata:
+      name: vol1
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}
+      ## Dunno which provider supports auto-provisioning with selector.
+      ## At least the rancher local path provider stopped with:
+      ##  waiting for a volume to be created, either by external provisioner "rancher.io/local-path" or manually created by system administrator
+      # selector:
+      #    matchLabels:
+      #      runnerset-volume-id: ${NAME}-vol1
+  - metadata:
+      name: vol2
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}
+      # selector:
+      #    matchLabels:
+      #      runnerset-volume-id: ${NAME}-vol2
+  - metadata:
+      name: var-lib-docker
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}-var-lib-docker
+  - metadata:
+      name: cache
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}-cache
+  - metadata:
+      name: runner-tool-cache
+      # It turns out labels doesn't distinguish PVs across PVCs and the
+      # end result is PVs are reused by wrong PVCs.
+      # The correct way seems to be to differentiate storage class per pvc template.
+      # labels:
+      #   id: runner-tool-cache
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}-runner-tool-cache
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler

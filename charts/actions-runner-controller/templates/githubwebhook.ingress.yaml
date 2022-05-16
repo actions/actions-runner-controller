@@ -37,6 +37,9 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          {{- if .extraPaths }}
+          {{- toYaml .extraPaths | nindent 10 }}
+          {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
             {{- if $.Capabilities.APIVersions.Has "networking.k8s.io/v1" }}

@@ -8,6 +8,7 @@
   * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
   * [Runner coming up before network available](#runner-coming-up-before-network-available)
+  * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
 
 
 ## Tools
@@ -55,22 +56,37 @@ context deadline exceeded
 
 **Solution**<br />
 
-To fix this, you need to set up a firewall rule to allow the master node to connect to the webhook port.
-The exact way to do this may wary, but the following script should point you in the right direction:
+To fix this, you may either:
 
-```
-# 1) Retrieve the network tag automatically given to the worker nodes
-# NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
-WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
+1. Configure the webhook to use another port, such as 443 or 10250, [each of
+   which allow traffic by default](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules).
 
-# 2) Take note of the VPC network in which you deployed your cluster
-# NOTE this only works if you have only one network in which you deploy your clusters
-NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
+   ```sh
+   # With helm, you'd set `webhookPort` to the port number of your choice
+   # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1410/files for more information
+   helm upgrade --install --namespace actions-runner-system --create-namespace \
+                --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+                --set webhookPort=10250
+   ```
 
-# 3) Get the master source ip block
-SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
-gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
-```
+2. Set up a firewall rule to allow the master node to connect to the default
+   webhook port. The exact way to do this may vary, but the following script
+   should point you in the right direction:
+
+   ```sh
+   # 1) Retrieve the network tag automatically given to the worker nodes
+   # NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
+   WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
+
+   # 2) Take note of the VPC network in which you deployed your cluster
+   # NOTE this only works if you have only one network in which you deploy your clusters
+   NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
+
+   # 3) Get the master source ip block
+   SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
+
+   gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
+   ```
 
 ## Operations
 
@@ -164,3 +180,31 @@ spec:
         - name: STARTUP_DELAY_IN_SECONDS
           value: "5"
 ```
+
+## Outgoing network action hangs indefinitely
+
+**Problem**
+
+Some random outgoing network actions hangs indefinitely. This could be because your cluster does not give Docker the standard MTU of 1500, you can check this out by running `ip link` in a pod that encounters the problem and reading the outgoing interface's MTU value. If it is smaller than 1500, then try the following.
+
+**Solution**
+
+Add a `dockerMTU` key in your runner's spec with the value you read on the outgoing interface. For instance:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: github-runner
+  namespace: github-system
+spec:
+  replicas: 6
+  template:
+    spec:
+      dockerMTU: 1400
+      repository: $username/$repo
+      env: []
+```
+
+There may be more places you need to tweak for MTU.
+Please consult issues like #651 for more information.

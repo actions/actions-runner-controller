@@ -47,8 +47,6 @@ const (
 	// A pod that is timed out can be terminated if needed.
 	registrationTimeout = 10 * time.Minute
 
-	defaultRegistrationCheckInterval = time.Minute
-
 	// DefaultRunnerPodRecreationDelayAfterWebhookScale is the delay until syncing the runners with the desired replicas
 	// after a webhook-based scale up.
 	// This is used to prevent ARC from recreating completed runner pods that are deleted soon without being used at all.
