@@ -55,6 +55,8 @@ context deadline exceeded
 
 **Solution**<br />
 
+To fix this, you may either:
+
 1. Configure the webhook to use another port, such as 443 or 10250, [each of
    which allow traffic by default](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules).
 
