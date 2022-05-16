@@ -197,7 +197,7 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
+	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL)
 	if err != nil {
 		return nil, err
 	}

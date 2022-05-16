@@ -47,9 +47,6 @@ const (
 
 	retryDelayOnGitHubAPIRateLimitError = 30 * time.Second
 
-	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
-	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
-
 	EnvVarOrg        = "RUNNER_ORG"
 	EnvVarRepo       = "RUNNER_REPO"
 	EnvVarEnterprise = "RUNNER_ENTERPRISE"
@@ -415,9 +412,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	template.Spec.SecurityContext = runner.Spec.SecurityContext
 	template.Spec.EnableServiceLinks = runner.Spec.EnableServiceLinks
 
-	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
-
-	pod, err := newRunnerPod(runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
+	pod, err := newRunnerPod(runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
 	if err != nil {
 		return pod, err
 	}
@@ -531,7 +526,7 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -601,14 +596,6 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			Name:  EnvVarEphemeral,
 			Value: fmt.Sprintf("%v", ephemeral),
 		},
-	}
-
-	if registrationOnly {
-		env = append(env, corev1.EnvVar{
-			Name:  "RUNNER_REGISTRATION_ONLY",
-			Value: "true",
-		},
-		)
 	}
 
 	var seLinuxOptions *corev1.SELinuxOptions
