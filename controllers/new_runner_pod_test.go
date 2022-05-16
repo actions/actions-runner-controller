@@ -106,10 +106,6 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "DOCKER_CERT_PATH",
 							Value: "/certs/client",
 						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -159,7 +155,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -228,10 +224,6 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
 						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -245,7 +237,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -310,10 +302,6 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
 						},
-						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -327,7 +315,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -400,8 +388,7 @@ func TestNewRunnerPod(t *testing.T) {
 				DockerEnabled: boolPtr(false),
 			},
 			want: newTestPod(dockerDisabled, func(p *corev1.Pod) {
-				// TODO
-				// p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
+				p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
 			}),
 		},
 	}
@@ -417,7 +404,7 @@ func TestNewRunnerPod(t *testing.T) {
 	for i := range testcases {
 		tc := testcases[i]
 		t.Run(tc.description, func(t *testing.T) {
-			got, err := newRunnerPod("runner", tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, false)
+			got, err := newRunnerPod("runner", tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -533,10 +520,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "/certs/client",
 						},
 						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
-						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -593,7 +576,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -670,10 +653,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "true",
 						},
 						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
-						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -694,7 +673,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -771,10 +750,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "true",
 						},
 						{
-							Name:  "RUNNER_FEATURE_FLAG_EPHEMERAL",
-							Value: "true",
-						},
-						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -795,7 +770,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
+			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 
@@ -904,7 +879,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 			},
 
 			want: newTestPod(dockerDisabled, func(p *corev1.Pod) {
-				// p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
+				p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
 			}),
 		},
 	}

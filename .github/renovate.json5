@@ -30,8 +30,8 @@
     },
     {
       "fileMatch": [
-        "runner/Dockerfile",
-        "runner/Dockerfile.dindrunner"
+        "runner/actions-runner.dockerfile",
+        "runner/actions-runner-dind.dockerfile"
       ],
       "matchStrings": ["RUNNER_VERSION=+(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
