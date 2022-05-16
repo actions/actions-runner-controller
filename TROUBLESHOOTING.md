@@ -8,6 +8,7 @@
   * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
   * [Runner coming up before network available](#runner-coming-up-before-network-available)
+  * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
 
 
 ## Tools
@@ -179,3 +180,31 @@ spec:
         - name: STARTUP_DELAY_IN_SECONDS
           value: "5"
 ```
+
+## Outgoing network action hangs indefinitely
+
+**Problem**
+
+Some random outgoing network actions hangs indefinitely. This could be because your cluster does not give Docker the standard MTU of 1500, you can check this out by running `ip link` in a pod that encounters the problem and reading the outgoing interface's MTU value. If it is smaller than 1500, then try the following.
+
+**Solution**
+
+Add a `dockerMTU` key in your runner's spec with the value you read on the outgoing interface. For instance:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: github-runner
+  namespace: github-system
+spec:
+  replicas: 6
+  template:
+    spec:
+      dockerMTU: 1400
+      repository: $username/$repo
+      env: []
+```
+
+There may be more places you need to tweak for MTU.
+Please consult issues like #651 for more information.
