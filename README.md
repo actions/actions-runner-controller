@@ -489,7 +489,7 @@ A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `min
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. 
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up.
 
 This anti-flap configuration also has the final say on if a runner can be scaled down or not regardless of the chosen scaling method.
 
@@ -536,7 +536,7 @@ spec:
 
 > To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
 
-The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes. 
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.
 
 Be aware that the shorter the sync period the quicker you will consume your rate limit budget, depending on your environment this may or may not be a risk. Consider monitoring ARCs rate limit budget when configuring this feature to find the optimal performance sync period.
 
@@ -709,9 +709,9 @@ $ helm upgrade --install --namespace actions-runner-system --create-namespace \
              --set "githubWebhookServer.enabled=true"
 ```
 
-The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
+The command above will create a new deployment and a service for receiving GitHub Webhooks on the `actions-runner-system` namespace.
 
-Now we need to expose this service so that Github can send these webhooks over the network with TSL protection.
+Now we need to expose this service so that GitHub can send these webhooks over the network with TSL protection.
 
 You can do it in any way you prefer, here we'll suggest doing it with a k8s Ingress.
 For the sake of this example we'll expose this service on the following URL:
@@ -759,9 +759,9 @@ Then create this resource on your cluster with the following command:
 kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
 ```
 
-After this step your webhook server should be ready to start receiving webhooks from Github.
+After this step your webhook server should be ready to start receiving webhooks from GitHub.
 
-To configure Github to start sending you webhooks, go to the settings page of your repository
+To configure GitHub to start sending you webhooks, go to the settings page of your repository
 or organization then click on `Webhooks`, then on `Add webhook`.
 
 There set the "Payload URL" field with the webhook URL you just created,
@@ -771,18 +771,19 @@ if you followed the example ingress above the URL would be something like this:
 
 > Remember to replace `your.domain.com` with your own domain.
 
-Then click on "let me select individual events" and choose:
+Then click on "let me select individual events" and choose `Workflow Jobs`.
+
+You may also want to choose the following event(s) if you use it as a scale trigger in your HRA spec:
 
 - Check runs
 - Pushes
 - Pull Requests
-- Workflow Jobs
 
 Later you can remove any of these you are not using to reduce the amount of data sent to your server.
 
 Then click on `Add Webhook`.
 
-Github will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
+GitHub will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
 alongside your webhook on the Settings -> Webhooks page.
 
 Once you were able to confirm that the Webhook server is ready and running from GitHub create or update your
