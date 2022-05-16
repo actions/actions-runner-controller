@@ -421,9 +421,7 @@ func getSelector(rd *v1alpha1.RunnerDeployment) *metav1.LabelSelector {
 func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []string, scheme *runtime.Scheme) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 
-	for _, l := range commonRunnerLabels {
-		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
-	}
+	newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, commonRunnerLabels...)
 
 	templateHash := ComputeHash(&newRSTemplate)
 
