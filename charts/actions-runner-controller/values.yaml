@@ -6,6 +6,7 @@ labels: {}
 
 replicaCount: 1
 
+webhookPort: 9443
 syncPeriod: 1m
 defaultScaleDownDelay: 10m
 

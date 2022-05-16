@@ -71,6 +71,7 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		leaderElectionId     string
+		port                 int
 		syncPeriod           time.Duration
 
 		gitHubAPICacheDuration time.Duration
@@ -113,6 +114,7 @@ func main() {
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "DEPRECATED: The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", controllers.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
+	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
@@ -136,7 +138,7 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
-		Port:               9443,
+		Port:               port,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
 	})
