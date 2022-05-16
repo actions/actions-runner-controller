@@ -706,7 +706,7 @@ _[see the values documentation for all configuration options](https://github.com
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
-             --set "githubWebhookServer.enabled=true"
+             --set "githubWebhookServer.enabled=true,service.type=NodePort,githubWebhookServer.ports[0].nodePort=33080"
 ```
 
 The command above will create a new deployment and a service for receiving GitHub Webhooks on the `actions-runner-system` namespace.
