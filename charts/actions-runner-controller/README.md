@@ -4,14 +4,15 @@ All additional docs are kept in the `docs/` folder, this README is solely for do
 
 ## Values
 
-**_The values are documented as of HEAD, to review the configuration options for your chart version ensure you view this file at the relevent [tag](https://github.com/actions-runner-controller/actions-runner-controller/tags)_**
+**_The values are documented as of HEAD, to review the configuration options for your chart version ensure you view this file at the relevant [tag](https://github.com/actions-runner-controller/actions-runner-controller/tags)_**
 
-> _Default values are the defaults set in the charts values.yaml, some properties have default configurations in the code for when the property is omitted or invalid_
+> _Default values are the defaults set in the charts `values.yaml`, some properties have default configurations in the code for when the property is omitted or invalid_
 
 | Key                                                      | Description                                                                                                                | Default                                                              |
 |----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
 | `labels`                                                 | Set labels to apply to all resources in the chart                                                                          |                                                                      |
 | `replicaCount`                                           | Set the number of controller pods                                                                                          | 1                                                                    |
+| `webhookPort`                                            | Set the containerPort for the webhook Pod                                                                                  | 9443                                                                 |
 | `syncPeriod`                                             | Set the period in which the controler reconciles the desired runners count                                                 | 10m                                                                  |
 | `enableLeaderElection`                                   | Enable election configuration                                                                                              | true                                                                 |
 | `leaderElectionId`                                       | Set the election ID for the controller group                                                                               |                                                                      |

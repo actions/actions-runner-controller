@@ -59,6 +59,7 @@ type RunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
@@ -130,6 +131,12 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		owners = append(owners, &ss)
 	}
 
+	if res, err := syncVolumes(ctx, r.Client, log, req.Namespace, runnerSet, statefulsets); err != nil {
+		return ctrl.Result{}, err
+	} else if res != nil {
+		return *res, nil
+	}
+
 	res, err := syncRunnerPodsOwners(ctx, r.Client, log, effectiveTime, newDesiredReplicas, func() client.Object { return create.DeepCopy() }, ephemeral, owners)
 	if err != nil || res == nil {
 		return ctrl.Result{}, err
@@ -182,16 +189,14 @@ var LabelValuePodMutation = "true"
 func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
 	runnerSetWithOverrides := *runnerSet.Spec.DeepCopy()
 
-	for _, l := range r.CommonRunnerLabels {
-		runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, l)
-	}
+	runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, r.CommonRunnerLabels...)
 
 	template := corev1.Pod{
 		ObjectMeta: runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta,
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false, r.ConfigureRunnersRBAC)
+	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, r.ConfigureRunnersRBAC)
 	if err != nil {
 		return nil, err
 	}

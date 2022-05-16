@@ -42,5 +42,13 @@ type Step struct {
 }
 
 type With struct {
-	Version string `json:"version,omitempty"`
+	Version   string `json:"version,omitempty"`
+	GoVersion string `json:"go-version,omitempty"`
+
+	// https://github.com/docker/setup-buildx-action#inputs
+	BuildkitdFlags string `json:"buildkitd-flags,omitempty"`
+	Install        bool   `json:"install,omitempty"`
+	// This can be either the address or the context name
+	// https://github.com/docker/buildx/blob/master/docs/reference/buildx_create.md#description
+	Endpoint string `json:"endpoint,omitempty"`
 }
