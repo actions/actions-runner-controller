@@ -49,12 +49,11 @@ const (
 	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
 	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
 
-	EnvVarOrg                        = "RUNNER_ORG"
-	EnvVarRepo                       = "RUNNER_REPO"
-	EnvVarEnterprise                 = "RUNNER_ENTERPRISE"
-	EnvVarEphemeral                  = "RUNNER_EPHEMERAL"
-	EnvVarRunnerFeatureFlagEphemeral = "RUNNER_FEATURE_FLAG_EPHEMERAL"
-	EnvVarTrue                       = "true"
+	EnvVarOrg        = "RUNNER_ORG"
+	EnvVarRepo       = "RUNNER_REPO"
+	EnvVarEnterprise = "RUNNER_ENTERPRISE"
+	EnvVarEphemeral  = "RUNNER_EPHEMERAL"
+	EnvVarTrue       = "true"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -210,6 +209,24 @@ func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	return stopped
 }
 
+func ephemeralRunnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
+	if getRunnerEnv(pod, "RUNNER_EPHEMERAL") != "true" {
+		return nil
+	}
+
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name != containerName {
+			continue
+		}
+
+		status := status
+
+		return &status
+	}
+
+	return nil
+}
+
 func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger, pod *corev1.Pod) (reconcile.Result, error) {
 	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
@@ -362,23 +379,50 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runner.Spec.Containers) == 0 {
 		template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
-			Name:            "runner",
-			ImagePullPolicy: runner.Spec.ImagePullPolicy,
-			EnvFrom:         runner.Spec.EnvFrom,
-			Env:             runner.Spec.Env,
-			Resources:       runner.Spec.Resources,
+			Name: "runner",
 		})
 
 		if (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
 			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
-				Name:         "docker",
-				VolumeMounts: runner.Spec.DockerVolumeMounts,
-				Resources:    runner.Spec.DockerdContainerResources,
-				Env:          runner.Spec.DockerEnv,
+				Name: "docker",
 			})
 		}
 	} else {
 		template.Spec.Containers = runner.Spec.Containers
+	}
+
+	for i, c := range template.Spec.Containers {
+		switch c.Name {
+		case "runner":
+			if c.ImagePullPolicy == "" {
+				template.Spec.Containers[i].ImagePullPolicy = runner.Spec.ImagePullPolicy
+			}
+			if len(c.EnvFrom) == 0 {
+				template.Spec.Containers[i].EnvFrom = runner.Spec.EnvFrom
+			}
+			if len(c.Env) == 0 {
+				template.Spec.Containers[i].Env = runner.Spec.Env
+			}
+			if len(c.Resources.Requests) == 0 {
+				template.Spec.Containers[i].Resources.Requests = runner.Spec.Resources.Requests
+			}
+			if len(c.Resources.Limits) == 0 {
+				template.Spec.Containers[i].Resources.Limits = runner.Spec.Resources.Limits
+			}
+		case "docker":
+			if len(c.VolumeMounts) == 0 {
+				template.Spec.Containers[i].VolumeMounts = runner.Spec.DockerVolumeMounts
+			}
+			if len(c.Resources.Limits) == 0 {
+				template.Spec.Containers[i].Resources.Limits = runner.Spec.DockerdContainerResources.Limits
+			}
+			if len(c.Resources.Requests) == 0 {
+				template.Spec.Containers[i].Resources.Requests = runner.Spec.DockerdContainerResources.Requests
+			}
+			if len(c.Env) == 0 {
+				template.Spec.Containers[i].Env = runner.Spec.DockerEnv
+			}
+		}
 	}
 
 	template.Spec.SecurityContext = runner.Spec.SecurityContext
@@ -637,14 +681,15 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 	if runnerContainer.SecurityContext == nil {
 		runnerContainer.SecurityContext = &corev1.SecurityContext{}
 	}
-	// Runner need to run privileged if it contains DinD
-	runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+
+	if runnerContainer.SecurityContext.Privileged == nil {
+		// Runner need to run privileged if it contains DinD
+		runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+	}
 
 	pod := template.DeepCopy()
 
-	if pod.Spec.RestartPolicy == "" {
-		pod.Spec.RestartPolicy = "OnFailure"
-	}
+	forceRunnerPodRestartPolicyNever(pod)
 
 	if mtu := runnerSpec.DockerMTU; mtu != nil && dockerdInRunner {
 		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
@@ -841,12 +886,6 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 		} else {
 			pod.Spec.Containers[dockerdContainerIndex] = *dockerdContainer
 		}
-	}
-
-	// TODO Remove this once we remove RUNNER_FEATURE_FLAG_EPHEMERAL from runner's entrypoint.sh
-	// and make --ephemeral the default option.
-	if getRunnerEnv(pod, EnvVarRunnerFeatureFlagEphemeral) == "" {
-		setRunnerEnv(pod, EnvVarRunnerFeatureFlagEphemeral, EnvVarTrue)
 	}
 
 	return *pod, nil

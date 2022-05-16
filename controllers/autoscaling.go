@@ -30,10 +30,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgi
 	metrics := hra.Spec.Metrics
 	numMetrics := len(metrics)
 	if numMetrics == 0 {
-		if len(hra.Spec.ScaleUpTriggers) == 0 {
-			return r.suggestReplicasByQueuedAndInProgressWorkflowRuns(ghc, st, hra, nil)
-		}
-
+		// We don't default to anything since ARC 0.23.0
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/728
 		return nil, nil
 	} else if numMetrics > 2 {
 		return nil, fmt.Errorf("too many autoscaling metrics configured: It must be 0 to 2, but got %d", numMetrics)
@@ -140,7 +138,29 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 		if len(allJobs) == 0 {
 			fallback_cb()
 		} else {
+		JOB:
 			for _, job := range allJobs {
+				runnerLabels := make(map[string]struct{}, len(st.labels))
+				for _, l := range st.labels {
+					runnerLabels[l] = struct{}{}
+				}
+
+				if len(job.Labels) == 0 {
+					// This shouldn't usually happen
+					r.Log.Info("Detected job with no labels, which is not supported by ARC. Skipping anyway.", "labels", job.Labels, "run_id", job.GetRunID(), "job_id", job.GetID())
+					continue JOB
+				}
+
+				for _, l := range job.Labels {
+					if l == "self-hosted" {
+						continue
+					}
+
+					if _, ok := runnerLabels[l]; !ok {
+						continue JOB
+					}
+				}
+
 				switch job.GetStatus() {
 				case "completed":
 					// We add a case for `completed` so it is not counted in `unknown`.

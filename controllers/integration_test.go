@@ -1230,9 +1230,11 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
-								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{},
-								Amount:      1,
-								Duration:    metav1.Duration{Duration: time.Minute},
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
 							},
 						},
 					},
@@ -1312,9 +1314,11 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
 						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
 							{
-								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{},
-								Amount:      1,
-								Duration:    metav1.Duration{Duration: time.Minute},
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
 							},
 						},
 					},

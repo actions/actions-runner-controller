@@ -16,9 +16,9 @@ jobs:
         run: echo ::set-output name=sha_short::${GITHUB_SHA::7}
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
 
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@193b404f8a1d1dccaf6ed9bf03cdb68d2d02020f
         with:
           go-version: '1.17.7'
 
@@ -42,22 +42,22 @@ jobs:
         run: make github-release
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@0522dcd2bf084920c411162fde334a308be75015
 
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@91cb32d715c128e5f0ede915cd7e196ab7799b83
         with:
           version: latest
 
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@d398f07826957cd0a18ea1b059cf1207835e60bc
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build and Push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64

@@ -1,10 +1,27 @@
 # Troubleshooting
 
-* [Invalid header field value](#invalid-header-field-value)
-* [Runner coming up before network available](#runner-coming-up-before-network-available)
-* [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
+* [Tools](#tools)
+* [Installation](#installation)
+  * [Invalid header field value](#invalid-header-field-value)
+  * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
+* [Operations](#operations)
+  * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
+  * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
+  * [Runner coming up before network available](#runner-coming-up-before-network-available)
 
-## Invalid header field value
+
+## Tools
+
+A list of tools which are helpful for troubleshooting
+
+* https://github.com/rewanthtammana/kubectl-fields Kubernetes resources hierarchy parsing tool
+* https://github.com/stern/stern Multi pod and container log tailing for Kubernetes
+
+## Installation
+
+Troubeshooting runbooks that relate to ARC installation problems
+
+### Invalid header field value
 
 **Problem**
 
@@ -23,7 +40,88 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documented flags
 
-## Runner coming up before network available
+
+### Deployment fails on GKE due to webhooks
+
+**Problem**
+
+Due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster:
+
+```
+Internal error occurred: failed calling webhook "mutate.runner.actions.summerwind.dev": 
+Post https://webhook-service.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runner?timeout=10s: 
+context deadline exceeded
+```
+
+**Solution**<br />
+
+To fix this, you need to set up a firewall rule to allow the master node to connect to the webhook port.
+The exact way to do this may wary, but the following script should point you in the right direction:
+
+```
+# 1) Retrieve the network tag automatically given to the worker nodes
+# NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
+WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
+
+# 2) Take note of the VPC network in which you deployed your cluster
+# NOTE this only works if you have only one network in which you deploy your clusters
+NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
+
+# 3) Get the master source ip block
+SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
+gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
+```
+
+## Operations
+
+Troubeshooting runbooks that relate to ARC operational problems
+
+### Stuck runner kind or backing pod
+
+**Problem**
+
+Sometimes either the runner kind (`kubectl get runners`) or it's underlying pod can get stuck in a terminating state for various reasons. You can get the kind unstuck by removing its finaliser using something like this:
+
+**Solution**
+
+Remove the finaliser from the relevent runner kind or pod
+
+```
+# Get all kind runners and remove the finalizer
+$ kubectl get runners --no-headers | awk {'print $1'} | xargs kubectl patch runner --type merge -p '{"metadata":{"finalizers":null}}'
+
+# Get all pods that are stuck terminating and remove the finalizer
+$ kubectl -n get pods | grep Terminating | awk {'print $1'} | xargs kubectl patch pod -p '{"metadata":{"finalizers":null}}'
+```
+
+_Note the code assumes you have already selected the namespace your runners are in and that they 
+are in a namespace not shared with anything else_
+
+### Delay in jobs being allocated to runners
+
+**Problem**
+
+ARC isn't involved in jobs actually getting allocated to a runner. ARC is responsible for orchestrating runners and the runner lifecycle. Why some people see large delays in job allocation is not clear however it has been https://github.com/actions-runner-controller/actions-runner-controller/issues/1387#issuecomment-1122593984 that this is caused from the self-update process somehow.
+
+**Solution**
+
+Disable the self-update process in your runner manifests
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment-with-sleep
+spec:
+  template:
+    spec:
+      ...
+      env:
+        - name: DISABLE_RUNNER_UPDATE
+          value: "true"
+```
+
+### Runner coming up before network available
 
 **Problem**
 
@@ -61,40 +159,8 @@ metadata:
 spec:
   template:
     spec:
+      ...
       env:
-        # This runner's entrypoint script will have a 5 seconds delay 
-        # as a first action within the entrypoint script
         - name: STARTUP_DELAY_IN_SECONDS
           value: "5"
-```
-
-## Deployment fails on GKE due to webhooks
-
-**Problem**
-
-Due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster:
-
-```
-Internal error occurred: failed calling webhook "mutate.runner.actions.summerwind.dev": 
-Post https://webhook-service.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runner?timeout=10s: 
-context deadline exceeded
-```
-
-**Solution**<br />
-
-To fix this, you need to set up a firewall rule to allow the master node to connect to the webhook port.
-The exact way to do this may wary, but the following script should point you in the right direction:
-
-```
-# 1) Retrieve the network tag automatically given to the worker nodes
-# NOTE: this only works if you have only one cluster in your GCP project. You will have to manually inspect the result of this command to find the tag for the cluster you want to target
-WORKER_NODES_TAG=$(gcloud compute instances list --format='text(tags.items[0])' --filter='metadata.kubelet-config:*' | grep tags | awk '{print $2}' | sort | uniq)
-
-# 2) Take note of the VPC network in which you deployed your cluster
-# NOTE this only works if you have only one network in which you deploy your clusters
-NETWORK=$(gcloud compute instances list --format='text(networkInterfaces[0].network)' --filter='metadata.kubelet-config:*' | grep networks | awk -F'/' '{print $NF}' | sort | uniq)
-
-# 3) Get the master source ip block
-SOURCE=$(gcloud container clusters describe <cluster-name> --region <region> | grep masterIpv4CidrBlock| cut -d ':' -f 2 | tr -d ' ')
-gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
 ```
