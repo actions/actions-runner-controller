@@ -90,6 +90,8 @@ func (c *MultiGitHubClient) Init(ctx context.Context, object interface{}) (*gith
 	// case *v1alpha1.RunnerDeployment:
 	case *v1alpha1.RunnerSet:
 		return c.initClientForRunnerSet(ctx, o)
+	case *v1alpha1.HorizontalRunnerAutoscaler:
+		return c.initClientForHorizontalRunnerAutoscaler(ctx, o)
 	default:
 		return nil, fmt.Errorf("unsupported object type for initializing github client: %T", o)
 	}
@@ -165,6 +167,16 @@ func (c *MultiGitHubClient) initClientForRunnerSet(ctx context.Context, rs *v1al
 	return c.initClientWithSecretName(ctx, rs.Namespace, secretName, ref)
 }
 
+func (c *MultiGitHubClient) initClientForHorizontalRunnerAutoscaler(ctx context.Context, hra *v1alpha1.HorizontalRunnerAutoscaler) (*github.Client, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	ref := refFromHorizontalRunnerAutoscaler(hra)
+
+	secretName := hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+
+	return c.initClientWithSecretName(ctx, hra.Namespace, secretName, ref)
+}
 func (c *MultiGitHubClient) deinitClientForRunnerPod(p *corev1.Pod) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -432,5 +444,13 @@ func refFromRunnerSet(rs *v1alpha1.RunnerSet) *runnerOwnerRef {
 		kind: rs.Kind,
 		ns:   rs.Namespace,
 		name: rs.Name,
+	}
+}
+
+func refFromHorizontalRunnerAutoscaler(hra *v1alpha1.HorizontalRunnerAutoscaler) *runnerOwnerRef {
+	return &runnerOwnerRef{
+		kind: hra.Kind,
+		ns:   hra.Namespace,
+		name: hra.Name,
 	}
 }
