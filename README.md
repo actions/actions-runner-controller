@@ -59,7 +59,7 @@ By default, actions-runner-controller uses [cert-manager](https://cert-manager.i
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
-Subsequent to this, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
+After installing cert-manager, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 **Kubectl Deployment:**
 
@@ -444,6 +444,17 @@ spec:
           requests:
             cpu: "2.0"
             memory: "4Gi"
+        # This is an advanced configuration. Don't touch it unless you know what you're doing.
+        securityContext:
+          # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
+          # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
+          # just specified `privileged: true` like this.
+          # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+          # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
+          # like firecracker and kata. Basically they run containers within dedicated micro vms and so
+          # it's more like you can use `privileged: true` safer with those runtimes.
+          #
+          # privileged: true
       - name: docker
         resources:
           limits:
@@ -1138,6 +1149,18 @@ spec:
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
       runtimeClassName: "runc"
+      # This is an advanced configuration. Don't touch it unless you know what you're doing.
+      containers:
+      - name: runner
+        # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
+        # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
+        # just specified `privileged: true` like this.
+        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+        # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
+        # like firecracker and kata. Basically they run containers within dedicated micro vms and so
+        # it's more like you can use `privileged: true` safer with those runtimes.
+        #
+        # privileged: true
 ```
 
 ### Custom Volume mounts
@@ -1311,12 +1334,11 @@ spec:
         # Disables automatic runner updates
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
-        # Configure runner with --ephemeral instead of --once flag
+        # Configure runner with legacy --once instead of --ephemeral flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA 
-        # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
+        # IN A FUTURE VERSION OF ARC.
         # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+        - name: RUNNER_FEATURE_FLAG_ONCE
           value: "true"
 ```
 

@@ -99,8 +99,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
-	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
-	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
+	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
 	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
 	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
@@ -218,9 +218,11 @@ func main() {
 		"github-api-cache-duration", gitHubAPICacheDuration,
 		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
-		"runner-image", runnerImage,
-		"docker-image", dockerImage,
+		"default-runner-image", runnerImage,
+		"default-docker-image", dockerImage,
 		"common-runnner-labels", commonRunnerLabels,
+		"leader-election-enabled", enableLeaderElection,
+		"leader-election-id", leaderElectionId,
 		"watch-namespace", namespace,
 	)
 
@@ -240,6 +242,18 @@ func main() {
 		GitHubClient: ghClient,
 	}
 
+	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolume"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	runnerPersistentVolumeClaimReconciler := &controllers.RunnerPersistentVolumeClaimReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolumeclaim"),
+		Scheme: mgr.GetScheme(),
+	}
+
 	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "RunnerPod")
 		os.Exit(1)
@@ -247,6 +261,16 @@ func main() {
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
 		os.Exit(1)
 	}
 
