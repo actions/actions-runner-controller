@@ -190,3 +190,6 @@ spec:
       repository: $username/$repo
       env: []
 ```
+
+There may be more places you need to tweak for MTU.
+Please consult issues like #651 for more information.
