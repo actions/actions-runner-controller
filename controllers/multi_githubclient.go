@@ -114,8 +114,10 @@ func (c *MultiGitHubClient) Deinit(ctx context.Context, object interface{}) erro
 		c.deinitClientForRunnerDeployment(o)
 	case *v1alpha1.RunnerSet:
 		c.deinitClientForRunnerSet(o)
+	case *v1alpha1.HorizontalRunnerAutoscaler:
+		c.deinitClientForHorizontalRunnerAutoscaler(o)
 	default:
-		return fmt.Errorf("unsupported object type for initializing github client: %T", o)
+		return fmt.Errorf("unsupported object type for de-initializing github client: %T", o)
 	}
 	return nil
 }
@@ -227,6 +229,13 @@ func (c *MultiGitHubClient) deinitClientForRunnerDeployment(rd *v1alpha1.RunnerD
 	defer c.mu.Unlock()
 
 	c.derefClient(rd.Namespace, rd.Spec.Template.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromRunnerDeployment(rd))
+}
+
+func (c *MultiGitHubClient) deinitClientForHorizontalRunnerAutoscaler(hra *v1alpha1.HorizontalRunnerAutoscaler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.derefClient(hra.Namespace, hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromHorizontalRunnerAutoscaler(hra))
 }
 
 func (c *MultiGitHubClient) DerefClientForSecret(secret *corev1.Secret, dependent *runnerOwnerRef) {
