@@ -62,7 +62,7 @@ type HorizontalRunnerAutoscalerSpec struct {
 	ScheduledOverrides []ScheduledOverride `json:"scheduledOverrides,omitempty"`
 
 	// +optional
-	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom"`
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
 }
 
 type ScaleUpTrigger struct {

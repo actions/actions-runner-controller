@@ -73,7 +73,7 @@ type RunnerConfig struct {
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
 
 	// +optional
-	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom"`
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
 }
 
 type GitHubAPICredentialsFrom struct {
