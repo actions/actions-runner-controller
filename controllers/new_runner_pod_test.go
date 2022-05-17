@@ -508,6 +508,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "true",
 						},
 						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
+						{
 							Name:  "DOCKER_HOST",
 							Value: "tcp://localhost:2376",
 						},
@@ -653,6 +657,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "true",
 						},
 						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
+						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -748,6 +756,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						{
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
 						},
 						{
 							Name:  "RUNNER_NAME",

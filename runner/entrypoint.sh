@@ -6,8 +6,8 @@ RUNNER_HOME=${RUNNER_HOME:-/runner}
 
 # Let runner execute these hooks
 # Scripts must end in .sh or .ps1 for it to become a valid hook script, otherwise GitHub will fail to run the hook
-export ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/arc/hooks/started.sh
-export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/etc/arc/hooks/completed.sh
+export ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/arc/hooks/job-started.sh
+export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/etc/arc/hooks/job-completed.sh
 
 if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   log.notice "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds"
