@@ -1400,7 +1400,8 @@ spec:
           value: "true"
         # Configure runner with legacy --once instead of --ephemeral flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. SEE ISSUE #1196 FOR DETAILS
+        # THIS ENV VAR WILL BE REMOVED SOON.
+        # SEE ISSUE #1196 FOR DETAILS
         - name: RUNNER_FEATURE_FLAG_ONCE
           value: "true"
 ```
