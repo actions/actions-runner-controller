@@ -813,8 +813,6 @@ metadata:
 spec:
   template:
     spec:
-      labels:
-        - self-hosted
       repository: example/myrepo
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
