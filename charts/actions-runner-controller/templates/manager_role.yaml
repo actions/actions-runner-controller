@@ -250,7 +250,7 @@ rules:
   - patch
   - update
   - watch
-{{- if .Values.useCustomRunnersRBAC }}
+{{- if .Values.useRunnerStatusUpdateHookEphemeralRole }}
 - apiGroups:
   - ""
   resources:

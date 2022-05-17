@@ -1,0 +1,3 @@
+#!/bin/bash
+
+update-status "Running" "Run $GITHUB_RUN_ID from $GITHUB_REPOSITORY"

@@ -112,10 +112,10 @@ RUN mkdir /opt/hostedtoolcache \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint.sh logger.bash job_start.sh job_end.sh update_status.sh /usr/bin/
+COPY entrypoint.sh logger.bash update-status /usr/bin/
 
-# TODO fix
-RUN chmod 755 entrypoint.sh job_start.sh job_end.sh update_status.sh
+# Configure hooks folder structure.
+COPY hooks /etc/arc/hooks/
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"

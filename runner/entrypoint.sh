@@ -4,11 +4,10 @@ source logger.bash
 RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
-if [ "${RUNNER_CUSTOM_RBAC:-}" == "true" ]; then
-  # Let runner execute these hooks
-  export ACTIONS_RUNNER_HOOK_JOB_STARTED=/job_start.sh
-  export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/job_end.sh
-fi
+# Let runner execute these hooks
+# Scripts must end in .sh or .ps1 for it to become a valid hook script, otherwise GitHub will fail to run the hook
+export ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/arc/hooks/started.sh
+export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/etc/arc/hooks/completed.sh
 
 if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   log.notice "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds"
@@ -91,7 +90,7 @@ if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
   log.debug 'Passing --disableupdate to config.sh to disable automatic runner updates.'
 fi
 
-/update_status.sh "Registering"
+update-status "Registering"
 
 retries_left=10
 while [[ ${retries_left} -gt 0 ]]; do
@@ -172,5 +171,5 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT
 if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
-/update_status.sh "Idle"
+update-status "Idle"
 exec env -- "${env[@]}" ./run.sh "${args[@]}"
