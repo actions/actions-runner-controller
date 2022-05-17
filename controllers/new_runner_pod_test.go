@@ -9,7 +9,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestNewRunnerPod(t *testing.T) {
@@ -898,13 +900,20 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 
 	for i := range testcases {
 		tc := testcases[i]
+
+		rr := &testResourceReader{
+			objects: map[types.NamespacedName]client.Object{},
+		}
+
+		multiClient := NewMultiGitHubClient(rr, &github.Client{GithubBaseURL: githubBaseURL})
+
 		t.Run(tc.description, func(t *testing.T) {
 			r := &RunnerReconciler{
 				RunnerImage:            defaultRunnerImage,
 				RunnerImagePullSecrets: defaultRunnerImagePullSecrets,
 				DockerImage:            defaultDockerImage,
 				DockerRegistryMirror:   defaultDockerRegistryMirror,
-				GitHubClient:           &github.Client{GithubBaseURL: githubBaseURL},
+				GitHubClient:           multiClient,
 				Scheme:                 scheme,
 			}
 			got, err := r.newPod(tc.runner)

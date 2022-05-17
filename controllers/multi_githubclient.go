@@ -55,10 +55,14 @@ type savedClient struct {
 	*github.Client
 }
 
+type resourceReader interface {
+	Get(context.Context, types.NamespacedName, client.Object) error
+}
+
 type MultiGitHubClient struct {
 	mu sync.Mutex
 
-	client client.Client
+	client resourceReader
 
 	githubClient *github.Client
 
@@ -69,7 +73,7 @@ type MultiGitHubClient struct {
 	clients map[secretRef]savedClient
 }
 
-func NewMultiGitHubClient(client client.Client, githubClient *github.Client) *MultiGitHubClient {
+func NewMultiGitHubClient(client resourceReader, githubClient *github.Client) *MultiGitHubClient {
 	return &MultiGitHubClient{
 		client:       client,
 		githubClient: githubClient,
