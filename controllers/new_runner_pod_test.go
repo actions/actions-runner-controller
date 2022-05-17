@@ -95,6 +95,10 @@ func TestNewRunnerPod(t *testing.T) {
 							Value: "true",
 						},
 						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
+						{
 							Name:  "DOCKER_HOST",
 							Value: "tcp://localhost:2376",
 						},
@@ -224,6 +228,10 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
 						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -301,6 +309,10 @@ func TestNewRunnerPod(t *testing.T) {
 						{
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
