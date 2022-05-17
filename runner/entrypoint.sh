@@ -4,8 +4,10 @@ source logger.bash
 RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
-# Let runner execute these hooks
-# Scripts must end in .sh or .ps1 for it to become a valid hook script, otherwise GitHub will fail to run the hook
+# Let GitHub runner execute these hooks. These environment variables are used by GitHub's Runner as described here
+# https://github.com/actions/runner/blob/main/docs/adrs/1751-runner-job-hooks.md
+# Scripts referenced in the ACTIONS_RUNNER_HOOK_ environment variables must end in .sh or .ps1
+# for it to become a valid hook script, otherwise GitHub will fail to run the hook
 export ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/arc/hooks/job-started.sh
 export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/etc/arc/hooks/job-completed.sh
 
