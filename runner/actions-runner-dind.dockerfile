@@ -74,8 +74,6 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 	dockerd --version; \
 	docker --version
 
-ENV HOME=/home/runner
-
 # Runner download supports amd64 as x64
 #
 # libyaml-dev is required for ruby/setup-ruby action.
@@ -122,6 +120,7 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 
 # No group definition, as that makes it harder to run docker.
 USER runner
+ENV HOME=/home/runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["startup.sh"]

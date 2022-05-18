@@ -67,8 +67,6 @@ RUN set -vx; \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ENV HOME=/home/runner
-
 # Uncomment the below COPY to use your own custom build of actions-runner.
 #
 # To build a custom runner:
@@ -128,6 +126,7 @@ RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment
 
 USER runner
+ENV HOME=/home/runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["entrypoint.sh"]
