@@ -112,10 +112,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
 
-		if err := r.GitHubClient.Deinit(ctx, runner); err != nil {
-			return ctrl.Result{}, err
-		}
-
+		r.GitHubClient.DeinitForRunner(&runner)
 	}
 
 	var pod corev1.Pod
@@ -284,7 +281,7 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 	log := r.Log.WithValues("runner", runner.Name)
 
-	ghc, err := r.GitHubClient.Init(ctx, runner)
+	ghc, err := r.GitHubClient.InitForRunner(ctx, &runner)
 	if err != nil {
 		return false, err
 	}
@@ -329,7 +326,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		labels[k] = v
 	}
 
-	ghc, err := r.GitHubClient.Init(context.Background(), runner)
+	ghc, err := r.GitHubClient.InitForRunner(context.Background(), &runner)
 	if err != nil {
 		return corev1.Pod{}, err
 	}

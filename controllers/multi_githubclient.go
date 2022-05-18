@@ -8,23 +8,16 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	// The api creds scope annotation is added to (1) runnerreplicasets by the runnerdeployment controller
-	// (2) runners by the runnerreplicaset controller (3) pods by the runner controller and the runnerset controller
-	// to share the GitHub API clients across all the controllers that uses the same GitHub API credentials.
-	annotationKeyGitHubAPICredsScope = annotationKeyPrefix + "github-api-creds-scope"
-
 	// The api creds scret annotation is added by the runner controller or the runnerset controller according to runner.spec.githubAPICredentialsFrom.secretRef.name,
 	// so that the runner pod controller can share the same GitHub API credentials and the instance of the GitHub API client with the upstream controllers.
 	annotationKeyGitHubAPICredsSecret = annotationKeyPrefix + "github-api-creds-secret"
@@ -83,58 +76,12 @@ func NewMultiGitHubClient(client resourceReader, githubClient *github.Client) *M
 
 // Init sets up and return the *github.Client for the object.
 // In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
-func (c *MultiGitHubClient) Init(ctx context.Context, object interface{}) (*github.Client, error) {
-	switch o := object.(type) {
-	case *corev1.Pod:
-		return c.initClientForRunnerPod(ctx, o)
-	case *v1alpha1.Runner:
-		return c.initClientForRunner(ctx, o)
-		// We currently assume rrs and rd doesn't rely on *github.Client
-	// case *v1alpha1.RunnerReplicaSet:
-	// case *v1alpha1.RunnerDeployment:
-	case *v1alpha1.RunnerSet:
-		return c.initClientForRunnerSet(ctx, o)
-	case *v1alpha1.HorizontalRunnerAutoscaler:
-		return c.initClientForHorizontalRunnerAutoscaler(ctx, o)
-	default:
-		return nil, fmt.Errorf("unsupported object type for initializing github client: %T", o)
-	}
-}
-
-func (c *MultiGitHubClient) Deinit(ctx context.Context, object interface{}) error {
-	switch o := object.(type) {
-	case *corev1.Pod:
-		c.deinitClientForRunnerPod(o)
-	case *v1alpha1.Runner:
-		c.deinitClientForRunner(o)
-		// We currently assume rrs and rd doesn't rely on *github.Client
-	case *v1alpha1.RunnerReplicaSet:
-		c.deinitClientForRunnerReplicaSet(o)
-	case *v1alpha1.RunnerDeployment:
-		c.deinitClientForRunnerDeployment(o)
-	case *v1alpha1.RunnerSet:
-		c.deinitClientForRunnerSet(o)
-	case *v1alpha1.HorizontalRunnerAutoscaler:
-		c.deinitClientForHorizontalRunnerAutoscaler(o)
-	default:
-		return fmt.Errorf("unsupported object type for de-initializing github client: %T", o)
-	}
-	return nil
-}
-
-func (c *MultiGitHubClient) initClientForRunnerPod(ctx context.Context, pod *corev1.Pod) (*github.Client, error) {
+func (c *MultiGitHubClient) InitForRunnerPod(ctx context.Context, pod *corev1.Pod) (*github.Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	ref := refFromAnnotation(&pod.ObjectMeta)
-	if ref == nil {
-		// These 3 default values are used only when the user created the pod directly, not via Runner, RunnerReplicaSet, RunnerDeploment, or RunnerSet resources.
-		ref = refFromRunnerPod(pod)
-	}
-
-	if ref.ns != pod.Namespace {
-		return nil, fmt.Errorf("referencing github api creds secret from owner in another namespace is not supported yet")
-	}
+	// These 3 default values are used only when the user created the pod directly, not via Runner, RunnerReplicaSet, RunnerDeploment, or RunnerSet resources.
+	ref := refFromRunnerPod(pod)
 
 	secretName := pod.Annotations[annotationKeyGitHubAPICredsSecret]
 
@@ -142,17 +89,19 @@ func (c *MultiGitHubClient) initClientForRunnerPod(ctx context.Context, pod *cor
 	return c.initClientWithSecretName(ctx, pod.Namespace, secretName, ref)
 }
 
-func (c *MultiGitHubClient) initClientForRunner(ctx context.Context, r *v1alpha1.Runner) (*github.Client, error) {
+// Init sets up and return the *github.Client for the object.
+// In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
+func (c *MultiGitHubClient) InitForRunner(ctx context.Context, r *v1alpha1.Runner) (*github.Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	secretName := r.Spec.GitHubAPICredentialsFrom.SecretRef.Name
-
-	ref := refFromAnnotation(&r.ObjectMeta)
-	if ref == nil {
-		// These 3 default values are used only when the user created the runner resource directly, not via RunnerReplicaSet, RunnerDeploment, or RunnerSet resources.
-		ref = refFromRunner(r)
+	var secretName string
+	if r.Spec.GitHubAPICredentialsFrom != nil {
+		secretName = r.Spec.GitHubAPICredentialsFrom.SecretRef.Name
 	}
+
+	// These 3 default values are used only when the user created the runner resource directly, not via RunnerReplicaSet, RunnerDeploment, or RunnerSet resources.
+	ref := refFromRunner(r)
 
 	if ref.ns != r.Namespace {
 		return nil, fmt.Errorf("referencing github api creds secret from owner in another namespace is not supported yet")
@@ -162,59 +111,69 @@ func (c *MultiGitHubClient) initClientForRunner(ctx context.Context, r *v1alpha1
 	return c.initClientWithSecretName(ctx, r.Namespace, secretName, ref)
 }
 
-func (c *MultiGitHubClient) initClientForRunnerSet(ctx context.Context, rs *v1alpha1.RunnerSet) (*github.Client, error) {
+// Init sets up and return the *github.Client for the object.
+// In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
+func (c *MultiGitHubClient) InitForRunnerSet(ctx context.Context, rs *v1alpha1.RunnerSet) (*github.Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	ref := refFromRunnerSet(rs)
 
-	secretName := rs.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+	var secretName string
+	if rs.Spec.GitHubAPICredentialsFrom != nil {
+		secretName = rs.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+	}
 
 	return c.initClientWithSecretName(ctx, rs.Namespace, secretName, ref)
 }
 
-func (c *MultiGitHubClient) initClientForHorizontalRunnerAutoscaler(ctx context.Context, hra *v1alpha1.HorizontalRunnerAutoscaler) (*github.Client, error) {
+// Init sets up and return the *github.Client for the object.
+// In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
+func (c *MultiGitHubClient) InitForHRA(ctx context.Context, hra *v1alpha1.HorizontalRunnerAutoscaler) (*github.Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	ref := refFromHorizontalRunnerAutoscaler(hra)
 
-	secretName := hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+	var secretName string
+	if hra.Spec.GitHubAPICredentialsFrom != nil {
+		secretName = hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+	}
 
 	return c.initClientWithSecretName(ctx, hra.Namespace, secretName, ref)
 }
-func (c *MultiGitHubClient) deinitClientForRunnerPod(p *corev1.Pod) {
+
+func (c *MultiGitHubClient) DeinitForRunnerPod(p *corev1.Pod) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	ref := refFromAnnotation(&p.ObjectMeta)
-	if ref != nil {
-		return
-	}
 
 	secretName := p.Annotations[annotationKeyGitHubAPICredsSecret]
 
 	c.derefClient(p.Namespace, secretName, refFromRunnerPod(p))
 }
 
-func (c *MultiGitHubClient) deinitClientForRunner(r *v1alpha1.Runner) {
+func (c *MultiGitHubClient) DeinitForRunner(r *v1alpha1.Runner) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	scope := strings.Split(r.Annotations[annotationKeyGitHubAPICredsScope], "/")
-
-	if len(scope) == 3 {
-		return
+	var secretName string
+	if r.Spec.GitHubAPICredentialsFrom != nil {
+		secretName = r.Spec.GitHubAPICredentialsFrom.SecretRef.Name
 	}
 
-	c.derefClient(r.Namespace, r.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromRunner(r))
+	c.derefClient(r.Namespace, secretName, refFromRunner(r))
 }
 
-func (c *MultiGitHubClient) deinitClientForRunnerSet(rs *v1alpha1.RunnerSet) {
+func (c *MultiGitHubClient) DeinitForRunnerSet(rs *v1alpha1.RunnerSet) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.derefClient(rs.Namespace, rs.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromRunnerSet(rs))
+	var secretName string
+	if rs.Spec.GitHubAPICredentialsFrom != nil {
+		secretName = rs.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+	}
+
+	c.derefClient(rs.Namespace, secretName, refFromRunnerSet(rs))
 }
 
 func (c *MultiGitHubClient) deinitClientForRunnerReplicaSet(rs *v1alpha1.RunnerReplicaSet) {
@@ -231,18 +190,16 @@ func (c *MultiGitHubClient) deinitClientForRunnerDeployment(rd *v1alpha1.RunnerD
 	c.derefClient(rd.Namespace, rd.Spec.Template.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromRunnerDeployment(rd))
 }
 
-func (c *MultiGitHubClient) deinitClientForHorizontalRunnerAutoscaler(hra *v1alpha1.HorizontalRunnerAutoscaler) {
+func (c *MultiGitHubClient) DeinitForHRA(hra *v1alpha1.HorizontalRunnerAutoscaler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.derefClient(hra.Namespace, hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromHorizontalRunnerAutoscaler(hra))
-}
+	var secretName string
+	if hra.Spec.GitHubAPICredentialsFrom != nil {
+		secretName = hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name
+	}
 
-func (c *MultiGitHubClient) DerefClientForSecret(secret *corev1.Secret, dependent *runnerOwnerRef) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.derefClient(secret.Namespace, secret.Name, nil)
+	c.derefClient(hra.Namespace, secretName, refFromHorizontalRunnerAutoscaler(hra))
 }
 
 func (c *MultiGitHubClient) initClientForSecret(secret *corev1.Secret, dependent *runnerOwnerRef) (*savedClient, error) {
@@ -409,16 +366,6 @@ func secretDataToGitHubClientConfig(data map[string][]byte) (*github.Config, err
 	}
 
 	return &conf, nil
-}
-
-func refFromAnnotation(meta *metav1.ObjectMeta) *runnerOwnerRef {
-	scope := strings.Split(meta.Annotations[annotationKeyGitHubAPICredsScope], "/")
-
-	return &runnerOwnerRef{
-		kind: scope[0],
-		ns:   scope[1],
-		name: scope[2],
-	}
 }
 
 func refFromRunnerDeployment(rd *v1alpha1.RunnerDeployment) *runnerOwnerRef {

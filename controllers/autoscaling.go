@@ -231,11 +231,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	scaleUpFactor := defaultScaleUpFactor
 	scaleDownFactor := defaultScaleDownFactor
 
-	ghc, err := r.GitHubClient.Init(ctx, hra)
-	if err != nil {
-		return nil, err
-	}
-
 	if metrics.ScaleUpThreshold != "" {
 		sut, err := strconv.ParseFloat(metrics.ScaleUpThreshold, 64)
 		if err != nil {

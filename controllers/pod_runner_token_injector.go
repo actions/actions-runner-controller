@@ -65,7 +65,7 @@ func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Reque
 		return newEmptyResponse()
 	}
 
-	ghc, err := t.GitHubClient.Init(ctx, pod)
+	ghc, err := t.GitHubClient.InitForRunnerPod(ctx, &pod)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}

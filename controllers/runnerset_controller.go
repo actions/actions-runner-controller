@@ -80,9 +80,7 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if !runnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
-		if err := r.GitHubClient.Deinit(ctx, runnerSet); err != nil {
-			return ctrl.Result{}, err
-		}
+		r.GitHubClient.DeinitForRunnerSet(runnerSet)
 
 		return ctrl.Result{}, nil
 	}
@@ -199,7 +197,7 @@ func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1a
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	ghc, err := r.GitHubClient.Init(ctx, runnerSet)
+	ghc, err := r.GitHubClient.InitForRunnerSet(ctx, runnerSet)
 	if err != nil {
 		return nil, err
 	}

@@ -310,7 +310,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 		return ctrl.Result{}, err
 	}
 
-	ghc, err := r.GitHubClient.Init(context.Background(), hra)
+	ghc, err := r.GitHubClient.InitForHRA(context.Background(), &hra)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
