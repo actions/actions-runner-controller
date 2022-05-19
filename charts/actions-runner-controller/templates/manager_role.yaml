@@ -230,8 +230,6 @@ rules:
   - ""
   resources:
   - pods
-  - persistentvolumeclaims
-  - persistentvolumes
   verbs:
   - create
   - delete
