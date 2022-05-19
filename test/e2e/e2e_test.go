@@ -411,7 +411,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: ">=1.18.0",
+						GoVersion: "1.18.2",
 					},
 				},
 				{
