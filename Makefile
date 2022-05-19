@@ -56,6 +56,7 @@ GO_TEST_ARGS ?= -short
 # Run tests
 test: generate fmt vet manifests
 	go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
+	go test -fuzz=Fuzz -fuzztime=10s -run=Fuzz* ./controllers
 
 test-with-deps: kube-apiserver etcd kubectl
 	# See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
