@@ -71,6 +71,8 @@ func (r *Runner) Validate() error {
 		err     error
 	)
 
+	runnerLog.Info("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n\n\n\nAAAAAAAAAAAAAAAAAAAA\n\n\n")
+
 	err = r.Spec.ValidateRepository()
 	if err != nil {
 		errList = append(errList, field.Invalid(field.NewPath("spec", "repository"), r.Spec.Repository, err.Error()))

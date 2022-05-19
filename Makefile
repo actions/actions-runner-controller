@@ -17,7 +17,7 @@ SYNC_PERIOD ?= 1m
 USE_RUNNERSET ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
-CERT_MANAGER_VERSION ?= v1.1.1
+CERT_MANAGER_VERSION ?= v1.8.0
 KUBE_RBAC_PROXY_VERSION ?= v0.11.0
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -122,11 +122,6 @@ docker-buildx:
 		-f Dockerfile \
 		. ${PUSH_ARG}
 
-# Push the docker image
-docker-push:
-	docker push ${NAME}:${VERSION}
-	docker push ${RUNNER_NAME}:${RUNNER_TAG}
-
 # Generate the release manifest file
 release: manifests
 	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
@@ -138,13 +133,13 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean acceptance/pull docker-build release
+acceptance: release/clean acceptance/pull docker-buildx release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
 
-acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
+acceptance/run: acceptance/kind acceptance/pull acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
 
 acceptance/kind:
 	kind create cluster --name ${CLUSTER} --config acceptance/kind.yaml
@@ -245,7 +240,8 @@ ifeq (, $(wildcard $(GOBIN)/yq))
 	rm -rf $$YQ_TMP_DIR ;\
 	}
 endif
-YQ=$(GOBIN)/yq
+
+YQ=$(shell which yq)
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 

@@ -500,6 +500,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.RuntimeClassName = runnerSpec.RuntimeClassName
 	}
 
+	if runner.Spec.ContainerMode == "kubernetes" {
+		addHookEnvs(&pod)
+	}
+
 	pod.ObjectMeta.Name = runner.ObjectMeta.Name
 
 	// Inject the registration token and the runner name
@@ -524,6 +528,21 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	}
 
 	return updated
+}
+
+func addHookEnvs(pod *corev1.Pod) {
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_CONTAINER_HOOKS") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_CONTAINER_HOOKS", defaultRunnerHookPath)
+	}
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER", "true")
+	}
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_POD_NAME") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_POD_NAME", pod.ObjectMeta.Name)
+	}
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_JOB_NAMESPACE") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_JOB_NAMESPACE", pod.ObjectMeta.Namespace)
+	}
 }
 
 func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
