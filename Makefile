@@ -17,7 +17,7 @@ SYNC_PERIOD ?= 1m
 USE_RUNNERSET ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
-CERT_MANAGER_VERSION ?= v1.8.0
+CERT_MANAGER_VERSION ?= v1.1.1
 KUBE_RBAC_PROXY_VERSION ?= v0.11.0
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -140,7 +140,7 @@ acceptance: release/clean acceptance/pull docker-buildx release
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
 
-acceptance/run: acceptance/kind acceptance/pull acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
+acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
 
 acceptance/kind:
 	kind create cluster --name ${CLUSTER} --config acceptance/kind.yaml
