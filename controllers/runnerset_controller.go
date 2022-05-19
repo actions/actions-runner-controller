@@ -188,9 +188,7 @@ var LabelValuePodMutation = "true"
 func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
 	runnerSetWithOverrides := *runnerSet.Spec.DeepCopy()
 
-	for _, l := range r.CommonRunnerLabels {
-		runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, l)
-	}
+	runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, r.CommonRunnerLabels...)
 
 	template := corev1.Pod{
 		ObjectMeta: runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta,

@@ -605,3 +605,13 @@ func parseAndMatchRecurringPeriod(now time.Time, start, end, frequency, until st
 
 	return MatchSchedule(now, startTime, endTime, RecurrenceRule{Frequency: frequency, UntilTime: untilTime})
 }
+
+func FuzzMatchSchedule(f *testing.F) {
+	start := time.Now()
+	end := time.Now()
+	now := time.Now()
+	f.Fuzz(func(t *testing.T, freq string) {
+		// Verify that it never panics
+		_, _, _ = MatchSchedule(now, start, end, RecurrenceRule{Frequency: freq})
+	})
+}
