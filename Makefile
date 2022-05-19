@@ -221,7 +221,7 @@ ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 endif
@@ -241,7 +241,7 @@ ifeq (, $(wildcard $(GOBIN)/yq))
 	YQ_TMP_DIR=$$(mktemp -d) ;\
 	cd $$YQ_TMP_DIR ;\
 	go mod init tmp ;\
-	go get github.com/mikefarah/yq/v3@3.4.0 ;\
+	go install github.com/mikefarah/yq/v3@3.4.0 ;\
 	rm -rf $$YQ_TMP_DIR ;\
 	}
 endif
