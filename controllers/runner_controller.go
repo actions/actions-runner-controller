@@ -427,7 +427,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 				corev1.ReadWriteOnce,
 			}
 		}
-		if err := applyWorkVolumeClaimTemplate(&runnerSpec); err != nil {
+		if err := applyWorkVolumeClaimTemplate(&runner); err != nil {
 			return pod, err
 		}
 	}
@@ -945,31 +945,34 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 	return false, 0
 }
 
-func applyWorkVolumeClaimTemplate(runnerSpec *v1alpha1.RunnerSpec) error {
-	isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
+func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
+	isPresent, _ := workVolumeMountPresent(runner.Spec.VolumeMounts)
 	if isPresent {
 		return errors.New("volumeMount with name \"work\" should not exist if workVolumeClaimTemplate is specified")
 	}
 
-	isPresent, _ = workVolumePresent(runnerSpec.Volumes)
+	isPresent, _ = workVolumePresent(runner.Spec.Volumes)
 	if isPresent {
 		return errors.New("volume with name \"work\" should not exist if workVolumeClaimTemplate is specified")
 	}
 
-	runnerSpec.VolumeMounts = append(runnerSpec.VolumeMounts, corev1.VolumeMount{
+	runner.Spec.VolumeMounts = append(runner.Spec.VolumeMounts, corev1.VolumeMount{
 		MountPath: "/runner/_work",
 		Name:      "work",
 	})
 
-	runnerSpec.Volumes = append(runnerSpec.Volumes, corev1.Volume{
+	runner.Spec.Volumes = append(runner.Spec.Volumes, corev1.Volume{
 		Name: "work",
 		VolumeSource: corev1.VolumeSource{
 			Ephemeral: &corev1.EphemeralVolumeSource{
 				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: runner.ObjectMeta.Name + "-work",
+					},
 					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes:      runnerSpec.WorkVolumeClaimTemplate.AccessModes,
-						StorageClassName: &runnerSpec.WorkVolumeClaimTemplate.StorageClassName,
-						Resources:        runnerSpec.WorkVolumeClaimTemplate.Resources,
+						AccessModes:      runner.Spec.WorkVolumeClaimTemplate.AccessModes,
+						StorageClassName: &runner.Spec.WorkVolumeClaimTemplate.StorageClassName,
+						Resources:        runner.Spec.WorkVolumeClaimTemplate.Resources,
 					},
 				},
 			},
@@ -1005,7 +1008,7 @@ func isRequireSameNode(pod *corev1.Pod) (bool, error) {
 }
 
 func appendRunnerVolumeMountEnvs(pod *corev1.Pod) error {
-	setRunnerEnv(pod, "ACTIONS_RUNNER_CLAIM_NAME", "work")
+	setRunnerEnv(pod, "ACTIONS_RUNNER_CLAIM_NAME", pod.ObjectMeta.Name+"-work")
 
 	isRequireSameNode, err := isRequireSameNode(pod)
 	if err != nil {
