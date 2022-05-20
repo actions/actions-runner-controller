@@ -948,12 +948,12 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
 	isPresent, _ := workVolumeMountPresent(runner.Spec.VolumeMounts)
 	if isPresent {
-		return errors.New("volumeMount with name \"work\" should not exist if workVolumeClaimTemplate is specified")
+		return errors.New("Volume mounts with the name \"work\" are reserved if workVolumeClaimTemplate is specified")
 	}
 
 	isPresent, _ = workVolumePresent(runner.Spec.Volumes)
 	if isPresent {
-		return errors.New("volume with name \"work\" should not exist if workVolumeClaimTemplate is specified")
+		return errors.New("Volumes with the name \"work\" are reserved if a workVolumeClaimTemplate is specified")
 	}
 
 	runner.Spec.VolumeMounts = append(runner.Spec.VolumeMounts, corev1.VolumeMount{
