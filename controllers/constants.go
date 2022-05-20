@@ -61,4 +61,7 @@ const (
 
 	EnvVarRunnerName  = "RUNNER_NAME"
 	EnvVarRunnerToken = "RUNNER_TOKEN"
+
+	// defaultHookPath is path to the hook script used when the "containerMode: kubernetes" is specified
+	defaultRunnerHookPath = "/runnertmp/index.js"
 )

@@ -71,6 +71,9 @@ type RunnerConfig struct {
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
 	// +optional
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
+
+	// +optional
+	ContainerMode string `json:"containerMode,omitempty"`
 }
 
 // RunnerPodSpec defines the desired pod spec fields of the runner pod
