@@ -1246,7 +1246,7 @@ spec:
 
 #### Docker image layers caching
 
-`docker` stores pulled and built image layers in [Docker daemon's (note not docker client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
+`docker` stores pulled and built image layers in the [daemon's (note not client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
 
 By leveraging RunnerSet's dynamic PV provisioning feature and your CSI driver, you can let ARC maintain a pool of PVs that are
 reused across runner pods to retain `/var/lib/docker`.
