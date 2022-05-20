@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -420,6 +421,17 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	// Customize the pod spec according to the runner spec
 	runnerSpec := runner.Spec
 
+	if runnerSpec.WorkVolumeClaimTemplate != nil {
+		if len(runnerSpec.WorkVolumeClaimTemplate.AccessModes) == 0 {
+			runnerSpec.WorkVolumeClaimTemplate.AccessModes = []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			}
+		}
+		if err := applyWorkVolumeClaimTemplate(&runnerSpec); err != nil {
+			return pod, err
+		}
+	}
+
 	if len(runnerSpec.VolumeMounts) != 0 {
 		// if operater provides a work volume mount, use that
 		isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
@@ -446,6 +458,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
 	}
+
 	if len(runnerSpec.InitContainers) != 0 {
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runnerSpec.InitContainers...)
 	}
@@ -501,6 +514,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	}
 
 	pod.ObjectMeta.Name = runner.ObjectMeta.Name
+
+	if err := appendRunnerVolumeMountEnvs(&pod); err != nil {
+		return pod, err
+	}
 
 	// Inject the registration token and the runner name
 	updated := mutatePod(&pod, runner.Status.Registration.Token)
@@ -926,4 +943,80 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 		}
 	}
 	return false, 0
+}
+
+func applyWorkVolumeClaimTemplate(runnerSpec *v1alpha1.RunnerSpec) error {
+	isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
+	if isPresent {
+		return errors.New("volumeMount with name \"work\" should not exist if workVolumeClaimTemplate is specified")
+	}
+
+	isPresent, _ = workVolumePresent(runnerSpec.Volumes)
+	if isPresent {
+		return errors.New("volume with name \"work\" should not exist if workVolumeClaimTemplate is specified")
+	}
+
+	runnerSpec.VolumeMounts = append(runnerSpec.VolumeMounts, corev1.VolumeMount{
+		MountPath: "/runner/_work",
+		Name:      "work",
+	})
+
+	runnerSpec.Volumes = append(runnerSpec.Volumes, corev1.Volume{
+		Name: "work",
+		VolumeSource: corev1.VolumeSource{
+			Ephemeral: &corev1.EphemeralVolumeSource{
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      runnerSpec.WorkVolumeClaimTemplate.AccessModes,
+						StorageClassName: &runnerSpec.WorkVolumeClaimTemplate.StorageClassName,
+						Resources:        runnerSpec.WorkVolumeClaimTemplate.Resources,
+					},
+				},
+			},
+		},
+	})
+	return nil
+}
+
+// isRequireSameNode specifies for the runner in kubernetes mode wether it should
+// schedule jobs to the same node where the runner is
+func isRequireSameNode(pod *corev1.Pod) (bool, error) {
+	isPresent, index := workVolumePresent(pod.Spec.Volumes)
+	if !isPresent {
+		return true, nil
+	}
+
+	if pod.Spec.Volumes[index].Ephemeral == nil || pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate == nil {
+		// TODO(nikola-jokic): how to handle this case?
+		return true, nil
+	}
+
+	for i := range pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
+		switch pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes[i] {
+		case corev1.ReadWriteOnce:
+			return true, nil
+		case corev1.ReadWriteMany:
+		default:
+			// TODO (nikola-jokic): Should we throw error or delete it from access modes?
+			return true, errors.New("read only mode cannot be specified for actions-runner-controller to work properly")
+		}
+	}
+	return false, nil
+}
+
+func appendRunnerVolumeMountEnvs(pod *corev1.Pod) error {
+	setRunnerEnv(pod, "ACTIONS_RUNNER_CLAIM_NAME", "work")
+
+	isRequireSameNode, err := isRequireSameNode(pod)
+	if err != nil {
+		return err
+	}
+
+	if isRequireSameNode {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_SAME_NODE", "true")
+		return nil
+	}
+
+	setRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_SAME_NODE", "false")
+	return nil
 }

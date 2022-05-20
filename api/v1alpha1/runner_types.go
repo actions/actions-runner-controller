@@ -154,6 +154,9 @@ type RunnerPodSpec struct {
 
 	// +optional
 	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+
+	// +optional
+	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
 }
 
 // ValidateRepository validates repository field.
@@ -205,6 +208,12 @@ type RunnerStatusRegistration struct {
 	Labels       []string    `json:"labels,omitempty"`
 	Token        string      `json:"token"`
 	ExpiresAt    metav1.Time `json:"expiresAt"`
+}
+
+type WorkVolumeClaimTemplate struct {
+	StorageClassName string                              `json:"storageClassName"`
+	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
+	Resources        corev1.ResourceRequirements         `json:"resources"`
 }
 
 // +kubebuilder:object:root=true
