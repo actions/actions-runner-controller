@@ -1251,7 +1251,10 @@ spec:
 By leveraging RunnerSet's dynamic PV provisioning feature and your CSI driver, you can let ARC maintain a pool of PVs that are
 reused across runner pods to retain `/var/lib/docker`.
 
-_The examples below are based on the all in one runner image (`dockerdWithinRunnerContainer: true`) where the Docker daemon is running in the runner container itself with the client rather than in a sidecar:_
+_Be sure to add the volume mount to the container that is supposed to run the docker daemon._
+
+By default, ARC creates a sidecar container named `docker` within the runner pod for running the docker daemon. In that case,
+it's where you need the volume mount so that the manifest looks like:
 
 ```yaml
 kind: RunnerSet
@@ -1261,14 +1264,37 @@ spec:
   template:
     spec:
       containers:
-      - name: runner
-        volumeMounts:
-        # Cache docker image layers, in case dockerdWithinRunnerContainer=true
-        - name: var-lib-docker
-          mountPath: /var/lib/docker
       - name: docker
         volumeMounts:
-        # Cache docker image layers, in case dockerdWithinRunnerContainer=true
+        - name: var-lib-docker
+          mountPath: /var/lib/docker
+  volumeClaimtemplates:
+  - metadata:
+      name: var-lib-docker
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: var-lib-docker
+```
+
+The examples below is based on the all in one runner image (requires `dockerdWithinRunnerContainer: true`) where the Docker daemon is running in the runner container itself with the client(`docker` commands invoked by your workflow job steps or `actions/runner`) rather than in a sidecar:
+
+```yaml
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  dockerdWithinRunnerContainer: true
+  runnerImage: ghcr.io/actions-runner-controller/actions-runner-controller/actions-runner-dind:latest
+  template:
+    spec:
+      containers:
+      # Notice that we added the volume mount for the `runner` container this time!
+      - name: runner
+        volumeMounts:
         - name: var-lib-docker
           mountPath: /var/lib/docker
   volumeClaimtemplates:
