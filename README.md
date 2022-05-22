@@ -1246,7 +1246,7 @@ spec:
 
 #### Docker image layers caching
 
-> Note: Ensure that the volume mount is added to the container that is running the Docker daemon!.
+> **Note**: Ensure that the volume mount is added to the container that is running the Docker daemon.
 
 `docker` stores pulled and built image layers in the [daemon's (note not client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
 
@@ -1282,34 +1282,7 @@ spec:
       storageClassName: var-lib-docker
 ```
 
-The examples below is based on the all in one runner image (requires `dockerdWithinRunnerContainer: true`) where the Docker daemon is running in the runner container itself with the client(`docker` commands invoked by your workflow job steps or `actions/runner`) rather than in a sidecar:
-
-```yaml
-kind: RunnerSet
-metadata:
-  name: example
-spec:
-  dockerdWithinRunnerContainer: true
-  runnerImage: ghcr.io/actions-runner-controller/actions-runner-controller/actions-runner-dind:latest
-  template:
-    spec:
-      containers:
-      # Notice that we added the volume mount for the `runner` container this time!
-      - name: runner
-        volumeMounts:
-        - name: var-lib-docker
-          mountPath: /var/lib/docker
-  volumeClaimtemplates:
-  - metadata:
-      name: var-lib-docker
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 10Mi
-      storageClassName: var-lib-docker
-```
+With `dockerdWithinRunnerContainer: true`, you need to add the volume mount to the `runner` container.
 
 #### Go module and build caching
 
