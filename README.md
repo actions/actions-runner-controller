@@ -1246,6 +1246,8 @@ spec:
 
 #### Docker image layers caching
 
+> Note: Ensure that the volume mount is added to the container that is running the Docker daemon!.
+
 `docker` stores pulled and built image layers in the [daemon's (note not client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
 
 By leveraging RunnerSet's dynamic PV provisioning feature and your CSI driver, you can let ARC maintain a pool of PVs that are
