@@ -113,10 +113,28 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		// Happens e.g. when dind is in runner and run completes
 		log.Info("Runner pod has been stopped with a successful status.")
 	} else if pod != nil && pod.Annotations[AnnotationKeyRunnerCompletionWaitStartTimestamp] != "" {
-		log.Info("Runner pod is annotated to wait for completion")
+		ct := ephemeralRunnerContainerStatus(pod)
+		if ct == nil {
+			log.Info("Runner pod is annotated to wait for completion, and the runner container is not ephemeral")
 
-		return &ctrl.Result{RequeueAfter: retryDelay}, nil
-	} else if ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, runner, *runnerID); err != nil {
+			return &ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
+
+		lts := ct.LastTerminationState.Terminated
+		if lts == nil {
+			log.Info("Runner pod is annotated to wait for completion, and the runner container is not restarting")
+
+			return &ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
+
+		// Prevent runner pod from stucking in Terminating.
+		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/1369
+		log.Info("Deleting runner pod anyway because it has stopped prematurely. This may leave a dangling runner resource in GitHub Actions",
+			"lastState.exitCode", lts.ExitCode,
+			"lastState.message", lts.Message,
+			"pod.phase", pod.Status.Phase,
+		)
+	} else if ok, err := unregisterRunner(ctx, ghClient, enterprise, organization, repository, *runnerID); err != nil {
 		if errors.Is(err, &gogithub.RateLimitError{}) {
 			// We log the underlying error when we failed calling GitHub API to list or unregisters,
 			// or the runner is still busy.
@@ -175,7 +193,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 			// So we can just wait for the completion without actively retrying unregistration.
 			ephemeral := getRunnerEnv(pod, EnvVarEphemeral)
 			if ephemeral == "true" {
-				pod, err = annotatePodOnce(ctx, c, log, pod, AnnotationKeyRunnerCompletionWaitStartTimestamp, time.Now().Format(time.RFC3339))
+				_, err = annotatePodOnce(ctx, c, log, pod, AnnotationKeyRunnerCompletionWaitStartTimestamp, time.Now().Format(time.RFC3339))
 				if err != nil {
 					return &ctrl.Result{}, err
 				}
@@ -352,7 +370,7 @@ func setRunnerEnv(pod *corev1.Pod, key, value string) {
 // There isn't a single right grace period that works for everyone.
 // The longer the grace period is, the earlier a cluster resource shortage can occur due to throttoled runner pod deletions,
 // while the shorter the grace period is, the more likely you may encounter the race issue.
-func unregisterRunner(ctx context.Context, client *github.Client, enterprise, org, repo, name string, id int64) (bool, error) {
+func unregisterRunner(ctx context.Context, client *github.Client, enterprise, org, repo string, id int64) (bool, error) {
 	// For the record, historically ARC did not try to call RemoveRunner on a busy runner, but it's no longer true.
 	// The reason ARC did so was to let a runner running a job to not stop prematurely.
 	//

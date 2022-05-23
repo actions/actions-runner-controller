@@ -26,7 +26,7 @@ jobs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
       - name: Checkout
-        uses: actions/checkout@d0651293c4a5a52e711f25b41b05b2212f385d28
+        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
               --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@98f2ad02fd48d057ee3b4d4f66525b231c3e52b6
+      - uses: actions/setup-python@c57f79353baa47cac20975f0a134915e0a8c18bf
         with:
           python-version: 3.7
 
@@ -109,7 +109,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@d0651293c4a5a52e711f25b41b05b2212f385d28
+        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
         with:
           fetch-depth: 0
 
@@ -119,7 +119,7 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@fc23f249f75decd5edf254c6b4401532cef093c3
+        uses: helm/chart-releaser-action@a3454e46a6f5ac4811069a381e646961dda2e1bf
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 

@@ -134,9 +134,9 @@ cat .runner
 #     -H "Authorization: bearer ${GITHUB_TOKEN}"
 #     https://api.github.com/repos/USER/REPO/actions/runners/171
 
-if [ -z "${UNITTEST:-}" ]; then
+# Hack due to the DinD volumes
+if [ -z "${UNITTEST:-}" ] && [ -e ./externalstmp ]; then
   mkdir -p ./externals
-  # Hack due to the DinD volumes
   mv ./externalstmp/* ./externals/
 fi
 

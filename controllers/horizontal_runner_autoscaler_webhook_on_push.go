@@ -15,10 +15,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) MatchPushEvent(event 
 
 		push := g.Push
 
-		if push == nil {
-			return false
-		}
-
-		return true
+		return push != nil
 	}
 }
