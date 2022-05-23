@@ -123,11 +123,6 @@ docker-buildx:
 		-f Dockerfile \
 		. ${PUSH_ARG}
 
-# Push the docker image
-docker-push:
-	docker push ${NAME}:${VERSION}
-	docker push ${RUNNER_NAME}:${RUNNER_TAG}
-
 # Generate the release manifest file
 release: manifests
 	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
@@ -139,7 +134,7 @@ release/clean:
 	rm -rf release
 
 .PHONY: acceptance
-acceptance: release/clean acceptance/pull docker-build release
+acceptance: release/clean acceptance/pull docker-buildx release
 	ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
 	ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
@@ -246,7 +241,8 @@ ifeq (, $(wildcard $(GOBIN)/yq))
 	rm -rf $$YQ_TMP_DIR ;\
 	}
 endif
-YQ=$(GOBIN)/yq
+
+YQ=$(shell which yq)
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 

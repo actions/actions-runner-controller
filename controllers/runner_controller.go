@@ -513,6 +513,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.RuntimeClassName = runnerSpec.RuntimeClassName
 	}
 
+	if runner.Spec.ContainerMode == "kubernetes" {
+		addHookEnvs(&pod)
+	}
+
 	pod.ObjectMeta.Name = runner.ObjectMeta.Name
 
 	if err := appendRunnerVolumeMountEnvs(&pod); err != nil {
@@ -541,6 +545,21 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	}
 
 	return updated
+}
+
+func addHookEnvs(pod *corev1.Pod) {
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_CONTAINER_HOOKS") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_CONTAINER_HOOKS", defaultRunnerHookPath)
+	}
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER", "true")
+	}
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_POD_NAME") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_POD_NAME", pod.ObjectMeta.Name)
+	}
+	if getRunnerEnv(pod, "ACTIONS_RUNNER_JOB_NAMESPACE") == "" {
+		setRunnerEnv(pod, "ACTIONS_RUNNER_JOB_NAMESPACE", pod.ObjectMeta.Namespace)
+	}
 }
 
 func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
@@ -758,13 +777,18 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			)
 		}
 
-		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			corev1.Volume{
-				Name: "work",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+		if ok, _ := workVolumePresent(pod.Spec.Volumes); !ok {
+			pod.Spec.Volumes = append(pod.Spec.Volumes,
+				corev1.Volume{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
+			)
+		}
+
+		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
 				Name: "certs-client",
 				VolumeSource: corev1.VolumeSource{
@@ -773,11 +797,16 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			},
 		)
 
+		if ok, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); !ok {
+			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "work",
+					MountPath: workDir,
+				},
+			)
+		}
+
 		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "work",
-				MountPath: workDir,
-			},
 			corev1.VolumeMount{
 				Name:      "certs-client",
 				MountPath: "/certs/client",

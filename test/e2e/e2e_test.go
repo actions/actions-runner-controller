@@ -36,21 +36,21 @@ var (
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/Dockerfile",
+			Dockerfile: "../../runner/actions-runner.dockerfile",
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.289.2",
+					Value: "2.291.1",
 				},
 			},
 			Image: runnerImage,
 		},
 		{
-			Dockerfile: "../../runner/Dockerfile.dindrunner",
+			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.289.2",
+					Value: "2.291.1",
 				},
 			},
 			Image: runnerDindImage,
