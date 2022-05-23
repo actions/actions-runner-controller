@@ -809,7 +809,6 @@ apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
   name: example-runners
-  namespace: actions-runner-system
 spec:
   template:
     spec:
@@ -819,7 +818,6 @@ apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
   name: example-runners
-  namespace: actions-runner-system
 spec:
   scaleDownDelaySecondsAfterScaleOut: 300
   minReplicas: 1
