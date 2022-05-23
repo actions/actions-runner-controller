@@ -9,7 +9,7 @@
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
   * [Runner coming up before network available](#runner-coming-up-before-network-available)
   * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
-
+  * [Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns](#unable-to-scale-to-zero-with-totalnumberofqueuedandinprogressworkflowruns)
 
 ## Tools
 
@@ -208,3 +208,15 @@ spec:
 
 There may be more places you need to tweak for MTU.
 Please consult issues like #651 for more information.
+
+## Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns
+
+**Problem**
+
+HRA doesn't scale the RunnerDeployment to zero, even though you did configure HRA correctly, to have a pull-based scaling metric `TotalNumberOfQueuedAndInProgressWorkflowRuns`, and set `minReplicas: 0`.
+
+**Solution**
+
+You very likely have some dangling workflow jobs stuck in `queued` or `in_progress` as seen in [#1057](https://github.com/actions-runner-controller/actions-runner-controller/issues/1057#issuecomment-1133439061).
+
+Manually call [the "list workflow runs" API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository), and [remove the dangling workflow job(s)](https://docs.github.com/en/rest/actions/workflow-runs#delete-a-workflow-run).
