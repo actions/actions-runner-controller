@@ -1,3 +1,14 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-runner-work-dir
+  labels:
+    content: ${NAME}-runner-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -109,7 +120,10 @@ spec:
           value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
         - name: GOMODCACHE
           value: "/home/runner/.cache/go-mod"
+        # PV-backed runner work dir
         volumeMounts:
+        - name: work
+          mountPath: /runner/_work
         # Cache docker image layers, in case dockerdWithinRunnerContainer=true
         - name: var-lib-docker
           mountPath: /var/lib/docker
@@ -137,7 +151,10 @@ spec:
           mountPath: "/opt/hostedtoolcache"
       # Valid only when dockerdWithinRunnerContainer=false
       - name: docker
+        # PV-backed runner work dir
         volumeMounts:
+        - name: work
+          mountPath: /runner/_work
         # Cache docker image layers, in case dockerdWithinRunnerContainer=false
         - name: var-lib-docker
           mountPath: /var/lib/docker
@@ -146,6 +163,17 @@ spec:
         # For buildx cache
         - name: cache
           mountPath: "/home/runner/.cache"
+      volumes:
+      - name: work
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes:
+              - ReadWriteOnce
+              storageClassName: "${NAME}-runner-work-dir"
+              resources:
+                requests:
+                  storage: 10Gi
   volumeClaimTemplates:
   - metadata:
       name: vol1
