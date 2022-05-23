@@ -367,7 +367,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			Name: "runner",
 		})
 
-		if (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
+		if runner.Spec.ContainerMode != "kubernetes" && (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
 			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
 				Name: "docker",
 			})
@@ -421,42 +421,60 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	// Customize the pod spec according to the runner spec
 	runnerSpec := runner.Spec
 
-	if runnerSpec.WorkVolumeClaimTemplate != nil {
-		if len(runnerSpec.WorkVolumeClaimTemplate.AccessModes) == 0 {
-			runnerSpec.WorkVolumeClaimTemplate.AccessModes = []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			}
-		}
-		if err := applyWorkVolumeClaimTemplate(&runner); err != nil {
-			return pod, err
-		}
-	}
+	switch runnerSpec.ContainerMode {
+	case "kubernetes":
+		addHookEnvs(&pod)
 
-	if len(runnerSpec.VolumeMounts) != 0 {
-		// if operater provides a work volume mount, use that
-		isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
-		if isPresent {
-			// remove work volume since it will be provided from runnerSpec.Volumes
-			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
-			_, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
+		if err := runner.Spec.ValidateWorkVolumeClaimTemplate(); err != nil {
+			return pod, fmt.Errorf("work volume claim template validation error: %v", err)
+		}
+
+		if isPresent, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts); isPresent {
+			// remove work volume mount since it will be created from WorkVolumeClaimTemplate
 			pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts[:index], pod.Spec.Containers[0].VolumeMounts[index+1:]...)
 		}
 
-		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runnerSpec.VolumeMounts...)
-	}
-
-	if len(runnerSpec.Volumes) != 0 {
-		// if operator provides a work volume. use that
-		isPresent, _ := workVolumePresent(runnerSpec.Volumes)
-		if isPresent {
-			_, index := workVolumePresent(pod.Spec.Volumes)
-
-			// remove work volume since it will be provided from runnerSpec.Volumes
-			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
+		if isPresent, index := workVolumePresent(pod.Spec.Volumes); isPresent {
+			// remove work volume since it will be created from WorkVolumeClaimTemplate
 			pod.Spec.Volumes = append(pod.Spec.Volumes[:index], pod.Spec.Volumes[index+1:]...)
 		}
 
+		if err := applyWorkVolumeClaimTemplate(&runner); err != nil {
+			return pod, err
+		}
+
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runnerSpec.VolumeMounts...)
 		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
+
+		appendRunnerVolumeMountEnvs(&pod)
+	default:
+		if len(runnerSpec.VolumeMounts) != 0 {
+			// if operater provides a work volume mount, use that
+			isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
+			if isPresent {
+				// remove work volume mount since it will be provided from runnerSpec.VolumeMounts
+				// if we don't remove it here we would get a duplicate key error, i.e. two volume mounts named work
+				_, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
+				pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts[:index], pod.Spec.Containers[0].VolumeMounts[index+1:]...)
+			}
+
+			pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runnerSpec.VolumeMounts...)
+		}
+
+		if len(runnerSpec.Volumes) != 0 {
+			// if operator provides a work volume. use that
+			isPresent, _ := workVolumePresent(runnerSpec.Volumes)
+			if isPresent {
+				_, index := workVolumePresent(pod.Spec.Volumes)
+
+				// remove work volume since it will be provided from runnerSpec.Volumes
+				// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
+				pod.Spec.Volumes = append(pod.Spec.Volumes[:index], pod.Spec.Volumes[index+1:]...)
+			}
+
+			pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
+		}
+
 	}
 
 	if len(runnerSpec.InitContainers) != 0 {
@@ -513,15 +531,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.RuntimeClassName = runnerSpec.RuntimeClassName
 	}
 
-	if runner.Spec.ContainerMode == "kubernetes" {
-		addHookEnvs(&pod)
-	}
-
 	pod.ObjectMeta.Name = runner.ObjectMeta.Name
-
-	if err := appendRunnerVolumeMountEnvs(&pod); err != nil {
-		return pod, err
-	}
 
 	// Inject the registration token and the runner name
 	updated := mutatePod(&pod, runner.Status.Registration.Token)
@@ -975,13 +985,11 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 }
 
 func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
-	isPresent, _ := workVolumeMountPresent(runner.Spec.VolumeMounts)
-	if isPresent {
+	if isPresent, _ := workVolumeMountPresent(runner.Spec.VolumeMounts); isPresent {
 		return errors.New("Volume mounts with the name \"work\" are reserved if workVolumeClaimTemplate is specified")
 	}
 
-	isPresent, _ = workVolumePresent(runner.Spec.Volumes)
-	if isPresent {
+	if isPresent, _ := workVolumePresent(runner.Spec.Volumes); isPresent {
 		return errors.New("Volumes with the name \"work\" are reserved if a workVolumeClaimTemplate is specified")
 	}
 
@@ -1015,11 +1023,11 @@ func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
 func isRequireSameNode(pod *corev1.Pod) (bool, error) {
 	isPresent, index := workVolumePresent(pod.Spec.Volumes)
 	if !isPresent {
-		return true, nil
+		return true, errors.New("internal error: work volume mount must exist in containerMode: kubernetes")
 	}
 
 	if pod.Spec.Volumes[index].Ephemeral == nil || pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate == nil {
-		// TODO(nikola-jokic): how to handle this case?
+		// should never happen but guard for the future changes
 		return true, nil
 	}
 
@@ -1029,8 +1037,7 @@ func isRequireSameNode(pod *corev1.Pod) (bool, error) {
 			return true, nil
 		case corev1.ReadWriteMany:
 		default:
-			// TODO (nikola-jokic): Should we throw error or delete it from access modes?
-			return true, errors.New("read only mode cannot be specified for actions-runner-controller to work properly")
+			return true, errors.New("actions-runner-controller supports ReadWriteOnce and ReadWriteMany modes only")
 		}
 	}
 	return false, nil
