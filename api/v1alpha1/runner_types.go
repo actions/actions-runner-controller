@@ -195,7 +195,7 @@ func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
 	}
 
 	if rs.WorkVolumeClaimTemplate.AccessModes == nil || len(rs.WorkVolumeClaimTemplate.AccessModes) == 0 {
-		return fmt.Errorf("Access mode should have at least one mode specified")
+		return errors.New("Access mode should have at least one mode specified")
 	}
 
 	for _, accessMode := range rs.WorkVolumeClaimTemplate.AccessModes {

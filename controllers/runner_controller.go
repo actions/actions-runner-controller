@@ -425,10 +425,6 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	case "kubernetes":
 		addHookEnvs(&pod)
 
-		if err := runner.Spec.ValidateWorkVolumeClaimTemplate(); err != nil {
-			return pod, fmt.Errorf("work volume claim template validation error: %v", err)
-		}
-
 		if isPresent, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts); isPresent {
 			// remove work volume mount since it will be created from WorkVolumeClaimTemplate
 			pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts[:index], pod.Spec.Containers[0].VolumeMounts[index+1:]...)
@@ -985,6 +981,10 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 }
 
 func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
+	if err := runner.Spec.ValidateWorkVolumeClaimTemplate(); err != nil {
+		return fmt.Errorf("work volume claim template validation error: %v", err)
+	}
+
 	if isPresent, _ := workVolumeMountPresent(runner.Spec.VolumeMounts); isPresent {
 		return errors.New("Volume mounts with the name \"work\" are reserved if workVolumeClaimTemplate is specified")
 	}
@@ -1018,31 +1018,8 @@ func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
 	return nil
 }
 
-// isRequireSameNode specifies for the runner in kubernetes mode wether it should
-// schedule jobs to the same node where the runner is
-func isRequireSameNode(pod *corev1.Pod) (bool, error) {
-	isPresent, index := workVolumePresent(pod.Spec.Volumes)
-	if !isPresent {
-		return true, errors.New("internal error: work volume mount must exist in containerMode: kubernetes")
-	}
-
-	if pod.Spec.Volumes[index].Ephemeral == nil || pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate == nil {
-		// should never happen but guard for the future changes
-		return true, nil
-	}
-
-	for i := range pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
-		switch pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes[i] {
-		case corev1.ReadWriteOnce:
-			return true, nil
-		case corev1.ReadWriteMany:
-		default:
-			return true, errors.New("actions-runner-controller supports ReadWriteOnce and ReadWriteMany modes only")
-		}
-	}
-	return false, nil
-}
-
+// appendRunnerVolumeMountEnvs function appends volume related environment variables
+// needed by the runner when executing in containerMode: kubernetes
 func appendRunnerVolumeMountEnvs(pod *corev1.Pod) error {
 	setRunnerEnv(pod, "ACTIONS_RUNNER_CLAIM_NAME", pod.ObjectMeta.Name+"-work")
 
@@ -1058,4 +1035,30 @@ func appendRunnerVolumeMountEnvs(pod *corev1.Pod) error {
 
 	setRunnerEnv(pod, "ACTIONS_RUNNER_REQUIRE_SAME_NODE", "false")
 	return nil
+}
+
+// isRequireSameNode specifies for the runner in kubernetes mode wether it should
+// schedule jobs to the same node where the runner is
+//
+// This function should only be called in containerMode: kubernetes
+func isRequireSameNode(pod *corev1.Pod) (bool, error) {
+	isPresent, index := workVolumePresent(pod.Spec.Volumes)
+	if !isPresent {
+		return true, errors.New("internal error: work volume mount must exist in containerMode: kubernetes")
+	}
+
+	if pod.Spec.Volumes[index].Ephemeral == nil || pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate == nil {
+		return true, errors.New("containerMode: kubernetes should have pod.Spec.Volumes[].Ephemeral.VolumeClaimTemplate set")
+	}
+
+	for i := range pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
+		switch pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes[i] {
+		case corev1.ReadWriteOnce:
+			return true, nil
+		case corev1.ReadWriteMany:
+		default:
+			return true, errors.New("actions-runner-controller supports ReadWriteOnce and ReadWriteMany modes only")
+		}
+	}
+	return false, nil
 }
