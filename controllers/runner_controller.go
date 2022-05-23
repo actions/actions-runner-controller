@@ -131,7 +131,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			p := p
 			go func() {
 				if err := r.Delete(ctx, &p); err != nil {
-					errs = append(errs, err)
+					errs = append(errs, fmt.Errorf("delete pod %s error: %v", p.ObjectMeta.Name, err))
 				}
 				wg.Done()
 			}()
@@ -140,6 +140,10 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		for _, err := range errs {
 			log.Error(err, "failed to remove runner-linked pod")
+		}
+
+		if len(errs) > 0 {
+			return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 		}
 
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
