@@ -126,9 +126,13 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			wg   sync.WaitGroup
 			errs []error
 		)
-		wg.Add(len(runnerLinkedPodList.Items))
 		for _, p := range runnerLinkedPodList.Items {
+			if !p.ObjectMeta.DeletionTimestamp.IsZero() {
+				continue
+			}
+
 			p := p
+			wg.Add(1)
 			go func() {
 				if err := r.Delete(ctx, &p); err != nil {
 					errs = append(errs, fmt.Errorf("delete pod %s error: %v", p.ObjectMeta.Name, err))
