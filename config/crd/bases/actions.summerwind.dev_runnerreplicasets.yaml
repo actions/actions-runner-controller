@@ -571,6 +571,8 @@ spec:
                           type: object
                         automountServiceAccountToken:
                           type: boolean
+                        containerMode:
+                          type: string
                         containers:
                           items:
                             description: A single application container that you want to run within a pod.
