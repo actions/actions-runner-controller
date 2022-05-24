@@ -127,11 +127,11 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			errs []error
 		)
 		for _, p := range runnerLinkedPodList.Items {
-			p := p
 			if !p.ObjectMeta.DeletionTimestamp.IsZero() {
 				continue
 			}
 
+			p := p
 			wg.Add(1)
 			go func() {
 				if err := r.Delete(ctx, &p); err != nil {
