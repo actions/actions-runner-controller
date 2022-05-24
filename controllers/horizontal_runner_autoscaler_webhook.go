@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +47,8 @@ const (
 
 	keyPrefixEnterprise = "enterprises/"
 	keyRunnerGroup      = "/group/"
+
+	DefaultQueueLimit = 100
 )
 
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
@@ -68,6 +71,13 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// Set to empty for letting it watch for all namespaces.
 	Namespace string
 	Name      string
+
+	// QueueLimit is the maximum length of the bounded queue of scale targets and their associated operations
+	// A scale target is enqueued on each retrieval of each eligible webhook event, so that it is processed asynchronously.
+	QueueLimit int
+
+	worker     *worker
+	workerInit sync.Once
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -312,9 +322,17 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		return
 	}
 
-	if err := autoscaler.tryScale(context.TODO(), target); err != nil {
-		log.Error(err, "could not scale up")
+	autoscaler.workerInit.Do(func() {
+		queueLimit := autoscaler.QueueLimit
+		if queueLimit == 0 {
+			queueLimit = DefaultQueueLimit
+		}
+		autoscaler.worker = newWorker(context.Background(), queueLimit, autoscaler.workOnScaleTarget)
+	})
 
+	target.log = &log
+	if ok := autoscaler.worker.Add(target); !ok {
+		log.Error(err, "Could not scale up due to queue full")
 		return
 	}
 
@@ -328,6 +346,12 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 	if written, err := w.Write([]byte(msg)); err != nil {
 		log.Error(err, "failed writing http response", "msg", msg, "written", written)
+	}
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) workOnScaleTarget(st *ScaleTarget) {
+	if err := autoscaler.tryScale(context.Background(), st); err != nil {
+		st.log.Error(err, "Could not scale due to %v", err)
 	}
 }
 
@@ -383,6 +407,8 @@ func matchTriggerConditionAgainstEvent(types []string, eventAction *string) bool
 type ScaleTarget struct {
 	v1alpha1.HorizontalRunnerAutoscaler
 	v1alpha1.ScaleUpTrigger
+
+	log *logr.Logger
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
