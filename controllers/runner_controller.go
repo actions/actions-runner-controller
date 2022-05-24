@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/hash"
@@ -103,6 +104,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	} else {
 		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
+
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {
@@ -112,6 +114,38 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			// Pod was not found
 			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
+		// remove runner-linked pods
+		var runnerLinkedPodList corev1.PodList
+		r.List(ctx, &runnerLinkedPodList, client.MatchingLabels(
+			map[string]string{
+				"runner-pod": pod.ObjectMeta.Name,
+			},
+		))
+
+		var (
+			wg   sync.WaitGroup
+			errs []error
+		)
+		wg.Add(len(runnerLinkedPodList.Items))
+		for _, p := range runnerLinkedPodList.Items {
+			p := p
+			go func() {
+				if err := r.Delete(ctx, &p); err != nil {
+					errs = append(errs, fmt.Errorf("delete pod %s error: %v", p.ObjectMeta.Name, err))
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+
+		for _, err := range errs {
+			log.Error(err, "failed to remove runner-linked pod")
+		}
+
+		if len(errs) > 0 {
+			return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+		}
+
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
 
