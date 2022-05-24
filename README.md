@@ -721,7 +721,29 @@ $ helm upgrade --install --namespace actions-runner-system --create-namespace \
              --set "githubWebhookServer.enabled=true,service.type=NodePort,githubWebhookServer.ports[0].nodePort=33080"
 ```
 
-The command above will create a new deployment and a service for receiving GitHub Webhooks on the `actions-runner-system` namespace.
+The above command will result in exposing the node port 33080 for Webhook events.
+Usually, you need to create an external load balancer targeted to the node port,
+and register the hostname or the IP address of the external load balancer to the GitHub Webhook.
+
+**With a custom Kubernetes ingress controller:**
+
+> **CAUTION:** The Kubernetes ingress controllers described below is just a suggestion from the community and
+> the ARC team will not provide any user support for ingress controllers as it's not a part of this project.
+>
+> The following guide on creating an ingress has been contributed by the awesome ARC community and is provided here as-is.
+> You may, however, still be able to ask for help on the community on GitHub Discussions if you have any problems.
+
+Kubernetes provides `Ingress` resources to let you configure your ingress controller to expose a Kubernetes service.
+If you plan to expose ARC via Ingress, you might not be required to make it a `NodePort` service
+(although nothing would prevent an ingress controller to expose NodePort services too):
+
+```console
+$ helm upgrade --install --namespace actions-runner-system --create-namespace \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+             --set "githubWebhookServer.enabled=true"
+```
+
+The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
 
 Now we need to expose this service so that GitHub can send these webhooks over the network with TSL protection.
 
@@ -732,7 +754,7 @@ For the sake of this example we'll expose this service on the following URL:
 
 Where `your.domain.com` should be replaced by your own domain.
 
-> Note: This step assumes you already have a configured cert-manager and domain name for your cluster.
+> Note: This step assumes you already have a configured `cert-manager` and domain name for your cluster.
 
 Let's start by creating an Ingress file called `arc-webhook-server.yaml` with the following contents:
 
@@ -770,6 +792,8 @@ Then create this resource on your cluster with the following command:
 ```bash
 kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
 ```
+
+**Configuring GitHub for sending webhooks for our newly created webhook server:**
 
 After this step your webhook server should be ready to start receiving webhooks from GitHub.
 
