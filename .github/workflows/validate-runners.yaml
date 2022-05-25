@@ -1,4 +1,4 @@
-name: Test Runner Entrypoint
+name: Validate Runners
 
 on:
   pull_request:
@@ -14,8 +14,8 @@ permissions:
 
 jobs:
   test-runner-entrypoint:
-    runs-on: ubuntu-latest
     name: Test entrypoint
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout
       uses: actions/checkout@v3

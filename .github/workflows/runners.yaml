@@ -22,11 +22,11 @@ env:
 
 jobs:
   build-runners:
+    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
       contents: read
-    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
     strategy:
       fail-fast: false
       matrix:
