@@ -5,7 +5,7 @@ on:
     types: [published]
 
 jobs:
-  build:
+  release-controller:
     runs-on: ubuntu-latest
     name: Release
     env:

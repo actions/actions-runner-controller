@@ -7,11 +7,11 @@ on:
     paths-ignore:
       - '**.md'
       - '.github/ISSUE_TEMPLATE/**'
-      - '.github/workflows/on-push-lint-charts.yml'
-      - '.github/workflows/on-push-master-publish-chart.yml'
-      - '.github/workflows/runners.yml'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/test-entrypoint.yml'
+      - '.github/workflows/validate-chart.yaml'
+      - '.github/workflows/publish-chart.yaml'
+      - '.github/workflows/runners.yaml'
+      - '.github/workflows/release.yaml'
+      - '.github/workflows/test-entrypoint.yaml'
       - '.github/renovate.*'
       - 'runner/**'
       - '.gitignore'
@@ -23,9 +23,9 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  canary-build:
+    name: Build and Publish Canary Image  
     runs-on: ubuntu-latest
-    name: Build and Publish Canary Image
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
     steps:

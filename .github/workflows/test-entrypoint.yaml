@@ -1,4 +1,4 @@
-name: Test Entrypoint
+name: Test Runner Entrypoint
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test-runner-entrypoint:
     runs-on: ubuntu-latest
     name: Test entrypoint
     steps:

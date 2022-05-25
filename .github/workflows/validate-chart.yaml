@@ -1,10 +1,10 @@
-name: Lint and Test Helm Charts
+name: Validate Helm Chart
 
 on:
   push:
     paths:
       - 'charts/**'
-      - '.github/workflows/on-push-lint-charts.yaml'
+      - '.github/workflows/validate-chart.yaml'
       - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
   workflow_dispatch:
@@ -16,17 +16,17 @@ permissions:
   contents: read
 
 jobs:
-  lint-test:
-    runs-on: ubuntu-latest
+  validate-chart:
     name: Lint Chart
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@217bf70cbd2e930ba2e81ba7e1de2f7faecc42ba
+        uses: azure/setup-helm@v2
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -36,7 +36,8 @@ jobs:
           chmod 755 kube-score
 
       - name: Kube-score generated manifests
-        run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
+        run: |
+          helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
               --ignore-test pod-networkpolicy
               --ignore-test deployment-has-poddisruptionbudget
               --ignore-test deployment-has-host-podantiaffinity
@@ -47,12 +48,12 @@ jobs:
               --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@fff15a21cc8b16191cb1249f621fa3a55b9005b8
+      - uses: actions/setup-python@v3
         with:
-          python-version: 3.7
+          python-version: '3.7'
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@62a185010be4cb08459f7acb19f37927235d5cf3
+        uses: helm/chart-testing-action@v2.2.1
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -63,18 +64,20 @@ jobs:
           fi
 
       - name: Run chart-testing (lint)
-        run: ct lint --config charts/.ci/ct-config.yaml
+        run: |
+          ct lint --config charts/.ci/ct-config.yaml
 
       - name: Create kind cluster
-        uses: helm/kind-action@94729529f85113b88f4f819c17ce61382e6d8478
+        uses: helm/kind-action@v1.2.0
         if: steps.list-changed.outputs.changed == 'true'
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist
       - name: Install cert-manager
+        if: steps.list-changed.outputs.changed == 'true'
         run: |
           helm repo add jetstack https://charts.jetstack.io --force-update
           helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
-        if: steps.list-changed.outputs.changed == 'true'
 
       - name: Run chart-testing (install)
-        run: ct install --config charts/.ci/ct-config.yaml
+        run: |
+          ct install --config charts/.ci/ct-config.yaml

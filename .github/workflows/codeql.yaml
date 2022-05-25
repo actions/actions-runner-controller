@@ -9,7 +9,8 @@ on:
     - cron: '30 1 * * 0'
 
 jobs:
-  CodeQL-Build:
+  codeql-scan:
+    name: Scan Go Code
     runs-on: ubuntu-latest
     permissions:
       security-events: write

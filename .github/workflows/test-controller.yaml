@@ -8,7 +8,7 @@ on:
       - '**.md'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/canary.yaml'
-      - '.github/workflows/on-push-lint-charts.yaml'
+      - '.github/workflows/validate-chart.yaml'
       - '.github/workflows/on-push-master-publish-chart.yaml'
       - '.github/workflows/runners.yaml'
       - '.github/workflows/release.yaml'
@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test-controller:
     runs-on: ubuntu-latest
     name: Test Controller
     steps:

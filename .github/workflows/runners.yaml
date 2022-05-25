@@ -21,7 +21,7 @@ env:
   DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
 
 jobs:
-  build:
+  build-runners:
     runs-on: ubuntu-latest
     permissions:
       packages: write
