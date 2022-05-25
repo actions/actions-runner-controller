@@ -2,9 +2,11 @@ name: CodeQL Scanning
 
 on:
   push:
-    branches: [master]
+    branches: 
+      - master
   pull_request:
-    branches: [master]
+    branches:
+      - master
   schedule:
     - cron: '30 1 * * 0'
 
