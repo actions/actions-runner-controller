@@ -11,7 +11,7 @@ on:
     - cron: '30 1 * * 0'
 
 jobs:
-  codeql-go-scan:
+  codeql-scan:
     name: Scan Go Code
     runs-on: ubuntu-latest
     permissions:
