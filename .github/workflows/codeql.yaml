@@ -1,4 +1,4 @@
-name: CodeQL Scanning
+name: CodeQL Scan
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
 
 jobs:
   codeql-scan:
-    name: Scan Go Code
+    name: CodeQL Scan
     runs-on: ubuntu-latest
     permissions:
       security-events: write
