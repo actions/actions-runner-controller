@@ -1,4 +1,4 @@
-name: Stale Bot
+name: Run Stale Bot
 on:
   schedule:
     - cron: '30 1 * * *'

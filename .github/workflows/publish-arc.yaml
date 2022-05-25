@@ -1,4 +1,4 @@
-name: Publish Controller Image
+name: Publish ARC
 
 on:
   release:
