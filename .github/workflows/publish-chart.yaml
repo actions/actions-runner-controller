@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v2
+        uses: azure/setup-helm@v2.1
         with:
           version: ${{ env.HELM_VERSION }}
 
