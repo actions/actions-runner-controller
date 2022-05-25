@@ -1,4 +1,4 @@
-name: Unit tests for entrypoint
+name: Test Entrypoint
 
 on:
   pull_request:
@@ -18,7 +18,8 @@ jobs:
     name: Test entrypoint
     steps:
     - name: Checkout
-      uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
-    - name: Run unit tests for entrypoint.sh
+      uses: actions/checkout@v3
+
+    - name: Run tests
       run: |
         make acceptance/runner/entrypoint

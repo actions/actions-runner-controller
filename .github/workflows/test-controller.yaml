@@ -1,16 +1,16 @@
-name: CI
+name: Test Controller
 
 on:
   pull_request:
     branches:
       - master
     paths-ignore:
-      - .github/workflows/runners.yml
-      - .github/workflows/on-push-lint-charts.yml
-      - .github/workflows/on-push-master-publish-chart.yml
-      - .github/workflows/release.yml
-      - .github/workflows/test-entrypoint.yml
-      - .github/workflows/wip.yml
+      - '.github/workflows/runners.yml'
+      - '.github/workflows/on-push-lint-charts.yml'
+      - '.github/workflows/on-push-master-publish-chart.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/test-entrypoint.yml'
+      - '.github/workflows/wip.yml'
       - 'runner/**'
       - '**.md'
       - '.gitignore'
@@ -21,28 +21,34 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: Test
+    name: Test Controller
     steps:
     - name: Checkout
-      uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
-    - uses: actions/setup-go@193b404f8a1d1dccaf6ed9bf03cdb68d2d02020f
+      uses: actions/checkout@v3
+
+    - name: Set-up Go
+      uses: actions/setup-go@v3
       with:
         go-version: '1.18.2'
         check-latest: false
-    - run: go version
-    - uses: actions/cache@95f200e41cfa87b8e07f30196c0df17a67e67786
+    
+    - uses: actions/cache@v3
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
+
     - name: Install kubebuilder
       run: |
         curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_linux_amd64.tar.gz
         tar zxvf kubebuilder_2.3.2_linux_amd64.tar.gz
         sudo mv kubebuilder_2.3.2_linux_amd64 /usr/local/kubebuilder
+
     - name: Run tests
-      run: make test
+      run: |
+        make test
+
     - name: Verify manifests are up-to-date
       run: |
         make manifests

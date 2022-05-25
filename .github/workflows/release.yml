@@ -11,14 +11,10 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
     steps:
-      - name: Set outputs
-        id: vars
-        run: echo ::set-output name=sha_short::${GITHUB_SHA::7}
-
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-go@193b404f8a1d1dccaf6ed9bf03cdb68d2d02020f
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18.2'
 
@@ -39,25 +35,20 @@ jobs:
       - name: Upload artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make github-release
+        run: |
+          make github-release
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@0522dcd2bf084920c411162fde334a308be75015
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@91cb32d715c128e5f0ede915cd7e196ab7799b83
+      - name: Setup Docker Environment
+        id: vars
+        uses: ./.github/actions/setup-docker-environment
         with:
-          version: latest
-
-      - name: Login to DockerHub
-        uses: docker/login-action@d398f07826957cd0a18ea1b059cf1207835e60bc
-        with:
-          username: ${{ secrets.DOCKER_USER }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push
-        uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
+        uses: docker/build-push-action@v3
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
@@ -66,4 +57,6 @@ jobs:
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
