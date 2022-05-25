@@ -9,6 +9,7 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/on-push-lint-charts.yml'
       - '.github/workflows/on-push-master-publish-chart.yml'
+      - '.github/workflows/runners.yml'
       - '.github/workflows/release.yml'
       - '.github/workflows/test-entrypoint.yml'
       - '.github/renovate.*'
@@ -29,30 +30,26 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
+        uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@0522dcd2bf084920c411162fde334a308be75015
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@91cb32d715c128e5f0ede915cd7e196ab7799b83
+      - name: Setup Docker Environment
+        id: vars
+        uses: ./.github/actions/setup-docker-environment
         with:
-          version: latest
-
-      - name: Login to DockerHub
-        uses: docker/login-action@d398f07826957cd0a18ea1b059cf1207835e60bc
-        with:
-          username: ${{ secrets.DOCKER_USER }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
       # Considered unstable builds
       # See Issue #285, PR #286, and PR #323 for more information
       - name: Build and Push
-        uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
+        uses: docker/build-push-action@v3
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

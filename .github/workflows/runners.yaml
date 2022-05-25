@@ -12,7 +12,7 @@ on:
     paths:
       - 'runner/**'
       - '!runner/Makefile'
-      - '.github/workflows/runners.yml'
+      - '.github/workflows/runners.yaml'
       - '!**.md'
 
 env:

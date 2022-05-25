@@ -1,16 +1,13 @@
-name: Publish Helm Chart
+name: Lint and Test Helm Charts
 
 on:
   push:
-    branches:
-      - master
     paths:
       - 'charts/**'
-      - '.github/workflows/on-push-master-publish-chart.yml'
+      - '.github/workflows/on-push-lint-charts.yaml'
       - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
   workflow_dispatch:
-
 env:
   KUBE_SCORE_VERSION: 1.10.0
   HELM_VERSION: v3.8.0
@@ -19,11 +16,9 @@ permissions:
   contents: read
 
 jobs:
-  lint-chart:
+  lint-test:
     runs-on: ubuntu-latest
     name: Lint Chart
-    outputs:
-      publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
       - name: Checkout
         uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
@@ -83,43 +78,3 @@ jobs:
 
       - name: Run chart-testing (install)
         run: ct install --config charts/.ci/ct-config.yaml
-        if: steps.list-changed.outputs.changed == 'true'
-
-      # WARNING: This relies on the latest release being inat the top of the JSON from GitHub and a clean chart.yaml
-      - name: Check if Chart Publish is Needed
-        id: publish-chart-step
-        run: |
-          CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/actions-runner-controller/actions-runner-controller/master/charts/actions-runner-controller/Chart.yaml)
-          NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
-          RELEASE_LIST=$(curl -fs https://api.github.com/repos/actions-runner-controller/actions-runner-controller/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
-          LATEST_RELEASED_CHART_VERSION=$(echo $RELEASE_LIST | cut -d ' ' -f 1)
-          echo "Chart version in master : $NEW_CHART_VERSION"
-          echo "Latest release chart version : $LATEST_RELEASED_CHART_VERSION"
-          if [[ $NEW_CHART_VERSION != $LATEST_RELEASED_CHART_VERSION ]]; then
-            echo "::set-output name=publish::true"
-          fi
-
-  publish-chart:
-    permissions:
-      contents: write  # for helm/chart-releaser-action to push chart release and create a release
-    if: needs.lint-chart.outputs.publish-chart == 'true'
-    needs: lint-chart
-    runs-on: ubuntu-latest
-    name: Publish Chart
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
-        with:
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@a3454e46a6f5ac4811069a381e646961dda2e1bf
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-
