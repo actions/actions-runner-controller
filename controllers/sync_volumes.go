@@ -73,6 +73,8 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 		return nil, nil
 	}
 
+	log.V(2).Info("Reconciling runner PVC")
+
 	var sts appsv1.StatefulSet
 	if err := c.Get(ctx, types.NamespacedName{Namespace: ns, Name: stsName}, &sts); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -85,7 +87,7 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 		return &ctrl.Result{RequeueAfter: retry}, nil
 	}
 
-	log = log.WithValues("pvc", pvc.Name, "sts", stsName)
+	log = log.WithValues("sts", stsName)
 
 	pvName := pvc.Spec.VolumeName
 
@@ -108,7 +110,7 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 		}
 		pvCopy.Labels[labelKeyCleanup] = stsName
 
-		log.Info("Scheduling to unset PV's claimRef", "pv", pv.Name)
+		log.V(2).Info("Scheduling to unset PV's claimRef", "pv", pv.Name)
 
 		// Apparently K8s doesn't reconcile PV immediately after PVC deletion.
 		// So we start a relatively busy loop of PV reconcilation slightly before the PVC deletion,
@@ -117,13 +119,17 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 			return nil, err
 		}
 
+		log.Info("Updated PV to unset claimRef")
+
 		// At this point, the PV is still Bound
 
-		log.Info("Deleting unused pvc")
+		log.V(2).Info("Deleting unused PVC")
 
 		if err := c.Delete(ctx, pvc); err != nil {
 			return nil, err
 		}
+
+		log.Info("Deleted unused PVC")
 
 		// At this point, the PV is still "Bound", but we are ready to unset pv.spec.claimRef in pv controller.
 		// Once the pv controller unsets claimRef, the PV becomes "Released", hence available for reuse by another eligible PVC.
@@ -133,13 +139,11 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 }
 
 func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv *corev1.PersistentVolume) (*ctrl.Result, error) {
-	log.V(2).Info("checking pv claimRef")
-
 	if pv.Spec.ClaimRef == nil {
 		return nil, nil
 	}
 
-	log.V(2).Info("checking labels")
+	log.V(2).Info("Reconciling PV")
 
 	if pv.Labels[labelKeyCleanup] == "" {
 		// We assume that the pvc is shortly terminated, hence retry forever until it gets removed.
@@ -162,10 +166,12 @@ func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv
 	pvCopy := pv.DeepCopy()
 	delete(pvCopy.Labels, labelKeyCleanup)
 	pvCopy.Spec.ClaimRef = nil
-	log.Info("Unsetting PV's claimRef", "pv", pv.Name)
+	log.V(2).Info("Unsetting PV's claimRef", "pv", pv.Name)
 	if err := c.Update(ctx, pvCopy); err != nil {
 		return nil, err
 	}
+
+	log.Info("PV should be Available now")
 
 	// At this point, the PV becomes Available, if it's reclaim policy is "Retain".
 	// I have not yet tested it with "Delete" but perhaps it's deleted automatically after the update?
