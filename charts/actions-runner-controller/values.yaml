@@ -104,6 +104,7 @@ metrics:
   serviceAnnotations: {}
   serviceMonitor: false
   serviceMonitorLabels: {}
+  serviceMonitorNamespace: default
   port: 8443
   proxy:
     enabled: true
