@@ -400,12 +400,18 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	template.ObjectMeta = objectMeta
 
+	if runner.Spec.ContainerMode == "kubernetes" {
+		f := false
+		runner.Spec.DockerEnabled = &f
+		runner.Spec.DockerdWithinRunnerContainer = &f
+	}
+
 	if len(runner.Spec.Containers) == 0 {
 		template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
 			Name: "runner",
 		})
 
-		if runner.Spec.ContainerMode != "kubernetes" && (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
+		if (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
 			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
 				Name: "docker",
 			})

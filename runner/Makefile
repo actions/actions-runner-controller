@@ -1,4 +1,4 @@
-DOCKER_USER ?= summerwind
+DOCKER_USER ?= jokicnikola07
 NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 TAG ?= latest
@@ -25,18 +25,8 @@ else
 endif
 
 docker-build-ubuntu:
-	docker build \
-	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
-	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner.dockerfile \
-	  -t ${NAME}:${TAG} .
-	docker build \
-	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
-	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner-dind.dockerfile \
-	  -t ${DIND_RUNNER_NAME}:${TAG} .
+	docker build --build-arg TARGETPLATFORM=${TARGETPLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${NAME}:${TAG} .
+	# docker build --build-arg TARGETPLATFORM=${TARGETPLATFORM} --build-arg RUNNER_VERSION=${RUNNER_VERSION} --build-arg DOCKER_VERSION=${DOCKER_VERSION} -t ${DIND_RUNNER_NAME}:${TAG} -f Dockerfile.dindrunner .
 
 docker-push-ubuntu:
 	docker push ${NAME}:${TAG}
@@ -46,17 +36,17 @@ docker-buildx-ubuntu:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
     export DOCKER_BUILDKIT=1
 	@if ! docker buildx ls | grep -q container-builder; then\
-	  docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
+		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
 	docker buildx build --platform ${PLATFORMS} \
-	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner.dockerfile \
-	  -t "${NAME}:${TAG}" \
-	  . ${PUSH_ARG}
+		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+		-t "${NAME}:${TAG}" \
+		-f Dockerfile \
+		. ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
-	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner-dind.dockerfile \
-	  -t "${DIND_RUNNER_NAME}:${TAG}" \
-	  . ${PUSH_ARG}
+		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+		-t "${DIND_RUNNER_NAME}:${TAG}" \
+		-f Dockerfile.dindrunner \
+		. ${PUSH_ARG}
