@@ -46,6 +46,8 @@ spec:
             spec:
               description: RunnerSetSpec defines the desired state of RunnerSet
               properties:
+                containerMode:
+                  type: string
                 dockerEnabled:
                   type: boolean
                 dockerMTU:

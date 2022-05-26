@@ -13,18 +13,43 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
+func newWorkGenericEphemeralVolume(t *testing.T, storageReq string) corev1.Volume {
+	GBs, err := resource.ParseQuantity(storageReq)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	return corev1.Volume{
+		Name: "work",
+		VolumeSource: corev1.VolumeSource{
+			Ephemeral: &corev1.EphemeralVolumeSource{
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes: []corev1.PersistentVolumeAccessMode{
+							corev1.ReadWriteOnce,
+						},
+						StorageClassName: strPtr("runner-work-dir"),
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: GBs,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestNewRunnerPod(t *testing.T) {
+	workGenericEphemeralVolume := newWorkGenericEphemeralVolume(t, "10Gi")
+
 	type testcase struct {
 		description string
 
 		template corev1.Pod
 		config   arcv1alpha1.RunnerConfig
 		want     corev1.Pod
-	}
-
-	tenGB, err := resource.ParseQuantity("10Gi")
-	if err != nil {
-		t.Fatalf("%v", err)
 	}
 
 	base := corev1.Pod{
@@ -325,27 +350,6 @@ func TestNewRunnerPod(t *testing.T) {
 		},
 	}
 
-	workGenericEphemeralVolume := corev1.Volume{
-		Name: "work",
-		VolumeSource: corev1.VolumeSource{
-			Ephemeral: &corev1.EphemeralVolumeSource{
-				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{
-							corev1.ReadWriteOnce,
-						},
-						StorageClassName: strPtr("runner-work-dir"),
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: tenGB,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
 	newTestPod := func(base corev1.Pod, f func(*corev1.Pod)) corev1.Pod {
 		pod := base.DeepCopy()
 		if f != nil {
@@ -523,6 +527,8 @@ func strPtr(s string) *string {
 }
 
 func TestNewRunnerPodFromRunnerController(t *testing.T) {
+	workGenericEphemeralVolume := newWorkGenericEphemeralVolume(t, "10Gi")
+
 	type testcase struct {
 		description string
 
@@ -991,6 +997,96 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 
 			want: newTestPod(dockerDisabled, func(p *corev1.Pod) {
 				p.Spec.Containers[0].SecurityContext.Privileged = boolPtr(true)
+			}),
+		},
+		{
+			description: "Mount generic ephemeral volume onto work (with explicit volumeMount)",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerPodSpec: arcv1alpha1.RunnerPodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "runner",
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "work",
+										MountPath: "/runner/_work",
+									},
+								},
+							},
+						},
+						Volumes: []corev1.Volume{
+							workGenericEphemeralVolume,
+						},
+					},
+				},
+			},
+			want: newTestPod(base, func(p *corev1.Pod) {
+				p.Spec.Volumes = []corev1.Volume{
+					{
+						Name: "runner",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+					{
+						Name: "certs-client",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+					workGenericEphemeralVolume,
+				}
+				p.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "work",
+						MountPath: "/runner/_work",
+					},
+					{
+						Name:      "runner",
+						MountPath: "/runner",
+					},
+					{
+						Name:      "certs-client",
+						MountPath: "/certs/client",
+						ReadOnly:  true,
+					},
+				}
+			}),
+		},
+		{
+			description: "Mount generic ephemeral volume onto work (without explicit volumeMount)",
+			runner: arcv1alpha1.Runner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "runner",
+				},
+				Spec: arcv1alpha1.RunnerSpec{
+					RunnerPodSpec: arcv1alpha1.RunnerPodSpec{
+						Volumes: []corev1.Volume{
+							workGenericEphemeralVolume,
+						},
+					},
+				},
+			},
+			want: newTestPod(base, func(p *corev1.Pod) {
+				p.Spec.Volumes = []corev1.Volume{
+					{
+						Name: "runner",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+					{
+						Name: "certs-client",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+					workGenericEphemeralVolume,
+				}
 			}),
 		},
 	}
