@@ -139,7 +139,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			go func() {
 				defer wg.Done()
 				if err := r.Delete(ctx, &p); err != nil {
-					if kerrors.IsNotFound(err) {
+					if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
 						return
 					}
 					errs = append(errs, fmt.Errorf("delete pod %s error: %v", p.ObjectMeta.Name, err))
@@ -279,7 +279,7 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 		log.Info("Removed finalizer")
 	}
 
-	if runner.Spec.ContainerMode == "kubernetes" {
+	if runner.Spec.ContainerMode == "kubernetes" && runner.Spec.WorkVolumeClaimTemplate.StorageClassName == "local-storage" {
 		if err := r.deletePersistentVolume(ctx, &runner); err != nil {
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
@@ -301,7 +301,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
-	if runner.Spec.ContainerMode == "kubernetes" {
+	if runner.Spec.ContainerMode == "kubernetes" && runner.Spec.WorkVolumeClaimTemplate.StorageClassName == "local-storage" {
 		if err := r.createPersistentVolume(ctx, &runner); err != nil {
 			log.Error(err, "could not create persistent volume")
 			return ctrl.Result{}, err
@@ -1083,10 +1083,20 @@ func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
 		return errors.New("Volumes with the name \"work\" are reserved if a workVolumeClaimTemplate is specified")
 	}
 
+	mountPath := runner.Spec.WorkDir
+	if mountPath == "" {
+		mountPath = "/runner/_work"
+	}
+
 	runner.Spec.VolumeMounts = append(runner.Spec.VolumeMounts, corev1.VolumeMount{
-		MountPath: "/runner/_work",
+		MountPath: mountPath,
 		Name:      "work",
 	})
+
+	var volumeName string
+	if runner.Spec.WorkVolumeClaimTemplate.StorageClassName == "local-storage" {
+		volumeName = generatePersistentVolumeName(runner)
+	}
 
 	runner.Spec.Volumes = append(runner.Spec.Volumes, corev1.Volume{
 		Name: "work",
@@ -1094,7 +1104,7 @@ func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
 			Ephemeral: &corev1.EphemeralVolumeSource{
 				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
 					Spec: corev1.PersistentVolumeClaimSpec{
-						VolumeName:       generatePersistentVolumeName(runner),
+						VolumeName:       volumeName,
 						AccessModes:      runner.Spec.WorkVolumeClaimTemplate.AccessModes,
 						StorageClassName: &runner.Spec.WorkVolumeClaimTemplate.StorageClassName,
 						Resources:        runner.Spec.WorkVolumeClaimTemplate.Resources,
