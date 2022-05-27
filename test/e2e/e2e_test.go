@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -36,21 +37,21 @@ var (
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/Dockerfile",
+			Dockerfile: "../../runner/actions-runner.dockerfile",
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.289.2",
+					Value: "2.291.1",
 				},
 			},
 			Image: runnerImage,
 		},
 		{
-			Dockerfile: "../../runner/Dockerfile.dindrunner",
+			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.289.2",
+					Value: "2.291.1",
 				},
 			},
 			Image: runnerDindImage,
@@ -137,6 +138,10 @@ func TestE2E(t *testing.T) {
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
+
+	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+		t.FailNow()
+	}
 }
 
 func TestE2ERunnerDeploy(t *testing.T) {
@@ -179,7 +184,9 @@ func TestE2ERunnerDeploy(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
 
-	t.FailNow()
+	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+		t.FailNow()
+	}
 }
 
 type env struct {
@@ -411,7 +418,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: ">=1.18.0",
+						GoVersion: "1.18.2",
 					},
 				},
 				{

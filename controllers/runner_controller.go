@@ -829,13 +829,18 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			)
 		}
 
-		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			corev1.Volume{
-				Name: "work",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+		if ok, _ := workVolumePresent(pod.Spec.Volumes); !ok {
+			pod.Spec.Volumes = append(pod.Spec.Volumes,
+				corev1.Volume{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
+			)
+		}
+
+		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
 				Name: "certs-client",
 				VolumeSource: corev1.VolumeSource{
@@ -844,11 +849,16 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			},
 		)
 
+		if ok, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); !ok {
+			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "work",
+					MountPath: workDir,
+				},
+			)
+		}
+
 		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "work",
-				MountPath: workDir,
-			},
 			corev1.VolumeMount{
 				Name:      "certs-client",
 				MountPath: "/certs/client",
