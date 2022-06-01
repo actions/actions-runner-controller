@@ -1412,7 +1412,7 @@ jobs:
     runs-on: custom-runner
 ```
 
-Note that if you specify `self-hosted` in your workflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have.
+Note that if you specify `self-hosted` in your workflow, then this will run your job on _any_ self-hosted runner, regardless of the labels that they have. All the labels are **case-insensitive.**
 
 ### Runner Groups
 
