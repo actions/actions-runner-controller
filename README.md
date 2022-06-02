@@ -7,6 +7,7 @@ This controller operates self-hosted runners for GitHub Actions on your Kubernet
 
 ToC:
 
+- [People](#people)
 - [Status](#status)
 - [About](#about)
 - [Installation](#installation)
@@ -40,6 +41,20 @@ ToC:
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
+
+## People
+
+`actions-runner-controller` is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions-runner-controller/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions-runner-controller/actions-runner-controller/discussions), mostly in their spare time.
+
+If you think the project is awesome and it's becoming a basis for your important business, consider [sponsoring us](https://github.com/sponsors/actions-runner-controller)!
+
+In case you are already the employer of one of contributors, sponsoring via GitHub Sponsors might not be an option. Just support them in other means!
+
+We don't currently have [any sponsors dedicated to this project yet](https://github.com/sponsors/actions-runner-controller).
+
+However, [HelloFresh](https://www.hellofreshgroup.com/en/) has recently started sponsoring @mumoshu for this project along with his other works. A part of their sponsorship will enable @mumoshu to add an E2E test to keep ARC even more reliable on AWS. Thank you for your sponsorship!
+
+[<img src="https://user-images.githubusercontent.com/22009/170898715-07f02941-35ec-418b-8cd4-251b422fa9ac.png" width="219" height="71" />](https://careers.hellofresh.com/)
 
 ## Status
 
