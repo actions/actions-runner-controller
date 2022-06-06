@@ -15,14 +15,14 @@ ToC:
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
-- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
+- [Deploying Multiple Controllers](#deploying-multiple-controllers)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [RunnerDeployments](#runnerdeployments)
   - [RunnerSets](#runnersets)
-  - [Persistent Runners](#persistent-runners)  
+  - [Persistent Runners](#persistent-runners)
   - [Autoscaling](#autoscaling)
     - [Anti-Flapping Configuration](#anti-flapping-configuration)
     - [Pull Driven Scaling](#pull-driven-scaling)
@@ -223,7 +223,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 _Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one-time configuration step, this only needs to be done once after which it is permanent for that runner group._
 
-_Note: GitHub does not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and may not be 100% accurate._ 
+_Note: GitHub does not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and may not be 100% accurate._
 
 ---
 
@@ -445,7 +445,7 @@ spec:
       securityContext:
         # All level/role/type/user values will vary based on your SELinux policies.
         # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
+        seLinuxOptions:
           level: "s0"
           role: "system_r"
           type: "super_t"
@@ -515,7 +515,7 @@ A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `min
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. 
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up.
 
 This anti-flap configuration also has the final say on if a runner can be scaled down or not regardless of the chosen scaling method.
 
@@ -562,7 +562,7 @@ spec:
 
 > To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
 
-The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes. 
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.
 
 Be aware that the shorter the sync period the quicker you will consume your rate limit budget, depending on your environment this may or may not be a risk. Consider monitoring ARCs rate limit budget when configuring this feature to find the optimal performance sync period.
 
@@ -580,7 +580,7 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
-  metrics: [] 
+  metrics: []
 ```
 
 **Metric Options:**
@@ -732,23 +732,117 @@ _[see the values documentation for all configuration options](https://github.com
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
-             --set "githubWebhookServer.enabled=true,githubWebhookServer.ports[0].nodePort=33080"
+             --set "githubWebhookServer.enabled=true,service.type=NodePort,githubWebhookServer.ports[0].nodePort=33080"
 ```
 
-The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
-external load balancer targeted to the node port, and register the hostname or the IP address of the external load balancer
-to the GitHub Webhook.
+The above command will result in exposing the node port 33080 for Webhook events.
+Usually, you need to create an external load balancer targeted to the node port,
+and register the hostname or the IP address of the external load balancer to the GitHub Webhook.
 
-Once you were able to confirm that the Webhook server is ready and running from GitHub - this is usually verified by the
-GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
-by learning the following configuration examples.
+**With a custom Kubernetes ingress controller:**
+
+> **CAUTION:** The Kubernetes ingress controllers described below is just a suggestion from the community and
+> the ARC team will not provide any user support for ingress controllers as it's not a part of this project.
+>
+> The following guide on creating an ingress has been contributed by the awesome ARC community and is provided here as-is.
+> You may, however, still be able to ask for help on the community on GitHub Discussions if you have any problems.
+
+Kubernetes provides `Ingress` resources to let you configure your ingress controller to expose a Kubernetes service.
+If you plan to expose ARC via Ingress, you might not be required to make it a `NodePort` service
+(although nothing would prevent an ingress controller to expose NodePort services too):
+
+```console
+$ helm upgrade --install --namespace actions-runner-system --create-namespace \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+             --set "githubWebhookServer.enabled=true"
+```
+
+The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
+
+Now we need to expose this service so that GitHub can send these webhooks over the network with TSL protection.
+
+You can do it in any way you prefer, here we'll suggest doing it with a k8s Ingress.
+For the sake of this example we'll expose this service on the following URL:
+
+- https://your.domain.com/actions-runner-controller-github-webhook-server
+
+Where `your.domain.com` should be replaced by your own domain.
+
+> Note: This step assumes you already have a configured `cert-manager` and domain name for your cluster.
+
+Let's start by creating an Ingress file called `arc-webhook-server.yaml` with the following contents:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: actions-runner-controller-github-webhook-server
+  namespace: actions-runner-system
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  tls:
+  - hosts:
+    - your.domain.com
+    secretName: your-tls-secret-name
+  rules:
+    - http:
+        paths:
+          - path: /actions-runner-controller-github-webhook-server
+            pathType: Prefix
+            backend:
+              service:
+                name: actions-runner-controller-github-webhook-server
+                port:
+                  number: 80
+```
+
+Make sure to set the `spec.tls.secretName` to the name of your TLS secret and
+`spec.tls.hosts[0]` to your own domain.
+
+Then create this resource on your cluster with the following command:
+
+```bash
+kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
+```
+
+**Configuring GitHub for sending webhooks for our newly created webhook server:**
+
+After this step your webhook server should be ready to start receiving webhooks from GitHub.
+
+To configure GitHub to start sending you webhooks, go to the settings page of your repository
+or organization then click on `Webhooks`, then on `Add webhook`.
+
+There set the "Payload URL" field with the webhook URL you just created,
+if you followed the example ingress above the URL would be something like this:
+
+- https://your.domain.com/actions-runner-controller-github-webhook-server
+
+> Remember to replace `your.domain.com` with your own domain.
+
+Then click on "let me select individual events" and choose `Workflow Jobs`.
+
+You may also want to choose the following event(s) if you use it as a scale trigger in your HRA spec:
+
+- Check runs
+- Pushes
+- Pull Requests
+
+Later you can remove any of these you are not using to reduce the amount of data sent to your server.
+
+Then click on `Add Webhook`.
+
+GitHub will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
+alongside your webhook on the Settings -> Webhooks page.
+
+Once you were able to confirm that the Webhook server is ready and running from GitHub create or update your
+`HorizontalRunnerAutoscaler` resources by learning the following configuration examples.
 
 - [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
 - [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 - [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
-
-**Note:** All these examples should have **minReplicas** & **maxReplicas** as mandatory parameters even for webhook driven scaling. 
 
 ##### Example 1: Scale on each `workflow_job` event
 
@@ -761,16 +855,23 @@ The most flexible webhook GitHub offers is the `workflow_job` webhook, it includ
 This webhook should cover most people's needs, please experiment with this webhook first before considering the others.
 
 ```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
-   name: example-runners
+  name: example-runners
 spec:
   template:
     spec:
       repository: example/myrepo
 ---
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runners
 spec:
+  scaleDownDelaySecondsAfterScaleOut: 300
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -804,6 +905,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -830,6 +933,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -860,6 +965,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -888,6 +995,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -1105,7 +1214,7 @@ spec:
       # Valid only when dockerdWithinRunnerContainer=false
       dockerEnv:
         - name: HTTP_PROXY
-          value: http://example.com      
+          value: http://example.com
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
@@ -1472,8 +1581,8 @@ spec:
           value: "true"
         # Configure runner with legacy --once instead of --ephemeral flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC.
-        # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
+        # THIS ENV VAR WILL BE REMOVED SOON.
+        # SEE ISSUE #1196 FOR DETAILS
         - name: RUNNER_FEATURE_FLAG_ONCE
           value: "true"
 ```
