@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -137,6 +138,10 @@ func TestE2E(t *testing.T) {
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
+
+	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+		t.FailNow()
+	}
 }
 
 func TestE2ERunnerDeploy(t *testing.T) {
@@ -179,7 +184,9 @@ func TestE2ERunnerDeploy(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
 
-	t.FailNow()
+	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+		t.FailNow()
+	}
 }
 
 type env struct {
