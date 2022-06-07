@@ -1,8 +1,11 @@
 package github
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,16 +24,20 @@ import (
 
 // Config contains configuration for Github client
 type Config struct {
-	EnterpriseURL     string `split_words:"true"`
-	AppID             int64  `split_words:"true"`
-	AppInstallationID int64  `split_words:"true"`
-	AppPrivateKey     string `split_words:"true"`
-	Token             string
-	URL               string `split_words:"true"`
-	UploadURL         string `split_words:"true"`
-	BasicauthUsername string `split_words:"true"`
-	BasicauthPassword string `split_words:"true"`
-	RunnerGitHubURL   string `split_words:"true"`
+	EnterpriseURL      string `split_words:"true"`
+	AppID              int64  `split_words:"true"`
+	AppInstallationID  int64  `split_words:"true"`
+	AppPrivateKey      string `split_words:"true"`
+	Token              string
+	URL                string `split_words:"true"`
+	UploadURL          string `split_words:"true"`
+	BasicauthUsername  string `split_words:"true"`
+	BasicauthPassword  string `split_words:"true"`
+	RunnerGitHubURL    string `split_words:"true"`
+	RunnerScaleSetName string `split_words:"true"`
+	RunnerEnterprise   string `split_words:"true"`
+	RunnerOrg          string `split_words:"true"`
+	RunnerRepository   string `split_words:"true"`
 
 	Log *logr.Logger
 }
@@ -192,6 +199,72 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 	}()
 
 	return rt, nil
+}
+
+type ActionsServiceAdminConnection struct {
+	ActionsServiceUrl *string `json:"url,omitempty"`
+	AdminToken        *string `json:"token,omitempty"`
+}
+
+func (c *Client) GetActionsServiceAdminConnection(ctx context.Context, enterprise, org, repo string) (*ActionsServiceAdminConnection, error) {
+	rt, err := c.GetRegistrationToken(ctx, enterprise, org, fmt.Sprintf("%v/%v", org, repo), "actions-service-admin-connection")
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := c.BaseURL.Parse("actions/runner-registration")
+	if err != nil {
+		return nil, err
+	}
+
+	configUrl := fmt.Sprintf("%venterprises/%v", c.GithubBaseURL, enterprise)
+	if len(repo) > 0 {
+		configUrl = fmt.Sprintf("%v%v/%v", c.GithubBaseURL, org, repo)
+	} else if len(org) > 0 {
+		configUrl = fmt.Sprintf("%vorgs/%v", c.GithubBaseURL, org)
+	}
+
+	body := struct {
+		Url         string `json:"url"`
+		RunnerEvent string `json:"runner_event"`
+	}{
+		Url:         configUrl,
+		RunnerEvent: "register",
+	}
+
+	var buf io.ReadWriter
+
+	buf = &bytes.Buffer{}
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
+	err = enc.Encode(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, u.String(), buf)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("RemoteAuth %s", *rt.Token))
+
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
+
+	actionsServiceAdminConnection := new(ActionsServiceAdminConnection)
+
+	newClient := github.NewClient(nil)
+	newClient.UserAgent = c.UserAgent
+	_, err = newClient.Do(ctx, req, actionsServiceAdminConnection)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return actionsServiceAdminConnection, nil
 }
 
 // RemoveRunner removes a runner with specified runner ID from repository.
