@@ -57,7 +57,7 @@ jobs:
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
       - name: Build and Push
-        uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
+        uses: docker/build-push-action@42863b1282f7046f6c1ec9222965bbceafae3bb8
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
