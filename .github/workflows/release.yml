@@ -46,7 +46,7 @@ jobs:
 
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@91cb32d715c128e5f0ede915cd7e196ab7799b83
+        uses: docker/setup-buildx-action@312f67c6629946ba17269558b63d0bd84a63caab
         with:
           version: latest
 
