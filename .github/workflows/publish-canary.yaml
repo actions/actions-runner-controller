@@ -22,7 +22,7 @@ on:
 # https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
 permissions:
   contents: read
-  actions: write
+  packages: write  
 
 jobs:
   canary-build:
