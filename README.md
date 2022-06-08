@@ -1142,6 +1142,7 @@ spec:
       annotations:
         cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
     spec:
+      priorityClassName: "high"
       nodeSelector:
         node-role.kubernetes.io/test: ""
 
