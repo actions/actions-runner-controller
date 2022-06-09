@@ -41,7 +41,7 @@ body:
       required: true
     - label: My actions-runner-controller version (v0.x.y) does support the feature
       required: true
-    - label: I've already upgraded ARC to the latest and it didn't fix the issue
+    - label: I've already upgraded ARC (including the CRDs, see charts/actions-runner-controller/docs/UPGRADING.md for details) to the latest and it didn't fix the issue
       required: true
 - type: textarea
   id: resource-definitions
