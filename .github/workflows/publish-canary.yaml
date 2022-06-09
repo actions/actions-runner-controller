@@ -19,8 +19,10 @@ on:
       - 'LICENSE'
       - 'Makefile'
 
+# https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
 permissions:
   contents: read
+  packages: write  
 
 jobs:
   canary-build:
