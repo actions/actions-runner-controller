@@ -15,10 +15,10 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.18.0
+version: 0.19.0
 
 # Used as the default manager tag value when no tag property is provided in the values.yaml
-appVersion: 0.23.0
+appVersion: 0.24.0
 
 home: https://github.com/actions-runner-controller/actions-runner-controller
 
