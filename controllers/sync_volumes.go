@@ -148,7 +148,7 @@ func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv
 	if pv.Labels[labelKeyCleanup] == "" {
 		// We assume that the pvc is shortly terminated, hence retry forever until it gets removed.
 		retry := 10 * time.Second
-		log.V(1).Info("Retrying sync until pvc gets removed", "requeueAfter", retry)
+		log.V(2).Info("Retrying sync to see if this PV needs to be managed by ARC", "requeueAfter", retry)
 		return &ctrl.Result{RequeueAfter: retry}, nil
 	}
 
