@@ -12,21 +12,21 @@ on:
     paths:
       - 'runner/**'
       - '!runner/Makefile'
-      - .github/workflows/runners.yml
+      - '.github/workflows/runners.yaml'
       - '!**.md'
 
 env:
   RUNNER_VERSION: 2.292.0
   DOCKER_VERSION: 20.10.12
-  DOCKERHUB_USERNAME: summerwind
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
 
 jobs:
-  build:
+  build-runners:
+    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
       contents: read
-    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
+        uses: actions/checkout@v3
 
       - name: Setup Docker Environment
         id: vars
@@ -52,7 +52,7 @@ jobs:
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Versioned Tags
-        uses: docker/build-push-action@c5e6528d5ddefc82f682165021e05edf58044bce
+        uses: docker/build-push-action@v3
         with:
           context: ./runner
           file: ./runner/${{ matrix.name }}.dockerfile
@@ -68,5 +68,5 @@ jobs:
             ghcr.io/${{ github.repository }}/${{ matrix.name }}:latest
             ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}
             ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=build-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.name }}
