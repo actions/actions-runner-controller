@@ -37,7 +37,6 @@ runs:
         version: latest
 
     - name: Login to DockerHub
-      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
       uses: docker/login-action@v2
       with:
         username: ${{ inputs.username }}
@@ -45,7 +44,6 @@ runs:
 
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v2
-      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
       with:
         registry: ghcr.io
         username: ${{ inputs.ghcr_username }}
