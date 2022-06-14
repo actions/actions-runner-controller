@@ -78,12 +78,12 @@ func (r *RunnerDeployment) Validate() error {
 
 	err = r.Spec.Template.Spec.ValidateWorkVolumeClaimTemplate()
 	if err != nil {
-		errList = append(errList, field.Invalid(field.NewPath("spec", "workVolumeClaimTemplate"), r.Spec.Template.Spec.WorkVolumeClaimTemplate, err.Error()))
+		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "workVolumeClaimTemplate"), r.Spec.Template.Spec.WorkVolumeClaimTemplate, err.Error()))
 	}
 
 	err = r.Spec.Template.Spec.ValidateIsServiceAccountNameSet()
 	if err != nil {
-		errList = append(errList, field.Invalid(field.NewPath("spec", "serviceAccountName"), r.Spec.Template.Spec.ServiceAccountName, err.Error()))
+		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "serviceAccountName"), r.Spec.Template.Spec.ServiceAccountName, err.Error()))
 	}
 
 	if len(errList) > 0 {
