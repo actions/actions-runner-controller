@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"errors"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -157,6 +158,9 @@ type RunnerPodSpec struct {
 
 	// +optional
 	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+
+	// +optional
+	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
 }
 
 // ValidateRepository validates repository field.
@@ -179,6 +183,40 @@ func (rs *RunnerSpec) ValidateRepository() error {
 		return errors.New("Spec cannot have many fields defined enterprise, organization and repository")
 	}
 
+	return nil
+}
+
+func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
+	if rs.ContainerMode != "kubernetes" {
+		return nil
+	}
+
+	if rs.WorkVolumeClaimTemplate == nil {
+		return errors.New("Spec.ContainerMode: kubernetes must have workVolumeClaimTemplate field specified")
+	}
+
+	if rs.WorkVolumeClaimTemplate.AccessModes == nil || len(rs.WorkVolumeClaimTemplate.AccessModes) == 0 {
+		return errors.New("Access mode should have at least one mode specified")
+	}
+
+	for _, accessMode := range rs.WorkVolumeClaimTemplate.AccessModes {
+		switch accessMode {
+		case corev1.ReadWriteOnce, corev1.ReadWriteMany:
+		default:
+			return fmt.Errorf("Access mode %v is not supported", accessMode)
+		}
+	}
+	return nil
+}
+
+func (rs *RunnerSpec) ValidateIsServiceAccountNameSet() error {
+	if rs.ContainerMode != "kubernetes" {
+		return nil
+	}
+
+	if len(rs.ServiceAccountName) == 0 {
+		return errors.New("service account name is required if container mode is kubernetes")
+	}
 	return nil
 }
 
@@ -208,6 +246,12 @@ type RunnerStatusRegistration struct {
 	Labels       []string    `json:"labels,omitempty"`
 	Token        string      `json:"token"`
 	ExpiresAt    metav1.Time `json:"expiresAt"`
+}
+
+type WorkVolumeClaimTemplate struct {
+	StorageClassName string                              `json:"storageClassName"`
+	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
+	Resources        corev1.ResourceRequirements         `json:"resources"`
 }
 
 // +kubebuilder:object:root=true

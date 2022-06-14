@@ -76,6 +76,16 @@ func (r *RunnerReplicaSet) Validate() error {
 		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "repository"), r.Spec.Template.Spec.Repository, err.Error()))
 	}
 
+	err = r.Spec.Template.Spec.ValidateWorkVolumeClaimTemplate()
+	if err != nil {
+		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "workVolumeClaimTemplate"), r.Spec.Template.Spec.WorkVolumeClaimTemplate, err.Error()))
+	}
+
+	err = r.Spec.Template.Spec.ValidateIsServiceAccountNameSet()
+	if err != nil {
+		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "serviceAccountName"), r.Spec.Template.Spec.ServiceAccountName, err.Error()))
+	}
+
 	if len(errList) > 0 {
 		return apierrors.NewInvalid(r.GroupVersionKind().GroupKind(), r.Name, errList)
 	}
