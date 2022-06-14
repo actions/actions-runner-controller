@@ -77,7 +77,6 @@ type RunnerReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=create;delete;get;list
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
@@ -1073,8 +1072,8 @@ func isRequireSameNode(runner *v1alpha1.Runner) (bool, error) {
 		return true, errors.New("containerMode: kubernetes should have pod.Spec.Volumes[].Ephemeral.VolumeClaimTemplate set")
 	}
 
-	for i := range runner.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
-		switch runner.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes[i] {
+	for _, accessMode := range runner.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
+		switch accessMode {
 		case corev1.ReadWriteOnce:
 			return true, nil
 		case corev1.ReadWriteMany:
