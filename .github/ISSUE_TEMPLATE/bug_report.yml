@@ -17,6 +17,12 @@ body:
     label: Helm Chart Version
     description: Run `helm list` and see what's shown under CHART VERSION. Any release tags prefixed with `actions-runner-controller-` are for chart releases
     placeholder: ex. 0.11.0
+- type: input
+  id: cert-manager-version
+  attributes:
+    label: CertManager Version
+    description: Run `kubectl get po -o yaml $CERT_MANAGER_POD` and see the image tag, or run `helm list` and see what's shown under APP VERSION for your cert-manager Helm release.
+    placeholder: ex. 1.8
 - type: dropdown
   id: deployment-method
   attributes:
@@ -27,6 +33,17 @@ body:
       - Kustomize
       - ArgoCD
       - Other
+  validations:
+    required: true
+- type: textarea
+  id: cert-manager
+  attributes:
+    label: cert-manager installation
+    description: Confirm that you've installed cert-manager correctly by answering a few questions
+    placeholder: |
+      - Did you follow https://github.com/actions-runner-controller/actions-runner-controller#installation? If not, describe the installation process so that we can reproduce your environment.
+      - Are you sure you've installed cert-manager from an official source?
+      (Note that we won't provide user support for cert-manager itself. Make sure cert-manager is fully working before testing ARC or reporting a bug
   validations:
     required: true
 - type: checkboxes
@@ -113,7 +130,7 @@ body:
   id: controller-logs
   attributes:
     label: Controller Logs
-    description: "Include logs from `actions-runner-controller`'s controller-manager pod"
+    description: "NEVER EVER OMIT THIS! Include logs from `actions-runner-controller`'s controller-manager pod"
     render: shell
     placeholder: |
       To grab controller logs:
