@@ -53,5 +53,6 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
+            ghcr.io/actions-runner-controller/actions-runner-controller:canary
           cache-from: type=gha,scope=arc-canary
           cache-to: type=gha,mode=max,scope=arc-canary
