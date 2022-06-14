@@ -118,6 +118,7 @@ RUN mkdir /opt/hostedtoolcache \
 # override them with scripts of the same name placed in `/usr/local/bin`.
 COPY entrypoint.sh logger.bash /usr/bin/
 
+ENV HOME=/home/runner
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
@@ -126,7 +127,6 @@ RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment
 
 USER runner
-ENV HOME=/home/runner
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["entrypoint.sh"]
