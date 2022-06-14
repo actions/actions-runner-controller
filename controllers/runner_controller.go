@@ -29,7 +29,6 @@ import (
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -279,12 +278,6 @@ func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx con
 		log.Info("Removed finalizer")
 	}
 
-	if runner.Spec.ContainerMode == "kubernetes" && runner.Spec.WorkVolumeClaimTemplate.StorageClassName == "local-storage" {
-		if err := r.deletePersistentVolume(ctx, &runner); err != nil {
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
-		}
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -299,13 +292,6 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 	if err != nil {
 		log.Error(err, "Could not create pod")
 		return ctrl.Result{}, err
-	}
-
-	if runner.Spec.ContainerMode == "kubernetes" && runner.Spec.WorkVolumeClaimTemplate.StorageClassName == "local-storage" {
-		if err := r.createPersistentVolume(ctx, &runner); err != nil {
-			log.Error(err, "could not create persistent volume")
-			return ctrl.Result{}, err
-		}
 	}
 
 	if err := r.Create(ctx, &newPod); err != nil {
@@ -966,62 +952,6 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// createPersistentVolume creates persistent volume needed by the runner in kubernetes mode
-//
-// This method should be called only in containerMode="kubernetes"
-func (r *RunnerReconciler) createPersistentVolume(ctx context.Context, runner *v1alpha1.Runner) error {
-	if runner.Spec.WorkVolumeClaimTemplate == nil {
-		return errors.New("container mode kubernetes mode requires work volume claim template")
-	}
-
-	fsMode := corev1.PersistentVolumeFilesystem
-	pv := corev1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      generatePersistentVolumeName(runner),
-			Namespace: runner.ObjectMeta.Namespace,
-		},
-		Spec: corev1.PersistentVolumeSpec{
-			StorageClassName: runner.Spec.WorkVolumeClaimTemplate.StorageClassName,
-			Capacity: corev1.ResourceList{
-				corev1.ResourceStorage: runner.Spec.WorkVolumeClaimTemplate.Resources.Requests[corev1.ResourceStorage],
-			},
-			VolumeMode:  &fsMode,
-			AccessModes: runner.Spec.WorkVolumeClaimTemplate.AccessModes,
-			PersistentVolumeSource: corev1.PersistentVolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/tmp/" + runner.ObjectMeta.Name + "-data",
-				},
-			},
-		},
-	}
-
-	return r.Create(ctx, &pv)
-}
-
-func (r *RunnerReconciler) deletePersistentVolume(ctx context.Context, runner *v1alpha1.Runner) error {
-	var pv corev1.PersistentVolume
-	namespacedName := types.NamespacedName{
-		Name:      generatePersistentVolumeName(runner),
-		Namespace: runner.ObjectMeta.Namespace,
-	}
-
-	if err := r.Get(ctx, namespacedName, &pv); err != nil {
-		if kerrors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
-	if err := r.Delete(ctx, &pv); err != nil {
-		if kerrors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
-	return nil
-}
-
 func addFinalizer(finalizers []string, finalizerName string) ([]string, bool) {
 	exists := false
 	for _, name := range finalizers {
@@ -1093,18 +1023,12 @@ func applyWorkVolumeClaimTemplate(runner *v1alpha1.Runner) error {
 		Name:      "work",
 	})
 
-	var volumeName string
-	if runner.Spec.WorkVolumeClaimTemplate.StorageClassName == "local-storage" {
-		volumeName = generatePersistentVolumeName(runner)
-	}
-
 	runner.Spec.Volumes = append(runner.Spec.Volumes, corev1.Volume{
 		Name: "work",
 		VolumeSource: corev1.VolumeSource{
 			Ephemeral: &corev1.EphemeralVolumeSource{
 				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
 					Spec: corev1.PersistentVolumeClaimSpec{
-						VolumeName:       volumeName,
 						AccessModes:      runner.Spec.WorkVolumeClaimTemplate.AccessModes,
 						StorageClassName: &runner.Spec.WorkVolumeClaimTemplate.StorageClassName,
 						Resources:        runner.Spec.WorkVolumeClaimTemplate.Resources,
@@ -1169,8 +1093,4 @@ func overwriteRunnerEnv(runner *v1alpha1.Runner, key string, value string) {
 		}
 	}
 	runner.Spec.Env = append(runner.Spec.Env, corev1.EnvVar{Name: key, Value: value})
-}
-
-func generatePersistentVolumeName(runner *v1alpha1.Runner) string {
-	return runner.ObjectMeta.Name + "-pv"
 }
