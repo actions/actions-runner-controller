@@ -73,6 +73,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 	}
 
 	if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+		r.GitHubClient.DeinitForHRA(&hra)
+
 		return ctrl.Result{}, nil
 	}
 
