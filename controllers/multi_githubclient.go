@@ -77,12 +77,8 @@ func NewMultiGitHubClient(client resourceReader, githubClient *github.Client) *M
 // Init sets up and return the *github.Client for the object.
 // In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
 func (c *MultiGitHubClient) InitForRunnerPod(ctx context.Context, pod *corev1.Pod) (*github.Client, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// These 3 default values are used only when the user created the pod directly, not via Runner, RunnerReplicaSet, RunnerDeploment, or RunnerSet resources.
 	ref := refFromRunnerPod(pod)
-
 	secretName := pod.Annotations[annotationKeyGitHubAPICredsSecret]
 
 	// kind can be any of Pod, Runner, RunnerReplicaSet, RunnerDeployment, or RunnerSet depending on which custom resource the user directly created.
@@ -92,9 +88,6 @@ func (c *MultiGitHubClient) InitForRunnerPod(ctx context.Context, pod *corev1.Po
 // Init sets up and return the *github.Client for the object.
 // In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
 func (c *MultiGitHubClient) InitForRunner(ctx context.Context, r *v1alpha1.Runner) (*github.Client, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	var secretName string
 	if r.Spec.GitHubAPICredentialsFrom != nil {
 		secretName = r.Spec.GitHubAPICredentialsFrom.SecretRef.Name
@@ -102,7 +95,6 @@ func (c *MultiGitHubClient) InitForRunner(ctx context.Context, r *v1alpha1.Runne
 
 	// These 3 default values are used only when the user created the runner resource directly, not via RunnerReplicaSet, RunnerDeploment, or RunnerSet resources.
 	ref := refFromRunner(r)
-
 	if ref.ns != r.Namespace {
 		return nil, fmt.Errorf("referencing github api creds secret from owner in another namespace is not supported yet")
 	}
@@ -114,9 +106,6 @@ func (c *MultiGitHubClient) InitForRunner(ctx context.Context, r *v1alpha1.Runne
 // Init sets up and return the *github.Client for the object.
 // In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
 func (c *MultiGitHubClient) InitForRunnerSet(ctx context.Context, rs *v1alpha1.RunnerSet) (*github.Client, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	ref := refFromRunnerSet(rs)
 
 	var secretName string
@@ -130,9 +119,6 @@ func (c *MultiGitHubClient) InitForRunnerSet(ctx context.Context, rs *v1alpha1.R
 // Init sets up and return the *github.Client for the object.
 // In case the object (like RunnerDeployment) does not request a custom client, it returns the default client.
 func (c *MultiGitHubClient) InitForHRA(ctx context.Context, hra *v1alpha1.HorizontalRunnerAutoscaler) (*github.Client, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	ref := refFromHorizontalRunnerAutoscaler(hra)
 
 	var secretName string
@@ -144,18 +130,11 @@ func (c *MultiGitHubClient) InitForHRA(ctx context.Context, hra *v1alpha1.Horizo
 }
 
 func (c *MultiGitHubClient) DeinitForRunnerPod(p *corev1.Pod) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	secretName := p.Annotations[annotationKeyGitHubAPICredsSecret]
-
 	c.derefClient(p.Namespace, secretName, refFromRunnerPod(p))
 }
 
 func (c *MultiGitHubClient) DeinitForRunner(r *v1alpha1.Runner) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	var secretName string
 	if r.Spec.GitHubAPICredentialsFrom != nil {
 		secretName = r.Spec.GitHubAPICredentialsFrom.SecretRef.Name
@@ -165,9 +144,6 @@ func (c *MultiGitHubClient) DeinitForRunner(r *v1alpha1.Runner) {
 }
 
 func (c *MultiGitHubClient) DeinitForRunnerSet(rs *v1alpha1.RunnerSet) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	var secretName string
 	if rs.Spec.GitHubAPICredentialsFrom != nil {
 		secretName = rs.Spec.GitHubAPICredentialsFrom.SecretRef.Name
@@ -177,23 +153,14 @@ func (c *MultiGitHubClient) DeinitForRunnerSet(rs *v1alpha1.RunnerSet) {
 }
 
 func (c *MultiGitHubClient) deinitClientForRunnerReplicaSet(rs *v1alpha1.RunnerReplicaSet) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.derefClient(rs.Namespace, rs.Spec.Template.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromRunnerReplicaSet(rs))
 }
 
 func (c *MultiGitHubClient) deinitClientForRunnerDeployment(rd *v1alpha1.RunnerDeployment) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.derefClient(rd.Namespace, rd.Spec.Template.Spec.GitHubAPICredentialsFrom.SecretRef.Name, refFromRunnerDeployment(rd))
 }
 
 func (c *MultiGitHubClient) DeinitForHRA(hra *v1alpha1.HorizontalRunnerAutoscaler) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	var secretName string
 	if hra.Spec.GitHubAPICredentialsFrom != nil {
 		secretName = hra.Spec.GitHubAPICredentialsFrom.SecretRef.Name
@@ -254,6 +221,9 @@ func (c *MultiGitHubClient) initClientForSecret(secret *corev1.Secret, dependent
 }
 
 func (c *MultiGitHubClient) initClientWithSecretName(ctx context.Context, ns, secretName string, runRef *runnerOwnerRef) (*github.Client, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if secretName == "" {
 		return c.githubClient, nil
 	}
@@ -281,6 +251,9 @@ func (c *MultiGitHubClient) initClientWithSecretName(ctx context.Context, ns, se
 }
 
 func (c *MultiGitHubClient) derefClient(ns, secretName string, dependent *runnerOwnerRef) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	secRef := secretRef{
 		ns:   ns,
 		name: secretName,
