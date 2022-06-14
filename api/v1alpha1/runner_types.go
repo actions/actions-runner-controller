@@ -190,6 +190,7 @@ func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
 	if rs.ContainerMode != "kubernetes" {
 		return nil
 	}
+
 	if rs.WorkVolumeClaimTemplate == nil {
 		return errors.New("Spec.ContainerMode: kubernetes must have workVolumeClaimTemplate field specified")
 	}
@@ -204,6 +205,17 @@ func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
 		default:
 			return fmt.Errorf("Access mode %v is not supported", accessMode)
 		}
+	}
+	return nil
+}
+
+func (rs *RunnerSpec) ValidateIsServiceAccountNameSet() error {
+	if rs.ContainerMode != "kubernetes" {
+		return nil
+	}
+
+	if len(rs.ServiceAccountName) == 0 {
+		return errors.New("service account name is required if container mode is kubernetes")
 	}
 	return nil
 }
