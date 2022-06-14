@@ -44,7 +44,8 @@ var (
 					Value: "2.291.1",
 				},
 			},
-			Image: runnerImage,
+			Image:        runnerImage,
+			EnableBuildX: true,
 		},
 		{
 			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
@@ -54,7 +55,8 @@ var (
 					Value: "2.291.1",
 				},
 			},
-			Image: runnerDindImage,
+			Image:        runnerDindImage,
+			EnableBuildX: true,
 		},
 	}
 
