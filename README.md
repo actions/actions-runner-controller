@@ -13,7 +13,7 @@ ToC:
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
-- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
+- [Deploying Multiple Controllers](#deploying-multiple-controllers)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
@@ -36,6 +36,7 @@ ToC:
   - [Using IRSA (IAM Roles for Service Accounts) in EKS](#using-irsa-iam-roles-for-service-accounts-in-eks)
   - [Software Installed in the Runner Image](#software-installed-in-the-runner-image)
   - [Using without cert-manager](#using-without-cert-manager)
+  - [Multitenancy](#multitenancy)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
@@ -1433,6 +1434,56 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
+
+### Multitenancy
+
+Since [#1371](https://github.com/actions-runner-controller/actions-runner-controller/pull/1371) and the version 0.25.0, ARC supports multi-tenancy.
+
+In a large enterprise, there might be many GitHub organizations that requires self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
+
+With multitenancy, you can let ARC manage self-hosted runners across organizations. It's enabled by default and the only thing you need to start using it is to set the `spec.githubAPICredentialsFrom.secretRef.name` fields for the following resources:
+
+- `HorizontalRunnerAutoscaler`
+- `RunnerDeployment`
+- `RunnerSet`
+
+> Note that `spec.githubAPICredentialsFrom` fields are present in `Runner` and `RunnerReplicaSet`, and a comparable pod annotation exists for the runner pod. However, `Runner`, `RunnerReplicaSet` and runner pods are implementation details and are managed by `RunnerDeployment` and ARC.
+> YUually you don't need to manually set the fields for those resources.
+
+`spec.githubAPICredentialsFrom.secretRef.name` should be the name of the Kubernetes secret that contains either PAT or GitHub App credentials that is used for GitHub API calls for the said resource.
+
+Usually, you should have a set of GitHub App credentials per a GitHub organization and you would have a RunnerDeployment and a HorizontalRunnerAutoscaler per an organization runner group. So, you might end up having the following resources for each organization:
+
+- 1 Kuernetes secret that contains GitHub App credentials
+- 1 RunnerDeployment/RunnerSet and 1 HorizontalRunnerAutoscaler per Runner Group
+
+And the RunnerDeployment/RunnerSet and HorizontalRunnerAutoscaler should have the same value for `spec.githubAPICredentialsFrom.secretRef.name`, which refers to the name of the Kubernetes secret.
+
+```yaml
+kind: Secret
+data:
+  github_app_id: ...
+  github_app_installation_id: ...
+  github_app_private_key: ...
+---
+kind: RunnerDeployment
+metadata:
+  namespace: org1-runners
+spec:
+  githubAPICredentialsFrom:
+    secretRef:
+      name: org1-github-app
+---
+kind: HorizontalRunnerAutoscaler
+metadata:
+  namespace: org1-runners
+spec:
+  githubAPICredentialsFrom:
+    secretRef:
+      name: org1-github-app
+```
+
+Please refer to [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication) for how you could create the Kubernetes secret containing GitHub App credentials.
 
 # Troubleshooting
 
