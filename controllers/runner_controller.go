@@ -961,7 +961,6 @@ func (r *RunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *v1.
 	}
 
 	return nil
-
 }
 
 func addFinalizer(finalizers []string, finalizerName string) ([]string, bool) {
