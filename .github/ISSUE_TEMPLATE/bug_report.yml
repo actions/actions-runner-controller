@@ -143,7 +143,9 @@ body:
 
       kubectl -n $NS logs $POD_NAME > arc.log
 
-      Upload it to e.g. https://gist.github.com/ and paste the link to it here.
+      Supply the logs, either:
+      - directly in this textbox
+      - using a GitHub Gist link (useful if you hit the max length an issue body can have)
   validations:
     required: true
 - type: textarea
@@ -164,7 +166,9 @@ body:
       kubectl -n $NS logs $POD_NAME -c runner > runnerpod_runner.log
       kubectl -n $NS logs $POD_NAME -c docker > runnerpod_docker.log
 
-      Upload it to e.g. https://gist.github.com/ and paste the link to it here.
+      Supply the logs, either:
+      - directly in this textbox
+      - using a GitHub Gist link (useful if you hit the max length an issue body can have)
   validations:
     required: true
 - type: textarea
