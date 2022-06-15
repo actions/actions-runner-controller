@@ -5,6 +5,11 @@ on:
     types:
       - published
 
+# https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
+permissions:
+ contents: write 
+ packages: write
+
 jobs:
   release-controller:
     name: Release
@@ -58,6 +63,8 @@ jobs:
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
+            ghcr.io/actions-runner-controller/actions-runner-controller:latest
+            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}
+            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
