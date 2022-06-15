@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
@@ -921,7 +920,7 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *RunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *v1.Pod, log logr.Logger) error {
+func (r *RunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
 	var runnerLinkedPodList corev1.PodList
 	r.List(ctx, &runnerLinkedPodList, client.MatchingLabels(
 		map[string]string{
