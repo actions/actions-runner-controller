@@ -1148,6 +1148,8 @@ spec:
   serviceAccountName: my-service-account
   workVolumeClaimTemplate:
     storageClassName: "my-dynamic-storage-class"
+    accessModes:
+    - ReadWriteOnce
     resources:
       requests:
         storage: 10Gi
