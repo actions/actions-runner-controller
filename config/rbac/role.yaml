@@ -249,3 +249,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
