@@ -106,7 +106,6 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	} else {
 		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
-
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {

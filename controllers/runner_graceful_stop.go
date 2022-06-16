@@ -321,7 +321,8 @@ func getRunnerEnv(pod *corev1.Pod, key string) string {
 }
 
 func setRunnerEnv(pod *corev1.Pod, key, value string) {
-	for i, c := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		c := pod.Spec.Containers[i]
 		if c.Name == containerName {
 			for j, env := range c.Env {
 				if env.Name == key {
