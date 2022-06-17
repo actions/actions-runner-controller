@@ -9,14 +9,6 @@ if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
 
-if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
-    log.debug 'Docker enabled runner detected and Docker daemon wait is enabled'
-    log.debug 'Waiting until Docker is available or the timeout is reached'
-    timeout 120s bash -c 'until docker ps ;do sleep 1; done'
-else
-  log.notice 'Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint'
-fi
-
 if [ -z "${GITHUB_URL}" ]; then
   log.debug 'Working with public GitHub'
   GITHUB_URL="https://github.com/"
@@ -138,6 +130,14 @@ cat .runner
 if [ -z "${UNITTEST:-}" ] && [ -e ./externalstmp ]; then
   mkdir -p ./externals
   mv ./externalstmp/* ./externals/
+fi
+
+if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
+    log.debug 'Docker enabled runner detected and Docker daemon wait is enabled'
+    log.debug 'Waiting until Docker is available or the timeout is reached'
+    timeout 120s bash -c 'until docker ps ;do sleep 1; done'
+else
+  log.notice 'Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint'
 fi
 
 # Unset entrypoint environment variables so they don't leak into the runner environment
