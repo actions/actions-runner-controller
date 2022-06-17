@@ -13,8 +13,8 @@ on:
       - '!runner/Makefile'
       - '.github/workflows/runners.yaml'
       - '!**.md'
-  # We must do a release from a push trigger instead of a close pul requset (a merge) so 
-  # GitHub Secrets are available to the workflow run
+  # We must do a trigger on a push: instead of a types: closed so GitHub Secrets 
+  # are available to the workflow run
   push:
     branches:
       - 'master'
