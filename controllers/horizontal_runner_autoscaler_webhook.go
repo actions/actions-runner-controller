@@ -846,7 +846,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.
 		"after", after,
 	)
 
-	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
+	if err := autoscaler.Client.Update(ctx, copy); err != nil {
 		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
 	}
 
