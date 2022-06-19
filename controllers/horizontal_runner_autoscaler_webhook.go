@@ -76,8 +76,10 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// A scale target is enqueued on each retrieval of each eligible webhook event, so that it is processed asynchronously.
 	QueueLimit int
 
-	worker     *worker
-	workerInit sync.Once
+	worker      *worker
+	workerInit  sync.Once
+	workerStart sync.Once
+	batchCh     chan *ScaleTarget
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -350,9 +352,53 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) workOnScaleTarget(st *ScaleTarget) {
-	if err := autoscaler.tryScale(context.Background(), st); err != nil {
-		st.log.Error(err, "Could not scale due to %v", err)
+	if st == nil {
+		return
 	}
+
+	autoscaler.workerStart.Do(func() {
+		type batch struct {
+			hra      v1alpha1.HorizontalRunnerAutoscaler
+			triggers []v1alpha1.ScaleUpTrigger
+		}
+
+		autoscaler.batchCh = make(chan *ScaleTarget, autoscaler.QueueLimit)
+
+		go func() {
+			for {
+				batches := map[string]batch{}
+				after := time.After(3 * time.Second)
+
+			batch:
+				for {
+					select {
+					case <-after:
+						after = nil
+						break batch
+					case st := <-autoscaler.batchCh:
+						id := fmt.Sprintf("%s/%s", st.HorizontalRunnerAutoscaler.Namespace, st.HorizontalRunnerAutoscaler.Name)
+						b, ok := batches[id]
+						if !ok {
+							b = batch{
+								hra: st.HorizontalRunnerAutoscaler,
+							}
+						}
+						b.triggers = append(b.triggers, st.ScaleUpTrigger)
+						batches[id] = b
+					}
+				}
+
+				for _, b := range batches {
+					b := b
+					if err := autoscaler.batchScale(context.Background(), b.hra, b.triggers); err != nil {
+						st.log.Error(err, "Could not scale due to %v", err)
+					}
+				}
+			}
+		}()
+	})
+
+	autoscaler.batchCh <- st
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
@@ -796,53 +842,58 @@ HRA:
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.Context, target *ScaleTarget) error {
-	if target == nil {
-		return nil
-	}
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) batchScale(ctx context.Context, hra v1alpha1.HorizontalRunnerAutoscaler, triggers []v1alpha1.ScaleUpTrigger) error {
+	copy := hra.DeepCopy()
 
-	copy := target.HorizontalRunnerAutoscaler.DeepCopy()
+	copy.Spec.CapacityReservations = getValidCapacityReservations(copy)
 
-	amount := 1
+	var added, completed int
 
-	if target.ScaleUpTrigger.Amount != 0 {
-		amount = target.ScaleUpTrigger.Amount
-	}
+	for _, trigger := range triggers {
+		amount := 1
 
-	capacityReservations := getValidCapacityReservations(copy)
-
-	if amount > 0 {
-		now := time.Now()
-		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-			EffectiveTime:  metav1.Time{Time: now},
-			ExpirationTime: metav1.Time{Time: now.Add(target.ScaleUpTrigger.Duration.Duration)},
-			Replicas:       amount,
-		})
-	} else if amount < 0 {
-		var reservations []v1alpha1.CapacityReservation
-
-		var found bool
-
-		for _, r := range capacityReservations {
-			if !found && r.Replicas+amount == 0 {
-				found = true
-			} else {
-				reservations = append(reservations, r)
-			}
+		if trigger.Amount != 0 {
+			amount = trigger.Amount
 		}
 
-		copy.Spec.CapacityReservations = reservations
+		if amount > 0 {
+			now := time.Now()
+			copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
+				EffectiveTime:  metav1.Time{Time: now},
+				ExpirationTime: metav1.Time{Time: now.Add(trigger.Duration.Duration)},
+				Replicas:       amount,
+			})
+
+			added += amount
+		} else if amount < 0 {
+			var reservations []v1alpha1.CapacityReservation
+
+			var found bool
+
+			for _, r := range copy.Spec.CapacityReservations {
+				if !found && r.Replicas+amount == 0 {
+					found = true
+				} else {
+					reservations = append(reservations, r)
+				}
+			}
+
+			copy.Spec.CapacityReservations = reservations
+
+			completed += amount
+		}
 	}
 
-	before := len(target.HorizontalRunnerAutoscaler.Spec.CapacityReservations)
-	expired := before - len(capacityReservations)
+	before := len(hra.Spec.CapacityReservations)
+	expired := before - len(copy.Spec.CapacityReservations)
 	after := len(copy.Spec.CapacityReservations)
 
 	autoscaler.Log.V(1).Info(
-		fmt.Sprintf("Patching hra %s for capacityReservations update", target.HorizontalRunnerAutoscaler.Name),
+		fmt.Sprintf("Updating hra %s for capacityReservations update(s)", hra.Name),
 		"before", before,
 		"expired", expired,
-		"amount", amount,
+		"added", added,
+		"completed", completed,
 		"after", after,
 	)
 
