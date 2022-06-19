@@ -32,7 +32,7 @@ func newWorker(ctx context.Context, queueLimit int, work func(*ScaleTarget)) *wo
 	return w
 }
 
-// Add adds the scale target to the bounded queue, returning the result as a bool value. It returns true on successful enqueue, and returns false otherwise.
+// Add the scale target to the bounded queue, returning the result as a bool value. It returns true on successful enqueue, and returns false otherwise.
 // When returned false, the queue is already full so the enqueue operation must be retried later.
 // If the enqueue was triggered by an external source and there's no intermediate queue that we can use,
 // you must instruct the source to resend the original request later.
