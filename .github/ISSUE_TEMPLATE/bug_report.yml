@@ -133,6 +133,8 @@ body:
     description: "NEVER EVER OMIT THIS! Include logs from `actions-runner-controller`'s controller-manager pod"
     render: shell
     placeholder: |
+      PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+      
       To grab controller logs:
 
       # Set NS according to your setup
@@ -142,8 +144,6 @@ body:
       kubectl -n $NS get po
 
       kubectl -n $NS logs $POD_NAME > arc.log
-
-      Upload it to e.g. https://gist.github.com/ and paste the link to it here.
   validations:
     required: true
 - type: textarea
@@ -153,6 +153,8 @@ body:
     description: "Include logs from runner pod(s)"
     render: shell
     placeholder: |
+      PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+      
       To grab the runner pod logs:
 
       # Set NS according to your setup. It should match your RunnerDeployment's metadata.namespace.
@@ -163,8 +165,6 @@ body:
 
       kubectl -n $NS logs $POD_NAME -c runner > runnerpod_runner.log
       kubectl -n $NS logs $POD_NAME -c docker > runnerpod_docker.log
-
-      Upload it to e.g. https://gist.github.com/ and paste the link to it here.
   validations:
     required: true
 - type: textarea
