@@ -5,7 +5,7 @@ TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.293.0
-RUNNER_CONTAINER_HOOKS_VERSION ?= 0.1.0
+RUNNER_CONTAINER_HOOKS_VERSION ?= 0.1.1
 DOCKER_VERSION ?= 20.10.12
 
 # default list of platforms for which multiarch image is built
