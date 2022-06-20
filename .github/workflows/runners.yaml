@@ -6,7 +6,6 @@ on:
       - opened
       - synchronize
       - reopened
-      - closed
     branches:
       - 'master'
     paths:
@@ -14,6 +13,11 @@ on:
       - '!runner/Makefile'
       - '.github/workflows/runners.yaml'
       - '!**.md'
+  # We must do a trigger on a push: instead of a types: closed so GitHub Secrets 
+  # are available to the workflow run
+  push:
+    branches:
+      - 'master'
 
 env:
   RUNNER_VERSION: 2.293.0
