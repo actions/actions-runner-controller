@@ -590,7 +590,6 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 				},
 			},
 		},
-		// TODO "ACTIONS_RUNNER_CLAIM_NAME",
 		corev1.EnvVar{
 			Name:  "ACTIONS_RUNNER_REQUIRE_SAME_NODE",
 			Value: strconv.FormatBool(isRequireSameNode),
@@ -610,7 +609,7 @@ func newRunnerPodWithContainerMode(containerMode string, runnerName string, temp
 	if containerMode == "kubernetes" {
 		dockerdInRunner = false
 		dockerEnabled = false
-		dockerdInRunnerPrivileged = true
+		dockerdInRunnerPrivileged = false
 	}
 
 	template = *template.DeepCopy()
@@ -706,6 +705,8 @@ func newRunnerPodWithContainerMode(containerMode string, runnerName string, temp
 		if runnerContainerIndex < runnerContainerIndex {
 			runnerContainerIndex--
 		}
+		dockerdContainer = nil
+		dockerdContainerIndex = -1
 	}
 
 	if runnerContainer == nil {
