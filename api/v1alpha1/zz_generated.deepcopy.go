@@ -944,6 +944,11 @@ func (in *RunnerSetSpec) DeepCopyInto(out *RunnerSetSpec) {
 		in, out := &in.EffectiveTime, &out.EffectiveTime
 		*out = (*in).DeepCopy()
 	}
+	if in.WorkVolumeClaimTemplate != nil {
+		in, out := &in.WorkVolumeClaimTemplate, &out.WorkVolumeClaimTemplate
+		*out = new(WorkVolumeClaimTemplate)
+		(*in).DeepCopyInto(*out)
+	}
 	in.StatefulSetSpec.DeepCopyInto(&out.StatefulSetSpec)
 }
 
