@@ -78,6 +78,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	var enterprise, org, repo string
+	var isContainerMode bool
 
 	for _, e := range envvars {
 		switch e.Name {
@@ -87,13 +88,20 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			org = e.Value
 		case EnvVarRepo:
 			repo = e.Value
+		case "ACTIONS_RUNNER_CONTAINER_HOOKS":
+			isContainerMode = true
 		}
 	}
 
 	if runnerPod.ObjectMeta.DeletionTimestamp.IsZero() {
 		finalizers, added := addFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
-		if added {
+		var cleanupFinalizersAdded bool
+		if isContainerMode {
+			finalizers, cleanupFinalizersAdded = addFinalizer(finalizers, runnerLinkedResourcesFinalizerName)
+		}
+
+		if added || cleanupFinalizersAdded {
 			newRunner := runnerPod.DeepCopy()
 			newRunner.ObjectMeta.Finalizers = finalizers
 
