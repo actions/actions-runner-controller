@@ -9,7 +9,8 @@ const (
 const (
 	// This names requires at least one slash to work.
 	// See https://github.com/google/knative-gcp/issues/378
-	runnerPodFinalizerName = "actions.summerwind.dev/runner-pod"
+	runnerPodFinalizerName             = "actions.summerwind.dev/runner-pod"
+	runnerLinkedResourcesFinalizerName = "actions.summerwind.dev/linked-resources"
 
 	annotationKeyPrefix = "actions-runner/"
 

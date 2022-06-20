@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/hash"
@@ -114,17 +113,6 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			}
 			// Pod was not found
 			return r.processRunnerDeletion(runner, ctx, log, nil)
-		}
-
-		if runner.Spec.ContainerMode == "kubernetes" {
-			if err := r.cleanupRunnerLinkedPods(ctx, &pod, log); err != nil {
-				log.Error(err, "cleanup failed")
-				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
-			}
-			if err := r.cleanupRunnerLinkedSecrets(ctx, &pod, log); err != nil {
-				log.Error(err, "cleanup failed")
-				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
-			}
 		}
 
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
@@ -923,90 +911,6 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Pod{}).
 		Named(name).
 		Complete(r)
-}
-
-func (r *RunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
-	var runnerLinkedPodList corev1.PodList
-	r.List(ctx, &runnerLinkedPodList, client.MatchingLabels(
-		map[string]string{
-			"runner-pod": pod.ObjectMeta.Name,
-		},
-	))
-
-	var (
-		wg   sync.WaitGroup
-		errs []error
-	)
-	for _, p := range runnerLinkedPodList.Items {
-		if !p.ObjectMeta.DeletionTimestamp.IsZero() {
-			continue
-		}
-
-		p := p
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := r.Delete(ctx, &p); err != nil {
-				if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
-					return
-				}
-				errs = append(errs, fmt.Errorf("delete pod %q error: %v", p.ObjectMeta.Name, err))
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	if len(errs) > 0 {
-		for _, err := range errs {
-			log.Error(err, "failed to remove runner-linked pod")
-		}
-		return errors.New("failed to remove some runner linked pods")
-	}
-
-	return nil
-}
-
-func (r *RunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
-	var runnerLinkedSecretList corev1.SecretList
-	r.List(ctx, &runnerLinkedSecretList, client.MatchingLabels(
-		map[string]string{
-			"runner-pod": pod.ObjectMeta.Name,
-		},
-	))
-
-	var (
-		wg   sync.WaitGroup
-		errs []error
-	)
-	for _, s := range runnerLinkedSecretList.Items {
-		if !s.ObjectMeta.DeletionTimestamp.IsZero() {
-			continue
-		}
-
-		s := s
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := r.Delete(ctx, &s); err != nil {
-				if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
-					return
-				}
-				errs = append(errs, fmt.Errorf("delete secret %q error: %v", s.ObjectMeta.Name, err))
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	if len(errs) > 0 {
-		for _, err := range errs {
-			log.Error(err, "failed to remove runner-linked secret")
-		}
-		return errors.New("failed to remove some runner linked secrets")
-	}
-
-	return nil
 }
 
 func addFinalizer(finalizers []string, finalizerName string) ([]string, bool) {
