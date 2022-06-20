@@ -195,18 +195,7 @@ func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
 		return errors.New("Spec.ContainerMode: kubernetes must have workVolumeClaimTemplate field specified")
 	}
 
-	if rs.WorkVolumeClaimTemplate.AccessModes == nil || len(rs.WorkVolumeClaimTemplate.AccessModes) == 0 {
-		return errors.New("Access mode should have at least one mode specified")
-	}
-
-	for _, accessMode := range rs.WorkVolumeClaimTemplate.AccessModes {
-		switch accessMode {
-		case corev1.ReadWriteOnce, corev1.ReadWriteMany:
-		default:
-			return fmt.Errorf("Access mode %v is not supported", accessMode)
-		}
-	}
-	return nil
+	return rs.WorkVolumeClaimTemplate.validate()
 }
 
 func (rs *RunnerSpec) ValidateIsServiceAccountNameSet() error {
@@ -214,7 +203,7 @@ func (rs *RunnerSpec) ValidateIsServiceAccountNameSet() error {
 		return nil
 	}
 
-	if len(rs.ServiceAccountName) == 0 {
+	if rs.ServiceAccountName == "" {
 		return errors.New("service account name is required if container mode is kubernetes")
 	}
 	return nil
@@ -252,6 +241,45 @@ type WorkVolumeClaimTemplate struct {
 	StorageClassName string                              `json:"storageClassName"`
 	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
 	Resources        corev1.ResourceRequirements         `json:"resources"`
+}
+
+func (w *WorkVolumeClaimTemplate) validate() error {
+	if w.AccessModes == nil || len(w.AccessModes) == 0 {
+		return errors.New("Access mode should have at least one mode specified")
+	}
+
+	for _, accessMode := range w.AccessModes {
+		switch accessMode {
+		case corev1.ReadWriteOnce, corev1.ReadWriteMany:
+		default:
+			return fmt.Errorf("Access mode %v is not supported", accessMode)
+		}
+	}
+	return nil
+}
+
+func (w *WorkVolumeClaimTemplate) V1Volume() corev1.Volume {
+	return corev1.Volume{
+		Name: "work",
+		VolumeSource: corev1.VolumeSource{
+			Ephemeral: &corev1.EphemeralVolumeSource{
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      w.AccessModes,
+						StorageClassName: &(*w).StorageClassName,
+						Resources:        w.Resources,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeMount {
+	return corev1.VolumeMount{
+		MountPath: mountPath,
+		Name:      "work",
+	}
 }
 
 // +kubebuilder:object:root=true

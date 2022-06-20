@@ -195,7 +195,31 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL)
+	if runnerSet.Spec.RunnerConfig.ContainerMode == "kubernetes" {
+		found := false
+		for i := range template.Spec.Containers {
+			if template.Spec.Containers[i].Name == containerName {
+				found = true
+			}
+		}
+		if !found {
+			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
+				Name: "runner",
+			})
+		}
+
+		workDir := runnerSet.Spec.RunnerConfig.WorkDir
+		if workDir == "" {
+			workDir = "/runner/_work"
+		}
+		if err := applyWorkVolumeClaimTemplateToPod(&template, runnerSet.Spec.WorkVolumeClaimTemplate, workDir); err != nil {
+			return nil, err
+		}
+
+		template.Spec.ServiceAccountName = runnerSet.Spec.ServiceAccountName
+	}
+
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL)
 	if err != nil {
 		return nil, err
 	}
