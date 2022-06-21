@@ -351,22 +351,22 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}
 }
 
+type scaleOperation struct {
+	namespacedName types.NamespacedName
+	triggers       []v1alpha1.ScaleUpTrigger
+}
+
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) workOnScaleTarget(st *ScaleTarget) {
 	if st == nil {
 		return
 	}
 
 	autoscaler.workerStart.Do(func() {
-		type batch struct {
-			hra      v1alpha1.HorizontalRunnerAutoscaler
-			triggers []v1alpha1.ScaleUpTrigger
-		}
-
 		autoscaler.batchCh = make(chan *ScaleTarget, autoscaler.QueueLimit)
 
 		go func() {
 			for {
-				batches := map[string]batch{}
+				batches := map[types.NamespacedName]scaleOperation{}
 				after := time.After(3 * time.Second)
 
 			batch:
@@ -376,21 +376,24 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) workOnScaleTarget(st 
 						after = nil
 						break batch
 					case st := <-autoscaler.batchCh:
-						id := fmt.Sprintf("%s/%s", st.HorizontalRunnerAutoscaler.Namespace, st.HorizontalRunnerAutoscaler.Name)
-						b, ok := batches[id]
+						nsName := types.NamespacedName{
+							Namespace: st.HorizontalRunnerAutoscaler.Namespace,
+							Name:      st.HorizontalRunnerAutoscaler.Name,
+						}
+						b, ok := batches[nsName]
 						if !ok {
-							b = batch{
-								hra: st.HorizontalRunnerAutoscaler,
+							b = scaleOperation{
+								namespacedName: nsName,
 							}
 						}
 						b.triggers = append(b.triggers, st.ScaleUpTrigger)
-						batches[id] = b
+						batches[nsName] = b
 					}
 				}
 
 				for _, b := range batches {
 					b := b
-					if err := autoscaler.batchScale(context.Background(), b.hra, b.triggers); err != nil {
+					if err := autoscaler.batchScale(context.Background(), b); err != nil {
 						st.log.Error(err, "Could not scale due to %v", err)
 					}
 				}
@@ -842,14 +845,20 @@ HRA:
 	return nil, nil
 }
 
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) batchScale(ctx context.Context, hra v1alpha1.HorizontalRunnerAutoscaler, triggers []v1alpha1.ScaleUpTrigger) error {
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) batchScale(ctx context.Context, op scaleOperation) error {
+	var hra v1alpha1.HorizontalRunnerAutoscaler
+
+	if err := autoscaler.Client.Get(ctx, op.namespacedName, &hra); err != nil {
+		return err
+	}
+
 	copy := hra.DeepCopy()
 
 	copy.Spec.CapacityReservations = getValidCapacityReservations(copy)
 
 	var added, completed int
 
-	for _, trigger := range triggers {
+	for _, trigger := range op.triggers {
 		amount := 1
 
 		if trigger.Amount != 0 {
@@ -889,7 +898,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) batchScale(ctx contex
 	after := len(copy.Spec.CapacityReservations)
 
 	autoscaler.Log.V(1).Info(
-		fmt.Sprintf("Updating hra %s for capacityReservations update(s)", hra.Name),
+		fmt.Sprintf("Updating hra %s for capacityReservations update", hra.Name),
 		"before", before,
 		"expired", expired,
 		"added", added,
