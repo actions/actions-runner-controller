@@ -1,6 +1,8 @@
 package controllers
 
-import "context"
+import (
+	"context"
+)
 
 // worker is a worker that has a non-blocking bounded queue of scale targets, dequeues scale target and executes the scale operation one by one.
 type worker struct {

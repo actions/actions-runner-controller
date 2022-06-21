@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -325,11 +324,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}
 
 	autoscaler.workerInit.Do(func() {
+		batchScaler := newBatchScaler(context.Background(), autoscaler.Client, autoscaler.Log)
+
 		queueLimit := autoscaler.QueueLimit
 		if queueLimit == 0 {
 			queueLimit = DefaultQueueLimit
 		}
-		autoscaler.worker = newWorker(context.Background(), queueLimit, autoscaler.workOnScaleTarget)
+		autoscaler.worker = newWorker(context.Background(), queueLimit, batchScaler.Add)
 	})
 
 	target.log = &log
@@ -349,59 +350,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	if written, err := w.Write([]byte(msg)); err != nil {
 		log.Error(err, "failed writing http response", "msg", msg, "written", written)
 	}
-}
-
-type scaleOperation struct {
-	namespacedName types.NamespacedName
-	triggers       []v1alpha1.ScaleUpTrigger
-}
-
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) workOnScaleTarget(st *ScaleTarget) {
-	if st == nil {
-		return
-	}
-
-	autoscaler.workerStart.Do(func() {
-		autoscaler.batchCh = make(chan *ScaleTarget, autoscaler.QueueLimit)
-
-		go func() {
-			for {
-				batches := map[types.NamespacedName]scaleOperation{}
-				after := time.After(3 * time.Second)
-
-			batch:
-				for {
-					select {
-					case <-after:
-						after = nil
-						break batch
-					case st := <-autoscaler.batchCh:
-						nsName := types.NamespacedName{
-							Namespace: st.HorizontalRunnerAutoscaler.Namespace,
-							Name:      st.HorizontalRunnerAutoscaler.Name,
-						}
-						b, ok := batches[nsName]
-						if !ok {
-							b = scaleOperation{
-								namespacedName: nsName,
-							}
-						}
-						b.triggers = append(b.triggers, st.ScaleUpTrigger)
-						batches[nsName] = b
-					}
-				}
-
-				for _, b := range batches {
-					b := b
-					if err := autoscaler.batchScale(context.Background(), b); err != nil {
-						st.log.Error(err, "Could not scale due to %v", err)
-					}
-				}
-			}
-		}()
-	})
-
-	autoscaler.batchCh <- st
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) findHRAsByKey(ctx context.Context, value string) ([]v1alpha1.HorizontalRunnerAutoscaler, error) {
@@ -843,74 +791,6 @@ HRA:
 	}
 
 	return nil, nil
-}
-
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) batchScale(ctx context.Context, op scaleOperation) error {
-	var hra v1alpha1.HorizontalRunnerAutoscaler
-
-	if err := autoscaler.Client.Get(ctx, op.namespacedName, &hra); err != nil {
-		return err
-	}
-
-	copy := hra.DeepCopy()
-
-	copy.Spec.CapacityReservations = getValidCapacityReservations(copy)
-
-	var added, completed int
-
-	for _, trigger := range op.triggers {
-		amount := 1
-
-		if trigger.Amount != 0 {
-			amount = trigger.Amount
-		}
-
-		if amount > 0 {
-			now := time.Now()
-			copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
-				EffectiveTime:  metav1.Time{Time: now},
-				ExpirationTime: metav1.Time{Time: now.Add(trigger.Duration.Duration)},
-				Replicas:       amount,
-			})
-
-			added += amount
-		} else if amount < 0 {
-			var reservations []v1alpha1.CapacityReservation
-
-			var found bool
-
-			for _, r := range copy.Spec.CapacityReservations {
-				if !found && r.Replicas+amount == 0 {
-					found = true
-				} else {
-					reservations = append(reservations, r)
-				}
-			}
-
-			copy.Spec.CapacityReservations = reservations
-
-			completed += amount
-		}
-	}
-
-	before := len(hra.Spec.CapacityReservations)
-	expired := before - len(copy.Spec.CapacityReservations)
-	after := len(copy.Spec.CapacityReservations)
-
-	autoscaler.Log.V(1).Info(
-		fmt.Sprintf("Updating hra %s for capacityReservations update", hra.Name),
-		"before", before,
-		"expired", expired,
-		"added", added,
-		"completed", completed,
-		"after", after,
-	)
-
-	if err := autoscaler.Client.Update(ctx, copy); err != nil {
-		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
-	}
-
-	return nil
 }
 
 func getValidCapacityReservations(autoscaler *v1alpha1.HorizontalRunnerAutoscaler) []v1alpha1.CapacityReservation {
