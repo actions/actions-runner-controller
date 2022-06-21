@@ -266,7 +266,7 @@ func (w *WorkVolumeClaimTemplate) V1Volume() corev1.Volume {
 				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      w.AccessModes,
-						StorageClassName: &(*w).StorageClassName,
+						StorageClassName: &w.StorageClassName,
 						Resources:        w.Resources,
 					},
 				},
