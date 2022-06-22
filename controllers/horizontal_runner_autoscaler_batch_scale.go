@@ -32,9 +32,14 @@ func newBatchScaler(ctx context.Context, client client.Client, log logr.Logger) 
 	}
 }
 
-type scaleOperation struct {
+type batchScaleOperation struct {
 	namespacedName types.NamespacedName
-	triggers       []v1alpha1.ScaleUpTrigger
+	scaleOps       []scaleOperation
+}
+
+type scaleOperation struct {
+	trigger v1alpha1.ScaleUpTrigger
+	log     logr.Logger
 }
 
 // Add the scale target to the unbounded queue, blocking until the target is successfully added to the queue.
@@ -51,9 +56,11 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 
 		s.queue = make(chan *ScaleTarget)
 
+		log := s.Log
+
 		go func() {
-			s.Log.Info("Starting batch worker")
-			defer s.Log.Info("Stopped batch worker")
+			log.Info("Starting batch worker")
+			defer log.Info("Stopped batch worker")
 
 			for {
 				select {
@@ -62,9 +69,9 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 				default:
 				}
 
-				s.Log.V(2).Info("Batch worker is dequeueing operations")
+				log.V(2).Info("Batch worker is dequeueing operations")
 
-				batches := map[types.NamespacedName]scaleOperation{}
+				batches := map[types.NamespacedName]batchScaleOperation{}
 				after := time.After(s.interval)
 				var ops uint
 
@@ -81,27 +88,32 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 						}
 						b, ok := batches[nsName]
 						if !ok {
-							b = scaleOperation{
+							b = batchScaleOperation{
 								namespacedName: nsName,
 							}
 						}
-						b.triggers = append(b.triggers, st.ScaleUpTrigger)
+						b.scaleOps = append(b.scaleOps, scaleOperation{
+							log:     *st.log,
+							trigger: st.ScaleUpTrigger,
+						})
 						batches[nsName] = b
 						ops++
 					}
 				}
 
-				s.Log.V(2).Info("Batch worker dequeued operations", "num", ops)
+				log.V(2).Info("Batch worker dequeued operations", "ops", ops, "batches", len(batches))
 
 			retry:
 				for i := 0; ; i++ {
-					failed := map[types.NamespacedName]scaleOperation{}
+					failed := map[types.NamespacedName]batchScaleOperation{}
 
 					for nsName, b := range batches {
 						b := b
 						if err := s.batchScale(context.Background(), b); err != nil {
-							st.log.V(2).Info("Failed to scale due to error", "error", err)
+							log.V(2).Info("Failed to scale due to error", "error", err)
 							failed[nsName] = b
+						} else {
+							log.V(2).Info("Successfully ran batch scale", "hra", b.namespacedName)
 						}
 					}
 
@@ -124,10 +136,10 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 	s.queue <- st
 }
 
-func (s *batchScaler) batchScale(ctx context.Context, op scaleOperation) error {
+func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation) error {
 	var hra v1alpha1.HorizontalRunnerAutoscaler
 
-	if err := s.Client.Get(ctx, op.namespacedName, &hra); err != nil {
+	if err := s.Client.Get(ctx, batch.namespacedName, &hra); err != nil {
 		return err
 	}
 
@@ -137,18 +149,20 @@ func (s *batchScaler) batchScale(ctx context.Context, op scaleOperation) error {
 
 	var added, completed int
 
-	for _, trigger := range op.triggers {
+	for _, scale := range batch.scaleOps {
 		amount := 1
 
-		if trigger.Amount != 0 {
-			amount = trigger.Amount
+		if scale.trigger.Amount != 0 {
+			amount = scale.trigger.Amount
 		}
+
+		scale.log.V(2).Info("Adding capacity reservation", "amount", amount)
 
 		if amount > 0 {
 			now := time.Now()
 			copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
 				EffectiveTime:  metav1.Time{Time: now},
-				ExpirationTime: metav1.Time{Time: now.Add(trigger.Duration.Duration)},
+				ExpirationTime: metav1.Time{Time: now.Add(scale.trigger.Duration.Duration)},
 				Replicas:       amount,
 			})
 
