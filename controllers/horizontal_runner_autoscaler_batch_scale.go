@@ -200,7 +200,7 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 	)
 
 	if err := s.Client.Update(ctx, copy); err != nil {
-		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
+		return fmt.Errorf("updating horizontalrunnerautoscaler to add capacity reservation: %w", err)
 	}
 
 	return nil
