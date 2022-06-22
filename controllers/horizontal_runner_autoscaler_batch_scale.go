@@ -52,13 +52,21 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 		s.queue = make(chan *ScaleTarget)
 
 		go func() {
+			s.Log.Info("Starting batch worker")
+			defer s.Log.Info("Stopped batch worker")
+
 			for {
-				if _, done := <-s.Ctx.Done(); done {
+				select {
+				case <-s.Ctx.Done():
 					return
+				default:
 				}
+
+				s.Log.V(2).Info("Batch worker is dequeueing operations")
 
 				batches := map[types.NamespacedName]scaleOperation{}
 				after := time.After(s.interval)
+				var ops uint
 
 			batch:
 				for {
@@ -79,8 +87,11 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 						}
 						b.triggers = append(b.triggers, st.ScaleUpTrigger)
 						batches[nsName] = b
+						ops++
 					}
 				}
+
+				s.Log.V(2).Info("Batch worker dequeued operations", "num", ops)
 
 			retry:
 				for i := 0; ; i++ {
@@ -89,7 +100,7 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 					for nsName, b := range batches {
 						b := b
 						if err := s.batchScale(context.Background(), b); err != nil {
-							st.log.Error(err, "Could not scale due to %v", err)
+							st.log.V(2).Info("Failed to scale due to error", "error", err)
 							failed[nsName] = b
 						}
 					}
