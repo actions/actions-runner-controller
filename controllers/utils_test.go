@@ -102,7 +102,7 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 	}
 
 	if len(diff) != 0 {
-		t.Fatalf("got access modes did not take every access mode into account\ngot: %v want: %v\n", gotAccesModes, wantAccessModes)
+		t.Fatalf("got access modes did not take every access mode into account\nactual: %v expected: %v\n", actualAccessModes, expectedAccessModes)
 	}
 }
 
