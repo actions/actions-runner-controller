@@ -22,7 +22,7 @@ on:
 env:
   RUNNER_VERSION: 2.293.0
   DOCKER_VERSION: 20.10.12
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+  DOCKERHUB_USERNAME: summerwind
 
 jobs:
   build-runners:
