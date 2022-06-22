@@ -123,6 +123,6 @@ func Test_workVolumeClaimTemplateV1VolumeMount(t *testing.T) {
 	got := workVolumeClaimTemplate.V1VolumeMount(mountPath)
 
 	if want != got {
-		t.Fatalf("want volume mount %+v, got %+v\n", want, got)
+		t.Fatalf("expected volume mount %+v, actual %+v\n", want, got)
 	}
 }
