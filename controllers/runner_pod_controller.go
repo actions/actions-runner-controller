@@ -119,11 +119,11 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		if finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerLinkedResourcesFinalizerName); removed {
 			if err := r.cleanupRunnerLinkedPods(ctx, &runnerPod, log); err != nil {
-				log.Info("Retrying runner-linked pods clean up that has failed due to an error. If this persists, please manually remove the runner-linked pods to unblock ARC", "err", err.Error())
+				log.Info("Runner-linked pods clean up that has failed due to an error. If this persists, please manually remove the runner-linked pods to unblock ARC", "err", err.Error())
 				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 			}
 			if err := r.cleanupRunnerLinkedSecrets(ctx, &runnerPod, log); err != nil {
-				log.Info("Retrying runner-linked secrets clean up that has failed due to an error. If this persists, please manually remove the runner-linked secrets to unblock ARC", "err", err.Error())
+				log.Info("Runner-linked secrets clean up that has failed due to an error. If this persists, please manually remove the runner-linked secrets to unblock ARC", "err", err.Error())
 				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 			}
 			patchedPod := runnerPod.DeepCopy()
