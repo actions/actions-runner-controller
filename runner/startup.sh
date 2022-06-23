@@ -27,7 +27,7 @@ if [[ $MTU ]]; then
   # session.
   if [[ $MTU =~ ^[1-9][0-9]*$ ]]; then
     # See https://docs.docker.com/engine/security/rootless/
-    sudo tee -a $dockerd_supervisor_config_path 1>&- <<<"environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=$MTU"
+    sudo tee -a $dockerd_supervisor_config_path 1>/dev/null <<<"environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=$MTU"
     dockerd_config=$(jq -S ".mtu = $MTU" <<<"$dockerd_config")
   else
     # shellcheck source=runner/logger.bash
@@ -42,7 +42,7 @@ if [[ ${DOCKER_REGISTRY_MIRROR:-} != '' ]]; then
 fi
 
 sudo mkdir -p ${dockerd_config_path%/*}
-sudo tee $dockerd_config_path 1>&- <<<"$dockerd_config"
+sudo tee $dockerd_config_path 1>/dev/null <<<"$dockerd_config"
 
 for config in $dockerd_config_path $dockerd_supervisor_config_path; do
   (
