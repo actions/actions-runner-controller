@@ -22,6 +22,21 @@ A list of tools which are helpful for troubleshooting
 
 Troubeshooting runbooks that relate to ARC installation problems
 
+### InternalError when calling webhook: context deadline exceeded
+
+**Problem**
+
+This issue can come up if there are already actions-runner-controller webhooks present in your cluster.
+
+**Solution**
+
+Remove the mutating & validating webhooks:
+
+```bash
+kubectl delete mutatingwebhookconfiguration actions-runner-controller-mutating-webhook-configuration
+kubectl delete validatingwebhookconfiguration actions-runner-controller-validating-webhook-configuration
+```
+
 ### Invalid header field value
 
 **Problem**
