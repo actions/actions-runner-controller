@@ -1,75 +1,70 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+#!/bin/bash
+source logger.bash
 
-# This path can only be customized through arguments passed to the dockerd cli
-# at startup. Parsing the supervisor docker.conf file is cumbersome, and there
-# is little reason to allow users to customize this. Hence, we hardcode the path
-# here.
-#
-# See: https://docs.docker.com/engine/reference/commandline/dockerd/
-readonly dockerd_config_path=/etc/docker/daemon.json
-readonly dockerd_supervisor_config_path=/etc/supervisor/conf.d/dockerd.conf
+function wait_for_process () {
+    local max_time_wait=30
+    local process_name="$1"
+    local waited_sec=0
+    while ! pgrep "$process_name" >/dev/null && ((waited_sec < max_time_wait)); do
+        log.debug "Process $process_name is not running yet. Retrying in 1 seconds"
+        log.debug "Waited $waited_sec seconds of $max_time_wait seconds"
+        sleep 1
+        ((waited_sec=waited_sec+1))
+        if ((waited_sec >= max_time_wait)); then
+            return 1
+        fi
+    done
+    return 0
+}
 
-# Extend existing config...
-dockerd_config=$(! cat $dockerd_config_path 2>&-)
+sudo /bin/bash <<SCRIPT
+mkdir -p /etc/docker
 
-# ...and fallback to an empty object if there is no existing configuration, or
-# otherwise the following `jq` merge commands would not produce anything.
-if [[ $dockerd_config == '' ]]; then
-  dockerd_config='{}'
+echo "{}" > /etc/docker/daemon.json
+
+if [ -n "${MTU}" ]; then
+jq ".\"mtu\" = ${MTU}" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
+# See https://docs.docker.com/engine/security/rootless/
+echo "environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=${MTU}" >> /etc/supervisor/conf.d/dockerd.conf
 fi
 
-readonly MTU=${MTU:-}
-if [[ $MTU ]]; then
-  # We have to verify that this value is a valid integer because we are going to
-  # start docker in the background and invalid values would never be surfaced.
-  # Well, except that startup fails and our users are sent on a nice debugging
-  # session.
-  if [[ $MTU =~ ^[1-9][0-9]*$ ]]; then
-    # See https://docs.docker.com/engine/security/rootless/
-    sudo tee -a $dockerd_supervisor_config_path 1>&- <<<"environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=$MTU"
-    dockerd_config=$(jq -S ".mtu = $MTU" <<<"$dockerd_config")
-  else
-    # shellcheck source=runner/logger.bash
-    source logger.bash
-    log.error "Docker MTU must be an integer, continuing bootstrapping without it, got: $MTU"
-    MTU=
-  fi
+if [ -n "${DOCKER_REGISTRY_MIRROR}" ]; then
+jq ".\"registry-mirrors\"[0] = \"${DOCKER_REGISTRY_MIRROR}\"" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
 fi
+SCRIPT
 
-if [[ ${DOCKER_REGISTRY_MIRROR:-} != '' ]]; then
-  dockerd_config=$(jq -S --arg url "$DOCKER_REGISTRY_MIRROR" '."registry-mirrors" += ["$url"]' <<<"$dockerd_config")
-fi
+dump() {
+  local path=${1:?missing required <path> argument}
+  shift
+  printf -- "%s\n---\n" "${*//\{path\}/"$path"}" 1>&2
+  cat "$path" 1>&2
+  printf -- '---\n' 1>&2
+}
 
-sudo mkdir -p ${dockerd_config_path%/*}
-sudo tee $dockerd_config_path 1>&- <<<"$dockerd_config"
-
-for config in $dockerd_config_path $dockerd_supervisor_config_path; do
-  (
-    echo "Using '$config' with the following content <<CONFIG"
-    cat $config
-    echo 'CONFIG'
-  ) 1>&2
+for config in /etc/docker/daemon.json /etc/supervisor/conf.d/dockerd.conf; do
+  dump "$config" 'Using {path} with the following content:'
 done
 
-sudo /usr/bin/supervisord -c /etc/supervicor/supervisord.conf
+log.debug 'Starting supervisor daemon'
+sudo /usr/bin/supervisord -n >> /dev/null 2>&1 &
 
-if [[ $MTU ]]; then
-  # It might take a few ticks for the `docker0` device to be up after starting
-  # the docker daemon with supervisord, hence, we retry for a little while.
-  # Notice how we use `nice` to execute the command with a least favorable
-  # scheduling priority and are using a noop (`:`) instruction instead of
-  # `sleep`. We do this to ensure that we keep the startup as fast as possible.
-  if ! nice -n 19 timeout -k 70 60 -- bash -c "(until sudo ifconfig docker0 mtu '$MTU' up; do :; done) 1>&- 2>&-"; then
-    # shellcheck source=runner/logger.bash
-    source logger.bash
-    log.error 'Failed to set docker interface mtu within 1 minute, continuing bootstrapping without it...'
-  fi
+log.debug 'Waiting for processes to be running...'
+processes=(dockerd)
+
+for process in "${processes[@]}"; do
+    wait_for_process "$process"
+    if [ $? -ne 0 ]; then
+        log.error "$process is not running after max time"
+        dump /var/log/dockerd.err.log 'Dumping {path} to aid investigation'
+        exit 1
+    else
+        log.debug "$process is running"
+    fi
+done
+
+if [ -n "${MTU}" ]; then
+  sudo ifconfig docker0 mtu ${MTU} up
 fi
 
-# We leave the wait for docker to come up to our entrypoint.sh script, since its
-# check properly handles the case where the docker service is in a crash loop.
-# Users still have the ability to disable the wait.
-export DOCKER_ENABLED=true
-export DISABLE_WAIT_FOR_DOCKER=${DISABLE_WAIT_FOR_DOCKER:-false}
-exec entrypoint.sh
+# Wait processes to be running
+entrypoint.sh
