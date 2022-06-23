@@ -78,10 +78,10 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 		t.Errorf("expected storage class name %q, got %q\n", wantClassName, gotClassName)
 	}
 
-	gotAccesModes := got.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
+	gotAccessModes := got.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
 	wantAccessModes := want.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
-	if len(gotAccesModes) != len(wantAccessModes) {
-		t.Fatalf("access modes lengths missmatch: got %v, expected %v\n", gotAccesModes, wantAccessModes)
+	if len(gotAccessModes) != len(wantAccessModes) {
+		t.Fatalf("access modes lengths missmatch: got %v, expected %v\n", gotAccessModes, wantAccessModes)
 	}
 
 	diff := make(map[corev1.PersistentVolumeAccessMode]int, len(wantAccessModes))
@@ -89,7 +89,7 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 		diff[am]++
 	}
 
-	for _, am := range gotAccesModes {
+	for _, am := range gotAccessModes {
 		_, ok := diff[am]
 		if !ok {
 			t.Errorf("got access mode %v that is not in the wanted access modes\n", am)
