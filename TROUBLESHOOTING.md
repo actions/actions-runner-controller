@@ -28,6 +28,11 @@ Troubeshooting runbooks that relate to ARC installation problems
 
 This issue can come up if there are already actions-runner-controller webhooks present in your cluster.
 
+```
+Internal error occurred: failed calling webhook "mutate.runnerdeployment.actions.summerwind.dev":
+Post "https://actions-runner-controller-webhook.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment?timeout=10s": context deadline exceeded
+```
+
 **Solution**
 
 Remove the mutating & validating webhooks:
