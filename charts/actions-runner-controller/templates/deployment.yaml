@@ -122,6 +122,9 @@ spec:
         - name: {{ $key }}
           value: {{ $val | quote }}
         {{- end }}
+        { { - if .Values.additionalFullEnv } }
+          { { - toYaml .Values.additionalFullEnv | nindent 8 } }
+        { { - end } }
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (cat "v" .Chart.AppVersion | replace " " "") }}"
         name: manager
         imagePullPolicy: {{ .Values.image.pullPolicy }}
