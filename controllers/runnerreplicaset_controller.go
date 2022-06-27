@@ -205,7 +205,3 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named(name).
 		Complete(r)
 }
-
-func registrationOnlyRunnerNameFor(rsName string) string {
-	return rsName + "-registration-only"
-}

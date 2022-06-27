@@ -1,4 +1,4 @@
-name: Publish helm chart
+name: Publish Helm Chart
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - master
     paths:
       - 'charts/**'
-      - '.github/workflows/on-push-master-publish-chart.yml'
+      - '.github/workflows/publish-chart.yaml'
       - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
   workflow_dispatch:
@@ -15,10 +15,13 @@ env:
   KUBE_SCORE_VERSION: 1.10.0
   HELM_VERSION: v3.8.0
 
+permissions:
+  contents: read
+
 jobs:
   lint-chart:
-    runs-on: ubuntu-latest
     name: Lint Chart
+    runs-on: ubuntu-latest
     outputs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
@@ -28,7 +31,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v2.0
+        uses: azure/setup-helm@v2.1
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -49,9 +52,9 @@ jobs:
               --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@v3
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.7
+          python-version: '3.7'
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.2.1
@@ -65,22 +68,23 @@ jobs:
           fi
 
       - name: Run chart-testing (lint)
-        run: ct lint --config charts/.ci/ct-config.yaml
+        run: |
+          ct lint --config charts/.ci/ct-config.yaml
 
       - name: Create kind cluster
-        uses: helm/kind-action@v1.2.0
         if: steps.list-changed.outputs.changed == 'true'
+        uses: helm/kind-action@v1.2.0
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist
       - name: Install cert-manager
+        if: steps.list-changed.outputs.changed == 'true'      
         run: |
           helm repo add jetstack https://charts.jetstack.io --force-update
           helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
-        if: steps.list-changed.outputs.changed == 'true'
 
       - name: Run chart-testing (install)
-        run: ct install --config charts/.ci/ct-config.yaml
         if: steps.list-changed.outputs.changed == 'true'
+        run: ct install --config charts/.ci/ct-config.yaml
 
       # WARNING: This relies on the latest release being inat the top of the JSON from GitHub and a clean chart.yaml
       - name: Check if Chart Publish is Needed
@@ -99,8 +103,11 @@ jobs:
   publish-chart:
     if: needs.lint-chart.outputs.publish-chart == 'true'
     needs: lint-chart
-    runs-on: ubuntu-latest
     name: Publish Chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # for helm/chart-releaser-action to push chart release and create a release
+    
 
     steps:
       - name: Checkout

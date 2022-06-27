@@ -23,9 +23,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -46,6 +46,8 @@ const (
 
 	keyPrefixEnterprise = "enterprises/"
 	keyRunnerGroup      = "/group/"
+
+	DefaultQueueLimit = 100
 )
 
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
@@ -68,6 +70,15 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// Set to empty for letting it watch for all namespaces.
 	Namespace string
 	Name      string
+
+	// QueueLimit is the maximum length of the bounded queue of scale targets and their associated operations
+	// A scale target is enqueued on each retrieval of each eligible webhook event, so that it is processed asynchronously.
+	QueueLimit int
+
+	worker      *worker
+	workerInit  sync.Once
+	workerStart sync.Once
+	batchCh     chan *ScaleTarget
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -242,18 +253,23 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				enterpriseSlug,
 				labels,
 			)
-
-			if target != nil {
-				if e.GetAction() == "queued" {
-					target.Amount = 1
-				} else if e.GetAction() == "completed" {
-					// A nagative amount is processed in the tryScale func as a scale-down request,
-					// that erasese the oldest CapacityReservation with the same amount.
-					// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
-					// so that the resulting desired replicas decreases by 1.
-					target.Amount = -1
-				}
+			if target == nil {
+				break
 			}
+
+			if e.GetAction() == "queued" {
+				target.Amount = 1
+				break
+			} else if e.GetAction() == "completed" && e.GetWorkflowJob().GetConclusion() != "skipped" {
+				// A nagative amount is processed in the tryScale func as a scale-down request,
+				// that erasese the oldest CapacityReservation with the same amount.
+				// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
+				// so that the resulting desired replicas decreases by 1.
+				target.Amount = -1
+				break
+			}
+			// If the conclusion is "skipped", we will ignore it and fallthrough to the default case.
+			fallthrough
 		default:
 			ok = true
 
@@ -307,9 +323,19 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		return
 	}
 
-	if err := autoscaler.tryScale(context.TODO(), target); err != nil {
-		log.Error(err, "could not scale up")
+	autoscaler.workerInit.Do(func() {
+		batchScaler := newBatchScaler(context.Background(), autoscaler.Client, autoscaler.Log)
 
+		queueLimit := autoscaler.QueueLimit
+		if queueLimit == 0 {
+			queueLimit = DefaultQueueLimit
+		}
+		autoscaler.worker = newWorker(context.Background(), queueLimit, batchScaler.Add)
+	})
+
+	target.log = &log
+	if ok := autoscaler.worker.Add(target); !ok {
+		log.Error(err, "Could not scale up due to queue full")
 		return
 	}
 
@@ -378,6 +404,8 @@ func matchTriggerConditionAgainstEvent(types []string, eventAction *string) bool
 type ScaleTarget struct {
 	v1alpha1.HorizontalRunnerAutoscaler
 	v1alpha1.ScaleUpTrigger
+
+	log *logr.Logger
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) searchScaleTargets(hras []v1alpha1.HorizontalRunnerAutoscaler, f func(v1alpha1.ScaleUpTrigger) bool) []ScaleTarget {
@@ -663,16 +691,29 @@ HRA:
 
 		if len(hra.Spec.ScaleUpTriggers) > 1 {
 			autoscaler.Log.V(1).Info("Skipping this HRA as it has too many ScaleUpTriggers to be used in workflow_job based scaling", "hra", hra.Name)
+			continue
+		}
+
+		if len(hra.Spec.ScaleUpTriggers) == 0 {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has no ScaleUpTriggers configured", "hra", hra.Name)
+			continue
+		}
+
+		scaleUpTrigger := hra.Spec.ScaleUpTriggers[0]
+
+		if scaleUpTrigger.GitHubEvent == nil {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has no `githubEvent` scale trigger configured", "hra", hra.Name)
 
 			continue
 		}
 
-		var duration metav1.Duration
+		if scaleUpTrigger.GitHubEvent.WorkflowJob == nil {
+			autoscaler.Log.V(1).Info("Skipping this HRA as it has no `githubEvent.workflowJob` scale trigger configured", "hra", hra.Name)
 
-		if len(hra.Spec.ScaleUpTriggers) > 0 {
-			duration = hra.Spec.ScaleUpTriggers[0].Duration
+			continue
 		}
 
+		duration := scaleUpTrigger.Duration
 		if duration.Duration <= 0 {
 			// Try to release the reserved capacity after at least 10 minutes by default,
 			// we won't end up in the reserved capacity remained forever in case GitHub somehow stopped sending us "completed" workflow_job events.
@@ -750,63 +791,6 @@ HRA:
 	}
 
 	return nil, nil
-}
-
-func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) tryScale(ctx context.Context, target *ScaleTarget) error {
-	if target == nil {
-		return nil
-	}
-
-	copy := target.HorizontalRunnerAutoscaler.DeepCopy()
-
-	amount := 1
-
-	if target.ScaleUpTrigger.Amount != 0 {
-		amount = target.ScaleUpTrigger.Amount
-	}
-
-	capacityReservations := getValidCapacityReservations(copy)
-
-	if amount > 0 {
-		now := time.Now()
-		copy.Spec.CapacityReservations = append(capacityReservations, v1alpha1.CapacityReservation{
-			EffectiveTime:  metav1.Time{Time: now},
-			ExpirationTime: metav1.Time{Time: now.Add(target.ScaleUpTrigger.Duration.Duration)},
-			Replicas:       amount,
-		})
-	} else if amount < 0 {
-		var reservations []v1alpha1.CapacityReservation
-
-		var found bool
-
-		for _, r := range capacityReservations {
-			if !found && r.Replicas+amount == 0 {
-				found = true
-			} else {
-				reservations = append(reservations, r)
-			}
-		}
-
-		copy.Spec.CapacityReservations = reservations
-	}
-
-	before := len(target.HorizontalRunnerAutoscaler.Spec.CapacityReservations)
-	expired := before - len(capacityReservations)
-	after := len(copy.Spec.CapacityReservations)
-
-	autoscaler.Log.V(1).Info(
-		fmt.Sprintf("Patching hra %s for capacityReservations update", target.HorizontalRunnerAutoscaler.Name),
-		"before", before,
-		"expired", expired,
-		"amount", amount,
-		"after", after,
-	)
-
-	if err := autoscaler.Client.Patch(ctx, copy, client.MergeFrom(&target.HorizontalRunnerAutoscaler)); err != nil {
-		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
-	}
-
-	return nil
 }
 
 func getValidCapacityReservations(autoscaler *v1alpha1.HorizontalRunnerAutoscaler) []v1alpha1.CapacityReservation {

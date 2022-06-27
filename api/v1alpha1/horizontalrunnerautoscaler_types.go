@@ -72,10 +72,12 @@ type GitHubEventScaleUpTriggerSpec struct {
 	CheckRun    *CheckRunSpec    `json:"checkRun,omitempty"`
 	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
 	Push        *PushSpec        `json:"push,omitempty"`
+	WorkflowJob *WorkflowJobSpec `json:"workflowJob,omitempty"`
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
 type CheckRunSpec struct {
+	// One of: created, rerequested, or completed
 	Types  []string `json:"types,omitempty"`
 	Status string   `json:"status,omitempty"`
 
@@ -88,6 +90,10 @@ type CheckRunSpec struct {
 	// Repositories is a list of GitHub repositories.
 	// Any check_run event whose repository matches one of repositories in the list can trigger autoscaling.
 	Repositories []string `json:"repositories,omitempty"`
+}
+
+// https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job
+type WorkflowJobSpec struct {
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request

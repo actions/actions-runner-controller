@@ -1,4 +1,4 @@
-name: Unit tests for entrypoint
+name: Validate Runners
 
 on:
   pull_request:
@@ -9,13 +9,17 @@ on:
       - 'test/entrypoint/**'
       - '!**.md'
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  test-runner-entrypoint:
     name: Test entrypoint
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Run unit tests for entrypoint.sh
+
+    - name: Run tests
       run: |
         make acceptance/runner/entrypoint

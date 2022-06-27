@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -36,24 +37,26 @@ var (
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/Dockerfile",
+			Dockerfile: "../../runner/actions-runner.dockerfile",
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.289.2",
+					Value: "2.291.1",
 				},
 			},
-			Image: runnerImage,
+			Image:        runnerImage,
+			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/Dockerfile.dindrunner",
+			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.289.2",
+					Value: "2.291.1",
 				},
 			},
-			Image: runnerDindImage,
+			Image:        runnerDindImage,
+			EnableBuildX: true,
 		},
 	}
 
@@ -137,6 +140,10 @@ func TestE2E(t *testing.T) {
 	t.Run("Verify workflow run result", func(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
+
+	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+		t.FailNow()
+	}
 }
 
 func TestE2ERunnerDeploy(t *testing.T) {
@@ -179,7 +186,9 @@ func TestE2ERunnerDeploy(t *testing.T) {
 		env.verifyActionsWorkflowRun(t)
 	})
 
-	t.FailNow()
+	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+		t.FailNow()
+	}
 }
 
 type env struct {
@@ -198,7 +207,6 @@ type env struct {
 	githubTokenWebhook                                       string
 	testEnterprise                                           string
 	testEphemeral                                            string
-	featureFlagEphemeral                                     *bool
 	scaleDownDelaySecondsAfterScaleOut                       int64
 	minReplicas                                              int64
 	dockerdWithinRunnerContainer                             bool
@@ -232,11 +240,7 @@ func initTestEnv(t *testing.T) *env {
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 20)
-
-	if ephemeral, err := strconv.ParseBool(testing.Getenv(t, "TEST_FEATURE_FLAG_EPHEMERAL", "")); err == nil {
-		e.featureFlagEphemeral = &ephemeral
-	}
+	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 6)
 
 	e.scaleDownDelaySecondsAfterScaleOut, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT", "10"), 10, 32)
 	e.minReplicas, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_MIN_REPLICAS", "1"), 10, 32)
@@ -306,10 +310,6 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
-	}
-
-	if e.featureFlagEphemeral != nil {
-		varEnv = append(varEnv, fmt.Sprintf("RUNNER_FEATURE_FLAG_EPHEMERAL=%v", *e.featureFlagEphemeral))
 	}
 
 	if e.useApp {
@@ -406,6 +406,62 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			Steps: []testing.Step{
 				{
 					Uses: testing.ActionsCheckoutV2,
+				},
+				{
+					// This might be the easiest way to handle permissions without use of securityContext
+					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+					Run: "sudo chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
+				},
+				{
+					// This might be the easiest way to handle permissions without use of securityContext
+					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+					Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
+				},
+				{
+					Uses: "actions/setup-go@v3",
+					With: &testing.With{
+						GoVersion: "1.18.2",
+					},
+				},
+				{
+					Run: "go version",
+				},
+				{
+					Run: "go build .",
+				},
+				{
+					// https://github.com/docker/buildx/issues/413#issuecomment-710660155
+					// To prevent setup-buildx-action from failing with:
+					//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
+					Run: "docker context create mycontext",
+				},
+				{
+					Run: "docker context use mycontext",
+				},
+				{
+					Name: "Set up Docker Buildx",
+					Uses: "docker/setup-buildx-action@v1",
+					With: &testing.With{
+						BuildkitdFlags: "--debug",
+						Endpoint:       "mycontext",
+						// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
+						// so we need to use `docker buildx build` in the next step
+						Install: false,
+					},
+				},
+				{
+					Run: "docker buildx build --platform=linux/amd64 " +
+						"--cache-from=type=local,src=/home/runner/.cache/buildx " +
+						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max " +
+						".",
+				},
+				{
+					// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+					// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+					Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
+				},
+				{
+					Run: "ls -lah /home/runner/.cache/*",
 				},
 				{
 					Uses: "azure/setup-kubectl@v1",

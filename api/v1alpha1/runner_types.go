@@ -136,6 +136,9 @@ type RunnerPodSpec struct {
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
 	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// +optional
@@ -145,7 +148,7 @@ type RunnerPodSpec struct {
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 
 	// +optional
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraint,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// RuntimeClassName is the container runtime configuration that containers should run under.
 	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class
@@ -153,7 +156,7 @@ type RunnerPodSpec struct {
 	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 
 	// +optional
-	DnsConfig []corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
 }
 
 // ValidateRepository validates repository field.
