@@ -726,7 +726,7 @@ The primary benefit of autoscaling on Webhooks compared to the pull driven scali
 
 > You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
 
-###### Install with Helm
+##### Install with Helm
 
 To enable this feature, you first need to install the GitHub webhook server. To install via our Helm chart,
 _[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
@@ -841,7 +841,7 @@ alongside your webhook on the Settings -> Webhooks page.
 Once you were able to confirm that the Webhook server is ready and running from GitHub create or update your
 `HorizontalRunnerAutoscaler` resources by learning the following configuration examples.
 
-###### Install with Kustomize
+##### Install with Kustomize
 
 To install this feature using Kustomize, add `github-webhook-server` resources to your `kustomization.yaml` file as in the example below:
 
@@ -883,7 +883,7 @@ spec:
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 - [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
 
-##### Example 1: Scale on each `workflow_job` event
+###### Example 1: Scale on each `workflow_job` event
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
@@ -927,7 +927,7 @@ You can configure your GitHub webhook settings to only include `Workflows Job` e
 
 Each kind has a `status` of `queued`, `in_progress` and `completed`. With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`. The caveat to this to remember is that this scale-down is within the bounds of your `scaleDownDelaySecondsAfterScaleOut` configuration, if this time hasn't passed the scale down will be deferred.
 
-##### Example 2: Scale up on each `check_run` event
+###### Example 2: Scale up on each `check_run` event
 
 > Note: This should work almost like https://github.com/philips-labs/terraform-aws-github-runner
 
@@ -989,7 +989,7 @@ spec:
     duration: "5m"
 ```
 
-##### Example 3: Scale on each `pull_request` event against a given set of branches
+###### Example 3: Scale on each `pull_request` event against a given set of branches
 
 To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `pull_request` against the `main` or `develop` branch you write manifests like the below:
 
