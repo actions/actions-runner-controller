@@ -701,15 +701,17 @@ to the GitHub Webhook.
 
 ##### Install with Kustomize
 
-To install this feature using Kustomize, add the resource to your `kustomization.yaml` file as in the example below:
+To install this feature using Kustomize, add `github-webhook-server` resources to your `kustomization.yaml` file as in the example below:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+# You should already have this
+- github.com/actions-runner-controller/actions-runner-controller/config//default?ref=v0.22.2
+# Add the below!
 - github.com/actions-runner-controller/actions-runner-controller/config//github-webhook-server?ref=v0.22.2
-```
 
 Finally, you will have to configure an ingress so that you may configure the webhook in github. An example of such ingress can be find below:
 
