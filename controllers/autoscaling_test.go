@@ -170,7 +170,23 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Job-level autoscaling with no label (imply self-hosted, 5 requested from 3 workflows)",
+			description:              "Job-level autoscaling with no explicit runner label (runners have implicit self-hosted, requested self-hosted, 5 jobs from 3 workflows)",
+			repo:                     "test/valid",
+			min:                      intPtr(2),
+			max:                      intPtr(10),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued", "labels":["self-hosted"]}, {"status":"queued", "labels":["self-hosted"]}]}`,
+				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}, {"status":"completed", "labels":["self-hosted"]}]}`,
+				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}, {"status":"queued", "labels":["self-hosted"]}]}`,
+			},
+			want: 5,
+		},
+
+		{
+			description:              "Skipped job-level autoscaling with no explicit runner label (runners have implicit self-hosted, requested self-hosted+custom, 0 jobs from 3 workflows)",
 			repo:                     "test/valid",
 			min:                      intPtr(2),
 			max:                      intPtr(10),
@@ -182,11 +198,11 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"completed", "labels":["self-hosted", "custom"]}]}`,
 				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"queued", "labels":["self-hosted", "custom"]}]}`,
 			},
-			want: 5,
+			want: 2,
 		},
 
 		{
-			description:              "Skipped job-level autoscaling with no label (imply self-hosted, 0 requested from 3 workflows)",
+			description:              "Skipped job-level autoscaling with no label (runners have implicit self-hosted, jobs had no labels, 0 jobs from 3 workflows)",
 			repo:                     "test/valid",
 			min:                      intPtr(2),
 			max:                      intPtr(10),
@@ -202,7 +218,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Job-level autoscaling with default runner label (5 requested from 3 workflows)",
+			description:              "Skipped job-level autoscaling with default runner label (runners have self-hosted only, requested self-hosted+custom, 0 jobs from 3 workflows)",
 			repo:                     "test/valid",
 			labels:                   []string{"self-hosted"},
 			min:                      intPtr(2),
@@ -215,11 +231,11 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"completed", "labels":["self-hosted", "custom"]}]}`,
 				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"queued", "labels":["self-hosted", "custom"]}]}`,
 			},
-			want: 5,
+			want: 2,
 		},
 
 		{
-			description:              "Skipped job-level autoscaling with custom runner label",
+			description:              "Skipped job-level autoscaling with custom runner label (runners have custom2, requested self-hosted+custom, 0 jobs from 5 workflows",
 			repo:                     "test/valid",
 			labels:                   []string{"custom2"},
 			min:                      intPtr(2),
@@ -236,7 +252,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Skipped job-level autoscaling with default runner label",
+			description:              "Skipped job-level autoscaling with default runner label (runners have self-hosted, requested managed-runner-label, 0 jobs from 3 runs)",
 			repo:                     "test/valid",
 			labels:                   []string{"self-hosted"},
 			min:                      intPtr(2),
@@ -253,7 +269,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Job-level autoscaling with default + custom runner label (5 requested from 3 workflows)",
+			description:              "Job-level autoscaling with default + custom runner label (runners have self-hosted+custom, requested self-hosted+custom, 5 jobs from 3 workflows)",
 			repo:                     "test/valid",
 			labels:                   []string{"self-hosted", "custom"},
 			min:                      intPtr(2),
@@ -270,7 +286,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Job-level autoscaling with custom runner label (5 requested from 3 workflows)",
+			description:              "Job-level autoscaling with custom runner label (runners have custom, requested self-hosted+custom, 5 jobs from 3 workflows)",
 			repo:                     "test/valid",
 			labels:                   []string{"custom"},
 			min:                      intPtr(2),
@@ -533,7 +549,42 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Skipped job-level autoscaling (imply self-hosted, but jobs lack self-hosted labels, 0 requested from 3 workflows)",
+			description:              "Job-level autoscaling (runners have implicit self-hosted, requested self-hosted, 5 jobs from 3 runs)",
+			org:                      "test",
+			repos:                    []string{"valid"},
+			min:                      intPtr(2),
+			max:                      intPtr(10),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued", "labels":["self-hosted"]}, {"status":"queued", "labels":["self-hosted"]}]}`,
+				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}, {"status":"completed", "labels":["self-hosted"]}]}`,
+				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}, {"status":"queued", "labels":["self-hosted"]}]}`,
+			},
+			want: 5,
+		},
+
+		{
+			description:              "Job-level autoscaling (runners have explicit self-hosted, requested self-hosted, 5 jobs from 3 runs)",
+			org:                      "test",
+			repos:                    []string{"valid"},
+			labels:                   []string{"self-hosted"},
+			min:                      intPtr(2),
+			max:                      intPtr(10),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued", "labels":["self-hosted"]}, {"status":"queued", "labels":["self-hosted"]}]}`,
+				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}, {"status":"completed", "labels":["self-hosted"]}]}`,
+				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}, {"status":"queued", "labels":["self-hosted"]}]}`,
+			},
+			want: 5,
+		},
+
+		{
+			description:              "Skipped job-level autoscaling (jobs lack labels, 0 requested from 3 workflows)",
 			org:                      "test",
 			repos:                    []string{"valid"},
 			min:                      intPtr(2),
@@ -550,7 +601,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		},
 
 		{
-			description:              "Job-level autoscaling (imply self-hosted, 5 requested from 3 workflows)",
+			description:              "Skipped job-level autoscaling (runners have valid and implicit self-hosted, requested self-hosted+custom, 0 jobs from 3 runs)",
 			org:                      "test",
 			repos:                    []string{"valid"},
 			min:                      intPtr(2),
@@ -563,11 +614,11 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"completed", "labels":["self-hosted", "custom"]}]}`,
 				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"queued", "labels":["self-hosted", "custom"]}]}`,
 			},
-			want: 5,
+			want: 2,
 		},
 
 		{
-			description:              "Job-level autoscaling (specified self-hosted, 5 requested from 3 workflows)",
+			description:              "Skipped job-level autoscaling (runners have self-hosted, requested self-hosted+custom, 0 jobs from 3 workflows)",
 			org:                      "test",
 			repos:                    []string{"valid"},
 			labels:                   []string{"self-hosted"},
@@ -581,11 +632,11 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"completed", "labels":["self-hosted", "custom"]}]}`,
 				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"queued", "labels":["self-hosted", "custom"]}]}`,
 			},
-			want: 5,
+			want: 2,
 		},
 
 		{
-			description:              "Job-level autoscaling (specified custom, 5 requested from 3 workflows)",
+			description:              "Job-level autoscaling (runners have custom, requested self-hosted+custom, 5 requested from 3 workflows)",
 			org:                      "test",
 			repos:                    []string{"valid"},
 			labels:                   []string{"custom"},
@@ -598,6 +649,24 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 				1: `{"jobs": [{"status":"queued", "labels":["self-hosted", "custom"]}, {"status":"queued", "labels":["self-hosted", "custom"]}]}`,
 				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"completed", "labels":["self-hosted", "custom"]}]}`,
 				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted", "custom"]}, {"status":"queued", "labels":["self-hosted", "custom"]}]}`,
+			},
+			want: 5,
+		},
+
+		{
+			description:              "Job-level autoscaling (runners have custom, requested custom, 5 requested from 3 workflows)",
+			org:                      "test",
+			repos:                    []string{"valid"},
+			labels:                   []string{"custom"},
+			min:                      intPtr(2),
+			max:                      intPtr(10),
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued", "labels":["custom"]}, {"status":"queued", "labels":["custom"]}]}`,
+				2: `{"jobs": [{"status": "in_progress", "labels":["custom"]}, {"status":"completed", "labels":["custom"]}]}`,
+				3: `{"jobs": [{"status": "in_progress", "labels":["custom"]}, {"status":"queued", "labels":["custom"]}]}`,
 			},
 			want: 5,
 		},

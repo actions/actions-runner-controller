@@ -47,15 +47,11 @@ const (
 
 	retryDelayOnGitHubAPIRateLimitError = 30 * time.Second
 
-	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
-	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
-
-	EnvVarOrg                        = "RUNNER_ORG"
-	EnvVarRepo                       = "RUNNER_REPO"
-	EnvVarEnterprise                 = "RUNNER_ENTERPRISE"
-	EnvVarEphemeral                  = "RUNNER_EPHEMERAL"
-	EnvVarRunnerFeatureFlagEphemeral = "RUNNER_FEATURE_FLAG_EPHEMERAL"
-	EnvVarTrue                       = "true"
+	EnvVarOrg        = "RUNNER_ORG"
+	EnvVarRepo       = "RUNNER_REPO"
+	EnvVarEnterprise = "RUNNER_ENTERPRISE"
+	EnvVarEphemeral  = "RUNNER_EPHEMERAL"
+	EnvVarTrue       = "true"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -207,6 +203,24 @@ func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	return stopped
 }
 
+func ephemeralRunnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
+	if getRunnerEnv(pod, "RUNNER_EPHEMERAL") != "true" {
+		return nil
+	}
+
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name != containerName {
+			continue
+		}
+
+		status := status
+
+		return &status
+	}
+
+	return nil
+}
+
 func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger, pod *corev1.Pod) (reconcile.Result, error) {
 	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
@@ -349,31 +363,56 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runner.Spec.Containers) == 0 {
 		template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
-			Name:            "runner",
-			ImagePullPolicy: runner.Spec.ImagePullPolicy,
-			EnvFrom:         runner.Spec.EnvFrom,
-			Env:             runner.Spec.Env,
-			Resources:       runner.Spec.Resources,
+			Name: "runner",
 		})
 
 		if (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
 			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
-				Name:         "docker",
-				VolumeMounts: runner.Spec.DockerVolumeMounts,
-				Resources:    runner.Spec.DockerdContainerResources,
-				Env:          runner.Spec.DockerEnv,
+				Name: "docker",
 			})
 		}
 	} else {
 		template.Spec.Containers = runner.Spec.Containers
 	}
 
+	for i, c := range template.Spec.Containers {
+		switch c.Name {
+		case "runner":
+			if c.ImagePullPolicy == "" {
+				template.Spec.Containers[i].ImagePullPolicy = runner.Spec.ImagePullPolicy
+			}
+			if len(c.EnvFrom) == 0 {
+				template.Spec.Containers[i].EnvFrom = runner.Spec.EnvFrom
+			}
+			if len(c.Env) == 0 {
+				template.Spec.Containers[i].Env = runner.Spec.Env
+			}
+			if len(c.Resources.Requests) == 0 {
+				template.Spec.Containers[i].Resources.Requests = runner.Spec.Resources.Requests
+			}
+			if len(c.Resources.Limits) == 0 {
+				template.Spec.Containers[i].Resources.Limits = runner.Spec.Resources.Limits
+			}
+		case "docker":
+			if len(c.VolumeMounts) == 0 {
+				template.Spec.Containers[i].VolumeMounts = runner.Spec.DockerVolumeMounts
+			}
+			if len(c.Resources.Limits) == 0 {
+				template.Spec.Containers[i].Resources.Limits = runner.Spec.DockerdContainerResources.Limits
+			}
+			if len(c.Resources.Requests) == 0 {
+				template.Spec.Containers[i].Resources.Requests = runner.Spec.DockerdContainerResources.Requests
+			}
+			if len(c.Env) == 0 {
+				template.Spec.Containers[i].Env = runner.Spec.DockerEnv
+			}
+		}
+	}
+
 	template.Spec.SecurityContext = runner.Spec.SecurityContext
 	template.Spec.EnableServiceLinks = runner.Spec.EnableServiceLinks
 
-	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
-
-	pod, err := newRunnerPod(runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
+	pod, err := newRunnerPod(runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
 	if err != nil {
 		return pod, err
 	}
@@ -487,7 +526,7 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -559,14 +598,6 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 		},
 	}
 
-	if registrationOnly {
-		env = append(env, corev1.EnvVar{
-			Name:  "RUNNER_REGISTRATION_ONLY",
-			Value: "true",
-		},
-		)
-	}
-
 	var seLinuxOptions *corev1.SELinuxOptions
 	if template.Spec.SecurityContext != nil {
 		seLinuxOptions = template.Spec.SecurityContext.SELinuxOptions
@@ -624,14 +655,15 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 	if runnerContainer.SecurityContext == nil {
 		runnerContainer.SecurityContext = &corev1.SecurityContext{}
 	}
-	// Runner need to run privileged if it contains DinD
-	runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+
+	if runnerContainer.SecurityContext.Privileged == nil {
+		// Runner need to run privileged if it contains DinD
+		runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+	}
 
 	pod := template.DeepCopy()
 
-	if pod.Spec.RestartPolicy == "" {
-		pod.Spec.RestartPolicy = "OnFailure"
-	}
+	forceRunnerPodRestartPolicyNever(pod)
 
 	if mtu := runnerSpec.DockerMTU; mtu != nil && dockerdInRunner {
 		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
@@ -709,13 +741,18 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			)
 		}
 
-		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			corev1.Volume{
-				Name: "work",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+		if ok, _ := workVolumePresent(pod.Spec.Volumes); !ok {
+			pod.Spec.Volumes = append(pod.Spec.Volumes,
+				corev1.Volume{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
+			)
+		}
+
+		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
 				Name: "certs-client",
 				VolumeSource: corev1.VolumeSource{
@@ -724,11 +761,16 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 			},
 		)
 
+		if ok, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); !ok {
+			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "work",
+					MountPath: workDir,
+				},
+			)
+		}
+
 		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "work",
-				MountPath: workDir,
-			},
 			corev1.VolumeMount{
 				Name:      "certs-client",
 				MountPath: "/certs/client",
@@ -828,12 +870,6 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 		} else {
 			pod.Spec.Containers[dockerdContainerIndex] = *dockerdContainer
 		}
-	}
-
-	// TODO Remove this once we remove RUNNER_FEATURE_FLAG_EPHEMERAL from runner's entrypoint.sh
-	// and make --ephemeral the default option.
-	if getRunnerEnv(pod, EnvVarRunnerFeatureFlagEphemeral) == "" {
-		setRunnerEnv(pod, EnvVarRunnerFeatureFlagEphemeral, EnvVarTrue)
 	}
 
 	return *pod, nil

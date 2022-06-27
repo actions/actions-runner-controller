@@ -1,25 +1,28 @@
-# actions-runner-controller
+# actions-runner-controller (ARC)
 
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6061/badge)](https://bestpractices.coreinfrastructure.org/projects/6061)
 [![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
 
 This controller operates self-hosted runners for GitHub Actions on your Kubernetes cluster.
 
 ToC:
 
-- [Motivation](#motivation)
+- [People](#people)
+- [Status](#status)
+- [About](#about)
 - [Installation](#installation)
   - [GitHub Enterprise Support](#github-enterprise-support)
 - [Setting Up Authentication with GitHub API](#setting-up-authentication-with-github-api)
   - [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication)
   - [Deploying Using PAT Authentication](#deploying-using-pat-authentication)
-- [Deploying Multiple Controllers](#deploying-multiple-controllers)  
+- [Deploying Multiple Controllers](#deploying-multiple-controllers)
 - [Usage](#usage)
   - [Repository Runners](#repository-runners)
   - [Organization Runners](#organization-runners)
   - [Enterprise Runners](#enterprise-runners)
   - [RunnerDeployments](#runnerdeployments)
   - [RunnerSets](#runnersets)
-  - [Persistent Runners](#persistent-runners)  
+  - [Persistent Runners](#persistent-runners)
   - [Autoscaling](#autoscaling)
     - [Anti-Flapping Configuration](#anti-flapping-configuration)
     - [Pull Driven Scaling](#pull-driven-scaling)
@@ -38,19 +41,41 @@ ToC:
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
-## Motivation
+
+## People
+
+`actions-runner-controller` is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions-runner-controller/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions-runner-controller/actions-runner-controller/discussions), mostly in their spare time.
+
+If you think the project is awesome and it's becoming a basis for your important business, consider [sponsoring us](https://github.com/sponsors/actions-runner-controller)!
+
+In case you are already the employer of one of contributors, sponsoring via GitHub Sponsors might not be an option. Just support them in other means!
+
+We don't currently have [any sponsors dedicated to this project yet](https://github.com/sponsors/actions-runner-controller).
+
+However, [HelloFresh](https://www.hellofreshgroup.com/en/) has recently started sponsoring @mumoshu for this project along with his other works. A part of their sponsorship will enable @mumoshu to add an E2E test to keep ARC even more reliable on AWS. Thank you for your sponsorship!
+
+[<img src="https://user-images.githubusercontent.com/22009/170898715-07f02941-35ec-418b-8cd4-251b422fa9ac.png" width="219" height="71" />](https://careers.hellofresh.com/)
+
+## Status
+
+Even though actions-runner-controller is used in production environments, it is still in its early stage of development, hence versioned 0.x.
+
+actions-runner-controller complies to Semantic Versioning 2.0.0 in which v0.x means that there could be backward-incompatible changes for every release.
+
+The documentation is kept inline with master@HEAD, we do our best to highlight any features that require a specific ARC version or higher however this is not always easily done due to there being many moving parts. Additionally, we actively do not retain compatibly with every GitHub Enterprise Server version nor every Kubernetes version so you will need to ensure you stay current within a reasonable timespan.
+
+## About
 
 [GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
 
 **actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
-
 ## Installation
 
 By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for the cert-manager can be found below.
 
 - [Installing cert-manager on Kubernetes](https://cert-manager.io/docs/installation/kubernetes/)
 
-Subsequent to this, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
+After installing cert-manager, install the custom resource definitions and actions-runner-controller with `kubectl` or `helm`. This will create an actions-runner-system namespace in your Kubernetes and deploy the required resources.
 
 **Kubectl Deployment:**
 
@@ -198,7 +223,7 @@ Log-in to a GitHub account that has `admin` privileges for the repository, and [
 
 _Note: When you deploy enterprise runners they will get access to organizations, however, access to the repositories themselves is **NOT** allowed by default. Each GitHub organization must allow enterprise runner groups to be used in repositories as an initial one-time configuration step, this only needs to be done once after which it is permanent for that runner group._
 
-_Note: GitHub does not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and may not be 100% accurate._ 
+_Note: GitHub does not document exactly what permissions you get with each PAT scope beyond a vague description. The best documentation they provide on the topic can be found [here](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) if you wish to review. The docs target OAuth apps and so are incomplete and may not be 100% accurate._
 
 ---
 
@@ -420,7 +445,7 @@ spec:
       securityContext:
         # All level/role/type/user values will vary based on your SELinux policies.
         # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
-        seLinuxOptions: 
+        seLinuxOptions:
           level: "s0"
           role: "system_r"
           type: "super_t"
@@ -435,6 +460,17 @@ spec:
           requests:
             cpu: "2.0"
             memory: "4Gi"
+        # This is an advanced configuration. Don't touch it unless you know what you're doing.
+        securityContext:
+          # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
+          # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
+          # just specified `privileged: true` like this.
+          # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+          # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
+          # like firecracker and kata. Basically they run containers within dedicated micro vms and so
+          # it's more like you can use `privileged: true` safer with those runtimes.
+          #
+          # privileged: true
       - name: docker
         resources:
           limits:
@@ -452,7 +488,6 @@ Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating We
 **Limitations**
 
 * For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-* Whilst `RunnerSets` support all runner modes as well as autoscaling, currently PVs are **NOT** automatically cleaned up as they are still bound to their respective PVCs when a runner is deleted by the controller. This has **major** implications when using `RunnerSets` in the standard runner mode, `ephemeral: true`, see [persistent runners](#persistent-runners) for more details. As a result of this, using the default ephemeral configuration or implementing autoscaling for your `RunnerSets`, you will get a build-up of PVCs and PVs without some sort of custom solution for cleaning up.
 
 ### Persistent Runners
 
@@ -480,9 +515,14 @@ A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `min
 
 #### Anti-Flapping Configuration
 
-For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up. This delay is configurable by including the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
+For both pull driven or webhook driven scaling an anti-flapping implementation is included, by default a runner won't be scaled down within 10 minutes of it having been scaled up.
 
-This configuration has the final say on if a runner can be scaled down or not regardless of the chosen scaling method. Depending on your requirements, you may want to consider adjusting this by setting the `scaleDownDelaySecondsAfterScaleOut:` attribute.
+This anti-flap configuration also has the final say on if a runner can be scaled down or not regardless of the chosen scaling method.
+
+This delay is configurable via 2 methods:
+
+1. By setting a new default via the controller's `--default-scale-down-delay` flag
+2. By setting by setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
 Below is a complete basic example of one of the pull driven scaling metrics.
 
@@ -522,7 +562,7 @@ spec:
 
 > To configure webhook driven scaling see the [Webhook Driven Scaling](#webhook-driven-scaling) section
 
-The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes. 
+The pull based metrics are configured in the `metrics` attribute of a HRA (see snippet below). The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.
 
 Be aware that the shorter the sync period the quicker you will consume your rate limit budget, depending on your environment this may or may not be a risk. Consider monitoring ARCs rate limit budget when configuring this feature to find the optimal performance sync period.
 
@@ -540,7 +580,7 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
-  metrics: [] 
+  metrics: []
 ```
 
 **Metric Options:**
@@ -551,14 +591,13 @@ The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all p
 
 **Benefits of this metric**
 1. Supports named repositories allowing you to restrict the runner to a specified set of repositories server-side.
-2. Scales the runner count based on the depth of the job queue meaning a more 1:1 scaling of runners to queued jobs (caveat, see drawback #4)
+2. Scales the runner count based on the depth of the job queue meaning a 1:1 scaling of runners to queued jobs.
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels).
 
 **Drawbacks of this metric**
 1. A list of repositories must be included within the scaling metric. Maintaining a list of repositories may not be viable in larger environments or self-serve environments.
 2. May not scale quickly enough for some users' needs. This metric is pull based and so the queue depth is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
 3. Relatively large amounts of API requests are required to maintain this metric, you may run into API rate limit issues depending on the size of your environment and how aggressive your sync period configuration is.
-4. The GitHub API doesn't provide a way to filter workflow jobs to just those targeting self-hosted runners. If your environment's workflows target both self-hosted and GitHub-hosted runners then the queue depth this metric scales against isn't a true 1:1 mapping of queue depth to the required runner count. As a result of this, this metric may scale too aggressively for your actual self-hosted runner count needs.
 
 Example `RunnerDeployment` backed by a `HorizontalRunnerAutoscaler`:
 
@@ -693,23 +732,117 @@ _[see the values documentation for all configuration options](https://github.com
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
-             --set "githubWebhookServer.enabled=true,githubWebhookServer.ports[0].nodePort=33080"
+             --set "githubWebhookServer.enabled=true,service.type=NodePort,githubWebhookServer.ports[0].nodePort=33080"
 ```
 
-The above command will result in exposing the node port 33080 for Webhook events. Usually, you need to create an
-external load balancer targeted to the node port, and register the hostname or the IP address of the external load balancer
-to the GitHub Webhook.
+The above command will result in exposing the node port 33080 for Webhook events.
+Usually, you need to create an external load balancer targeted to the node port,
+and register the hostname or the IP address of the external load balancer to the GitHub Webhook.
 
-Once you were able to confirm that the Webhook server is ready and running from GitHub - this is usually verified by the
-GitHub sending PING events to the Webhook server - create or update your `HorizontalRunnerAutoscaler` resources
-by learning the following configuration examples.
+**With a custom Kubernetes ingress controller:**
+
+> **CAUTION:** The Kubernetes ingress controllers described below is just a suggestion from the community and
+> the ARC team will not provide any user support for ingress controllers as it's not a part of this project.
+>
+> The following guide on creating an ingress has been contributed by the awesome ARC community and is provided here as-is.
+> You may, however, still be able to ask for help on the community on GitHub Discussions if you have any problems.
+
+Kubernetes provides `Ingress` resources to let you configure your ingress controller to expose a Kubernetes service.
+If you plan to expose ARC via Ingress, you might not be required to make it a `NodePort` service
+(although nothing would prevent an ingress controller to expose NodePort services too):
+
+```console
+$ helm upgrade --install --namespace actions-runner-system --create-namespace \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+             --set "githubWebhookServer.enabled=true"
+```
+
+The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
+
+Now we need to expose this service so that GitHub can send these webhooks over the network with TSL protection.
+
+You can do it in any way you prefer, here we'll suggest doing it with a k8s Ingress.
+For the sake of this example we'll expose this service on the following URL:
+
+- https://your.domain.com/actions-runner-controller-github-webhook-server
+
+Where `your.domain.com` should be replaced by your own domain.
+
+> Note: This step assumes you already have a configured `cert-manager` and domain name for your cluster.
+
+Let's start by creating an Ingress file called `arc-webhook-server.yaml` with the following contents:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: actions-runner-controller-github-webhook-server
+  namespace: actions-runner-system
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  tls:
+  - hosts:
+    - your.domain.com
+    secretName: your-tls-secret-name
+  rules:
+    - http:
+        paths:
+          - path: /actions-runner-controller-github-webhook-server
+            pathType: Prefix
+            backend:
+              service:
+                name: actions-runner-controller-github-webhook-server
+                port:
+                  number: 80
+```
+
+Make sure to set the `spec.tls.secretName` to the name of your TLS secret and
+`spec.tls.hosts[0]` to your own domain.
+
+Then create this resource on your cluster with the following command:
+
+```bash
+kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
+```
+
+**Configuring GitHub for sending webhooks for our newly created webhook server:**
+
+After this step your webhook server should be ready to start receiving webhooks from GitHub.
+
+To configure GitHub to start sending you webhooks, go to the settings page of your repository
+or organization then click on `Webhooks`, then on `Add webhook`.
+
+There set the "Payload URL" field with the webhook URL you just created,
+if you followed the example ingress above the URL would be something like this:
+
+- https://your.domain.com/actions-runner-controller-github-webhook-server
+
+> Remember to replace `your.domain.com` with your own domain.
+
+Then click on "let me select individual events" and choose `Workflow Jobs`.
+
+You may also want to choose the following event(s) if you use it as a scale trigger in your HRA spec:
+
+- Check runs
+- Pushes
+- Pull Requests
+
+Later you can remove any of these you are not using to reduce the amount of data sent to your server.
+
+Then click on `Add Webhook`.
+
+GitHub will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
+alongside your webhook on the Settings -> Webhooks page.
+
+Once you were able to confirm that the Webhook server is ready and running from GitHub create or update your
+`HorizontalRunnerAutoscaler` resources by learning the following configuration examples.
 
 - [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
 - [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
 - [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
 - [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
-
-**Note:** All these examples should have **minReplicas** & **maxReplicas** as mandatory parameters even for webhook driven scaling. 
 
 ##### Example 1: Scale on each `workflow_job` event
 
@@ -722,16 +855,23 @@ The most flexible webhook GitHub offers is the `workflow_job` webhook, it includ
 This webhook should cover most people's needs, please experiment with this webhook first before considering the others.
 
 ```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
-   name: example-runners
+  name: example-runners
 spec:
   template:
     spec:
       repository: example/myrepo
 ---
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runners
 spec:
+  scaleDownDelaySecondsAfterScaleOut: 300
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -765,6 +905,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -791,6 +933,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -821,6 +965,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -849,6 +995,8 @@ spec:
 ---
 kind: HorizontalRunnerAutoscaler
 spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     name: example-runners
     # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
@@ -1066,7 +1214,7 @@ spec:
       # Valid only when dockerdWithinRunnerContainer=false
       dockerEnv:
         - name: HTTP_PROXY
-          value: http://example.com      
+          value: http://example.com
       # Docker sidecar container image tweaks examples below, only applicable if dockerdWithinRunnerContainer = false
       dockerdContainerResources:
         limits:
@@ -1125,13 +1273,26 @@ spec:
       # This must match the name of a RuntimeClass resource available on the cluster.
       # More info: https://kubernetes.io/docs/concepts/containers/runtime-class
       runtimeClassName: "runc"
+      # This is an advanced configuration. Don't touch it unless you know what you're doing.
+      containers:
+      - name: runner
+        # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
+        # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
+        # just specified `privileged: true` like this.
+        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+        # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
+        # like firecracker and kata. Basically they run containers within dedicated micro vms and so
+        # it's more like you can use `privileged: true` safer with those runtimes.
+        #
+        # privileged: true
 ```
 
 ### Custom Volume mounts
 You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME SSD, for
 i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
 
-**RAM Disk Runner**<br />
+#### RAM Disk
+
 Example how to place the runner work dir, docker sidecar and /tmp within the runner onto a ramdisk.
 ```yaml
 kind: RunnerDeployment
@@ -1157,7 +1318,8 @@ spec:
       emphemeral: true # recommended to not leak data between builds.
 ```
 
-**NVME SSD Runner**<br />
+#### NVME SSD
+
 In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
 Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as a prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
 
@@ -1203,6 +1365,125 @@ spec:
           path: /mnt/disks/ssd0
         name: tmp
     emphemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
+```
+
+#### Docker image layers caching
+
+> **Note**: Ensure that the volume mount is added to the container that is running the Docker daemon.
+
+`docker` stores pulled and built image layers in the [daemon's (note not client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
+
+By leveraging RunnerSet's dynamic PV provisioning feature and your CSI driver, you can let ARC maintain a pool of PVs that are
+reused across runner pods to retain `/var/lib/docker`.
+
+_Be sure to add the volume mount to the container that is supposed to run the docker daemon._
+
+By default, ARC creates a sidecar container named `docker` within the runner pod for running the docker daemon. In that case,
+it's where you need the volume mount so that the manifest looks like:
+
+```yaml
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  template:
+    spec:
+      containers:
+      - name: docker
+        volumeMounts:
+        - name: var-lib-docker
+          mountPath: /var/lib/docker
+  volumeClaimtemplates:
+  - metadata:
+      name: var-lib-docker
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: var-lib-docker
+```
+
+With `dockerdWithinRunnerContainer: true`, you need to add the volume mount to the `runner` container.
+
+#### Go module and build caching
+
+`Go` is known to cache builds under `$HOME/.cache/go-build` and downloaded modules under `$HOME/pkg/mod`.
+The module cache dir can be customized by setting `GOMOD_CACHE` so by setting it to somewhere under `$HOME/.cache`,
+we can have a single PV to host both build and module cache, which might improve Go module downloading and building time.
+
+```yaml
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  template:
+    spec:
+      containers:
+      - name: runner
+        env:
+        - name: GOMODCACHE
+          value: "/home/runner/.cache/go-mod"
+        volumeMounts:
+        - name: cache
+          mountPath: "/home/runner/.cache"
+  volumeClaimTemplates:
+  - metadata:
+      name: cache
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: cache
+```
+
+#### PV-backed runner work directory
+
+ARC works by automatically creating runner pods for running [`actions/runner`](https://github.com/actions/runner) and [running `config.sh`](https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-a-repository) which you had to ran manually without ARC.
+
+`config.sh` is the script provided by `actions/runner` to pre-configure the runner process before being started. One of the options provided by `config.sh` is `--work`,
+which specifies the working directory where the runner runs your workflow jobs in.
+
+The volume and the partition that hosts the work directory should have several or dozens of GBs free space that might be used by your workflow jobs.
+
+By default, ARC uses `/runner/_work` as work directory, which is powered by Kubernetes's `emptyDir`. [`emptyDir` is usually backed by a directory created within a host's volume](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir), somewhere under `/var/lib/kuberntes/pods`. Therefore
+your host's volume that is backing `/var/lib/kubernetes/pods` must have enough free space to serve all the concurrent runner pods that might be deployed onto your host at the same time.
+
+So, in case you see a job failure seemingly due to "disk full", it's very likely you need to reconfigure your host to have more free space.
+
+In case you can't rely on host's volume, consider using `RunnerSet` and backing the work directory with a ephemeral PV.
+
+Kubernetes 1.23 or greater provides the support for [generic ephemeral volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/#generic-ephemeral-volumes), which is designed to support this exact use-case. It's defined in the Pod spec API so it isn't currently available for `RunnerDeployment`. `RunnerSet` is based on Kubernetes' `StatefulSet` which mostly embeds the Pod spec under `spec.template.spec`, so there you go.
+
+```yaml
+kind: RunnerSet
+metadata:
+  name: example
+spec:
+  template:
+    spec:
+      containers:
+      - name: runner
+        volumeMounts:
+        - mountPath: /runner/_work
+          name: work
+      - name: docker
+        volumeMounts:
+        - mountPath: /runner/_work
+          name: work
+      volumes:
+      - name: work
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: "runner-work-dir"
+              resources:
+                requests:
+                  storage: 10Gi
 ```
 
 ### Runner Labels
@@ -1298,12 +1579,11 @@ spec:
         # Disables automatic runner updates
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
-        # Configure runner with --ephemeral instead of --once flag
+        # Configure runner with legacy --once instead of --ephemeral flag
         # WARNING | THIS ENV VAR IS DEPRECATED AND WILL BE REMOVED
-        # IN A FUTURE VERSION OF ARC. IN 0.22.0 ARC SETS --ephemeral VIA 
-        # THE CONTROLLER SETTING THIS ENV VAR ON POD CREATION.
-        # THIS ENV VAR WILL BE REMOVED, SEE ISSUE #1196 FOR DETAILS
-        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+        # THIS ENV VAR WILL BE REMOVED SOON.
+        # SEE ISSUE #1196 FOR DETAILS
+        - name: RUNNER_FEATURE_FLAG_ONCE
           value: "true"
 ```
 

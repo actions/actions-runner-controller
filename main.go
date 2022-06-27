@@ -71,6 +71,7 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		leaderElectionId     string
+		port                 int
 		syncPeriod           time.Duration
 
 		gitHubAPICacheDuration time.Duration
@@ -98,8 +99,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
-	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
-	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
+	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
 	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
 	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
@@ -113,6 +114,7 @@ func main() {
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "DEPRECATED: The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", controllers.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
+	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
@@ -136,7 +138,7 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
-		Port:               9443,
+		Port:               port,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
 	})
@@ -216,9 +218,11 @@ func main() {
 		"github-api-cache-duration", gitHubAPICacheDuration,
 		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
-		"runner-image", runnerImage,
-		"docker-image", dockerImage,
+		"default-runner-image", runnerImage,
+		"default-docker-image", dockerImage,
 		"common-runnner-labels", commonRunnerLabels,
+		"leader-election-enabled", enableLeaderElection,
+		"leader-election-id", leaderElectionId,
 		"watch-namespace", namespace,
 	)
 
@@ -238,6 +242,18 @@ func main() {
 		GitHubClient: ghClient,
 	}
 
+	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolume"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	runnerPersistentVolumeClaimReconciler := &controllers.RunnerPersistentVolumeClaimReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolumeclaim"),
+		Scheme: mgr.GetScheme(),
+	}
+
 	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "RunnerPod")
 		os.Exit(1)
@@ -245,6 +261,16 @@ func main() {
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
 		os.Exit(1)
 	}
 

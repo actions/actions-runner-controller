@@ -76,7 +76,7 @@ cd ${RUNNER_HOME}
 # past that point, it's all relative pathes from /runner
 
 config_args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" == "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
+if [ "${RUNNER_FEATURE_FLAG_ONCE:-}" != "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   config_args+=(--ephemeral)
   log.debug 'Passing --ephemeral to config.sh to enable the ephemeral runner.'
 fi
@@ -134,17 +134,17 @@ cat .runner
 #     -H "Authorization: bearer ${GITHUB_TOKEN}"
 #     https://api.github.com/repos/USER/REPO/actions/runners/171
 
-if [ -z "${UNITTEST:-}" ]; then
+# Hack due to the DinD volumes
+if [ -z "${UNITTEST:-}" ] && [ -e ./externalstmp ]; then
   mkdir -p ./externals
-  # Hack due to the DinD volumes
   mv ./externalstmp/* ./externals/
 fi
 
 args=()
-if [ "${RUNNER_FEATURE_FLAG_EPHEMERAL:-}" != "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
+if [ "${RUNNER_FEATURE_FLAG_ONCE:-}" == "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
   args+=(--once)
   log.warning 'Passing --once is deprecated and will be removed as an option' \
-    'from the image and actions-runner-controller at the release of 0.24.0.' \
+    'from the image and actions-runner-controller at the release of 0.25.0.' \
     'Upgrade to GHES => 3.3 to continue using actions-runner-controller. If' \
     'you are using github.com ignore this warning.'
 fi

@@ -13,7 +13,7 @@
     {
       // use https://github.com/actions/runner/releases
       "fileMatch": [
-        ".github/workflows/runners.yml"
+        ".github/workflows/runners.yaml"
       ],
       "matchStrings": ["RUNNER_VERSION: +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
@@ -21,7 +21,8 @@
     },
     {
       "fileMatch": [
-        "runner/Makefile"
+        "runner/Makefile",
+        "Makefile"
       ],
       "matchStrings": ["RUNNER_VERSION \\?= +(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
@@ -29,8 +30,8 @@
     },
     {
       "fileMatch": [
-        "runner/Dockerfile",
-        "runner/Dockerfile.dindrunner"
+        "runner/actions-runner.dockerfile",
+        "runner/actions-runner-dind.dockerfile"
       ],
       "matchStrings": ["RUNNER_VERSION=+(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
