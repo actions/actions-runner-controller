@@ -136,6 +136,9 @@ type RunnerPodSpec struct {
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
 	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// +optional

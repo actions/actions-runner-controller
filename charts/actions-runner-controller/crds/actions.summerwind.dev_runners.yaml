@@ -3171,6 +3171,8 @@ spec:
                 organization:
                   pattern: ^[^/]+$
                   type: string
+                priorityClassName:
+                  type: string
                 repository:
                   pattern: ^[^/]+/[^/]+$
                   type: string
