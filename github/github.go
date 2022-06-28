@@ -14,7 +14,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v39/github"
+	"github.com/google/go-github/v45/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
@@ -248,7 +248,8 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 func (c *Client) ListOrganizationRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
 	var runnerGroups []*github.RunnerGroup
 
-	opts := github.ListOptions{PerPage: 100}
+	opts := github.ListOrgRunnerGroupOptions{}
+	opts.PerPage = 100
 	for {
 		list, res, err := c.Client.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
 		if err != nil {
