@@ -179,7 +179,10 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	newDesiredReplicas := getIntOrDefault(desiredRS.Spec.Replicas, defaultReplicas)
 
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
-	if currentDesiredReplicas != newDesiredReplicas {
+	//
+	// If we missed taking the EffectiveTime diff into account, you might end up experiencing scale-ups being delayed scale-down.
+	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1477#issuecomment-1164154496
+	if currentDesiredReplicas != newDesiredReplicas || newestSet.Spec.EffectiveTime != rd.Spec.EffectiveTime {
 		newestSet.Spec.Replicas = &newDesiredReplicas
 		newestSet.Spec.EffectiveTime = rd.Spec.EffectiveTime
 
