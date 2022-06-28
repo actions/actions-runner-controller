@@ -30,6 +30,7 @@ ToC:
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
   - [Runner with DinD](#runner-with-dind)
+  - [Runner with k8s jobs](#runner-with-k8s-jobs)
   - [Additional Tweaks](#additional-tweaks)
   - [Custom Volume mounts](#custom-volume-mounts)
   - [Runner Labels](#runner-labels)
@@ -1163,6 +1164,36 @@ spec:
 ```
 
 This also helps with resources, as you don't need to give resources separately to docker and runner.
+
+### Runner with K8s Jobs
+
+When using the default runner, jobs that use a container will run in docker. This necessitates privileged mode, either on the runner pod or the sidecar container
+
+By setting the container mode, you can instead invoke these jobs using a [kubernetes implementation](https://github.com/actions/runner-container-hooks/tree/main/packages/k8s) while not executing in privileged mode.
+
+The runner will dynamically spin up pods and k8s jobs in the runner's namespace to run the workflow, so a `workVolumeClaimTemplate` is required for the runner's working directory, and a service account with the [appropriate permissions.](https://github.com/actions/runner-container-hooks/tree/main/packages/k8s#pre-requisites)
+
+There are some [limitations](https://github.com/actions/runner-container-hooks/tree/main/packages/k8s#limitations) to this approach, mainly [job containers](https://docs.github.com/en/actions/using-jobs/running-jobs-in-a-container) are required on all workflows.
+
+```yaml
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: example-runner
+spec:
+  repository: example/myrepo
+  containerMode: kubernetes
+  serviceAccountName: my-service-account
+  workVolumeClaimTemplate:
+    storageClassName: "my-dynamic-storage-class"
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 10Gi
+  env: []
+```
 
 ### Additional Tweaks
 

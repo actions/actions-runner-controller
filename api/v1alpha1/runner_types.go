@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"errors"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -71,6 +72,9 @@ type RunnerConfig struct {
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
 	// +optional
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
+
+	// +optional
+	ContainerMode string `json:"containerMode,omitempty"`
 }
 
 // RunnerPodSpec defines the desired pod spec fields of the runner pod
@@ -157,6 +161,9 @@ type RunnerPodSpec struct {
 
 	// +optional
 	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+
+	// +optional
+	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
 }
 
 // ValidateRepository validates repository field.
@@ -179,6 +186,29 @@ func (rs *RunnerSpec) ValidateRepository() error {
 		return errors.New("Spec cannot have many fields defined enterprise, organization and repository")
 	}
 
+	return nil
+}
+
+func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
+	if rs.ContainerMode != "kubernetes" {
+		return nil
+	}
+
+	if rs.WorkVolumeClaimTemplate == nil {
+		return errors.New("Spec.ContainerMode: kubernetes must have workVolumeClaimTemplate field specified")
+	}
+
+	return rs.WorkVolumeClaimTemplate.validate()
+}
+
+func (rs *RunnerSpec) ValidateIsServiceAccountNameSet() error {
+	if rs.ContainerMode != "kubernetes" {
+		return nil
+	}
+
+	if rs.ServiceAccountName == "" {
+		return errors.New("service account name is required if container mode is kubernetes")
+	}
 	return nil
 }
 
@@ -208,6 +238,51 @@ type RunnerStatusRegistration struct {
 	Labels       []string    `json:"labels,omitempty"`
 	Token        string      `json:"token"`
 	ExpiresAt    metav1.Time `json:"expiresAt"`
+}
+
+type WorkVolumeClaimTemplate struct {
+	StorageClassName string                              `json:"storageClassName"`
+	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
+	Resources        corev1.ResourceRequirements         `json:"resources"`
+}
+
+func (w *WorkVolumeClaimTemplate) validate() error {
+	if w.AccessModes == nil || len(w.AccessModes) == 0 {
+		return errors.New("Access mode should have at least one mode specified")
+	}
+
+	for _, accessMode := range w.AccessModes {
+		switch accessMode {
+		case corev1.ReadWriteOnce, corev1.ReadWriteMany:
+		default:
+			return fmt.Errorf("Access mode %v is not supported", accessMode)
+		}
+	}
+	return nil
+}
+
+func (w *WorkVolumeClaimTemplate) V1Volume() corev1.Volume {
+	return corev1.Volume{
+		Name: "work",
+		VolumeSource: corev1.VolumeSource{
+			Ephemeral: &corev1.EphemeralVolumeSource{
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      w.AccessModes,
+						StorageClassName: &w.StorageClassName,
+						Resources:        w.Resources,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeMount {
+	return corev1.VolumeMount{
+		MountPath: mountPath,
+		Name:      "work",
+	}
 }
 
 // +kubebuilder:object:root=true

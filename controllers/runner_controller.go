@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,6 +78,7 @@ type RunnerReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
@@ -112,6 +115,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			// Pod was not found
 			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
+
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
 
@@ -412,7 +416,17 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	template.Spec.SecurityContext = runner.Spec.SecurityContext
 	template.Spec.EnableServiceLinks = runner.Spec.EnableServiceLinks
 
-	pod, err := newRunnerPod(runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
+	if runner.Spec.ContainerMode == "kubernetes" {
+		workDir := runner.Spec.WorkDir
+		if workDir == "" {
+			workDir = "/runner/_work"
+		}
+		if err := applyWorkVolumeClaimTemplateToPod(&template, runner.Spec.WorkVolumeClaimTemplate, workDir); err != nil {
+			return corev1.Pod{}, err
+		}
+	}
+
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
 	if err != nil {
 		return pod, err
 	}
@@ -424,6 +438,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		// if operater provides a work volume mount, use that
 		isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
 		if isPresent {
+			if runnerSpec.ContainerMode == "kubernetes" {
+				return pod, errors.New("volume mount \"work\" should be specified by workVolumeClaimTemplate in container mode kubernetes")
+			}
 			// remove work volume since it will be provided from runnerSpec.Volumes
 			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
 			_, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
@@ -437,6 +454,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		// if operator provides a work volume. use that
 		isPresent, _ := workVolumePresent(runnerSpec.Volumes)
 		if isPresent {
+			if runnerSpec.ContainerMode == "kubernetes" {
+				return pod, errors.New("volume \"work\" should be specified by workVolumeClaimTemplate in container mode kubernetes")
+			}
 			_, index := workVolumePresent(pod.Spec.Volumes)
 
 			// remove work volume since it will be provided from runnerSpec.Volumes
@@ -446,6 +466,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
 	}
+
 	if len(runnerSpec.InitContainers) != 0 {
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runnerSpec.InitContainers...)
 	}
@@ -530,7 +551,45 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
+func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
+	isRequireSameNode, err := isRequireSameNode(pod)
+	if err != nil {
+		return nil, err
+	}
+
+	return []corev1.EnvVar{
+		{
+			Name:  "ACTIONS_RUNNER_CONTAINER_HOOKS",
+			Value: defaultRunnerHookPath,
+		},
+		{
+			Name:  "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER",
+			Value: "true",
+		},
+		{
+			Name: "ACTIONS_RUNNER_POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "ACTIONS_RUNNER_JOB_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name:  "ACTIONS_RUNNER_REQUIRE_SAME_NODE",
+			Value: strconv.FormatBool(isRequireSameNode),
+		},
+	}, nil
+}
+
+func newRunnerPodWithContainerMode(containerMode string, runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -538,6 +597,12 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
 		dockerdInRunnerPrivileged bool = dockerdInRunner
 	)
+
+	if containerMode == "kubernetes" {
+		dockerdInRunner = false
+		dockerEnabled = false
+		dockerdInRunnerPrivileged = false
+	}
 
 	template = *template.DeepCopy()
 
@@ -625,6 +690,17 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 		}
 	}
 
+	if containerMode == "kubernetes" {
+		if dockerdContainer != nil {
+			template.Spec.Containers = append(template.Spec.Containers[:dockerdContainerIndex], template.Spec.Containers[dockerdContainerIndex+1:]...)
+		}
+		if runnerContainerIndex < runnerContainerIndex {
+			runnerContainerIndex--
+		}
+		dockerdContainer = nil
+		dockerdContainerIndex = -1
+	}
+
 	if runnerContainer == nil {
 		runnerContainerIndex = -1
 		runnerContainer = &corev1.Container{
@@ -655,6 +731,13 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 	}
 
 	runnerContainer.Env = append(runnerContainer.Env, env...)
+	if containerMode == "kubernetes" {
+		hookEnvs, err := runnerHookEnvs(&template)
+		if err != nil {
+			return corev1.Pod{}, err
+		}
+		runnerContainer.Env = append(runnerContainer.Env, hookEnvs...)
+	}
 
 	if runnerContainer.SecurityContext == nil {
 		runnerContainer.SecurityContext = &corev1.SecurityContext{}
@@ -879,6 +962,10 @@ func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.Ru
 	return *pod, nil
 }
 
+func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
+	return newRunnerPodWithContainerMode("", runnerName, template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
+}
+
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	name := "runner-controller"
 	if r.Name != "" {
@@ -940,4 +1027,72 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 		}
 	}
 	return false, 0
+}
+
+func applyWorkVolumeClaimTemplateToPod(pod *corev1.Pod, workVolumeClaimTemplate *v1alpha1.WorkVolumeClaimTemplate, workDir string) error {
+	if workVolumeClaimTemplate == nil {
+		return errors.New("work volume claim template must be specified in container mode kubernetes")
+	}
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Name == "work" {
+			return fmt.Errorf("Work volume should not be specified in container mode kubernetes. workVolumeClaimTemplate field should be used instead.")
+		}
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, workVolumeClaimTemplate.V1Volume())
+
+	var runnerContainer *corev1.Container
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "runner" {
+			runnerContainer = &pod.Spec.Containers[i]
+			break
+		}
+	}
+
+	if runnerContainer == nil {
+		return fmt.Errorf("runner container is not present when applying work volume claim template")
+	}
+
+	if isPresent, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); isPresent {
+		return fmt.Errorf("volume mount \"work\" should not be present on the runner container in container mode kubernetes")
+	}
+
+	runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts, workVolumeClaimTemplate.V1VolumeMount(workDir))
+
+	return nil
+}
+
+// isRequireSameNode specifies for the runner in kubernetes mode wether it should
+// schedule jobs to the same node where the runner is
+//
+// This function should only be called in containerMode: kubernetes
+func isRequireSameNode(pod *corev1.Pod) (bool, error) {
+	isPresent, index := workVolumePresent(pod.Spec.Volumes)
+	if !isPresent {
+		return true, errors.New("internal error: work volume mount must exist in containerMode: kubernetes")
+	}
+
+	if pod.Spec.Volumes[index].Ephemeral == nil || pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate == nil {
+		return true, errors.New("containerMode: kubernetes should have pod.Spec.Volumes[].Ephemeral.VolumeClaimTemplate set")
+	}
+
+	for _, accessMode := range pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
+		switch accessMode {
+		case corev1.ReadWriteOnce:
+			return true, nil
+		case corev1.ReadWriteMany:
+		default:
+			return true, errors.New("actions-runner-controller supports ReadWriteOnce and ReadWriteMany modes only")
+		}
+	}
+	return false, nil
+}
+
+func overwriteRunnerEnv(runner *v1alpha1.Runner, key string, value string) {
+	for i := range runner.Spec.Env {
+		if runner.Spec.Env[i].Name == key {
+			runner.Spec.Env[i].Value = value
+			return
+		}
+	}
+	runner.Spec.Env = append(runner.Spec.Env, corev1.EnvVar{Name: key, Value: value})
 }

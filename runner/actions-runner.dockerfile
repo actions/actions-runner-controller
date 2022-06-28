@@ -2,6 +2,7 @@ FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.294.0
+ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
@@ -104,6 +105,11 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && mv ./externals ./externalstmp \
     && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
+
+RUN cd "$RUNNER_ASSETS_DIR" \
+    && curl -f -L -o runner-container-hooks.zip https://github.com/actions/runner-container-hooks/releases/download/v${RUNNER_CONTAINER_HOOKS_VERSION}/actions-runner-hooks-k8s-${RUNNER_CONTAINER_HOOKS_VERSION}.zip \
+    && unzip ./runner-container-hooks.zip -d ./k8s \
+    && rm runner-container-hooks.zip
 
 ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
