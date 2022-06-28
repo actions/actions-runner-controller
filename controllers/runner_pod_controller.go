@@ -134,6 +134,9 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				log.Error(err, "Failed to update runner for finalizer linked resources removal")
 				return ctrl.Result{}, err
 			}
+
+			// Otherwise the subsequent patch request can revive the removed finalizer and it will trigger a unnecessary reconcilation
+			runnerPod = *patchedPod
 		}
 
 		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
