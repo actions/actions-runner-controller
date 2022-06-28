@@ -51,6 +51,7 @@ type RunnerPodReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -252,11 +253,13 @@ func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *RunnerPodReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
 	var runnerLinkedPodList corev1.PodList
-	r.List(ctx, &runnerLinkedPodList, client.MatchingLabels(
+	if err := r.List(ctx, &runnerLinkedPodList, client.InNamespace(pod.Namespace), client.MatchingLabels(
 		map[string]string{
 			"runner-pod": pod.ObjectMeta.Name,
 		},
-	))
+	)); err != nil {
+		return fmt.Errorf("failed to list runner-linked pods: %w", err)
+	}
 
 	var (
 		wg   sync.WaitGroup
@@ -293,12 +296,16 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *
 }
 
 func (r *RunnerPodReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
+	log.V(2).Info("Listing runner-linked secrets to be deleted", "ns", pod.Namespace)
+
 	var runnerLinkedSecretList corev1.SecretList
-	r.List(ctx, &runnerLinkedSecretList, client.MatchingLabels(
+	if err := r.List(ctx, &runnerLinkedSecretList, client.InNamespace(pod.Namespace), client.MatchingLabels(
 		map[string]string{
 			"runner-pod": pod.ObjectMeta.Name,
 		},
-	))
+	)); err != nil {
+		return fmt.Errorf("failed to list runner-linked secrets: %w", err)
+	}
 
 	var (
 		wg   sync.WaitGroup
