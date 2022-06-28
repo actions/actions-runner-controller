@@ -248,7 +248,8 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 func (c *Client) ListOrganizationRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
 	var runnerGroups []*github.RunnerGroup
 
-	opts := github.ListOptions{PerPage: 100}
+	opts := github.ListOrgRunnerGroupOptions{}
+	opts.PerPage = 100
 	for {
 		list, res, err := c.Client.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
 		if err != nil {
