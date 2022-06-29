@@ -71,7 +71,7 @@ var (
 	}
 
 	commonScriptEnv = []string{
-		"SYNC_PERIOD=" + "30m",
+		"SYNC_PERIOD=" + "30s",
 		"NAME=" + controllerImageRepo,
 		"VERSION=" + controllerImageTag,
 		"RUNNER_TAG=" + runnerImageTag,
@@ -400,45 +400,62 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 		Jobs: map[string]testing.Job{},
 	}
 
+	kubernetesContainerMode := os.Getenv("TEST_CONTAINER_MODE") == "kubernetes"
+
+	var container string
+	if kubernetesContainerMode {
+		container = "golang:1.18"
+	}
+
 	for _, j := range testJobs {
-		wf.Jobs[j.name] = testing.Job{
-			RunsOn: runnerLabel,
-			Steps: []testing.Step{
-				{
-					Uses: testing.ActionsCheckoutV2,
-				},
-				{
+		steps := []testing.Step{
+			{
+				Uses: testing.ActionsCheckout,
+			},
+		}
+
+		if !kubernetesContainerMode {
+			steps = append(steps,
+				testing.Step{
 					// This might be the easiest way to handle permissions without use of securityContext
 					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
 					Run: "sudo chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
 				},
-				{
+				testing.Step{
 					// This might be the easiest way to handle permissions without use of securityContext
 					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
 					Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
 				},
-				{
+				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
 						GoVersion: "1.18.2",
 					},
 				},
-				{
-					Run: "go version",
-				},
-				{
-					Run: "go build .",
-				},
-				{
+			)
+		}
+
+		steps = append(steps,
+			testing.Step{
+				Run: "go version",
+			},
+			testing.Step{
+				Run: "go build .",
+			},
+		)
+
+		if !kubernetesContainerMode {
+			steps = append(steps,
+				testing.Step{
 					// https://github.com/docker/buildx/issues/413#issuecomment-710660155
 					// To prevent setup-buildx-action from failing with:
 					//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
 					Run: "docker context create mycontext",
 				},
-				{
+				testing.Step{
 					Run: "docker context use mycontext",
 				},
-				{
+				testing.Step{
 					Name: "Set up Docker Buildx",
 					Uses: "docker/setup-buildx-action@v1",
 					With: &testing.With{
@@ -449,30 +466,36 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 						Install: false,
 					},
 				},
-				{
+				testing.Step{
 					Run: "docker buildx build --platform=linux/amd64 " +
 						"--cache-from=type=local,src=/home/runner/.cache/buildx " +
 						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max " +
 						".",
 				},
-				{
+				testing.Step{
 					// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
 					// See https://github.com/moby/buildkit/issues/1896 for why this is needed
 					Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
 				},
-				{
+				testing.Step{
 					Run: "ls -lah /home/runner/.cache/*",
 				},
-				{
+				testing.Step{
 					Uses: "azure/setup-kubectl@v1",
 					With: &testing.With{
 						Version: "v1.20.2",
 					},
 				},
-				{
+				testing.Step{
 					Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
 				},
-			},
+			)
+		}
+
+		wf.Jobs[j.name] = testing.Job{
+			RunsOn:    runnerLabel,
+			Container: container,
+			Steps:     steps,
 		}
 	}
 
