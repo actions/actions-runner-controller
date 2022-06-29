@@ -140,15 +140,6 @@ if [ -z "${UNITTEST:-}" ] && [ -e ./externalstmp ]; then
   mv ./externalstmp/* ./externals/
 fi
 
-args=()
-if [ "${RUNNER_FEATURE_FLAG_ONCE:-}" == "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
-  args+=(--once)
-  log.warning 'Passing --once is deprecated and will be removed as an option' \
-    'from the image and actions-runner-controller at the release of 0.25.0.' \
-    'Upgrade to GHES => 3.3 to continue using actions-runner-controller. If' \
-    'you are using github.com ignore this warning.'
-fi
-
 # Unset entrypoint environment variables so they don't leak into the runner environment
 unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT_FOR_DOCKER
 
@@ -164,4 +155,4 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT
 if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
-exec env -- "${env[@]}" ./run.sh "${args[@]}"
+exec env -- "${env[@]}" ./run.sh
