@@ -2,8 +2,8 @@
 
 * [Tools](#tools)
 * [Installation](#installation)
+  * [InternalError when calling webhook: context deadline exceeded](#internalerror-when-calling-webhook-context-deadline-exceeded)
   * [Invalid header field value](#invalid-header-field-value)
-  * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
 * [Operations](#operations)
   * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
@@ -22,39 +22,37 @@ A list of tools which are helpful for troubleshooting
 
 Troubeshooting runbooks that relate to ARC installation problems
 
-### Invalid header field value
+### InternalError when calling webhook: context deadline exceeded
 
 **Problem**
 
-```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
-{
-  "controller": "runner",
-  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
-  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
-}
+This issue can come up for various reasons like leftovers from previous installations or not being able to access the K8s service's clusterIP associated with the admission webhook server (of ARC).
+
+```
+Internal error occurred: failed calling webhook "mutate.runnerdeployment.actions.summerwind.dev":
+Post "https://actions-runner-controller-webhook.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment?timeout=10s": context deadline exceeded
 ```
 
 **Solution**
 
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
-* `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documented flags
+First we will try the common solution of checking webhook leftovers from previous installations:
+
+1.  ```bash
+    kubectl get validatingwebhookconfiguration -A
+    kubectl get mutatingwebhookconfiguration -A
+    ```
+2.  If you see any webhooks related to actions-runner-controller, delete them:
+    ```bash
+    kubectl delete mutatingwebhookconfiguration actions-runner-controller-mutating-webhook-configuration
+    kubectl delete validatingwebhookconfiguration actions-runner-controller-validating-webhook-configuration
+    ```
+
+If that didn't work then probably your K8s control-plane is somehow unable to access the K8s service's clusterIP associated with the admission webhook server:
+1. You're running apiserver as a binary and you didn't make service cluster IPs available to the host network. 
+2. You're running the apiserver in the pod but your pod network (i.e. CNI plugin installation and config) is not good so your pods(like kube-apiserver) in the K8s control-plane nodes can't access ARC's admission webhook server pod(s) in probably data-plane nodes.
 
 
-### Deployment fails on GKE due to webhooks
-
-**Problem**
-
-Due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster:
-
-```
-Internal error occurred: failed calling webhook "mutate.runner.actions.summerwind.dev": 
-Post https://webhook-service.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runner?timeout=10s: 
-context deadline exceeded
-```
-
-**Solution**<br />
+Another reason could be due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster: 
 
 To fix this, you may either:
 
@@ -87,6 +85,26 @@ To fix this, you may either:
 
    gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
    ```
+
+### Invalid header field value
+
+**Problem**
+
+```json
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
+{
+  "controller": "runner",
+  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
+  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
+}
+```
+
+**Solution**
+
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
+* `echo -n $TOKEN | base64`
+* Create the secret as described in the docs using the shell and documented flags
+
 
 ## Operations
 

@@ -5,6 +5,7 @@ TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.294.0
+RUNNER_CONTAINER_HOOKS_VERSION ?= 0.1.2
 DOCKER_VERSION ?= 20.10.12
 
 # default list of platforms for which multiarch image is built
@@ -28,6 +29,7 @@ docker-build-ubuntu:
 	docker build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.dockerfile \
 	  -t ${NAME}:${TAG} .
@@ -50,12 +52,14 @@ docker-buildx-ubuntu:
 	fi
 	docker buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.dockerfile \
 	  -t "${NAME}:${TAG}" \
 	  . ${PUSH_ARG}
 	docker buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.dockerfile \
 	  -t "${DIND_RUNNER_NAME}:${TAG}" \

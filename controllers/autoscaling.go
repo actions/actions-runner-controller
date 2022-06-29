@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/google/go-github/v39/github"
+	"github.com/google/go-github/v45/github"
 )
 
 const (

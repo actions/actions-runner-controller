@@ -22,6 +22,7 @@ on:
 env:
   RUNNER_VERSION: 2.294.0
   DOCKER_VERSION: 20.10.12
+  RUNNER_CONTAINER_HOOKS_VERSION: 0.1.2
   DOCKERHUB_USERNAME: summerwind
 
 jobs:
@@ -65,6 +66,7 @@ jobs:
           build-args: |
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
+            RUNNER_CONTAINER_HOOKS_VERSION=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}

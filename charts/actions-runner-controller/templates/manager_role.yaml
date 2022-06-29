@@ -276,3 +276,11 @@ rules:
   - delete
   - get
 {{- end }}
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch

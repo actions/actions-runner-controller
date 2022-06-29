@@ -33,6 +33,12 @@ type RunnerSetSpec struct {
 	// +nullable
 	EffectiveTime *metav1.Time `json:"effectiveTime,omitempty"`
 
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// +optional
+	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
+
 	appsv1.StatefulSetSpec `json:",inline"`
 }
 
