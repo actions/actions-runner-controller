@@ -4,6 +4,7 @@ import "time"
 
 const (
 	LabelKeyRunnerSetName = "runnerset-name"
+	LabelKeyRunner        = "actions-runner"
 )
 
 const (
@@ -15,6 +16,9 @@ const (
 	annotationKeyPrefix = "actions-runner/"
 
 	AnnotationKeyLastRegistrationCheckTime = "actions-runner-controller/last-registration-check-time"
+
+	// AnnotationKeyUnregistrationFailureMessage is the annotation that is added onto the pod once it failed to be unregistered from GitHub due to e.g. 422 error
+	AnnotationKeyUnregistrationFailureMessage = annotationKeyPrefix + "unregistration-failure-message"
 
 	// AnnotationKeyUnregistrationCompleteTimestamp is the annotation that is added onto the pod once the previously started unregistration process has been completed.
 	AnnotationKeyUnregistrationCompleteTimestamp = annotationKeyPrefix + "unregistration-complete-timestamp"

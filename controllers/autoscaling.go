@@ -10,6 +10,8 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/google/go-github/v45/github"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -314,9 +316,30 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		numRunners           int
 		numRunnersRegistered int
 		numRunnersBusy       int
+		numTerminatingBusy   int
 	)
 
 	numRunners = len(runnerMap)
+
+	busyTerminatingRunnerPods := map[string]struct{}{}
+
+	kindLabel := LabelKeyRunnerDeploymentName
+	if hra.Spec.ScaleTargetRef.Kind == "RunnerSet" {
+		kindLabel = LabelKeyRunnerSetName
+	}
+
+	var runnerPodList corev1.PodList
+	if err := r.Client.List(ctx, &runnerPodList, client.InNamespace(hra.Namespace), client.MatchingLabels(map[string]string{
+		kindLabel: hra.Spec.ScaleTargetRef.Name,
+	})); err != nil {
+		return nil, err
+	}
+
+	for _, p := range runnerPodList.Items {
+		if p.Annotations[AnnotationKeyUnregistrationFailureMessage] != "" {
+			busyTerminatingRunnerPods[p.Name] = struct{}{}
+		}
+	}
 
 	for _, runner := range runners {
 		if _, ok := runnerMap[*runner.Name]; ok {
@@ -324,12 +347,21 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 
 			if runner.GetBusy() {
 				numRunnersBusy++
+			} else if _, ok := busyTerminatingRunnerPods[*runner.Name]; ok {
+				numTerminatingBusy++
 			}
+
+			delete(busyTerminatingRunnerPods, *runner.Name)
 		}
 	}
 
+	// Remaining busyTerminatingRunnerPods are runners that were not on the ListRunners API response yet
+	for range busyTerminatingRunnerPods {
+		numTerminatingBusy++
+	}
+
 	var desiredReplicas int
-	fractionBusy := float64(numRunnersBusy) / float64(desiredReplicasBefore)
+	fractionBusy := float64(numRunnersBusy+numTerminatingBusy) / float64(desiredReplicasBefore)
 	if fractionBusy >= scaleUpThreshold {
 		if scaleUpAdjustment > 0 {
 			desiredReplicas = desiredReplicasBefore + scaleUpAdjustment
@@ -358,6 +390,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		"num_runners", numRunners,
 		"num_runners_registered", numRunnersRegistered,
 		"num_runners_busy", numRunnersBusy,
+		"num_terminating_busy", numTerminatingBusy,
 		"namespace", hra.Namespace,
 		"kind", st.kind,
 		"name", st.st,

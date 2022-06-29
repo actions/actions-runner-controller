@@ -426,7 +426,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, runner.Name, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
 	if err != nil {
 		return pod, err
 	}
@@ -589,7 +589,7 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 	}, nil
 }
 
-func newRunnerPodWithContainerMode(containerMode string, runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
+func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -607,7 +607,7 @@ func newRunnerPodWithContainerMode(containerMode string, runnerName string, temp
 	template = *template.DeepCopy()
 
 	// This label selector is used by default when rd.Spec.Selector is empty.
-	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerName)
+	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunner, "")
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
 
 	workDir := runnerSpec.WorkDir
@@ -962,8 +962,8 @@ func newRunnerPodWithContainerMode(containerMode string, runnerName string, temp
 	return *pod, nil
 }
 
-func newRunnerPod(runnerName string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
-	return newRunnerPodWithContainerMode("", runnerName, template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
+	return newRunnerPodWithContainerMode("", template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
