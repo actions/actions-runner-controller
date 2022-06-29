@@ -18,6 +18,11 @@ on:
   push:
     branches:
       - 'master'
+    paths:
+      - 'runner/**'
+      - '!runner/Makefile'
+      - '.github/workflows/runners.yaml'
+      - '!**.md'
 
 env:
   RUNNER_VERSION: 2.294.0
