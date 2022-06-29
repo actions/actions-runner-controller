@@ -56,7 +56,7 @@ func TestNewRunnerPod(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				"actions-runner-controller/inject-registration-token": "true",
-				"runnerset-name": "runner",
+				"actions-runner": "",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -198,7 +198,7 @@ func TestNewRunnerPod(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				"actions-runner-controller/inject-registration-token": "true",
-				"runnerset-name": "runner",
+				"actions-runner": "",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -276,7 +276,7 @@ func TestNewRunnerPod(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				"actions-runner-controller/inject-registration-token": "true",
-				"runnerset-name": "runner",
+				"actions-runner": "",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -515,7 +515,7 @@ func TestNewRunnerPod(t *testing.T) {
 	for i := range testcases {
 		tc := testcases[i]
 		t.Run(tc.description, func(t *testing.T) {
-			got, err := newRunnerPod("runner", tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
+			got, err := newRunnerPod(tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -546,7 +546,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 			Labels: map[string]string{
 				"actions-runner-controller/inject-registration-token": "true",
 				"pod-template-hash": "8857b86c7",
-				"runnerset-name":    "runner",
+				"actions-runner":    "",
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -703,7 +703,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 			Labels: map[string]string{
 				"actions-runner-controller/inject-registration-token": "true",
 				"pod-template-hash": "8857b86c7",
-				"runnerset-name":    "runner",
+				"actions-runner":    "",
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -800,7 +800,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 			Labels: map[string]string{
 				"actions-runner-controller/inject-registration-token": "true",
 				"pod-template-hash": "8857b86c7",
-				"runnerset-name":    "runner",
+				"actions-runner":    "",
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{

@@ -219,7 +219,9 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 		template.Spec.ServiceAccountName = runnerSet.Spec.ServiceAccountName
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, runnerSet.Name, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL)
+	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
+
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL)
 	if err != nil {
 		return nil, err
 	}

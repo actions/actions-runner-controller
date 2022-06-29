@@ -4,6 +4,7 @@ import "time"
 
 const (
 	LabelKeyRunnerSetName = "runnerset-name"
+	LabelKeyRunner        = "actions-runner"
 )
 
 const (
