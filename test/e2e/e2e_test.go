@@ -41,7 +41,7 @@ var (
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.291.1",
+					Value: "2.294.0",
 				},
 			},
 			Image:        runnerImage,
@@ -52,7 +52,7 @@ var (
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.291.1",
+					Value: "2.294.0",
 				},
 			},
 			Image:        runnerDindImage,
