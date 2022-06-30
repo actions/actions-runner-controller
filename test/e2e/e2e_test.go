@@ -13,6 +13,13 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+type DeployKind int
+
+const (
+	RunnerSets DeployKind = iota
+	RunnerDeployments
+)
+
 var (
 	controllerImageRepo = "actionsrunnercontrollere2e/actions-runner-controller"
 	controllerImageTag  = "e2e"
@@ -104,8 +111,11 @@ func TestE2E(t *testing.T) {
 		t.Skip("Skipped as -short is set")
 	}
 
+	skipRunnerCleanUp := os.Getenv("ARC_E2E_SKIP_RUNNER_CLEANUP") != ""
+	retainCluster := os.Getenv("ARC_E2E_RETAIN_CLUSTER") != ""
+	skipTestIDCleanUp := os.Getenv("ARC_E2E_SKIP_TEST_ID_CLEANUP") != ""
+
 	env := initTestEnv(t)
-	env.useRunnerSet = true
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -119,80 +129,107 @@ func TestE2E(t *testing.T) {
 		return
 	}
 
-	t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
-		env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1")
+	t.Run("RunnerSets", func(t *testing.T) {
+		var (
+			testID string
+		)
+
+		t.Run("get or generate test ID", func(t *testing.T) {
+			testID = env.GetOrGenerateTestID(t)
+		})
+
+		if !skipTestIDCleanUp {
+			t.Cleanup(func() {
+				env.DeleteTestID(t)
+			})
+		}
+
+		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
+			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
+		})
+
+		t.Run("deploy runners", func(t *testing.T) {
+			env.deploy(t, RunnerSets, testID)
+		})
+
+		if !skipRunnerCleanUp {
+			t.Cleanup(func() {
+				env.undeploy(t, RunnerSets, testID)
+			})
+		}
+
+		t.Run("install edge actions-runner-controller", func(t *testing.T) {
+			env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag, testID)
+		})
+
+		if t.Failed() {
+			return
+		}
+
+		t.Run("Install workflow", func(t *testing.T) {
+			env.installActionsWorkflow(t, testID)
+		})
+
+		if t.Failed() {
+			return
+		}
+
+		t.Run("Verify workflow run result", func(t *testing.T) {
+			env.verifyActionsWorkflowRun(t, testID)
+		})
 	})
 
-	t.Run("deploy runners", func(t *testing.T) {
-		env.deployRunners(t)
+	t.Run("RunnerDeployments", func(t *testing.T) {
+		var (
+			testID string
+		)
+
+		t.Run("get or generate test ID", func(t *testing.T) {
+			testID = env.GetOrGenerateTestID(t)
+		})
+
+		if !skipTestIDCleanUp {
+			t.Cleanup(func() {
+				env.DeleteTestID(t)
+			})
+		}
+
+		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
+			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
+		})
+
+		t.Run("deploy runners", func(t *testing.T) {
+			env.deploy(t, RunnerDeployments, testID)
+		})
+
+		if !skipRunnerCleanUp {
+			t.Cleanup(func() {
+				env.undeploy(t, RunnerDeployments, testID)
+			})
+		}
+
+		t.Run("install edge actions-runner-controller", func(t *testing.T) {
+			env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag, testID)
+		})
+
+		if t.Failed() {
+			return
+		}
+
+		t.Run("Install workflow", func(t *testing.T) {
+			env.installActionsWorkflow(t, testID)
+		})
+
+		if t.Failed() {
+			return
+		}
+
+		t.Run("Verify workflow run result", func(t *testing.T) {
+			env.verifyActionsWorkflowRun(t, testID)
+		})
 	})
 
-	t.Run("install edge actions-runner-controller", func(t *testing.T) {
-		env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag)
-	})
-
-	if t.Failed() {
-		return
-	}
-
-	t.Run("Install workflow", func(t *testing.T) {
-		env.installActionsWorkflow(t)
-	})
-
-	if t.Failed() {
-		return
-	}
-
-	t.Run("Verify workflow run result", func(t *testing.T) {
-		env.verifyActionsWorkflowRun(t)
-	})
-
-	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
-		t.FailNow()
-	}
-}
-
-func TestE2ERunnerDeploy(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipped as -short is set")
-	}
-
-	env := initTestEnv(t)
-	env.useApp = true
-
-	t.Run("build and load images", func(t *testing.T) {
-		env.buildAndLoadImages(t)
-	})
-
-	t.Run("install cert-manager", func(t *testing.T) {
-		env.installCertManager(t)
-	})
-
-	if t.Failed() {
-		return
-	}
-
-	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
-		env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag)
-	})
-
-	if t.Failed() {
-		return
-	}
-
-	t.Run("Install workflow", func(t *testing.T) {
-		env.installActionsWorkflow(t)
-	})
-
-	if t.Failed() {
-		return
-	}
-
-	t.Run("Verify workflow run result", func(t *testing.T) {
-		env.verifyActionsWorkflowRun(t)
-	})
-
-	if os.Getenv("ARC_E2E_NO_CLEANUP") != "" {
+	if retainCluster {
 		t.FailNow()
 	}
 }
@@ -200,23 +237,20 @@ func TestE2ERunnerDeploy(t *testing.T) {
 type env struct {
 	*testing.Env
 
-	useRunnerSet bool
 	// Uses GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, and GITHUB_APP_PRIVATE_KEY
 	// to let ARC authenticate as a GitHub App
 	useApp bool
 
-	testID                                                   string
-	testName                                                 string
-	repoToCommit                                             string
-	appID, appInstallationID, appPrivateKeyFile              string
-	runnerLabel, githubToken, testRepo, testOrg, testOrgRepo string
-	githubTokenWebhook                                       string
-	testEnterprise                                           string
-	testEphemeral                                            string
-	scaleDownDelaySecondsAfterScaleOut                       int64
-	minReplicas                                              int64
-	dockerdWithinRunnerContainer                             bool
-	testJobs                                                 []job
+	testName                                    string
+	repoToCommit                                string
+	appID, appInstallationID, appPrivateKeyFile string
+	githubToken, testRepo, testOrg, testOrgRepo string
+	githubTokenWebhook                          string
+	testEnterprise                              string
+	testEphemeral                               string
+	scaleDownDelaySecondsAfterScaleOut          int64
+	minReplicas                                 int64
+	dockerdWithinRunnerContainer                bool
 }
 
 func initTestEnv(t *testing.T) *env {
@@ -226,15 +260,11 @@ func initTestEnv(t *testing.T) *env {
 
 	e := &env{Env: testingEnv}
 
-	id := e.ID()
-
-	testName := t.Name() + " " + id
+	testName := t.Name()
 
 	t.Logf("Initializing test with name %s", testName)
 
-	e.testID = id
 	e.testName = testName
-	e.runnerLabel = "test-" + id
 	e.githubToken = testing.Getenv(t, "GITHUB_TOKEN")
 	e.appID = testing.Getenv(t, "GITHUB_APP_ID")
 	e.appInstallationID = testing.Getenv(t, "GITHUB_APP_INSTALLATION_ID")
@@ -246,7 +276,6 @@ func initTestEnv(t *testing.T) *env {
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
-	e.testJobs = createTestJobs(id, testResultCMNamePrefix, 6)
 
 	e.scaleDownDelaySecondsAfterScaleOut, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT", "10"), 10, 32)
 	e.minReplicas, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_MIN_REPLICAS", "1"), 10, 32)
@@ -287,7 +316,7 @@ func (e *env) installCertManager(t *testing.T) {
 	e.KubectlWaitUntilDeployAvailable(t, "cert-manager", waitCfg.WithTimeout(60*time.Second))
 }
 
-func (e *env) installActionsRunnerController(t *testing.T, repo, tag string) {
+func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID string) {
 	t.Helper()
 
 	e.createControllerNamespaceAndServiceAccount(t)
@@ -299,7 +328,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag string) {
 
 	varEnv := []string{
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
-		"TEST_ID=" + e.testID,
+		"TEST_ID=" + testID,
 		"NAME=" + repo,
 		"VERSION=" + tag,
 	}
@@ -324,19 +353,33 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag string) {
 	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
-func (e *env) deployRunners(t *testing.T) {
+func (e *env) deploy(t *testing.T, kind DeployKind, testID string) {
+	t.Helper()
+	e.do(t, "apply", kind, testID)
+}
+
+func (e *env) undeploy(t *testing.T, kind DeployKind, testID string) {
+	t.Helper()
+	e.do(t, "delete", kind, testID)
+}
+
+func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 	t.Helper()
 
 	e.createControllerNamespaceAndServiceAccount(t)
 
 	scriptEnv := []string{
 		"KUBECONFIG=" + e.Kubeconfig(),
+		"OP=" + op,
 	}
 
-	if e.useRunnerSet {
+	switch kind {
+	case RunnerSets:
 		scriptEnv = append(scriptEnv, "USE_RUNNERSET=1")
-	} else {
+	case RunnerDeployments:
 		scriptEnv = append(scriptEnv, "USE_RUNNERSET=false")
+	default:
+		t.Fatalf("Invalid deploy kind %v", kind)
 	}
 
 	varEnv := []string{
@@ -344,7 +387,7 @@ func (e *env) deployRunners(t *testing.T) {
 		"TEST_REPO=" + e.testRepo,
 		"TEST_ORG=" + e.testOrg,
 		"TEST_ORG_REPO=" + e.testOrgRepo,
-		"RUNNER_LABEL=" + e.runnerLabel,
+		"RUNNER_LABEL=" + e.runnerLabel(testID),
 		"TEST_EPHEMERAL=" + e.testEphemeral,
 		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
 		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
@@ -370,6 +413,10 @@ func (e *env) deployRunners(t *testing.T) {
 	e.RunScript(t, "../../acceptance/deploy_runners.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
+func (e *env) runnerLabel(testID string) string {
+	return "test-" + testID
+}
+
 func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 	t.Helper()
 
@@ -377,16 +424,20 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 	e.KubectlEnsureClusterRoleBindingServiceAccount(t, "default-admin", "cluster-admin", "default:default", testing.KubectlConfig{})
 }
 
-func (e *env) installActionsWorkflow(t *testing.T) {
+func (e *env) installActionsWorkflow(t *testing.T, testID string) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testName, e.runnerLabel, testResultCMNamePrefix, e.repoToCommit, e.testJobs)
+	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, e.testJobs(testID))
 }
 
-func (e *env) verifyActionsWorkflowRun(t *testing.T) {
+func (e *env) testJobs(testID string) []job {
+	return createTestJobs(testID, testResultCMNamePrefix, 6)
+}
+
+func (e *env) verifyActionsWorkflowRun(t *testing.T, testID string) {
 	t.Helper()
 
-	verifyActionsWorkflowRun(t, e.Env, e.testJobs)
+	verifyActionsWorkflowRun(t, e.Env, e.testJobs(testID))
 }
 
 type job struct {
