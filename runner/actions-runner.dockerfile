@@ -67,8 +67,6 @@ RUN set -vx; \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ENV HOME=/home/runner
-
 # Uncomment the below COPY to use your own custom build of actions-runner.
 #
 # To build a custom runner:
@@ -120,6 +118,7 @@ RUN mkdir /opt/hostedtoolcache \
 # override them with scripts of the same name placed in `/usr/local/bin`.
 COPY entrypoint.sh logger.bash /usr/bin/
 
+ENV HOME=/home/runner
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20

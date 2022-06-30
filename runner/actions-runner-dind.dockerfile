@@ -74,8 +74,6 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 	dockerd --version; \
 	docker --version
 
-ENV HOME=/home/runner
-
 # Runner download supports amd64 as x64
 #
 # libyaml-dev is required for ruby/setup-ruby action.
@@ -113,6 +111,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 VOLUME /var/lib/docker
 
+ENV HOME=/home/runner
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
