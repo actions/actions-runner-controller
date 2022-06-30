@@ -106,6 +106,17 @@ var (
 // whenever the whole test failed, so that you can immediately start fixing issues and rerun inidividual tests.
 // See the below link for how terratest handles this:
 // https://terratest.gruntwork.io/docs/testing-best-practices/iterating-locally-using-test-stages/
+//
+// This functions leaves PVs undeleted. To delete PVs, run:
+//   kubectl get pv -ojson | jq -rMc '.items[] | select(.status.phase == "Available") | {name:.metadata.name, status:.status.phase} | .name' | xargs kubectl delete pv
+//
+// If you disk full after dozens of test runs, try:
+//   docker system prune
+// and
+//   kind delete cluster --name teste2e
+//
+// The former tend to release 200MB-3GB and the latter can result in releasing like 100GB due to kind node contains loaded container images and
+// (in case you use it) local provisioners disk image(which is implemented as a directory within the kind node).
 func TestE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipped as -short is set")
