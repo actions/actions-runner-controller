@@ -66,25 +66,7 @@ func (r *RunnerReplicaSet) ValidateDelete() error {
 
 // Validate validates resource spec.
 func (r *RunnerReplicaSet) Validate() error {
-	var (
-		errList field.ErrorList
-		err     error
-	)
-
-	err = r.Spec.Template.Spec.ValidateRepository()
-	if err != nil {
-		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "repository"), r.Spec.Template.Spec.Repository, err.Error()))
-	}
-
-	err = r.Spec.Template.Spec.ValidateWorkVolumeClaimTemplate()
-	if err != nil {
-		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "workVolumeClaimTemplate"), r.Spec.Template.Spec.WorkVolumeClaimTemplate, err.Error()))
-	}
-
-	err = r.Spec.Template.Spec.ValidateIsServiceAccountNameSet()
-	if err != nil {
-		errList = append(errList, field.Invalid(field.NewPath("spec", "template", "spec", "serviceAccountName"), r.Spec.Template.Spec.ServiceAccountName, err.Error()))
-	}
+	errList := r.Spec.Template.Spec.Validate(field.NewPath("spec", "template", "spec"))
 
 	if len(errList) > 0 {
 		return apierrors.NewInvalid(r.GroupVersionKind().GroupKind(), r.Name, errList)

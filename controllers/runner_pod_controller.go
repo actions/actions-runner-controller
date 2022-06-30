@@ -62,8 +62,11 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, isRunnerPod := runnerPod.Labels[LabelKeyRunnerSetName]
-	if !isRunnerPod {
+	_, isRunnerPod := runnerPod.Labels[LabelKeyRunner]
+	_, isRunnerSetPod := runnerPod.Labels[LabelKeyRunnerSetName]
+	_, isRunnerDeploymentPod := runnerPod.Labels[LabelKeyRunnerDeploymentName]
+
+	if !isRunnerPod && !isRunnerSetPod && !isRunnerDeploymentPod {
 		return ctrl.Result{}, nil
 	}
 

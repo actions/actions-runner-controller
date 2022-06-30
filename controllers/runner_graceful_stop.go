@@ -67,6 +67,25 @@ func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod 
 
 	return updated, nil
 }
+func labelPod(ctx context.Context, c client.Client, log logr.Logger, pod *corev1.Pod, k, v string) (*corev1.Pod, error) {
+	if pod == nil {
+		return nil, nil
+	}
+
+	updated := pod.DeepCopy()
+	if updated.Labels == nil {
+		updated.Labels = map[string]string{}
+	}
+	updated.Labels[k] = v
+	if err := c.Patch(ctx, updated, client.MergeFrom(pod)); err != nil {
+		log.Error(err, fmt.Sprintf("Failed to patch pod to have %s annotation", k))
+		return nil, err
+	}
+
+	log.V(2).Info("Labeled pod", "key", k, "value", v)
+
+	return updated, nil
+}
 
 // If the first return value is nil, it's safe to delete the runner pod.
 func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
@@ -151,7 +170,10 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 
 		log.V(1).Info("Failed to unregister runner before deleting the pod.", "error", err)
 
-		var runnerBusy bool
+		var (
+			runnerBusy                         bool
+			runnerUnregistrationFailureMessage string
+		)
 
 		errRes := &gogithub.ErrorResponse{}
 		if errors.As(err, &errRes) {
@@ -173,6 +195,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 			}
 
 			runnerBusy = errRes.Response.StatusCode == 422
+			runnerUnregistrationFailureMessage = errRes.Message
 
 			if runnerBusy && code != nil {
 				log.V(2).Info("Runner container has already stopped but the unregistration attempt failed. "+
@@ -187,6 +210,11 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		}
 
 		if runnerBusy {
+			_, err := labelPod(ctx, c, log, pod, AnnotationKeyUnregistrationFailureMessage, runnerUnregistrationFailureMessage)
+			if err != nil {
+				return &ctrl.Result{}, err
+			}
+
 			// We want to prevent spamming the deletion attemps but returning ctrl.Result with RequeueAfter doesn't
 			// work as the reconcilation can happen earlier due to pod status update.
 			// For ephemeral runners, we can expect it to stop and unregister itself on completion.

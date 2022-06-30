@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -166,8 +167,32 @@ type RunnerPodSpec struct {
 	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
 }
 
+func (rs *RunnerSpec) Validate(rootPath *field.Path) field.ErrorList {
+	var (
+		errList field.ErrorList
+		err     error
+	)
+
+	err = rs.validateRepository()
+	if err != nil {
+		errList = append(errList, field.Invalid(rootPath.Child("repository"), rs.Repository, err.Error()))
+	}
+
+	err = rs.validateWorkVolumeClaimTemplate()
+	if err != nil {
+		errList = append(errList, field.Invalid(rootPath.Child("workVolumeClaimTemplate"), rs.WorkVolumeClaimTemplate, err.Error()))
+	}
+
+	err = rs.validateIsServiceAccountNameSet()
+	if err != nil {
+		errList = append(errList, field.Invalid(rootPath.Child("serviceAccountName"), rs.ServiceAccountName, err.Error()))
+	}
+
+	return errList
+}
+
 // ValidateRepository validates repository field.
-func (rs *RunnerSpec) ValidateRepository() error {
+func (rs *RunnerSpec) validateRepository() error {
 	// Enterprise, Organization and repository are both exclusive.
 	foundCount := 0
 	if len(rs.Organization) > 0 {
@@ -189,7 +214,7 @@ func (rs *RunnerSpec) ValidateRepository() error {
 	return nil
 }
 
-func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
+func (rs *RunnerSpec) validateWorkVolumeClaimTemplate() error {
 	if rs.ContainerMode != "kubernetes" {
 		return nil
 	}
@@ -201,7 +226,7 @@ func (rs *RunnerSpec) ValidateWorkVolumeClaimTemplate() error {
 	return rs.WorkVolumeClaimTemplate.validate()
 }
 
-func (rs *RunnerSpec) ValidateIsServiceAccountNameSet() error {
+func (rs *RunnerSpec) validateIsServiceAccountNameSet() error {
 	if rs.ContainerMode != "kubernetes" {
 		return nil
 	}
