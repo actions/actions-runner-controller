@@ -167,7 +167,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		t.Run("Install workflow", func(t *testing.T) {
-			env.installActionsWorkflow(t, testID)
+			env.installActionsWorkflow(t, RunnerSets, testID)
 		})
 
 		if t.Failed() {
@@ -217,7 +217,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		t.Run("Install workflow", func(t *testing.T) {
-			env.installActionsWorkflow(t, testID)
+			env.installActionsWorkflow(t, RunnerDeployments, testID)
 		})
 
 		if t.Failed() {
@@ -424,10 +424,10 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 	e.KubectlEnsureClusterRoleBindingServiceAccount(t, "default-admin", "cluster-admin", "default:default", testing.KubectlConfig{})
 }
 
-func (e *env) installActionsWorkflow(t *testing.T, testID string) {
+func (e *env) installActionsWorkflow(t *testing.T, kind DeployKind, testID string) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, e.testJobs(testID))
+	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID))
 }
 
 func (e *env) testJobs(testID string) []job {
@@ -460,7 +460,7 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 
 const Branch = "main"
 
-func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, testJobs []job) {
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -492,6 +492,14 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 		}
 
 		if !kubernetesContainerMode {
+			if kind == RunnerDeployments {
+				steps = append(steps,
+					testing.Step{
+						Run: "sudo mkdir -p \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
+					},
+				)
+			}
+
 			steps = append(steps,
 				testing.Step{
 					// This might be the easiest way to handle permissions without use of securityContext
@@ -656,5 +664,5 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job) {
 		}
 
 		return results, err
-	}, 3*60*time.Second, 10*time.Second).Should(gomega.Equal(expected))
+	}, 8*60*time.Second, 30*time.Second).Should(gomega.Equal(expected))
 }
