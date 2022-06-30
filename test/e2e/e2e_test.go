@@ -72,8 +72,6 @@ var (
 
 	commonScriptEnv = []string{
 		"SYNC_PERIOD=" + "30s",
-		"NAME=" + controllerImageRepo,
-		"VERSION=" + controllerImageTag,
 		"RUNNER_TAG=" + runnerImageTag,
 	}
 
@@ -121,8 +119,16 @@ func TestE2E(t *testing.T) {
 		return
 	}
 
-	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
-		env.installActionsRunnerController(t)
+	t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
+		env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1")
+	})
+
+	t.Run("deploy runners", func(t *testing.T) {
+		env.deployRunners(t)
+	})
+
+	t.Run("install edge actions-runner-controller", func(t *testing.T) {
+		env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag)
 	})
 
 	if t.Failed() {
@@ -167,7 +173,7 @@ func TestE2ERunnerDeploy(t *testing.T) {
 	}
 
 	t.Run("install actions-runner-controller and runners", func(t *testing.T) {
-		env.installActionsRunnerController(t)
+		env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag)
 	})
 
 	if t.Failed() {
@@ -281,7 +287,7 @@ func (e *env) installCertManager(t *testing.T) {
 	e.KubectlWaitUntilDeployAvailable(t, "cert-manager", waitCfg.WithTimeout(60*time.Second))
 }
 
-func (e *env) installActionsRunnerController(t *testing.T) {
+func (e *env) installActionsRunnerController(t *testing.T, repo, tag string) {
 	t.Helper()
 
 	e.createControllerNamespaceAndServiceAccount(t)
@@ -291,25 +297,11 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
 	}
 
-	if e.useRunnerSet {
-		scriptEnv = append(scriptEnv, "USE_RUNNERSET=1")
-	} else {
-		scriptEnv = append(scriptEnv, "USE_RUNNERSET=false")
-	}
-
 	varEnv := []string{
-		"TEST_ENTERPRISE=" + e.testEnterprise,
-		"TEST_REPO=" + e.testRepo,
-		"TEST_ORG=" + e.testOrg,
-		"TEST_ORG_REPO=" + e.testOrgRepo,
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
-		"RUNNER_LABEL=" + e.runnerLabel,
 		"TEST_ID=" + e.testID,
-		"TEST_EPHEMERAL=" + e.testEphemeral,
-		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
-		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
-		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
-		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		"NAME=" + repo,
+		"VERSION=" + tag,
 	}
 
 	if e.useApp {
@@ -324,6 +316,40 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 			"ACCEPTANCE_TEST_SECRET_TYPE=token",
 			"GITHUB_TOKEN="+e.githubToken,
 		)
+	}
+
+	scriptEnv = append(scriptEnv, varEnv...)
+	scriptEnv = append(scriptEnv, commonScriptEnv...)
+
+	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
+}
+
+func (e *env) deployRunners(t *testing.T) {
+	t.Helper()
+
+	e.createControllerNamespaceAndServiceAccount(t)
+
+	scriptEnv := []string{
+		"KUBECONFIG=" + e.Kubeconfig(),
+	}
+
+	if e.useRunnerSet {
+		scriptEnv = append(scriptEnv, "USE_RUNNERSET=1")
+	} else {
+		scriptEnv = append(scriptEnv, "USE_RUNNERSET=false")
+	}
+
+	varEnv := []string{
+		"TEST_ENTERPRISE=" + e.testEnterprise,
+		"TEST_REPO=" + e.testRepo,
+		"TEST_ORG=" + e.testOrg,
+		"TEST_ORG_REPO=" + e.testOrgRepo,
+		"RUNNER_LABEL=" + e.runnerLabel,
+		"TEST_EPHEMERAL=" + e.testEphemeral,
+		fmt.Sprintf("RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT=%d", e.scaleDownDelaySecondsAfterScaleOut),
+		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 	}
 
 	if e.dockerdWithinRunnerContainer {
@@ -341,7 +367,7 @@ func (e *env) installActionsRunnerController(t *testing.T) {
 	scriptEnv = append(scriptEnv, varEnv...)
 	scriptEnv = append(scriptEnv, commonScriptEnv...)
 
-	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
+	e.RunScript(t, "../../acceptance/deploy_runners.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
 func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
