@@ -419,7 +419,7 @@ spec:
         app: example
 ```
 
-As it is based on `StatefulSet`, `selector` and `template.medatada.labels` it needs to be defined and have the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
+As it is based on `StatefulSet`, `selector` and `template.metadata.labels` it needs to be defined and have the exact same set of labels. `serviceName` must be set to some non-empty string as it is also required by `StatefulSet`.
 
 Runner-related fields like `ephemeral`, `repository`, `organization`, `enterprise`, and so on should be written directly under `spec`.
 
