@@ -250,6 +250,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
 {{- if .Values.useRunnerStatusUpdateHookEphemeralRole }}
 - apiGroups:
   - ""
@@ -276,11 +284,3 @@ rules:
   - delete
   - get
 {{- end }}
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch

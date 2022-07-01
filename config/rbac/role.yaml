@@ -1,8 +1,10 @@
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: {{ include "actions-runner-controller.managerRoleName" . }}
+  name: manager-role
 rules:
 - apiGroups:
   - actions.summerwind.dev
@@ -165,7 +167,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - "apps"
+  - apps
   resources:
   - statefulsets
   verbs:
@@ -177,17 +179,22 @@ rules:
   - update
   - watch
 - apiGroups:
-  - "apps"
+  - apps
   resources:
-  - statefulsets/finalizers
+  - statefulsets/status
   verbs:
-  - create
-  - delete
   - get
-  - list
   - patch
   - update
-  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
 - apiGroups:
   - ""
   resources:
@@ -200,6 +207,7 @@ rules:
   resources:
   - persistentvolumeclaims
   verbs:
+  - create
   - delete
   - get
   - list
@@ -217,15 +225,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - create
-  - get
-  - list
-  - update
 - apiGroups:
   - ""
   resources:
@@ -250,7 +249,15 @@ rules:
   - patch
   - update
   - watch
-{{- if .Values.useRunnerStatusUpdateHookEphemeralRole }}
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -275,12 +282,3 @@ rules:
   - create
   - delete
   - get
-{{- end }}
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
