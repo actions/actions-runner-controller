@@ -32,7 +32,6 @@ type Env struct {
 	docker  *Docker
 	Kubectl *Kubectl
 	bash    *Bash
-	id      string
 }
 
 func Start(t *testing.T, opts ...Option) *Env {
@@ -56,7 +55,11 @@ func Start(t *testing.T, opts ...Option) *Env {
 
 	env.bash = bash
 
-	//
+	return &env
+}
+
+func (e *Env) GetOrGenerateTestID(t *testing.T) string {
+	k, kctl := e.kind, e.Kubectl
 
 	cmKey := "id"
 
@@ -82,13 +85,27 @@ func Start(t *testing.T, opts ...Option) *Env {
 		}
 	}
 
-	env.id = m[cmKey]
-
-	return &env
+	return m[cmKey]
 }
 
-func (e *Env) ID() string {
-	return e.id
+func (e *Env) DeleteTestID(t *testing.T) {
+	k, kctl := e.kind, e.Kubectl
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + k.Kubeconfig(),
+	}
+
+	cmCfg := KubectlConfig{
+		Env: kubectlEnv,
+	}
+	testInfoName := "test-info"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	if err := kctl.DeleteCM(ctx, testInfoName, cmCfg); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (e *Env) DockerBuild(t *testing.T, builds []DockerBuild) {
