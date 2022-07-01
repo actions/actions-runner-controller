@@ -261,7 +261,8 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
-	if r.UseRunnerStatusUpdateHookEphemeralRole {
+	needsServiceAccount := runner.Spec.ServiceAccountName != "" && (r.UseRunnerStatusUpdateHookEphemeralRole || runner.Spec.ContainerMode == "kubernetes")
+	if needsServiceAccount {
 		serviceAccount := &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      runner.ObjectMeta.Name,
@@ -272,13 +273,43 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 			return *res, nil
 		}
 
-		rules := []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{"actions.summerwind.dev"},
-				Resources:     []string{"runners/status"},
-				Verbs:         []string{"get", "update", "patch"},
-				ResourceNames: []string{runner.ObjectMeta.Name},
-			},
+		rules := []rbacv1.PolicyRule{}
+
+		if r.UseRunnerStatusUpdateHookEphemeralRole {
+			rules = append(rules, []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{"actions.summerwind.dev"},
+					Resources:     []string{"runners/status"},
+					Verbs:         []string{"get", "update", "patch"},
+					ResourceNames: []string{runner.ObjectMeta.Name},
+				},
+			}...)
+		}
+
+		if runner.Spec.ContainerMode == "kubernetes" {
+			// Permissions based on https://github.com/actions/runner-container-hooks/blob/main/packages/k8s/README.md
+			rules = append(rules, []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/exec"},
+					Verbs:     []string{"get", "create"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/log"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+			}...)
 		}
 
 		role := &rbacv1.Role{
@@ -555,10 +586,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.NodeSelector = runnerSpec.NodeSelector
 	}
 
-	if r.UseRunnerStatusUpdateHookEphemeralRole {
-		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
-	} else if runnerSpec.ServiceAccountName != "" {
+	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
+	} else if r.UseRunnerStatusUpdateHookEphemeralRole || runner.Spec.ContainerMode == "kubernetes" {
+		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
 	}
 
 	if runnerSpec.AutomountServiceAccountToken != nil {

@@ -183,11 +183,6 @@ func (rs *RunnerSpec) Validate(rootPath *field.Path) field.ErrorList {
 		errList = append(errList, field.Invalid(rootPath.Child("workVolumeClaimTemplate"), rs.WorkVolumeClaimTemplate, err.Error()))
 	}
 
-	err = rs.validateIsServiceAccountNameSet()
-	if err != nil {
-		errList = append(errList, field.Invalid(rootPath.Child("serviceAccountName"), rs.ServiceAccountName, err.Error()))
-	}
-
 	return errList
 }
 
@@ -224,17 +219,6 @@ func (rs *RunnerSpec) validateWorkVolumeClaimTemplate() error {
 	}
 
 	return rs.WorkVolumeClaimTemplate.validate()
-}
-
-func (rs *RunnerSpec) validateIsServiceAccountNameSet() error {
-	if rs.ContainerMode != "kubernetes" {
-		return nil
-	}
-
-	if rs.ServiceAccountName == "" {
-		return errors.New("service account name is required if container mode is kubernetes")
-	}
-	return nil
 }
 
 // RunnerStatus defines the observed state of Runner
