@@ -67,8 +67,8 @@ spec:
         {{- if .Values.runnerGithubURL  }}
         - "--runner-github-url={{ .Values.runnerGithubURL }}"
         {{- end }}
-        {{- if .Values.useRunnerStatusUpdateHookEphemeralRole }}
-        - "--use-runner-status-update-hook-emphemeral-role"
+        {{- if .Values.runner.statusUpdateHook.enabled }}
+        - "--runner-status-update-hook"
         {{- end }}
         command:
         - "/manager"

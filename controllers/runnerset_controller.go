@@ -45,13 +45,13 @@ type RunnerSetReconciler struct {
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 
-	CommonRunnerLabels                     []string
-	GitHubBaseURL                          string
-	RunnerImage                            string
-	RunnerImagePullSecrets                 []string
-	DockerImage                            string
-	DockerRegistryMirror                   string
-	UseRunnerStatusUpdateHookEphemeralRole bool
+	CommonRunnerLabels        []string
+	GitHubBaseURL             string
+	RunnerImage               string
+	RunnerImagePullSecrets    []string
+	DockerImage               string
+	DockerRegistryMirror      string
+	UseRunnerStatusUpdateHook bool
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
@@ -222,7 +222,7 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
 
-	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, r.UseRunnerStatusUpdateHookEphemeralRole)
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return nil, err
 	}

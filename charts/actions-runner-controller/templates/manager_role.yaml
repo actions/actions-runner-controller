@@ -258,7 +258,7 @@ rules:
   - get
   - list
   - watch
-{{- if .Values.useRunnerStatusUpdateHookEphemeralRole }}
+{{- if .Values.runner.statusUpdateHook.enabled }}
 - apiGroups:
   - ""
   resources:

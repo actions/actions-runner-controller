@@ -61,19 +61,19 @@ const (
 // RunnerReconciler reconciles a Runner object
 type RunnerReconciler struct {
 	client.Client
-	Log                                    logr.Logger
-	Recorder                               record.EventRecorder
-	Scheme                                 *runtime.Scheme
-	GitHubClient                           *github.Client
-	RunnerImage                            string
-	RunnerImagePullSecrets                 []string
-	DockerImage                            string
-	DockerRegistryMirror                   string
-	Name                                   string
-	RegistrationRecheckInterval            time.Duration
-	RegistrationRecheckJitter              time.Duration
-	UseRunnerStatusUpdateHookEphemeralRole bool
-	UnregistrationRetryDelay               time.Duration
+	Log                         logr.Logger
+	Recorder                    record.EventRecorder
+	Scheme                      *runtime.Scheme
+	GitHubClient                *github.Client
+	RunnerImage                 string
+	RunnerImagePullSecrets      []string
+	DockerImage                 string
+	DockerRegistryMirror        string
+	Name                        string
+	RegistrationRecheckInterval time.Duration
+	RegistrationRecheckJitter   time.Duration
+	UseRunnerStatusUpdateHook   bool
+	UnregistrationRetryDelay    time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -140,7 +140,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	ready := runnerPodReady(&pod)
 
-	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.UseRunnerStatusUpdateHookEphemeralRole || runner.Status.Phase == "" && r.UseRunnerStatusUpdateHookEphemeralRole {
+	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.UseRunnerStatusUpdateHook {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
@@ -261,7 +261,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
-	needsServiceAccount := runner.Spec.ServiceAccountName != "" && (r.UseRunnerStatusUpdateHookEphemeralRole || runner.Spec.ContainerMode == "kubernetes")
+	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
 	if needsServiceAccount {
 		serviceAccount := &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
@@ -275,7 +275,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 
 		rules := []rbacv1.PolicyRule{}
 
-		if r.UseRunnerStatusUpdateHookEphemeralRole {
+		if r.UseRunnerStatusUpdateHook {
 			rules = append(rules, []rbacv1.PolicyRule{
 				{
 					APIGroups:     []string{"actions.summerwind.dev"},
@@ -537,7 +537,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, r.UseRunnerStatusUpdateHookEphemeralRole)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return pod, err
 	}
@@ -588,7 +588,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
-	} else if r.UseRunnerStatusUpdateHookEphemeralRole || runner.Spec.ContainerMode == "kubernetes" {
+	} else if r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
 		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
 	}
 
@@ -704,7 +704,7 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 	}, nil
 }
 
-func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, customRBAC bool) (corev1.Pod, error) {
+func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHook bool) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -782,7 +782,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		},
 		{
 			Name:  "RUNNER_STATUS_UPDATE_HOOK",
-			Value: fmt.Sprintf("%v", customRBAC),
+			Value: fmt.Sprintf("%v", useRunnerStatusUpdateHook),
 		},
 	}
 
