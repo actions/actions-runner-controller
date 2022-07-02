@@ -524,6 +524,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 	if autoscaler.GitHubClient != nil {
 		simu := &simulator.Simulator{
 			Client: autoscaler.GitHubClient,
+			Log:    log,
 		}
 		// Get available organization runner groups and enterprise runner groups for a repository
 		// These are the sum of runner groups with repository access = All repositories and runner groups
