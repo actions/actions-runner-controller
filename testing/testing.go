@@ -17,6 +17,12 @@ type T = testing.T
 
 var Short = testing.Short
 
+var images = map[string]string{
+	"1.22": "kindest/node:v1.22.9@sha256:8135260b959dfe320206eb36b3aeda9cffcb262f4b44cda6b33f7bb73f453105",
+	"1.23": "kindest/node:v1.23.6@sha256:b1fa224cc6c7ff32455e0b1fd9cbfd3d3bc87ecaa8fcb06961ed1afb3db0f9ae",
+	"1.24": "kindest/node:v1.24.0@sha256:0866296e693efe1fed79d5e6c7af8df71fc73ae45e3679af05342239cdc5bc8e",
+}
+
 func Img(repo, tag string) ContainerImage {
 	return ContainerImage{
 		Repo: repo,
@@ -34,10 +40,10 @@ type Env struct {
 	bash    *Bash
 }
 
-func Start(t *testing.T, opts ...Option) *Env {
+func Start(t *testing.T, k8sMinorVer string, opts ...Option) *Env {
 	t.Helper()
 
-	k := StartKind(t, opts...)
+	k := StartKind(t, k8sMinorVer, opts...)
 
 	var env Env
 
@@ -251,7 +257,7 @@ type ContainerImage struct {
 	Repo, Tag string
 }
 
-func StartKind(t *testing.T, opts ...Option) *Kind {
+func StartKind(t *testing.T, k8sMinorVer string, opts ...Option) *Kind {
 	t.Helper()
 
 	invalidChars := []string{"/"}
@@ -266,7 +272,7 @@ func StartKind(t *testing.T, opts ...Option) *Kind {
 	k.Dir = t.TempDir()
 
 	kk := &k
-	if err := kk.Start(context.Background()); err != nil {
+	if err := kk.Start(context.Background(), k8sMinorVer); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -323,7 +329,7 @@ func (k *Kind) Kubeconfig() string {
 	return k.kubeconfig
 }
 
-func (k *Kind) Start(ctx context.Context) error {
+func (k *Kind) Start(ctx context.Context, k8sMinorVer string) error {
 	getNodes, err := k.CombinedOutput(k.kindGetNodesCmd(ctx, k.Name))
 	if err != nil {
 		return err
@@ -337,6 +343,8 @@ func (k *Kind) Start(ctx context.Context) error {
 			return err
 		}
 
+		image := images[k8sMinorVer]
+
 		kindConfig := []byte(fmt.Sprintf(`kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: %s
@@ -344,8 +352,10 @@ networking:
   apiServerAddress: 0.0.0.0
 nodes:
   - role: control-plane
+    image: %s
   - role: worker
-`, k.Name))
+    image: %s
+`, k.Name, image, image))
 
 		if err := os.WriteFile(f.Name(), kindConfig, 0644); err != nil {
 			return err
