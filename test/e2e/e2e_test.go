@@ -67,7 +67,7 @@ var (
 		},
 	}
 
-	certManagerVersion = "v1.1.1"
+	certManagerVersion = "v1.8.2"
 
 	images = []testing.ContainerImage{
 		testing.Img("docker", "dind"),
