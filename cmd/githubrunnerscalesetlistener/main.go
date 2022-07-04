@@ -34,7 +34,21 @@ import (
 )
 
 type JobAvailable struct {
-	AcquireJobUrl   string   `json:"acquireJobUrl"`
+	AcquireJobUrl string `json:"acquireJobUrl"`
+	JobMessageBase
+}
+
+type JobAssigned struct {
+	JobMessageBase
+}
+
+type JobCompleted struct {
+	Result string `json:"result"`
+	JobMessageBase
+}
+
+type JobMessageBase struct {
+	MessageType     string   `json:"messageType"`
 	RunnerRequestId int64    `json:"runnerRequestId"`
 	RepositoryName  string   `json:"repositoryName"`
 	OwnerName       string   `json:"ownerName"`
@@ -122,7 +136,7 @@ func main() {
 			Name:          c.RunnerScaleSetName,
 			RunnerGroupId: 1,
 			Labels: []github.Label{
-				{Name: "runner-scale-set-test", Type: "User"},
+				{Name: "runner-scale-set", Type: "User"},
 			},
 			RunnerSetting: github.RunnerSetting{
 				Ephemeral:     true,
@@ -203,23 +217,49 @@ func main() {
 
 			if message != nil {
 				lastMessageId = message.MessageId
-
 				if message.MessageType == "RunnerScaleSetJobAvailable" {
-					var JobAvailable JobAvailable
-					err = json.NewDecoder(strings.NewReader(message.Body)).Decode(&JobAvailable)
+					var jobAvailable JobAvailable
+					err = json.NewDecoder(strings.NewReader(message.Body)).Decode(&jobAvailable)
 					if err != nil {
-						logger.Error(err, "Error: Decode message body failed.")
+						logger.Error(err, "Error: Decode RunnerScaleSetJobAvailable message body failed.")
 						continue
 					}
 
-					logger.Info("Runner scale set job available message received.", "messageId", message.MessageId, "RequestId", JobAvailable.RunnerRequestId)
-					err = actionsServiceClient.AcquireJob(ctx, JobAvailable.AcquireJobUrl, runnerScaleSetSession.MessageQueueAccessToken)
+					logger.Info("Runner scale set job available message received.", "messageId", message.MessageId, "RequestId", jobAvailable.RunnerRequestId)
+					err = actionsServiceClient.AcquireJob(ctx, jobAvailable.AcquireJobUrl, runnerScaleSetSession.MessageQueueAccessToken)
 					if err != nil {
 						logger.Error(err, "Error: Acquire job failed.")
 						continue
 					}
 
-					logger.Info("Tried to acquire job.", "RequestId", JobAvailable.RunnerRequestId)
+					logger.Info("Tried to acquire job.", "RequestId", jobAvailable.RunnerRequestId)
+				} else if message.MessageType == "RunnerScaleSetJobAssigned" {
+					var jobAssigned JobAssigned
+					err = json.NewDecoder(strings.NewReader(message.Body)).Decode(&jobAssigned)
+					if err != nil {
+						logger.Error(err, "Error: Decode RunnerScaleSetJobAssigned message body failed.")
+						continue
+					}
+
+					logger.Info("Runner scale set job assigned message received.", "messageId", message.MessageId, "RequestId", jobAssigned.RunnerRequestId, "JitConfigUrl", runnerScaleSet.RunnerJitConfigUrl)
+					jitConfig, err := actionsServiceClient.GenerateJitRunnerConfig(ctx, &github.RunnerScaleSetJitRunnerSetting{WorkFolder: "__work"}, runnerScaleSet.RunnerJitConfigUrl)
+					if err != nil {
+						logger.Error(err, "Error: Generate JIT runner config failed.")
+						continue
+					}
+
+					logger.Info("Generated JIT runner config.", "RequestId", jobAssigned.RunnerRequestId, "RunnerId", jitConfig.Runner.Id, "JitConfig", jitConfig.EncodedJITConfig)
+				} else if message.MessageType == "RunnerScaleSetJobCompleted" {
+					var jobCompleted JobCompleted
+					err = json.NewDecoder(strings.NewReader(message.Body)).Decode(&jobCompleted)
+					if err != nil {
+						logger.Error(err, "Error: Decode RunnerScaleSetJobCompleted message body failed.")
+						continue
+					}
+
+					logger.Info("Runner scale set job completed message received.", "messageId", message.MessageId, "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result)
+				} else {
+					logger.Info("Unknown message type received.", "messageType", message.MessageType)
 				}
 			}
 		}

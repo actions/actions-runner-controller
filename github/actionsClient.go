@@ -30,13 +30,14 @@ type RunnerScaleSetList struct {
 }
 
 type RunnerScaleSet struct {
-	Id              int           `json:"id,omitempty"`
-	Name            string        `json:"name,omitempty"`
-	RunnerGroupId   int           `json:"runnerGroupId,omitempty"`
-	RunnerGroupName string        `json:"runnerGroupName,omitempty"`
-	Labels          []Label       `json:"labels,omitempty"`
-	RunnerSetting   RunnerSetting `json:"RunnerSetting,omitempty"`
-	CreatedOn       time.Time     `json:"createdOn,omitempty"`
+	Id                 int           `json:"id,omitempty"`
+	Name               string        `json:"name,omitempty"`
+	RunnerGroupId      int           `json:"runnerGroupId,omitempty"`
+	RunnerGroupName    string        `json:"runnerGroupName,omitempty"`
+	Labels             []Label       `json:"labels,omitempty"`
+	RunnerSetting      RunnerSetting `json:"RunnerSetting,omitempty"`
+	CreatedOn          time.Time     `json:"createdOn,omitempty"`
+	RunnerJitConfigUrl string        `json:"runnerJitConfigUrl,omitempty"`
 }
 
 type RunnerScaleSetSession struct {
@@ -51,6 +52,21 @@ type RunnerScaleSetMessage struct {
 	MessageId   int64  `json:"messageId"`
 	MessageType string `json:"messageType"`
 	Body        string `json:"body"`
+}
+
+type RunnerScaleSetJitRunnerSetting struct {
+	Name       string `json:"name"`
+	WorkFolder string `json:"workFolder"`
+}
+
+type RunnerReference struct {
+	Id   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type RunnerScaleSetJitRunnerConfig struct {
+	Runner           *RunnerReference `json:"runner"`
+	EncodedJITConfig string           `json:"encodedJITConfig"`
 }
 
 type ActionsClient struct {
@@ -475,5 +491,46 @@ func (c *ActionsClient) AcquireJob(ctx context.Context, acquireJobUrl, messageQu
 			return err
 		}
 		return fmt.Errorf("unexpected status code: %d - body: %s", resp.StatusCode, string(body))
+	}
+}
+
+func (c *ActionsClient) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *RunnerScaleSetJitRunnerSetting, runnerJitConfigUrl string) (*RunnerScaleSetJitRunnerConfig, error) {
+	body, err := json.Marshal(jitRunnerSetting)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, runnerJitConfigUrl, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
+
+	newClient := &http.Client{}
+
+	resp, err := newClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		var runnerJitConfig RunnerScaleSetJitRunnerConfig
+		err = json.NewDecoder(resp.Body).Decode(&runnerJitConfig)
+		if err != nil {
+			return nil, err
+		}
+		return &runnerJitConfig, nil
+	} else {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("unexpected status code: %d - body: %s", resp.StatusCode, string(body))
 	}
 }
