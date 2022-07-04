@@ -273,8 +273,17 @@ func (c *Client) ListOrganizationRunnerGroupsForRepository(ctx context.Context, 
 	var runnerGroups []*github.RunnerGroup
 
 	var opts github.ListOrgRunnerGroupOptions
+
 	opts.PerPage = 100
-	opts.VisibleToRepository = repo
+
+	repoName := repo
+	parts := strings.Split(repo, "/")
+	if len(parts) == 2 {
+		repoName = parts[1]
+	}
+	// This must be the repo name without the owner part, so in case the repo is "myorg/myrepo" the repo name
+	// passed to visible_to_repository must be "myrepo".
+	opts.VisibleToRepository = repoName
 
 	for {
 		list, res, err := c.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
