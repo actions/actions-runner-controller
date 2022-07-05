@@ -122,11 +122,12 @@ func TestE2E(t *testing.T) {
 		t.Skip("Skipped as -short is set")
 	}
 
+	k8sMinorVer := os.Getenv("ARC_E2E_KUBE_VERSION")
 	skipRunnerCleanUp := os.Getenv("ARC_E2E_SKIP_RUNNER_CLEANUP") != ""
 	retainCluster := os.Getenv("ARC_E2E_RETAIN_CLUSTER") != ""
 	skipTestIDCleanUp := os.Getenv("ARC_E2E_SKIP_TEST_ID_CLEANUP") != ""
 
-	env := initTestEnv(t)
+	env := initTestEnv(t, k8sMinorVer)
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -264,10 +265,10 @@ type env struct {
 	dockerdWithinRunnerContainer                bool
 }
 
-func initTestEnv(t *testing.T) *env {
+func initTestEnv(t *testing.T, k8sMinorVer string) *env {
 	t.Helper()
 
-	testingEnv := testing.Start(t, testing.Preload(images...))
+	testingEnv := testing.Start(t, k8sMinorVer, testing.Preload(images...))
 
 	e := &env{Env: testingEnv}
 
