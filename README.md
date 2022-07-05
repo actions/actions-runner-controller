@@ -1464,7 +1464,7 @@ spec:
         volumeMounts:
         - name: var-lib-docker
           mountPath: /var/lib/docker
-  volumeClaimtemplates:
+  volumeClaimTemplates:
   - metadata:
       name: var-lib-docker
     spec:
