@@ -1747,25 +1747,21 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
 
 ### Setting up Windows Runners
 
-You need to set the `nodeSelector.kubernetes.io/os` property in both the `cert-manager` and the `actions-runner-controller` deployments to `linux` so that the pods for these two deployments are only scheduled in Linux nodes.
+The main two steps in enabling Windows self-hosted runners are:
+
+- Using `nodeSelector`'s property to filter the `cert-manger` and `actions-runner-controller` pods
+- Deploying a RunnerDeployment using a Windows-based image
+
+For the first step, you need to set the `nodeSelector.kubernetes.io/os` property in both the `cert-manager` and the `actions-runner-controller` deployments to `linux` so that the pods for these two deployments are only scheduled in Linux nodes. You can do this as follows:
 
 ```yaml
 nodeSelector:
       kubernetes.io/os: linux
 ```
 
-For `cert-manager` you need to set it for:
+`cert-manager` has 4 different application within it the main application, the `webhook`, the `cainjector` and the `startupapicheck`. In the parameters or values file you use for the deployment you need to add the `nodeSelector` property four times, one for each application.
 
-.left[
-- The main deployment
-- The `webhook`
-]
-.right[
-- The `cainjector`
-- The `startupapicheck`
-]
-
-For the `actions-runner-controller` it's only for the main deployment.
+For the `actions-runner-controller` you only have to use the `nodeSelector` only for the main deployment, so it only has to be set once.
 
 Once this is set up, you will need to deploy two different `RunnerDeployment`'s, one for Windows and one for Linux.
 The Linux deployment can use either the default image or a custom one, however, there isn't a default Windows image so for Windows deployments you will have to build your own image.
@@ -1821,8 +1817,6 @@ RUN powershell Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.Ser
 RUN powershell choco install git.install --params "'/GitAndUnixToolsOnPath'" -y
 
 RUN powershell choco feature enable -n allowGlobalConfirmation
-
-RUN Get-ChildItem '/installation-scripts' | % {  & $_.FullName }
 
 CMD [ "pwsh", "-c", "./config.cmd --name $env:RUNNER_NAME --url https://github.com/$env:RUNNER_REPO --token $env:RUNNER_TOKEN --labels $env:RUNNER_LABELS --unattended --replace --ephemeral; ./run.cmd"]
 ```
