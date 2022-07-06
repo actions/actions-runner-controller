@@ -1747,7 +1747,7 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
 
 ### Setting up Windows Runners
 
-You need to set the `nodeSelector.kubernetes.io/os` property in both the `cert-manager` and the `actions-runner-controller` deployments to `linux` so that the pods are only scheduled in Linux nodes.
+You need to set the `nodeSelector.kubernetes.io/os` property in both the `cert-manager` and the `actions-runner-controller` deployments to `linux` so that the pods for these two deployments are only scheduled in Linux nodes.
 
 ```yaml
 nodeSelector:
@@ -1756,15 +1756,19 @@ nodeSelector:
 
 For `cert-manager` you need to set it for:
 
+.left[
 - The main deployment
 - The `webhook`
+]
+.right[
 - The `cainjector`
 - The `startupapicheck`
+]
 
 For the `actions-runner-controller` it's only for the main deployment.
 
 Once this is set up, you will need to deploy two different `RunnerDeployment`'s, one for Windows and one for Linux.
-The Linux deployment can use either the default or a custom image, however, there isn't a default Windows image so for Windows deployments you will have to build your own image.
+The Linux deployment can use either the default image or a custom one, however, there isn't a default Windows image so for Windows deployments you will have to build your own image.
 
 Below we share an example of the YAML used to create the deployment for each Operating System and a Dockerfile for the Windows deployment. 
 
