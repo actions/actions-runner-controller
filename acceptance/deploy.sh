@@ -51,6 +51,9 @@ if [ "${tool}" == "helm" ]; then
     --set image.tag=${VERSION} \
     --set podAnnotations.test-id=${TEST_ID} \
     --set githubWebhookServer.podAnnotations.test-id=${TEST_ID} \
+    --set imagePullSecrets[0].name=${IMAGE_PULL_SECRET} \
+    --set image.actionsRunnerImagePullSecrets[0].name=${IMAGE_PULL_SECRET} \
+    --set githubWebhookServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET} \
     -f ${VALUES_FILE}
   set +v
   # To prevent `CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: metadata.annotations: Too long: must have at most 262144 bytes`
