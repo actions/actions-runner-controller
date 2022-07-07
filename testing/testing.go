@@ -34,20 +34,16 @@ func Img(repo, tag string) ContainerImage {
 // All of its methods are idempotent so that you can safely call it from within each subtest
 // and you can rerun the individual subtest until it works as you expect.
 type Env struct {
-	kind    *Kind
-	docker  *Docker
-	Kubectl *Kubectl
-	bash    *Bash
+	Kubeconfig string
+	docker     *Docker
+	Kubectl    *Kubectl
+	bash       *Bash
 }
 
-func Start(t *testing.T, k8sMinorVer string, opts ...Option) *Env {
+func Start(t *testing.T, k8sMinorVer string) *Env {
 	t.Helper()
 
-	k := StartKind(t, k8sMinorVer, opts...)
-
 	var env Env
-
-	env.kind = k
 
 	d := &Docker{}
 
@@ -65,12 +61,12 @@ func Start(t *testing.T, k8sMinorVer string, opts ...Option) *Env {
 }
 
 func (e *Env) GetOrGenerateTestID(t *testing.T) string {
-	k, kctl := e.kind, e.Kubectl
+	kctl := e.Kubectl
 
 	cmKey := "id"
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + k.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cmCfg := KubectlConfig{
@@ -95,10 +91,10 @@ func (e *Env) GetOrGenerateTestID(t *testing.T) string {
 }
 
 func (e *Env) DeleteTestID(t *testing.T) {
-	k, kctl := e.kind, e.Kubectl
+	kctl := e.Kubectl
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + k.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cmCfg := KubectlConfig{
@@ -125,13 +121,13 @@ func (e *Env) DockerBuild(t *testing.T, builds []DockerBuild) {
 	}
 }
 
-func (e *Env) KindLoadImages(t *testing.T, prebuildImages []ContainerImage) {
+func (e *Env) DockerPush(t *testing.T, images []ContainerImage) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
-	if err := e.kind.LoadImages(ctx, prebuildImages); err != nil {
+	if err := e.docker.Push(ctx, images); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -143,7 +139,7 @@ func (e *Env) KubectlApply(t *testing.T, path string, cfg KubectlConfig) {
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -160,7 +156,7 @@ func (e *Env) KubectlWaitUntilDeployAvailable(t *testing.T, name string, cfg Kub
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -177,7 +173,7 @@ func (e *Env) KubectlEnsureNS(t *testing.T, name string, cfg KubectlConfig) {
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -194,7 +190,7 @@ func (e *Env) KubectlEnsureClusterRoleBindingServiceAccount(t *testing.T, bindin
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -204,10 +200,6 @@ func (e *Env) KubectlEnsureClusterRoleBindingServiceAccount(t *testing.T, bindin
 			t.Fatal(err)
 		}
 	}
-}
-
-func (e *Env) Kubeconfig() string {
-	return e.kind.Kubeconfig()
 }
 
 func (e *Env) RunScript(t *testing.T, path string, cfg ScriptConfig) {
