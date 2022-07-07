@@ -126,6 +126,7 @@ func TestE2E(t *testing.T) {
 	skipRunnerCleanUp := os.Getenv("ARC_E2E_SKIP_RUNNER_CLEANUP") != ""
 	retainCluster := os.Getenv("ARC_E2E_RETAIN_CLUSTER") != ""
 	skipTestIDCleanUp := os.Getenv("ARC_E2E_SKIP_TEST_ID_CLEANUP") != ""
+	skipArgoTunnelCleanUp := os.Getenv("ARC_E2E_SKIP_ARGO_TUNNEL_CLEAN_UP") != ""
 
 	env := initTestEnv(t, k8sMinorVer)
 
@@ -159,6 +160,16 @@ func TestE2E(t *testing.T) {
 		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
 			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
 		})
+
+		t.Run("install argo-tunnel", func(t *testing.T) {
+			env.installArgoTunnel(t)
+		})
+
+		if !skipArgoTunnelCleanUp {
+			t.Cleanup(func() {
+				env.uninstallArgoTunnel(t)
+			})
+		}
 
 		t.Run("deploy runners", func(t *testing.T) {
 			env.deploy(t, RunnerSets, testID)
@@ -209,6 +220,16 @@ func TestE2E(t *testing.T) {
 		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
 			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
 		})
+
+		t.Run("install argo-tunnel", func(t *testing.T) {
+			env.installArgoTunnel(t)
+		})
+
+		if !skipArgoTunnelCleanUp {
+			t.Cleanup(func() {
+				env.uninstallArgoTunnel(t)
+			})
+		}
 
 		t.Run("deploy runners", func(t *testing.T) {
 			env.deploy(t, RunnerDeployments, testID)
@@ -423,6 +444,28 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 	scriptEnv = append(scriptEnv, commonScriptEnv...)
 
 	e.RunScript(t, "../../acceptance/deploy_runners.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
+}
+
+func (e *env) installArgoTunnel(t *testing.T) {
+	e.doArgoTunnel(t, "apply")
+}
+
+func (e *env) uninstallArgoTunnel(t *testing.T) {
+	e.doArgoTunnel(t, "delete")
+}
+
+func (e *env) doArgoTunnel(t *testing.T, op string) {
+	t.Helper()
+
+	scriptEnv := []string{
+		"KUBECONFIG=" + e.Kubeconfig(),
+		"OP=" + op,
+		"TUNNEL_ID=" + os.Getenv("TUNNEL_ID"),
+		"TUNNE_NAME=" + os.Getenv("TUNNEL_NAME"),
+		"TUNNEL_HOSTNAME=" + os.Getenv("TUNNEL_HOSTNAME"),
+	}
+
+	e.RunScript(t, "../../acceptance/argotunnel.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
 func (e *env) runnerLabel(testID string) string {
