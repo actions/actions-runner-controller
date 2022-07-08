@@ -67,25 +67,6 @@ func annotatePodOnce(ctx context.Context, c client.Client, log logr.Logger, pod 
 
 	return updated, nil
 }
-func labelPod(ctx context.Context, c client.Client, log logr.Logger, pod *corev1.Pod, k, v string) (*corev1.Pod, error) {
-	if pod == nil {
-		return nil, nil
-	}
-
-	updated := pod.DeepCopy()
-	if updated.Labels == nil {
-		updated.Labels = map[string]string{}
-	}
-	updated.Labels[k] = v
-	if err := c.Patch(ctx, updated, client.MergeFrom(pod)); err != nil {
-		log.Error(err, fmt.Sprintf("Failed to patch pod to have %s annotation", k))
-		return nil, err
-	}
-
-	log.V(2).Info("Labeled pod", "key", k, "value", v)
-
-	return updated, nil
-}
 
 // If the first return value is nil, it's safe to delete the runner pod.
 func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*ctrl.Result, error) {
@@ -210,7 +191,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		}
 
 		if runnerBusy {
-			_, err := labelPod(ctx, c, log, pod, AnnotationKeyUnregistrationFailureMessage, runnerUnregistrationFailureMessage)
+			_, err := annotatePodOnce(ctx, c, log, pod, AnnotationKeyUnregistrationFailureMessage, runnerUnregistrationFailureMessage)
 			if err != nil {
 				return &ctrl.Result{}, err
 			}
