@@ -302,12 +302,16 @@ $ kubectl apply -f runnerdeployment.yaml
 runnerdeployment.actions.summerwind.dev/example-runnerdeploy created
 ```
 
-You can see that 1 runner have been created as specified by `replicas: 1` attribute:
+You can see that 1 runner and its underlying pod has been created as specified by `replicas: 1` attribute:
 
 ```shell
 $ kubectl get runners
 NAME                             REPOSITORY                             STATUS
 example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
+
+$ kubectl get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+example-runnerdeploy2475ht2qbr 2/2     Running   0          1m
 ```
 
 The runner you created has been registered directly to the defined repository, you should be able to see it in the settings of the repository.
