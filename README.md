@@ -29,8 +29,9 @@ ToC:
     - [Webhook Driven Scaling](#webhook-driven-scaling)
     - [Autoscaling to/from 0](#autoscaling-tofrom-0)
     - [Scheduled Overrides](#scheduled-overrides)
-  - [Runner with DinD](#runner-with-dind)
-  - [Runner with k8s jobs](#runner-with-k8s-jobs)
+  - [Alternative Runners](#alternative-runners)
+    - [Runner with DinD](#runner-with-dind)
+    - [Runner with k8s jobs](#runner-with-k8s-jobs)
   - [Additional Tweaks](#additional-tweaks)
   - [Custom Volume mounts](#custom-volume-mounts)
   - [Runner Labels](#runner-labels)
@@ -270,52 +271,30 @@ Alternatively, you can install each controller stack into a unique namespace (re
 - The organization level
 - The enterprise level
 
-There are two ways to use this controller:
+Runners can be deployed as 1 of 2 abstractions: 
 
-- Manage runners one by one with `Runner`.
-- Manage a set of runners with `RunnerDeployment`.
+- A `RunnerDeployment` (based on k8s's `Deployments`)
+- A `RunnerSet` (based on k8s's `StatefulSets`)
+
+We go into details about the differences between the 2 later, initially lets look at how to deploy a basic `RunnerDeployment` at the 3 possible management hierarchies.
 
 ### Repository Runners
 
-To launch a single self-hosted runner, you need to create a manifest file that includes a `Runner` resource as follows. This example launches a self-hosted runner with name *example-runner* for the *actions-runner-controller/actions-runner-controller* repository.
+To launch a single self-hosted runner, you need to create a manifest file that includes a `RunnerDeployment` resource as follows. This example launches a self-hosted runner with name *example-runnerdeploy* for the *actions-runner-controller/actions-runner-controller* repository.
 
 ```yaml
-# runner.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
+kind: RunnerDeployment
 metadata:
-  name: example-runner
+  name: example-runnerdeploy
 spec:
-  repository: example/myrepo
-  env: []
+  replicas: 1
+  template:
+    spec:
+      repository: mumoshu/actions-runner-controller-ci
 ```
 
-Apply the created manifest file to your Kubernetes.
-
-```shell
-$ kubectl apply -f runner.yaml
-runner.actions.summerwind.dev/example-runner created
-```
-
-You can see that the Runner resource has been created.
-
-```shell
-$ kubectl get runners
-NAME             REPOSITORY                             STATUS
-example-runner   actions-runner-controller/actions-runner-controller   Running
-```
-
-You can also see that the runner pod has been running.
-
-```shell
-$ kubectl get pods
-NAME           READY   STATUS    RESTARTS   AGE
-example-runner 2/2     Running   0          1m
-```
-
-The runner you created has been registered to your repository.
-
-<img width="756" alt="Actions tab in your repository settings" src="https://user-images.githubusercontent.com/230145/73618667-8cbf9700-466c-11ea-80b6-c67e6d3f70e7.png">
+The runner you created has been registered directly to the defined repository, you should be able to see it in the settings of the repository.
 
 Now you can use your self-hosted runner. See the [official documentation](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow) on how to run a job with it.
 
@@ -324,13 +303,15 @@ Now you can use your self-hosted runner. See the [official documentation](https:
 To add the runner to an organization, you only need to replace the `repository` field with `organization`, so the runner will register itself to the organization.
 
 ```yaml
-# runner.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
+kind: RunnerDeployment
 metadata:
-  name: example-org-runner
+  name: example-runnerdeploy
 spec:
-  organization: your-organization-name
+  replicas: 1
+  template:
+    spec:
+      organization: your-organization-name
 ```
 
 Now you can see the runner on the organization level (if you have organization owner permissions).
@@ -340,24 +321,22 @@ Now you can see the runner on the organization level (if you have organization o
 To add the runner to an enterprise, you only need to replace the `repository` field with `enterprise`, so the runner will register itself to the enterprise.
 
 ```yaml
-# runner.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
+kind: RunnerDeployment
 metadata:
-  name: example-enterprise-runner
+  name: example-runnerdeploy
 spec:
-  enterprise: your-enterprise-name
+  replicas: 1
+  template:
+    spec:
+      enterprise: your-enterprise-name
 ```
 
 Now you can see the runner on the enterprise level (if you have enterprise access permissions).
 
 ### RunnerDeployments
 
-You can manage sets of runners instead of individually through the `RunnerDeployment` kind and its `replicas:` attribute. This kind is required for many of the advanced features.
-
-There are `RunnerReplicaSet` and `RunnerDeployment` kinds that corresponds to the `ReplicaSet` and `Deployment` kinds but for the `Runner` kind.
-
-You typically only need `RunnerDeployment` rather than `RunnerReplicaSet` as the former is for managing the latter.
+In our previous examples we were deploying a single runner via the `RunnerDeployment` kind, the amount of runners deployed is controlled statically via the `replicas:` field, we can increase this value to deploy additioanl sets of runners instead:
 
 ```yaml
 # runnerdeployment.yaml
@@ -366,11 +345,11 @@ kind: RunnerDeployment
 metadata:
   name: example-runnerdeploy
 spec:
+  # This will deploy 2 runners now
   replicas: 2
   template:
     spec:
       repository: mumoshu/actions-runner-controller-ci
-      env: []
 ```
 
 Apply the manifest file to your cluster:
@@ -389,15 +368,13 @@ example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 ```
 
-  ### RunnerSets
+### RunnerSets
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
 _Ensure you see the limitations before using this kind!!!!!_
 
-For scenarios where you require the advantages of a `StatefulSet`, for example persistent storage, ARC implements a runner based on Kubernetes' `StatefulSets`, the `RunnerSet`.
-
-A basic `RunnerSet` would look like this:
+We can also deploy sets of RunnerSets the same way, a basic `RunnerSet` would look like this:
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -406,6 +383,7 @@ metadata:
   name: example
 spec:
   ephemeral: false
+  # This will deploy 2 runners now
   replicas: 2
   repository: mumoshu/actions-runner-controller-ci
   # Other mandatory fields from StatefulSet
@@ -1143,9 +1121,13 @@ The earlier entry is prioritized higher than later entries. So you usually defin
 
 A common use case for this may be to have 1 override to scale to 0 during the week outside of core business hours and another override to scale to 0 during all hours of the weekend.
 
-### Runner with DinD
+### Alternative Runners
 
-When using the default runner, the runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). This might create issues if there's `LimitRange` set to namespace.
+ARC also offers a few altenrative runner options
+
+#### Runner with DinD
+
+When using the default runner, the runner pod starts up 2 containers: runner and DinD (Docker-in-Docker). ARC maintains an alternative all in one runner image with docker running in the same container as the runner. This may be prefered from a resource or complexity perspective or to be compliant with a `LimitRange` namespace configuration.
 
 ```yaml
 # dindrunnerdeployment.yaml
@@ -1163,9 +1145,7 @@ spec:
       env: []
 ```
 
-This also helps with resources, as you don't need to give resources separately to docker and runner.
-
-### Runner with K8s Jobs
+#### Runner with K8s Jobs
 
 When using the default runner, jobs that use a container will run in docker. This necessitates privileged mode, either on the runner pod or the sidecar container
 
