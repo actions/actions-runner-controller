@@ -283,6 +283,7 @@ We go into details about the differences between the 2 later, initially lets loo
 To launch a single self-hosted runner, you need to create a manifest file that includes a `RunnerDeployment` resource as follows. This example launches a self-hosted runner with name *example-runnerdeploy* for the *actions-runner-controller/actions-runner-controller* repository.
 
 ```yaml
+# runnerdeployment.yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
@@ -292,6 +293,21 @@ spec:
   template:
     spec:
       repository: mumoshu/actions-runner-controller-ci
+```
+
+Apply the created manifest file to your Kubernetes.
+
+```shell
+$ kubectl apply -f runnerdeployment.yaml
+runnerdeployment.actions.summerwind.dev/example-runnerdeploy created
+```
+
+You can see that 1 runner have been created as specified by `replicas: 1` attribute:
+
+```shell
+$ kubectl get runners
+NAME                             REPOSITORY                             STATUS
+example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
 ```
 
 The runner you created has been registered directly to the defined repository, you should be able to see it in the settings of the repository.
@@ -336,7 +352,7 @@ Now you can see the runner on the enterprise level (if you have enterprise acces
 
 ### RunnerDeployments
 
-In our previous examples we were deploying a single runner via the `RunnerDeployment` kind, the amount of runners deployed is controlled statically via the `replicas:` field, we can increase this value to deploy additioanl sets of runners instead:
+In our previous examples we were deploying a single runner via the `RunnerDeployment` kind, the amount of runners deployed can be statically set via the `replicas:` field, we can increase this value to deploy additioanl sets of runners instead:
 
 ```yaml
 # runnerdeployment.yaml
