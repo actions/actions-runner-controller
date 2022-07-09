@@ -1386,7 +1386,7 @@ spec:
         - name: tmp
           emptyDir:
             medium: Memory
-      emphemeral: true # recommended to not leak data between builds.
+      ephemeral: true # recommended to not leak data between builds.
 ```
 
 #### NVME SSD
@@ -1394,7 +1394,7 @@ spec:
 In this example we provide NVME backed storage for the workdir, docker sidecar and /tmp within the runner.
 Here we use a working example on GKE, which will provide the NVME disk at /mnt/disks/ssd0.  We will be placing the respective volumes in subdirs here and in order to be able to run multiple runners we will use the pod name as a prefix for subdirectories. Also the disk will fill up over time and disk space will not be freed until the node is removed.
 
-**Beware** that running these persistent backend volumes **leave data behind** between 2 different jobs on the workdir and `/tmp` with `emphemeral: false`.
+**Beware** that running these persistent backend volumes **leave data behind** between 2 different jobs on the workdir and `/tmp` with `ephemeral: false`.
 
 ```yaml
 kind: RunnerDeployment
@@ -1435,7 +1435,7 @@ spec:
       - hostPath:
           path: /mnt/disks/ssd0
         name: tmp
-    emphemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
+    ephemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
 ```
 
 #### Docker image layers caching
