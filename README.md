@@ -382,9 +382,7 @@ kind: RunnerSet
 metadata:
   name: example
 spec:
-  ephemeral: false
-  # This will deploy 2 runners now
-  replicas: 2
+  replicas: 1
   repository: mumoshu/actions-runner-controller-ci
   # Other mandatory fields from StatefulSet
   selector:
@@ -415,8 +413,7 @@ kind: RunnerSet
 metadata:
   name: example
 spec:
-  ephemeral: false
-  replicas: 2
+  replicas: 1
   repository: mumoshu/actions-runner-controller-ci
   dockerdWithinRunnerContainer: true
   template:
