@@ -254,6 +254,7 @@ type env struct {
 	dockerdWithinRunnerContainer                bool
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
+	imagePullPolicy                             string
 
 	vars          vars
 	VerifyTimeout time.Duration
@@ -367,6 +368,12 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
 	e.vars = vars
 
+	if e.remoteKubeconfig != "" {
+		e.imagePullPolicy = "Always"
+	} else {
+		e.imagePullPolicy = "IfNotPresent"
+	}
+
 	if e.remoteKubeconfig == "" {
 		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
 		e.Env.Kubeconfig = e.Kind.Kubeconfig()
@@ -457,6 +464,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID str
 		"NAME=" + repo,
 		"VERSION=" + tag,
 		"IMAGE_PULL_SECRET=" + e.imagePullSecretName,
+		"IMAGE_PULL_POLICY=" + e.imagePullPolicy,
 	}
 
 	if e.useApp {
