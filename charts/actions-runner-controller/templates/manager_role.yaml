@@ -285,6 +285,8 @@ rules:
   - get
 {{- end }}
 {{- if .Values.rbac.allowGrantingKubernetesContainerModePermissions }}
+{{/* These permissions are required by ARC to create RBAC resources for the runner pod to use the kubernetes container mode. */}}
+{{/* See https://github.com/actions-runner-controller/actions-runner-controller/pull/1268/files#r917331632 */}}
 - apiGroups:
   - ""
   resources:
@@ -300,6 +302,15 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - "batch"
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - create
+  - delete
 - apiGroups:
   - ""
   resources:
