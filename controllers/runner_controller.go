@@ -740,6 +740,9 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	// This label selector is used by default when rd.Spec.Selector is empty.
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunner, "")
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
+	if runnerSpec.GitHubAPICredentialsFrom != nil {
+		template.ObjectMeta.Annotations = CloneAndAddLabel(template.ObjectMeta.Annotations, annotationKeyGitHubAPICredsSecret, runnerSpec.GitHubAPICredentialsFrom.SecretRef.Name)
+	}
 
 	workDir := runnerSpec.WorkDir
 	if workDir == "" {
