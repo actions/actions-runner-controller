@@ -305,6 +305,11 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 					Verbs:     []string{"get", "list", "watch"},
 				},
 				{
+					APIGroups: []string{"batch"},
+					Resources: []string{"jobs"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+				{
 					APIGroups: []string{""},
 					Resources: []string{"secrets"},
 					Verbs:     []string{"get", "list", "create", "delete"},
