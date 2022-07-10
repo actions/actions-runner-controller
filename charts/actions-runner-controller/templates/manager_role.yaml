@@ -284,3 +284,27 @@ rules:
   - delete
   - get
 {{- end }}
+{{- if .Values.rbac.allowGrantingKubernetesContainerModePermissions }}
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+{{- end }}

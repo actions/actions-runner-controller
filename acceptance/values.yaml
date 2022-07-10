@@ -5,6 +5,11 @@ imagePullSecrets:
 image:
   actionsRunnerImagePullSecrets:
   - name:
+runner:
+  statusUpdateHook:
+    enabled: true
+rbac:
+  allowGrantingKubernetesContainerModePermissions: true
 githubWebhookServer:
   imagePullSecrets:
   - name:
