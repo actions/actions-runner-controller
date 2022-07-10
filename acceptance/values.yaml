@@ -1,6 +1,18 @@
 # Set actions-runner-controller settings for testing
 logLevel: "-4"
+imagePullSecrets:
+- name:
+image:
+  actionsRunnerImagePullSecrets:
+  - name:
+runner:
+  statusUpdateHook:
+    enabled: true
+rbac:
+  allowGrantingKubernetesContainerModePermissions: true
 githubWebhookServer:
+  imagePullSecrets:
+  - name:
   logLevel: "-4"
   enabled: true
   labels: {}

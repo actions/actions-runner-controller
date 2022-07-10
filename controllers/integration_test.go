@@ -8,7 +8,7 @@ import (
 	"time"
 
 	github2 "github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/google/go-github/v39/github"
+	"github.com/google/go-github/v45/github"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
 
@@ -1368,7 +1368,7 @@ func (env *testEnvironment) ExpectRegisteredNumberCountEventuallyEquals(want int
 
 			return len(rs)
 		},
-		time.Second*5, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
+		time.Second*10, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
 }
 
 func (env *testEnvironment) SendOrgPullRequestEvent(org, repo, branch, action string) {

@@ -50,8 +50,6 @@ func (r *RunnerPersistentVolumeClaimReconciler) Reconcile(ctx context.Context, r
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.Info("Reconciling runner pvc")
-
 	res, err := syncPVC(ctx, r.Client, log, req.Namespace, &pvc)
 
 	if res == nil {

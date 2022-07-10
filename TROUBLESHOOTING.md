@@ -2,14 +2,15 @@
 
 * [Tools](#tools)
 * [Installation](#installation)
+  * [InternalError when calling webhook: context deadline exceeded](#internalerror-when-calling-webhook-context-deadline-exceeded)
   * [Invalid header field value](#invalid-header-field-value)
-  * [Deployment fails on GKE due to webhooks](#deployment-fails-on-gke-due-to-webhooks)
+  * [Helm chart install failure: certificate signed by unknown authority](#helm-chart-install-failure-certificate-signed-by-unknown-authority)
 * [Operations](#operations)
   * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
   * [Runner coming up before network available](#runner-coming-up-before-network-available)
   * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
-
+  * [Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns](#unable-to-scale-to-zero-with-totalnumberofqueuedandinprogressworkflowruns)
 
 ## Tools
 
@@ -22,39 +23,37 @@ A list of tools which are helpful for troubleshooting
 
 Troubeshooting runbooks that relate to ARC installation problems
 
-### Invalid header field value
+### InternalError when calling webhook: context deadline exceeded
 
 **Problem**
 
-```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
-{
-  "controller": "runner",
-  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
-  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
-}
+This issue can come up for various reasons like leftovers from previous installations or not being able to access the K8s service's clusterIP associated with the admission webhook server (of ARC).
+
+```
+Internal error occurred: failed calling webhook "mutate.runnerdeployment.actions.summerwind.dev":
+Post "https://actions-runner-controller-webhook.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment?timeout=10s": context deadline exceeded
 ```
 
 **Solution**
 
-Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
-* `echo -n $TOKEN | base64`
-* Create the secret as described in the docs using the shell and documented flags
+First we will try the common solution of checking webhook leftovers from previous installations:
+
+1.  ```bash
+    kubectl get validatingwebhookconfiguration -A
+    kubectl get mutatingwebhookconfiguration -A
+    ```
+2.  If you see any webhooks related to actions-runner-controller, delete them:
+    ```bash
+    kubectl delete mutatingwebhookconfiguration actions-runner-controller-mutating-webhook-configuration
+    kubectl delete validatingwebhookconfiguration actions-runner-controller-validating-webhook-configuration
+    ```
+
+If that didn't work then probably your K8s control-plane is somehow unable to access the K8s service's clusterIP associated with the admission webhook server:
+1. You're running apiserver as a binary and you didn't make service cluster IPs available to the host network. 
+2. You're running the apiserver in the pod but your pod network (i.e. CNI plugin installation and config) is not good so your pods(like kube-apiserver) in the K8s control-plane nodes can't access ARC's admission webhook server pod(s) in probably data-plane nodes.
 
 
-### Deployment fails on GKE due to webhooks
-
-**Problem**
-
-Due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster:
-
-```
-Internal error occurred: failed calling webhook "mutate.runner.actions.summerwind.dev": 
-Post https://webhook-service.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runner?timeout=10s: 
-context deadline exceeded
-```
-
-**Solution**<br />
+Another reason could be due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster: 
 
 To fix this, you may either:
 
@@ -87,6 +86,57 @@ To fix this, you may either:
 
    gcloud compute firewall-rules create k8s-cert-manager --source-ranges $SOURCE --target-tags $WORKER_NODES_TAG  --allow TCP:9443 --network $NETWORK
    ```
+
+### Invalid header field value
+
+**Problem**
+
+```json
+2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
+{
+  "controller": "runner",
+  "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
+  "error": "failed to create registration token: Post \"https://api.github.com/orgs/$YOUR_ORG_HERE/actions/runners/registration-token\": net/http: invalid header field value \"Bearer $YOUR_TOKEN_HERE\\n\" for key Authorization"
+}
+```
+
+**Solution**
+
+Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
+* `echo -n $TOKEN | base64`
+* Create the secret as described in the docs using the shell and documented flags
+
+### Helm chart install failure: certificate signed by unknown authority
+
+**Problem**
+
+```
+Error: UPGRADE FAILED: failed to create resource: Internal error occurred: failed calling webhook "webhook.cert-manager.io": failed to call webhook: Post "https://cert-manager-webhook.cert-manager.svc:443/mutate?timeout=10s": x509: certificate signed by unknown authority
+```
+
+Apparently, it's failing while `helm` is creating one of resources defined in the ARC chart and the cause was that cert-manager's webhook is not working correctly, due to the missing or the invalid CA certficate.
+
+You'd try to tail logs from the `cert-manager-cainjector` and see it's failing with an error like:
+
+```
+$ kubectl -n cert-manager logs cert-manager-cainjector-7cdbb9c945-g6bt4
+I0703 03:31:55.159339       1 start.go:91] "starting" version="v1.1.1" revision="3ac7418070e22c87fae4b22603a6b952f797ae96"
+I0703 03:31:55.615061       1 leaderelection.go:243] attempting to acquire leader lease  kube-system/cert-manager-cainjector-leader-election...
+I0703 03:32:10.738039       1 leaderelection.go:253] successfully acquired lease kube-system/cert-manager-cainjector-leader-election
+I0703 03:32:10.739941       1 recorder.go:52] cert-manager/controller-runtime/manager/events "msg"="Normal"  "message"="cert-manager-cainjector-7cdbb9c945-g6bt4_88e4bc70-eded-4343-a6fb-0ddd6434eb55 became leader" "object"={"kind":"ConfigMap","namespace":"kube-system","name":"cert-manager-cainjector-leader-election","uid":"942a021e-364c-461a-978c-f54a95723cdc","apiVersion":"v1","resourceVersion":"1576"} "reason"="LeaderElection"
+E0703 03:32:11.192128       1 start.go:119] cert-manager/ca-injector "msg"="manager goroutine exited" "error"=null
+I0703 03:32:12.339197       1 request.go:645] Throttling request took 1.047437675s, request: GET:https://10.96.0.1:443/apis/storage.k8s.io/v1beta1?timeout=32s
+E0703 03:32:13.143790       1 start.go:151] cert-manager/ca-injector "msg"="Error registering certificate based controllers. Retrying after 5 seconds." "error"="no matches for kind \"MutatingWebhookConfiguration\" in version \"admissionregistration.k8s.io/v1beta1\""
+Error: error registering secret controller: no matches for kind "MutatingWebhookConfiguration" in version "admissionregistration.k8s.io/v1beta1"
+```
+
+**Solution**
+
+Your cluster is based on a new enough Kubernetes of version 1.22 or greater which does not support the legacy `admissionregistration.k8s.io/v1beta1` API anymore, and your `cert-manager` is not up-to-date hence it's still trying to use the leagcy Kubernetes API.
+
+In many cases, it's not an option to downgrade Kubernetes. So, just upgrade `cert-manager` to a more recent version that does have have the support for the specific Kubernetes version you're using.
+
+See https://cert-manager.io/docs/installation/supported-releases/ for the list of available cert-manager versions.
 
 ## Operations
 
@@ -208,3 +258,15 @@ spec:
 
 There may be more places you need to tweak for MTU.
 Please consult issues like #651 for more information.
+
+## Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns
+
+**Problem**
+
+HRA doesn't scale the RunnerDeployment to zero, even though you did configure HRA correctly, to have a pull-based scaling metric `TotalNumberOfQueuedAndInProgressWorkflowRuns`, and set `minReplicas: 0`.
+
+**Solution**
+
+You very likely have some dangling workflow jobs stuck in `queued` or `in_progress` as seen in [#1057](https://github.com/actions-runner-controller/actions-runner-controller/issues/1057#issuecomment-1133439061).
+
+Manually call [the "list workflow runs" API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository), and [remove the dangling workflow job(s)](https://docs.github.com/en/rest/actions/workflow-runs#delete-a-workflow-run).

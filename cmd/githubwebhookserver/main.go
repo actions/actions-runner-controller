@@ -72,6 +72,7 @@ func main() {
 		enableLeaderElection bool
 		syncPeriod           time.Duration
 		logLevel             string
+		queueLimit           int
 
 		ghClient *github.Client
 	)
@@ -92,6 +93,7 @@ func main() {
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
+	flag.IntVar(&queueLimit, "queue-limit", controllers.DefaultQueueLimit, `The maximum length of the scale operation queue. The scale opration is enqueued per every matching webhook event, and the server returns a 500 HTTP status when the queue was already full on enqueue attempt.`)
 	flag.StringVar(&webhookSecretToken, "github-webhook-secret-token", "", "The personal access token of GitHub.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -164,6 +166,7 @@ func main() {
 		SecretKeyBytes: []byte(webhookSecretToken),
 		Namespace:      watchNamespace,
 		GitHubClient:   ghClient,
+		QueueLimit:     queueLimit,
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
