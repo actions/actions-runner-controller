@@ -67,6 +67,9 @@ spec:
         {{- if .Values.runnerGithubURL  }}
         - "--runner-github-url={{ .Values.runnerGithubURL }}"
         {{- end }}
+        {{- if .Values.runner.statusUpdateHook.enabled }}
+        - "--runner-status-update-hook"
+        {{- end }}
         command:
         - "/manager"
         env:

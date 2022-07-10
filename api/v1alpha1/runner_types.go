@@ -183,11 +183,6 @@ func (rs *RunnerSpec) Validate(rootPath *field.Path) field.ErrorList {
 		errList = append(errList, field.Invalid(rootPath.Child("workVolumeClaimTemplate"), rs.WorkVolumeClaimTemplate, err.Error()))
 	}
 
-	err = rs.validateIsServiceAccountNameSet()
-	if err != nil {
-		errList = append(errList, field.Invalid(rootPath.Child("serviceAccountName"), rs.ServiceAccountName, err.Error()))
-	}
-
 	return errList
 }
 
@@ -224,17 +219,6 @@ func (rs *RunnerSpec) validateWorkVolumeClaimTemplate() error {
 	}
 
 	return rs.WorkVolumeClaimTemplate.validate()
-}
-
-func (rs *RunnerSpec) validateIsServiceAccountNameSet() error {
-	if rs.ContainerMode != "kubernetes" {
-		return nil
-	}
-
-	if rs.ServiceAccountName == "" {
-		return errors.New("service account name is required if container mode is kubernetes")
-	}
-	return nil
 }
 
 // RunnerStatus defines the observed state of Runner
@@ -317,6 +301,7 @@ func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeM
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Runner is the Schema for the runners API

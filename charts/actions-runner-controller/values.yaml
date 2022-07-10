@@ -67,6 +67,10 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+runner:
+  statusUpdateHook:
+    enabled: false
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true

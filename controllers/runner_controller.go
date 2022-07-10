@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
@@ -70,8 +72,8 @@ type RunnerReconciler struct {
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
-
-	UnregistrationRetryDelay time.Duration
+	UseRunnerStatusUpdateHook   bool
+	UnregistrationRetryDelay    time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -81,6 +83,9 @@ type RunnerReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=create;delete;get
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get
 
 func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runner", req.NamespacedName)
@@ -135,7 +140,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	ready := runnerPodReady(&pod)
 
-	if runner.Status.Phase != phase || runner.Status.Ready != ready {
+	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.UseRunnerStatusUpdateHook {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
@@ -256,6 +261,91 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
+	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
+	if needsServiceAccount {
+		serviceAccount := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      runner.ObjectMeta.Name,
+				Namespace: runner.ObjectMeta.Namespace,
+			},
+		}
+		if res := r.createObject(ctx, serviceAccount, serviceAccount.ObjectMeta, &runner, log); res != nil {
+			return *res, nil
+		}
+
+		rules := []rbacv1.PolicyRule{}
+
+		if r.UseRunnerStatusUpdateHook {
+			rules = append(rules, []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{"actions.summerwind.dev"},
+					Resources:     []string{"runners/status"},
+					Verbs:         []string{"get", "update", "patch"},
+					ResourceNames: []string{runner.ObjectMeta.Name},
+				},
+			}...)
+		}
+
+		if runner.Spec.ContainerMode == "kubernetes" {
+			// Permissions based on https://github.com/actions/runner-container-hooks/blob/main/packages/k8s/README.md
+			rules = append(rules, []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/exec"},
+					Verbs:     []string{"get", "create"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/log"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+			}...)
+		}
+
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      runner.ObjectMeta.Name,
+				Namespace: runner.ObjectMeta.Namespace,
+			},
+			Rules: rules,
+		}
+		if res := r.createObject(ctx, role, role.ObjectMeta, &runner, log); res != nil {
+			return *res, nil
+		}
+
+		roleBinding := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      runner.ObjectMeta.Name,
+				Namespace: runner.ObjectMeta.Namespace,
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     runner.ObjectMeta.Name,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      runner.ObjectMeta.Name,
+					Namespace: runner.ObjectMeta.Namespace,
+				},
+			},
+		}
+		if res := r.createObject(ctx, roleBinding, roleBinding.ObjectMeta, &runner, log); res != nil {
+			return *res, nil
+		}
+	}
+
 	if err := r.Create(ctx, &newPod); err != nil {
 		if kerrors.IsAlreadyExists(err) {
 			// Gracefully handle pod-already-exists errors due to informer cache delay.
@@ -276,6 +366,27 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 	log.Info("Created runner pod", "repository", runner.Spec.Repository)
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RunnerReconciler) createObject(ctx context.Context, obj client.Object, meta metav1.ObjectMeta, runner *v1alpha1.Runner, log logr.Logger) *ctrl.Result {
+	kind := strings.Split(reflect.TypeOf(obj).String(), ".")[1]
+	if err := ctrl.SetControllerReference(runner, obj, r.Scheme); err != nil {
+		log.Error(err, fmt.Sprintf("Could not add owner reference to %s %s. %s", kind, meta.Name, err.Error()))
+		return &ctrl.Result{Requeue: true}
+	}
+	if err := r.Create(ctx, obj); err != nil {
+		if kerrors.IsAlreadyExists(err) {
+			log.Info(fmt.Sprintf("Failed to create %s %s as it already exists. Reusing existing %s", kind, meta.Name, kind))
+			r.Recorder.Event(runner, corev1.EventTypeNormal, fmt.Sprintf("%sReused", kind), fmt.Sprintf("Reused %s '%s'", kind, meta.Name))
+			return nil
+		}
+
+		log.Error(err, fmt.Sprintf("Retrying as failed to create %s %s resource", kind, meta.Name))
+		return &ctrl.Result{Requeue: true}
+	}
+	r.Recorder.Event(runner, corev1.EventTypeNormal, fmt.Sprintf("%sCreated", kind), fmt.Sprintf("Created %s '%s'", kind, meta.Name))
+	log.Info(fmt.Sprintf("Created %s", kind), "name", meta.Name)
+	return nil
 }
 
 func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v1alpha1.Runner) (bool, error) {
@@ -426,7 +537,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return pod, err
 	}
@@ -474,9 +585,13 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	if runnerSpec.NodeSelector != nil {
 		pod.Spec.NodeSelector = runnerSpec.NodeSelector
 	}
+
 	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
+	} else if r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
+		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
 	}
+
 	if runnerSpec.AutomountServiceAccountToken != nil {
 		pod.Spec.AutomountServiceAccountToken = runnerSpec.AutomountServiceAccountToken
 	}
@@ -589,7 +704,7 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 	}, nil
 }
 
-func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
+func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHook bool) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -664,6 +779,10 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		{
 			Name:  EnvVarEphemeral,
 			Value: fmt.Sprintf("%v", ephemeral),
+		},
+		{
+			Name:  "RUNNER_STATUS_UPDATE_HOOK",
+			Value: fmt.Sprintf("%v", useRunnerStatusUpdateHook),
 		},
 	}
 
@@ -962,8 +1081,8 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	return *pod, nil
 }
 
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string) (corev1.Pod, error) {
-	return newRunnerPodWithContainerMode("", template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHookEphemeralRole bool) (corev1.Pod, error) {
+	return newRunnerPodWithContainerMode("", template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, useRunnerStatusUpdateHookEphemeralRole)
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -68,11 +68,12 @@ func main() {
 		err      error
 		ghClient *github.Client
 
-		metricsAddr          string
-		enableLeaderElection bool
-		leaderElectionId     string
-		port                 int
-		syncPeriod           time.Duration
+		metricsAddr            string
+		enableLeaderElection   bool
+		runnerStatusUpdateHook bool
+		leaderElectionId       string
+		port                   int
+		syncPeriod             time.Duration
 
 		gitHubAPICacheDuration time.Duration
 		defaultScaleDownDelay  time.Duration
@@ -112,6 +113,7 @@ func main() {
 	flag.StringVar(&c.BasicauthUsername, "github-basicauth-username", c.BasicauthUsername, "Username for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
+	flag.BoolVar(&runnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
 	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "DEPRECATED: The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", controllers.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
@@ -148,12 +150,13 @@ func main() {
 	}
 
 	runnerReconciler := &controllers.RunnerReconciler{
-		Client:               mgr.GetClient(),
-		Log:                  log.WithName("runner"),
-		Scheme:               mgr.GetScheme(),
-		GitHubClient:         ghClient,
-		DockerImage:          dockerImage,
-		DockerRegistryMirror: dockerRegistryMirror,
+		Client:                    mgr.GetClient(),
+		Log:                       log.WithName("runner"),
+		Scheme:                    mgr.GetScheme(),
+		GitHubClient:              ghClient,
+		DockerImage:               dockerImage,
+		DockerRegistryMirror:      dockerRegistryMirror,
+		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
 		// Defaults for self-hosted runner containers
 		RunnerImage:            runnerImage,
 		RunnerImagePullSecrets: runnerImagePullSecrets,
@@ -197,8 +200,9 @@ func main() {
 		DockerRegistryMirror: dockerRegistryMirror,
 		GitHubBaseURL:        ghClient.GithubBaseURL,
 		// Defaults for self-hosted runner containers
-		RunnerImage:            runnerImage,
-		RunnerImagePullSecrets: runnerImagePullSecrets,
+		RunnerImage:               runnerImage,
+		RunnerImagePullSecrets:    runnerImagePullSecrets,
+		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {

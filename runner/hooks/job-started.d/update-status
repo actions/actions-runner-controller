@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -u
+
+exec update-status Running "Run $GITHUB_RUN_ID from $GITHUB_REPOSITORY"
