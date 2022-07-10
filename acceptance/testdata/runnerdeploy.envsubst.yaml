@@ -43,6 +43,17 @@ spec:
       # Non-standard working directory
       #
       # workDir: "/"
+
+      # # Uncomment the below to enable the kubernetes container mode
+      # # See https://github.com/actions-runner-controller/actions-runner-controller#runner-with-k8s-jobs
+      containerMode: kubernetes
+      workVolumeClaimTemplate:
+        accessModes:
+        - ReadWriteOnce
+        storageClassName: "${NAME}-runner-work-dir"
+        resources:
+          requests:
+            storage: 10Gi
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
