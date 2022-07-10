@@ -1747,7 +1747,7 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
 
 ### Multitenancy
 
-Since [#1371](https://github.com/actions-runner-controller/actions-runner-controller/pull/1371) and the version 0.25.0, ARC supports multi-tenancy.
+> This feature requires controller version => [v0.26.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.26.0)
 
 In a large enterprise, there might be many GitHub organizations that requires self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
 
