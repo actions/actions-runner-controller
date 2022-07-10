@@ -273,7 +273,7 @@ Alternatively, you can install each controller stack into a unique namespace (re
 
 Runners can be deployed as 1 of 2 abstractions: 
 
-- A `RunnerDeployment` (based on k8s's `Deployments`)
+- A `RunnerDeployment` (similar to k8s's `Deployments`, based on `Pods`)
 - A `RunnerSet` (based on k8s's `StatefulSets`)
 
 We go into details about the differences between the 2 later, initially lets look at how to deploy a basic `RunnerDeployment` at the 3 possible management hierarchies.
