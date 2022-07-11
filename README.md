@@ -1592,7 +1592,7 @@ jobs:
 
 When using labels there are a few things to be aware of:
 
-1. `self-hosted` is implict with every runner as this is an automatic label GitHub apply to any self-hosted runner. As a result ARC can treat all runners as having this label without physically having it a runner's manifest. You do not need to explicitly define this label in your runner manifests (you can if you want though).
+1. `self-hosted` is implict with every runner as this is an automatic label GitHub apply to any self-hosted runner. As a result ARC can treat all runners as having this label without having it explicitly defined in a runner's manifest. You do not need to explicitly define this label in your runner manifests (you can if you want though).
 2. In addition to the `self-hosted` label, GitHub also applies a few other [default](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#using-default-labels-to-route-jobs) labels to any self-hosted runner. These other default labels relate to the architecture of the runner and so can't be implicitly assumed by ARC as ARC doesn't know if your runner is `linux` or `windows`, `x64` or `ARM64`. If you wish to use these labels in your workflows you must add them to your runner manifests or ARC will ignore them.
 
 ### Runner Groups
