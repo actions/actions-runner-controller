@@ -98,7 +98,8 @@ RUN mkdir /opt/hostedtoolcache \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint.sh logger.bash startup.sh /usr/bin/
+COPY entrypoint.sh logger.bash startup.sh update-status /usr/bin/
+COPY hooks /etc/arc/hooks/
 COPY supervisor/ /etc/supervisor/conf.d/
 RUN chmod +x /usr/bin/startup.sh /usr/bin/entrypoint.sh
 
