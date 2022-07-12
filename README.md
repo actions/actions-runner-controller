@@ -542,9 +542,10 @@ spec:
   # for 5 minutes instead of the default 10 minutes now
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -570,10 +571,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    # Your RunnerDeployment Here
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
@@ -614,9 +615,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # IMPORTANT : If your HRA is targeting a RunnerSet you must specify the kind in the scaleTargetRef:, uncomment the below
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -649,9 +651,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -670,9 +673,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -699,9 +703,10 @@ More concretely, you can configure the targeted GitHub event types and the `N` i
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -909,9 +914,10 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       workflowJob: {}
@@ -944,9 +950,10 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -972,9 +979,10 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       checkRun:
@@ -1004,9 +1012,10 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       pullRequest:
@@ -1034,9 +1043,10 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scaleUpTriggers:
   - githubEvent:
       push:
@@ -1081,9 +1091,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 100 only between 2021-06-01T00:00:00+09:00 and 2021-06-03T00:00:00+09:00
   - startTime: "2021-06-01T00:00:00+09:00"
@@ -1103,9 +1114,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 0 only between 0am sat to 0am mon
   - startTime: "2021-05-01T00:00:00+09:00"
