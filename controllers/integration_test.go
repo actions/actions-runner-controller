@@ -138,13 +138,12 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runnerdeployment controller")
 
 		autoscalerController := &HorizontalRunnerAutoscalerReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        scheme.Scheme,
-			Log:           logf.Log,
-			GitHubClient:  multiClient,
-			Recorder:      mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
-			CacheDuration: 1 * time.Second,
-			Name:          controllerName("horizontalrunnerautoscaler"),
+			Client:       mgr.GetClient(),
+			Scheme:       scheme.Scheme,
+			Log:          logf.Log,
+			GitHubClient: multiClient,
+			Recorder:     mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Name:         controllerName("horizontalrunnerautoscaler"),
 		}
 		err = autoscalerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler controller")
