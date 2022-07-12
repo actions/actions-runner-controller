@@ -187,7 +187,6 @@ admissionWebHooks:
 githubWebhookServer:
   enabled: false
   replicaCount: 1
-  syncPeriod: 10m
   useRunnerGroupsVisibility: false
   secret:
     enabled: false
