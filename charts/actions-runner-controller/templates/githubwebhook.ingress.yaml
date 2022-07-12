@@ -1,13 +1,7 @@
 {{- if .Values.githubWebhookServer.ingress.enabled -}}
 {{- $fullName := include "actions-runner-controller-github-webhook-server.fullname" . -}}
 {{- $svcPort := (index .Values.githubWebhookServer.service.ports 0).port -}}
-{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1/Ingress" }}
 apiVersion: networking.k8s.io/v1
-{{- else if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1/Ingress" }}
-apiVersion: networking.k8s.io/v1beta1
-{{- else if .Capabilities.APIVersions.Has "extensions/v1beta1/Ingress" }}
-apiVersion: extensions/v1beta1
-{{- end }}
 kind: Ingress
 metadata:
   name: {{ $fullName }}
