@@ -15,12 +15,6 @@ enableLeaderElection: true
 # Must be unique if more than one controller installed onto the same namespace.
 #leaderElectionId: "actions-runner-controller"
 
-# DEPRECATED: This has been removed as unnecessary in #1192
-# The controller tries its best not to repeat the duplicate GitHub API call
-# within this duration.
-# Defaults to syncPeriod - 10s.
-#githubAPICacheDuration: 30s
-
 # The URL of your GitHub Enterprise server, if you're using one.
 #githubEnterpriseServerURL: https://github.example.com
 

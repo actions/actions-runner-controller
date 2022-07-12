@@ -75,8 +75,7 @@ func main() {
 		port                   int
 		syncPeriod             time.Duration
 
-		gitHubAPICacheDuration time.Duration
-		defaultScaleDownDelay  time.Duration
+		defaultScaleDownDelay time.Duration
 
 		runnerImage            string
 		runnerImagePullSecrets stringSlice
@@ -114,7 +113,6 @@ func main() {
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
 	flag.BoolVar(&runnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
-	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "DEPRECATED: The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", controllers.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
@@ -213,17 +211,9 @@ func main() {
 		log.Error(err, "unable to create controller", "controller", "RunnerSet")
 		os.Exit(1)
 	}
-	if gitHubAPICacheDuration == 0 {
-		gitHubAPICacheDuration = syncPeriod - 10*time.Second
-	}
-
-	if gitHubAPICacheDuration < 0 {
-		gitHubAPICacheDuration = 0
-	}
 
 	log.Info(
 		"Initializing actions-runner-controller",
-		"github-api-cache-duration", gitHubAPICacheDuration,
 		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
 		"default-runner-image", runnerImage,
@@ -239,7 +229,6 @@ func main() {
 		Log:                   log.WithName("horizontalrunnerautoscaler"),
 		Scheme:                mgr.GetScheme(),
 		GitHubClient:          multiClient,
-		CacheDuration:         gitHubAPICacheDuration,
 		DefaultScaleDownDelay: defaultScaleDownDelay,
 	}
 

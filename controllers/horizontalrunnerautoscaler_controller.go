@@ -51,7 +51,6 @@ type HorizontalRunnerAutoscalerReconciler struct {
 	Log                   logr.Logger
 	Recorder              record.EventRecorder
 	Scheme                *runtime.Scheme
-	CacheDuration         time.Duration
 	DefaultScaleDownDelay time.Duration
 	Name                  string
 }
