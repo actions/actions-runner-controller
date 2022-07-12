@@ -309,6 +309,7 @@ func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeM
 // +kubebuilder:printcolumn:JSONPath=".spec.enterprise",name=Enterprise,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.group",name=Group,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
