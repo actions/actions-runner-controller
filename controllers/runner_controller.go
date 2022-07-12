@@ -52,6 +52,8 @@ const (
 
 	EnvVarOrg        = "RUNNER_ORG"
 	EnvVarRepo       = "RUNNER_REPO"
+	EnvVarGroup      = "RUNNER_GROUP"
+	EnvVarLabels     = "RUNNER_LABELS"
 	EnvVarEnterprise = "RUNNER_ENTERPRISE"
 	EnvVarEphemeral  = "RUNNER_EPHEMERAL"
 	EnvVarTrue       = "true"
@@ -772,11 +774,11 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			Value: runnerSpec.Enterprise,
 		},
 		{
-			Name:  "RUNNER_LABELS",
+			Name:  EnvVarLabels,
 			Value: strings.Join(runnerSpec.Labels, ","),
 		},
 		{
-			Name:  "RUNNER_GROUP",
+			Name:  EnvVarGroup,
 			Value: runnerSpec.Group,
 		},
 		{
