@@ -149,11 +149,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	multiClient := controllers.NewMultiGitHubClient(
+		mgr.GetClient(),
+		ghClient,
+	)
+
 	runnerReconciler := &controllers.RunnerReconciler{
 		Client:                    mgr.GetClient(),
 		Log:                       log.WithName("runner"),
 		Scheme:                    mgr.GetScheme(),
-		GitHubClient:              ghClient,
+		GitHubClient:              multiClient,
 		DockerImage:               dockerImage,
 		DockerRegistryMirror:      dockerRegistryMirror,
 		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
@@ -168,10 +173,9 @@ func main() {
 	}
 
 	runnerReplicaSetReconciler := &controllers.RunnerReplicaSetReconciler{
-		Client:       mgr.GetClient(),
-		Log:          log.WithName("runnerreplicaset"),
-		Scheme:       mgr.GetScheme(),
-		GitHubClient: ghClient,
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerreplicaset"),
+		Scheme: mgr.GetScheme(),
 	}
 
 	if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
@@ -198,7 +202,7 @@ func main() {
 		CommonRunnerLabels:   commonRunnerLabels,
 		DockerImage:          dockerImage,
 		DockerRegistryMirror: dockerRegistryMirror,
-		GitHubBaseURL:        ghClient.GithubBaseURL,
+		GitHubClient:         multiClient,
 		// Defaults for self-hosted runner containers
 		RunnerImage:               runnerImage,
 		RunnerImagePullSecrets:    runnerImagePullSecrets,
@@ -234,7 +238,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		Log:                   log.WithName("horizontalrunnerautoscaler"),
 		Scheme:                mgr.GetScheme(),
-		GitHubClient:          ghClient,
+		GitHubClient:          multiClient,
 		CacheDuration:         gitHubAPICacheDuration,
 		DefaultScaleDownDelay: defaultScaleDownDelay,
 	}
@@ -243,7 +247,7 @@ func main() {
 		Client:       mgr.GetClient(),
 		Log:          log.WithName("runnerpod"),
 		Scheme:       mgr.GetScheme(),
-		GitHubClient: ghClient,
+		GitHubClient: multiClient,
 	}
 
 	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
@@ -294,7 +298,7 @@ func main() {
 
 	injector := &controllers.PodRunnerTokenInjector{
 		Client:       mgr.GetClient(),
-		GitHubClient: ghClient,
+		GitHubClient: multiClient,
 		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
 	}
 	if err = injector.SetupWithManager(mgr); err != nil {

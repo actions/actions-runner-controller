@@ -46,7 +46,7 @@ type RunnerSetReconciler struct {
 	Scheme   *runtime.Scheme
 
 	CommonRunnerLabels        []string
-	GitHubBaseURL             string
+	GitHubClient              *MultiGitHubClient
 	RunnerImage               string
 	RunnerImagePullSecrets    []string
 	DockerImage               string
@@ -81,6 +81,8 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if !runnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+		r.GitHubClient.DeinitForRunnerSet(runnerSet)
+
 		return ctrl.Result{}, nil
 	}
 
@@ -98,7 +100,7 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	desiredStatefulSet, err := r.newStatefulSet(runnerSet)
+	desiredStatefulSet, err := r.newStatefulSet(ctx, runnerSet)
 	if err != nil {
 		r.Recorder.Event(runnerSet, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -186,7 +188,7 @@ func getRunnerSetSelector(runnerSet *v1alpha1.RunnerSet) *metav1.LabelSelector {
 var LabelKeyPodMutation = "actions-runner-controller/inject-registration-token"
 var LabelValuePodMutation = "true"
 
-func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
+func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
 	runnerSetWithOverrides := *runnerSet.Spec.DeepCopy()
 
 	runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, r.CommonRunnerLabels...)
@@ -222,7 +224,14 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
 
-	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, r.UseRunnerStatusUpdateHook)
+	ghc, err := r.GitHubClient.InitForRunnerSet(ctx, runnerSet)
+	if err != nil {
+		return nil, err
+	}
+
+	githubBaseURL := ghc.GithubBaseURL
+
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, githubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return nil, err
 	}

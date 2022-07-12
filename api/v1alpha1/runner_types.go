@@ -76,6 +76,16 @@ type RunnerConfig struct {
 
 	// +optional
 	ContainerMode string `json:"containerMode,omitempty"`
+
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
+}
+
+type GitHubAPICredentialsFrom struct {
+	SecretRef SecretReference `json:"secretRef,omitempty"`
+}
+
+type SecretReference struct {
+	Name string `json:"name"`
 }
 
 // RunnerPodSpec defines the desired pod spec fields of the runner pod

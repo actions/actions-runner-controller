@@ -61,6 +61,16 @@ spec:
                         type: integer
                     type: object
                   type: array
+                githubAPICredentialsFrom:
+                  properties:
+                    secretRef:
+                      properties:
+                        name:
+                          type: string
+                      required:
+                        - name
+                      type: object
+                  type: object
                 maxReplicas:
                   description: MaxReplicas is the maximum number of replicas the deployment is allowed to scale
                   type: integer

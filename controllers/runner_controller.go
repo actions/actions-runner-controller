@@ -40,7 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 const (
@@ -64,7 +63,7 @@ type RunnerReconciler struct {
 	Log                         logr.Logger
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
-	GitHubClient                *github.Client
+	GitHubClient                *MultiGitHubClient
 	RunnerImage                 string
 	RunnerImagePullSecrets      []string
 	DockerImage                 string
@@ -120,6 +119,8 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			// Pod was not found
 			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
+
+		r.GitHubClient.DeinitForRunner(&runner)
 
 		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
@@ -401,7 +402,12 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 	log := r.Log.WithValues("runner", runner.Name)
 
-	rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+	ghc, err := r.GitHubClient.InitForRunner(ctx, &runner)
+	if err != nil {
+		return false, err
+	}
+
+	rt, err := ghc.GetRegistrationToken(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
 	if err != nil {
 		// An error can be a permanent, permission issue like the below:
 		//    POST https://api.github.com/enterprises/YOUR_ENTERPRISE/actions/runners/registration-token: 403 Resource not accessible by integration []
@@ -441,6 +447,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		labels[k] = v
 	}
 
+	ghc, err := r.GitHubClient.InitForRunner(context.Background(), &runner)
+	if err != nil {
+		return corev1.Pod{}, err
+	}
+
 	// This implies that...
 	//
 	// (1) We recreate the runner pod whenever the runner has changes in:
@@ -464,7 +475,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		filterLabels(runner.ObjectMeta.Labels, LabelKeyRunnerTemplateHash),
 		runner.ObjectMeta.Annotations,
 		runner.Spec,
-		r.GitHubClient.GithubBaseURL,
+		ghc.GithubBaseURL,
 		// Token change should trigger replacement.
 		// We need to include this explicitly here because
 		// runner.Spec does not contain the possibly updated token stored in the
@@ -542,7 +553,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, r.UseRunnerStatusUpdateHook)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, ghc.GithubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return pod, err
 	}
@@ -729,6 +740,9 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	// This label selector is used by default when rd.Spec.Selector is empty.
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunner, "")
 	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
+	if runnerSpec.GitHubAPICredentialsFrom != nil {
+		template.ObjectMeta.Annotations = CloneAndAddLabel(template.ObjectMeta.Annotations, annotationKeyGitHubAPICredsSecret, runnerSpec.GitHubAPICredentialsFrom.SecretRef.Name)
+	}
 
 	workDir := runnerSpec.WorkDir
 	if workDir == "" {

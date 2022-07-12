@@ -32,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 // RunnerPodReconciler reconciles a Runner object
@@ -42,7 +40,7 @@ type RunnerPodReconciler struct {
 	Log                         logr.Logger
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
-	GitHubClient                *github.Client
+	GitHubClient                *MultiGitHubClient
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
@@ -97,6 +95,11 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	ghc, err := r.GitHubClient.InitForRunnerPod(ctx, &runnerPod)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if runnerPod.ObjectMeta.DeletionTimestamp.IsZero() {
 		finalizers, added := addFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
@@ -148,7 +151,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			// In a standard scenario, the upstream controller, like runnerset-controller, ensures this runner to be gracefully stopped before the deletion timestamp is set.
 			// But for the case that the user manually deleted it for whatever reason,
 			// we have to ensure it to gracefully stop now.
-			updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+			updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationRetryDelay(), log, ghc, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
 			if res != nil {
 				return *res, err
 			}
@@ -163,6 +166,8 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 
 			log.V(2).Info("Removed finalizer")
+
+			r.GitHubClient.DeinitForRunnerPod(updatedPod)
 
 			return ctrl.Result{}, nil
 		}
@@ -202,7 +207,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	po, res, err := ensureRunnerPodRegistered(ctx, log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+	po, res, err := ensureRunnerPodRegistered(ctx, log, ghc, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
 	if res != nil {
 		return *res, err
 	}
@@ -216,7 +221,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		//
 		// In a standard scenario, ARC starts the unregistration process before marking the pod for deletion at all,
 		// so that it isn't subject to terminationGracePeriod and can safely take hours to finish it's work.
-		_, res, err := tickRunnerGracefulStop(ctx, r.unregistrationRetryDelay(), log, r.GitHubClient, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+		_, res, err := tickRunnerGracefulStop(ctx, r.unregistrationRetryDelay(), log, ghc, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
 		if res != nil {
 			return *res, err
 		}
