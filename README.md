@@ -1163,6 +1163,10 @@ spec:
       env: []
 ```
 
+#### Runner with rootless DinD
+
+When using the DinD runner, it assumes that the main runner is rootful, which can be problematic in a regulated or more security-conscious environment, such as co-tenanting across enterprise projects.  The `actions-runner-dind-rootless` image runs rootless Docker inside the container as `runner` user.  Note that this user does not have sudo access, so anything requiring admin privileges must be built into the runner's base image (like running `apt` to install additional software).
+
 #### Runner with K8s Jobs
 
 When using the default runner, jobs that use a container will run in docker. This necessitates privileged mode, either on the runner pod or the sidecar container
