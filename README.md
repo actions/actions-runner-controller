@@ -258,7 +258,7 @@ You can deploy multiple controllers either in a single shared namespace, or in a
 
 If you plan on installing all instances of the controller stack into a single namespace there are a few things you need to do for this to work.
 
-1. All resources per stack must have a unique, in the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
+1. All resources per stack must have a unique name, in the case of Helm this can be done by giving each install a unique release name, or via the `fullnameOverride` properties.
 2. `authSecret.name` needs to be unique per stack when each stack is tied to runners in different GitHub organizations and repositories AND you want your GitHub credentials to be narrowly scoped.
 3. `leaderElectionId` needs to be unique per stack. If this is not unique to the stack the controller tries to race onto the leader election lock resulting in only one stack working concurrently. Your controller will be stuck with a log message something like this `attempting to acquire leader lease arc-controllers/actions-runner-controller...`
 4. The MutatingWebhookConfiguration in each stack must include a namespace selector for that stack's corresponding runner namespace, this is already configured in the helm chart.
