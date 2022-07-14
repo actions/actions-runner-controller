@@ -165,6 +165,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
+		log.V(1).Info("Updated runnerreplicaset due to selector change")
+
 		// At this point, we are already sure that there's no need to create a new replicaset
 		// as the runner template hash is not changed.
 		//
@@ -182,7 +184,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	//
 	// If we missed taking the EffectiveTime diff into account, you might end up experiencing scale-ups being delayed scale-down.
 	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1477#issuecomment-1164154496
-	if currentDesiredReplicas != newDesiredReplicas || newestSet.Spec.EffectiveTime != rd.Spec.EffectiveTime {
+	var et1, et2 time.Time
+	if newestSet.Spec.EffectiveTime != nil {
+		et1 = newestSet.Spec.EffectiveTime.Time
+	}
+	if rd.Spec.EffectiveTime != nil {
+		et2 = rd.Spec.EffectiveTime.Time
+	}
+	if currentDesiredReplicas != newDesiredReplicas || et1 != et2 {
 		newestSet.Spec.Replicas = &newDesiredReplicas
 		newestSet.Spec.EffectiveTime = rd.Spec.EffectiveTime
 
@@ -191,6 +200,13 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			return ctrl.Result{}, err
 		}
+
+		log.V(1).Info("Updated runnerreplicaset due to spec change",
+			"currentDesiredReplicas", currentDesiredReplicas,
+			"newDesiredReplicas", newDesiredReplicas,
+			"currentEffectiveTime", newestSet.Spec.EffectiveTime,
+			"newEffectiveTime", rd.Spec.EffectiveTime,
+		)
 
 		return ctrl.Result{}, err
 	}
