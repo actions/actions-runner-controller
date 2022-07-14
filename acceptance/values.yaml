@@ -1,18 +1,18 @@
 # Set actions-runner-controller settings for testing
 logLevel: "-4"
-imagePullSecrets:
-- name:
+imagePullSecrets: []
 image:
-  actionsRunnerImagePullSecrets:
-  - name:
+  # This needs to be an empty array rather than a single-item array with empty name.
+  # Otherwise you end up with the following error on helm-upgrade:
+  #   Error: UPGRADE FAILED: failed to create patch: map: map[] does not contain declared merge key: name && failed to create patch: map: map[] does not contain declared merge key: name
+  actionsRunnerImagePullSecrets: []
 runner:
   statusUpdateHook:
     enabled: true
 rbac:
   allowGrantingKubernetesContainerModePermissions: true
 githubWebhookServer:
-  imagePullSecrets:
-  - name:
+  imagePullSecrets: []
   logLevel: "-4"
   enabled: true
   labels: {}
