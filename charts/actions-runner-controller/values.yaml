@@ -163,7 +163,6 @@ env:
   #       name: some-secret-name
   #       optional: true
 
-
 ## specify additional volumes to mount in the manager container, this can be used
 ## to specify additional storage of material or to inject files from ConfigMaps
 ## into the running container
