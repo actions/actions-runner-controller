@@ -149,9 +149,20 @@ priorityClassName: ""
 
 env:
   {}
+  # specify additional environment variables for the controller pod.
+  # It's possible to specify either key vale pairs e.g.:
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
+
+  # or a list of complete environment variable definitions e.g.:
+  # - name: GITHUB_APP_INSTALLATION_ID
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: some_key_in_the_secret
+  #       name: some-secret-name
+  #       optional: true
+
 
 ## specify additional volumes to mount in the manager container, this can be used
 ## to specify additional storage of material or to inject files from ConfigMaps
