@@ -1447,6 +1447,8 @@ reused across runner pods to retain `/var/lib/docker`.
 
 _Be sure to add the volume mount to the container that is supposed to run the docker daemon._
 
+_Be sure to trigger several workflow runs before checking if the cache is effective. ARC requires an `Available` PV to be reused for the new runner pod, and a PV becomes `Available` only after some time after the previous runner pod that was using the PV terminated. See [the related discussion](https://github.com/actions-runner-controller/actions-runner-controller/discussions/1605)._
+
 By default, ARC creates a sidecar container named `docker` within the runner pod for running the docker daemon. In that case,
 it's where you need the volume mount so that the manifest looks like:
 
@@ -1481,6 +1483,8 @@ With `dockerdWithinRunnerContainer: true`, you need to add the volume mount to t
 `Go` is known to cache builds under `$HOME/.cache/go-build` and downloaded modules under `$HOME/pkg/mod`.
 The module cache dir can be customized by setting `GOMOD_CACHE` so by setting it to somewhere under `$HOME/.cache`,
 we can have a single PV to host both build and module cache, which might improve Go module downloading and building time.
+
+_Be sure to trigger several workflow runs before checking if the cache is effective. ARC requires an `Available` PV to be reused for the new runner pod, and a PV becomes `Available` only after some time after the previous runner pod that was using the PV terminated. See [the related discussion](https://github.com/actions-runner-controller/actions-runner-controller/discussions/1605)._
 
 ```yaml
 kind: RunnerSet
