@@ -92,7 +92,7 @@ func main() {
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
-	fmt.Println("ARC VERSION:", getVersion("ARC_VERSION", "DEV"))
+	fmt.Println("ARC VERSION:", getVersion("ARC_VERSION", "VERSION NOT SET"))
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {

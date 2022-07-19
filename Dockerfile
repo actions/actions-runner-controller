@@ -7,7 +7,6 @@ WORKDIR /workspace
 ENV CGO_ENABLED=0
 # Enviroment Variable used inside main to display current ARC version
 ENV ARC_VERSION=$VERSION
-RUN echo $ARC_VERSION
 # Copy the Go Modules manifests
 COPY go.mod go.sum ./
 
