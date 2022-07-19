@@ -62,7 +62,12 @@ func (i *stringSlice) Set(value string) error {
 	*i = append(*i, value)
 	return nil
 }
-
+func getVersion(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
 func main() {
 	var (
 		err      error
@@ -87,7 +92,7 @@ func main() {
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
-
+	fmt.Println("ARC VERSION:", getVersion("ARC_VERSION", "DEV"))
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {

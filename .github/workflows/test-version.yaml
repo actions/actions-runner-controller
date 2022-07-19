@@ -1,0 +1,26 @@
+name: Publish ARC
+
+
+on:
+  workflow_dispatch:
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set version
+        run: echo "VERSION=test" >> $GITHUB_ENV
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build and Push
+        uses: docker/build-push-action@v3
+        with:
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
+            ghcr.io/actions-runner-controller/actions-runner-controller:latest
+            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}
+            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
