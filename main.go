@@ -92,7 +92,6 @@ func main() {
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
-	fmt.Println("ARC VERSION:", getVersion("ARC_VERSION", "VERSION NOT SET"))
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {
@@ -127,7 +126,7 @@ func main() {
 	flag.Parse()
 
 	logger := logging.NewLogger(logLevel)
-
+	version := getVersion("ARC_VERSION", "dev")
 	c.Log = &logger
 
 	ghClient, err = c.NewClient()
@@ -219,6 +218,7 @@ func main() {
 
 	log.Info(
 		"Initializing actions-runner-controller",
+		"version", version,
 		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
 		"default-runner-image", runnerImage,
