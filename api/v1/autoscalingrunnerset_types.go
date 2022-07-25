@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,17 +26,22 @@ import (
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	//+kubebuilder:validation:MinLength=0
+	// GITHUB_RUNNER_ORG
+	RunnerOrg string `json:"githubRunnerOrg,omitempty"`
 
-	// Foo is an example field of AutoscalingRunnerSet. Edit autoscalingrunnerset_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	//+kubebuilder:validation:MinLength=0
+	// GITHUB_RUNNER_REPOSITORY
+	RunnerRepo string `json:"githubRunnerRepository,omitempty"`
+
+	//+kubebuilder:validation:MinLength=0
+	// GITHUB_RUNNER_SCALE_SET_NAME
+	RunnerScaleSet string `json:"githubRunnerScaleSet,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	ActiveAutoscalers []corev1.ObjectReference `json:"active,omitempty"`
 }
 
 //+kubebuilder:object:root=true

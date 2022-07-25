@@ -3,4 +3,6 @@ kind: AutoscalingRunnerSet
 metadata:
   name: autoscalingrunnerset-sample
 spec:
-  # TODO(user): Add fields here
+  githubRunnerOrg: "bbq-beets"
+  githubRunnerRepository: "ting-test"
+  githubRunnerScaleSet: "test-runner-scale-set"

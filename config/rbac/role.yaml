@@ -7,6 +7,44 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - actions
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions
+  resources:
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - autoscalingrunnersets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - autoscalingrunnersets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - actions.summerwind.dev
   resources:
   - horizontalrunnerautoscalers
