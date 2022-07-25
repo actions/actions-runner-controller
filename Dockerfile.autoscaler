@@ -1,0 +1,12 @@
+FROM golang:1.18 AS build
+WORKDIR $GOPATH/autoscaler/
+COPY . .
+RUN go mod download
+RUN go mod verify
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-w -s" -a \
+    -o /bin/autoscaler ./cmd/githubrunnerscalesetlistener/
+
+FROM scratch
+COPY --from=build /bin/autoscaler /bin/autoscaler
+ENTRYPOINT ["/bin/autoscaler"]
