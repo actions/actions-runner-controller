@@ -74,10 +74,10 @@ func main() {
 	logger := logging.NewLogger(logging.LogLevelDebug)
 	ctrl.SetLogger(logger)
 
-	c.RunnerRepository = "ting-test"
-	c.RunnerOrg = "bbq-beets"
-	c.Token = ""
-	c.RunnerScaleSetName = "test-runner-scale-set"
+	if len(c.RunnerRepository) <= 0 || len(c.RunnerOrg) <= 0 || len(c.Token) <= 0 || len(c.RunnerScaleSetName) <= 0 {
+		fmt.Fprintln(os.Stderr, "GitHub config is not provided:", c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName)
+		os.Exit(1)
+	}
 	if len(c.Token) > 0 || (c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != "") || (len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0) {
 		c.Log = &logger
 
