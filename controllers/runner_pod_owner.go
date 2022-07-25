@@ -315,7 +315,7 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 	numOwners := len(owners)
 
 	var hashes []string
-	for h, _ := range state.podsForOwners {
+	for h := range state.podsForOwners {
 		hashes = append(hashes, h)
 	}
 

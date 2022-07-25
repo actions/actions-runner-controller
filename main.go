@@ -23,15 +23,16 @@ import (
 	"strings"
 	"time"
 
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -284,6 +285,14 @@ func main() {
 	}
 	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
 		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+		os.Exit(1)
+	}
+	if err = (&controllers.AutoscalingRunnerSetReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

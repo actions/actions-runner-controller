@@ -1,0 +1,6 @@
+apiVersion: actions.summerwind.dev/v1
+kind: AutoscalingRunnerSet
+metadata:
+  name: autoscalingrunnerset-sample
+spec:
+  # TODO(user): Add fields here
