@@ -31,6 +31,7 @@ ToC:
     - [Scheduled Overrides](#scheduled-overrides)
   - [Alternative Runners](#alternative-runners)
     - [Runner with DinD](#runner-with-dind)
+    - [Runner with rootless DinD](#runner-with-rootless-dind)
     - [Runner with k8s jobs](#runner-with-k8s-jobs)
   - [Additional Tweaks](#additional-tweaks)
   - [Custom Volume mounts](#custom-volume-mounts)
