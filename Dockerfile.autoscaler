@@ -7,6 +7,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-w -s" -a \
     -o /bin/autoscaler ./cmd/githubrunnerscalesetlistener/
 
-FROM scratch
+# TODO(cory-miller): Replace with alpine or something similar.
+FROM golang:1.18
 COPY --from=build /bin/autoscaler /bin/autoscaler
 ENTRYPOINT ["/bin/autoscaler"]
