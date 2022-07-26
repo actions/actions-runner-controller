@@ -249,6 +249,8 @@ func main() {
 					}
 
 					logger.Info("Generated JIT runner config.", "RequestId", jobAssigned.RunnerRequestId, "RunnerId", jitConfig.Runner.Id, "JitConfig", jitConfig.EncodedJITConfig)
+
+					// TODO(cory-miller): Create a Runner here and pass in the JIT config.
 				} else if message.MessageType == "RunnerScaleSetJobCompleted" {
 					var jobCompleted JobCompleted
 					err = json.NewDecoder(strings.NewReader(message.Body)).Decode(&jobCompleted)
