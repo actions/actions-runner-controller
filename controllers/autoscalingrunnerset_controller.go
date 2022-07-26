@@ -95,8 +95,8 @@ func getAutoscalerApplicationPodRef(org, repo, scaleSet, token string) *corev1.P
 	}
 }
 
-func isPodReady(job *corev1.Pod) bool {
-	for _, c := range job.Status.Conditions {
+func isPodReady(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
 		if c.Type == corev1.PodReady {
 			return true
 		}
@@ -149,13 +149,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	// TODO(cory-miller): Track inactive/old Pods and remove them
 
 	for _, pod := range childPods.Items {
-		if !isPodReady(&pod) {
-			klog.Info("%v is not ready, skipping", pod.Name)
+		if pod.Name != name {
+			klog.Info("%v is not a known autoscaler pod, skipping", pod.Name)
 			continue
 		}
 
-		if pod.Name != name {
-			klog.Info("%v is not a known autoscaler pod, skipping", pod.Name)
+		if !isPodReady(&pod) {
+			klog.Info("%v is not ready, skipping", pod.Name)
 			continue
 		}
 
