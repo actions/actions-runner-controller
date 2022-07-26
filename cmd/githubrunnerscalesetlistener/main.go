@@ -74,7 +74,7 @@ func main() {
 	logger := logging.NewLogger(logging.LogLevelDebug)
 	ctrl.SetLogger(logger)
 
-	if len(c.RunnerRepository) <= 0 || len(c.RunnerOrg) <= 0 || len(c.Token) <= 0 || len(c.RunnerScaleSetName) <= 0 {
+	if len(c.RunnerRepository) == 0 || len(c.RunnerOrg) == 0 || len(c.Token) == 0 || len(c.RunnerScaleSetName) == 0 {
 		fmt.Fprintln(os.Stderr, "GitHub config is not provided:", c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName)
 		os.Exit(1)
 	}
