@@ -46,7 +46,7 @@ type RunnerJobReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
-func (r *RunnerJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *RunnerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("runnerjob", req.NamespacedName)
 

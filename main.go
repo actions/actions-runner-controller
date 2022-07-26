@@ -50,7 +50,6 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = actionsv1alpha1.AddToScheme(scheme)
-	utilruntime.Must(actionsv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -283,14 +282,6 @@ func main() {
 	}
 	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
 		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
-		os.Exit(1)
-	}
-	if err = (&controllers.RunnerJobReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("RunnerJob"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RunnerJob")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
