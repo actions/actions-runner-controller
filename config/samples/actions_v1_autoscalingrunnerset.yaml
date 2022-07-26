@@ -4,5 +4,5 @@ metadata:
   name: autoscalingrunnerset-sample
 spec:
   githubRunnerOrg: "bbq-beets"
-  githubRunnerRepository: "ting-test"
-  githubRunnerScaleSet: "test-runner-scale-set"
+  githubRunnerRepository: "arc-test"
+  githubRunnerScaleSet: "arc-test-runner"
