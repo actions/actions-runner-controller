@@ -52,15 +52,13 @@ func SetupTest(ctx2 context.Context) *corev1.Namespace {
 
 		runnersList = fake.NewRunnersList()
 		server = runnersList.GetServer()
-		ghClient := newGithubClient(server)
 
 		controller := &RunnerReplicaSetReconciler{
-			Client:       mgr.GetClient(),
-			Scheme:       scheme.Scheme,
-			Log:          logf.Log,
-			Recorder:     mgr.GetEventRecorderFor("runnerreplicaset-controller"),
-			GitHubClient: ghClient,
-			Name:         "runnerreplicaset-" + ns.Name,
+			Client:   mgr.GetClient(),
+			Scheme:   scheme.Scheme,
+			Log:      logf.Log,
+			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Name:     "runnerreplicaset-" + ns.Name,
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")

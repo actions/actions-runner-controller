@@ -71,3 +71,18 @@ func (k *Docker) dockerBuildCombinedOutput(ctx context.Context, build DockerBuil
 
 	return k.CombinedOutput(cmd)
 }
+
+func (k *Docker) Push(ctx context.Context, images []ContainerImage) error {
+	for _, img := range images {
+		_, err := k.CombinedOutput(dockerPushCmd(ctx, img.Repo, img.Tag))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func dockerPushCmd(ctx context.Context, repo, tag string) *exec.Cmd {
+	return exec.CommandContext(ctx, "docker", "push", repo+":"+tag)
+}

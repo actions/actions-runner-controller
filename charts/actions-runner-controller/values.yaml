@@ -15,12 +15,6 @@ enableLeaderElection: true
 # Must be unique if more than one controller installed onto the same namespace.
 #leaderElectionId: "actions-runner-controller"
 
-# DEPRECATED: This has been removed as unnecessary in #1192
-# The controller tries its best not to repeat the duplicate GitHub API call
-# within this duration.
-# Defaults to syncPeriod - 10s.
-#githubAPICacheDuration: 30s
-
 # The URL of your GitHub Enterprise server, if you're using one.
 #githubEnterpriseServerURL: https://github.example.com
 
@@ -67,6 +61,18 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+runner:
+  statusUpdateHook:
+    enabled: false
+
+rbac:
+  {}
+  # # This allows ARC to dynamically create a ServiceAccount and a Role for each Runner pod that uses "kubernetes" container mode,
+  # # by extending ARC's manager role to have the same permissions required by the pod runs the runner agent in "kubernetes" container mode.
+  # # Without this, Kubernetes blocks ARC to create the role to prevent a priviledge escalation.
+  # # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1268/files#r917327010
+  # allowGrantingKubernetesContainerModePermissions: true
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
@@ -109,7 +115,7 @@ metrics:
     enabled: true
     image:
       repository: quay.io/brancz/kube-rbac-proxy
-      tag: v0.12.0
+      tag: v0.13.0
 
 resources:
   {}
@@ -143,9 +149,19 @@ priorityClassName: ""
 
 env:
   {}
+  # specify additional environment variables for the controller pod.
+  # It's possible to specify either key vale pairs e.g.:
   # http_proxy: "proxy.com:8080"
   # https_proxy: "proxy.com:8080"
   # no_proxy: ""
+
+  # or a list of complete environment variable definitions e.g.:
+  # - name: GITHUB_APP_INSTALLATION_ID
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: some_key_in_the_secret
+  #       name: some-secret-name
+  #       optional: true
 
 ## specify additional volumes to mount in the manager container, this can be used
 ## to specify additional storage of material or to inject files from ConfigMaps
@@ -175,7 +191,6 @@ admissionWebHooks:
 githubWebhookServer:
   enabled: false
   replicaCount: 1
-  syncPeriod: 10m
   useRunnerGroupsVisibility: false
   secret:
     enabled: false
@@ -183,6 +198,13 @@ githubWebhookServer:
     name: "github-webhook-server"
     ### GitHub Webhook Configuration
     github_webhook_secret_token: ""
+    ### GitHub Apps Configuration
+    ## NOTE: IDs MUST be strings, use quotes
+    #github_app_id: ""
+    #github_app_installation_id: ""
+    #github_app_private_key: |
+    ### GitHub PAT Configuration
+    #github_token: ""
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""

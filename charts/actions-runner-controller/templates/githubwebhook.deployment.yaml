@@ -39,7 +39,6 @@ spec:
         {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
         {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
         - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
-        - "--sync-period={{ .Values.githubWebhookServer.syncPeriod }}"
         {{- if .Values.githubWebhookServer.logLevel }}
         - "--log-level={{ .Values.githubWebhookServer.logLevel }}"
         {{- end }}

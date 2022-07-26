@@ -20,7 +20,9 @@ function wait_for_process () {
 sudo /bin/bash <<SCRIPT
 mkdir -p /etc/docker
 
-echo "{}" > /etc/docker/daemon.json
+if [ ! -f /etc/docker/daemon.json ]; then
+  echo "{}" > /etc/docker/daemon.json
+fi
 
 if [ -n "${MTU}" ]; then
 jq ".\"mtu\" = ${MTU}" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json

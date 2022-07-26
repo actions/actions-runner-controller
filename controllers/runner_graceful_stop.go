@@ -9,7 +9,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v39/github"
+	gogithub "github.com/google/go-github/v45/github"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -151,7 +151,10 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 
 		log.V(1).Info("Failed to unregister runner before deleting the pod.", "error", err)
 
-		var runnerBusy bool
+		var (
+			runnerBusy                         bool
+			runnerUnregistrationFailureMessage string
+		)
 
 		errRes := &gogithub.ErrorResponse{}
 		if errors.As(err, &errRes) {
@@ -173,6 +176,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 			}
 
 			runnerBusy = errRes.Response.StatusCode == 422
+			runnerUnregistrationFailureMessage = errRes.Message
 
 			if runnerBusy && code != nil {
 				log.V(2).Info("Runner container has already stopped but the unregistration attempt failed. "+
@@ -187,6 +191,11 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		}
 
 		if runnerBusy {
+			_, err := annotatePodOnce(ctx, c, log, pod, AnnotationKeyUnregistrationFailureMessage, runnerUnregistrationFailureMessage)
+			if err != nil {
+				return &ctrl.Result{}, err
+			}
+
 			// We want to prevent spamming the deletion attemps but returning ctrl.Result with RequeueAfter doesn't
 			// work as the reconcilation can happen earlier due to pod status update.
 			// For ephemeral runners, we can expect it to stop and unregister itself on completion.

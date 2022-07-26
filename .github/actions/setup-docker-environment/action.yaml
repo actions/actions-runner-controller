@@ -37,15 +37,15 @@ runs:
         version: latest
 
     - name: Login to DockerHub
-      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
+      if: ${{ github.event_name == 'release' || github.event_name == 'push' && github.ref == 'refs/heads/master' }}
       uses: docker/login-action@v2
       with:
         username: ${{ inputs.username }}
         password: ${{ inputs.password }}
 
     - name: Login to GitHub Container Registry
+      if: ${{ github.event_name == 'release' || github.event_name == 'push' && github.ref == 'refs/heads/master' }}
       uses: docker/login-action@v2
-      if: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
       with:
         registry: ghcr.io
         username: ${{ inputs.ghcr_username }}
