@@ -1,0 +1,6 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerJob
+metadata:
+  name: runnerjob-sample
+spec:
+  # TODO(user): Add fields here

@@ -10,4 +10,7 @@ resources:
 - group: actions
   kind: RunnerDeployment
   version: v1alpha1
+- group: actions
+  kind: RunnerJob
+  version: v1alpha1
 version: "2"
