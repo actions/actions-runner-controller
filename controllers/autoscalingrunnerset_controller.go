@@ -23,7 +23,6 @@ import (
 	actionsv1 "github.com/actions-runner-controller/actions-runner-controller/api/v1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,9 +33,8 @@ import (
 )
 
 const (
-	namespace = "default"
-	image     = "ghcr.io/cory-miller/autoscaler-prototype"
-	name      = "autoscaler-prototype"
+	image = "ghcr.io/cory-miller/autoscaler-prototype"
+	name  = "autoscaler-prototype"
 )
 
 var (
@@ -54,14 +52,14 @@ type AutoscalingRunnerSetReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func getAutoscalerApplicationPodRef(org, repo, scaleSet, token string) *corev1.Pod {
+func getAutoscalerApplicationPodRef(namespace, org, repo, scaleSet, token string) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%v-%v", name, uuid.New().String()),
+			Name:      fmt.Sprintf("%v-%v", name, scaleSet),
 			Namespace: namespace,
 			Labels:    labels,
 		},
@@ -101,11 +99,13 @@ func isPodReady(pod *corev1.Pod) bool {
 
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=actions,resources=pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=actions,resources=pods/status,verbs=get
+//+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/finalizers,verbs=update
+//+kubebuilder:rbac:groups=*,resources=pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=*,resources=pods/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
+//
 // TODO(user): Modify the Reconcile function to compare the state specified by
 // the AutoscalingRunnerSet object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
@@ -125,29 +125,32 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	kvlog.Info("Listing pods", "namespace", req.Namespace, "name", req.Name, "labels", labels)
+
 	var childPods corev1.PodList
 	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}, labels); err != nil {
 		kvlog.Error(err, "unable to list child Jobs")
 		return ctrl.Result{}, err
 	}
 
-	activePods := []corev1.Pod{}
+	kvlog.Info("Child pods", "pods", len(childPods.Items))
+
+	activePods := []*corev1.Pod{}
 
 	// TODO(cory-miller): Track inactive/old Pods and remove them
 
-	for _, pod := range childPods.Items {
-		if pod.Name != name {
-			kvlog.Info("%v is not a known autoscaler pod, skipping", pod.Name)
-			continue
-		}
+	for i, pod := range childPods.Items {
+		kvlog.Info("Evaluating pod", "pod", pod.Name)
 
 		if !isPodReady(&pod) {
 			kvlog.Info("%v is not ready, skipping", pod.Name)
 			continue
 		}
 
-		activePods = append(activePods, pod)
+		activePods = append(activePods, &childPods.Items[i])
 	}
+
+	kvlog.Info("Active pod count", "pods", len(activePods))
 
 	if len(activePods) > 1 {
 		// TODO(cory-miller): Delete all but one, based on creation time?
@@ -158,7 +161,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	runnerSet.Status.ActiveAutoscalers = nil
 
 	for _, activePod := range activePods {
-		podRef, err := reference.GetReference(r.Scheme, &activePod)
+		podRef, err := reference.GetReference(r.Scheme, activePod)
 		if err != nil {
 			kvlog.Error(err, "unable to make reference to active job", "job", activePod)
 			continue
@@ -166,12 +169,23 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		runnerSet.Status.ActiveAutoscalers = append(runnerSet.Status.ActiveAutoscalers, *podRef)
 	}
 
+	if len(activePods) == 1 {
+		// TODO(cory-miller): Why did I get here / why was the controller called?
+		kvlog.Info("Pod already running. Nothing to reconcile")
+		return ctrl.Result{}, nil
+	}
+
 	var c github.Config
 	if err := envconfig.Process("github", &c); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	pod := getAutoscalerApplicationPodRef(runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
+	pod := getAutoscalerApplicationPodRef(runnerSet.Namespace, runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
+
+	if err := ctrl.SetControllerReference(&runnerSet, pod, r.Scheme); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if err := r.Create(ctx, pod); err != nil {
 		kvlog.Error(err, "unable to create Autoscaler for AutoscalingRunnerSet", "pod", pod)
 		return ctrl.Result{}, err
@@ -197,8 +211,10 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			return nil
 		}
 
+		fmt.Println("aardvark", owner.APIVersion, owner.Kind)
+
 		// ...make sure it's a Pod...
-		if owner.APIVersion != apiGVStr || owner.Kind != "Pod" {
+		if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
 			return nil
 		}
 
@@ -210,5 +226,6 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&actionsv1.AutoscalingRunnerSet{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
