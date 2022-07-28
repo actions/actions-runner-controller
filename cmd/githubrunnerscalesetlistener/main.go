@@ -28,7 +28,6 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/actions-runner-controller/actions-runner-controller/pkg/github/scalesetclient"
 	"github.com/go-logr/logr"
-
 	"github.com/kelseyhightower/envconfig"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
