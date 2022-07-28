@@ -176,7 +176,7 @@ func main() {
 			// Feels bad to do this, but also feels bad to try type casting...
 			expiredError := &github.MessageQueueTokenExpiredError{}
 
-			message, err := GetMessage(ctx, actionsServiceClient, logger, runnerScaleSetSession.MessageQueueUrl, runnerScaleSetSession.MessageQueueAccessToken, lastMessageId)
+			message, err := getMessage(ctx, actionsServiceClient, logger, runnerScaleSetSession.MessageQueueUrl, runnerScaleSetSession.MessageQueueAccessToken, lastMessageId)
 			if errors.As(err, &expiredError) {
 				logger.Info("Message queue token is expired, refreshing...")
 
@@ -218,7 +218,7 @@ func main() {
 	}
 }
 
-func GetMessage(ctx context.Context, c *github.ActionsClient, logger logr.Logger, messageQueueUrl, messageQueueToken string, lastMessageId int64) (*github.RunnerScaleSetMessage, error) {
+func getMessage(ctx context.Context, c *github.ActionsClient, logger logr.Logger, messageQueueUrl, messageQueueToken string, lastMessageId int64) (*github.RunnerScaleSetMessage, error) {
 	message, err := c.GetMessage(ctx, messageQueueUrl, messageQueueToken, lastMessageId)
 	if err != nil {
 		return nil, err
@@ -230,12 +230,12 @@ func GetMessage(ctx context.Context, c *github.ActionsClient, logger logr.Logger
 
 	logger.Info("Get message.", "messageId", message.MessageId, "messageType", message.MessageType, "body", message.Body)
 
-	defer DeleteMessage(ctx, c, logger, messageQueueUrl, messageQueueToken, message.MessageId)
+	defer deleteMessage(ctx, c, logger, messageQueueUrl, messageQueueToken, message.MessageId)
 
 	return message, nil
 }
 
-func DeleteMessage(ctx context.Context, c *github.ActionsClient, logger logr.Logger, messageQueueUrl, messageQueueToken string, messageId int64) {
+func deleteMessage(ctx context.Context, c *github.ActionsClient, logger logr.Logger, messageQueueUrl, messageQueueToken string, messageId int64) {
 	if err := c.DeleteMessage(ctx, messageQueueUrl, messageQueueToken, messageId); err != nil {
 		logger.Error(err, "Error: Delete message failed.")
 	}
