@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	actionsv1 "github.com/actions-runner-controller/actions-runner-controller/api/v1"
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
@@ -116,7 +116,7 @@ func isPodReady(pod *corev1.Pod) bool {
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	kvlog := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
 
-	var runnerSet actionsv1.AutoscalingRunnerSet
+	var runnerSet actionsv1alpha1.AutoscalingRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &runnerSet); err != nil {
 		kvlog.Error(err, "unable to fetch AutoscalingRunnerSet")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -197,7 +197,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 var (
-	apiGVStr = actionsv1.GroupVersion.String()
+	apiGVStr = actionsv1alpha1.GroupVersion.String()
 )
 
 // SetupWithManager sets up the controller with the Manager.
@@ -211,8 +211,6 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			return nil
 		}
 
-		fmt.Println("aardvark", owner.APIVersion, owner.Kind)
-
 		// ...make sure it's a Pod...
 		if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
 			return nil
@@ -225,7 +223,7 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&actionsv1.AutoscalingRunnerSet{}).
+		For(&actionsv1alpha1.AutoscalingRunnerSet{}).
 		Owns(&corev1.Pod{}).
 		Complete(r)
 }

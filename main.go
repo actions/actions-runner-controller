@@ -23,16 +23,16 @@ import (
 	"strings"
 	"time"
 
-	actionsv1 "github.com/actions-runner-controller/actions-runner-controller/api/v1"
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers"
+	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -50,8 +50,6 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = actionsv1alpha1.AddToScheme(scheme)
-
-	_ = actionsv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -68,7 +66,8 @@ func (i *stringSlice) Set(value string) error {
 
 func main() {
 	var (
-		err error
+		err      error
+		ghClient *github.Client
 
 		metricsAddr          string
 		enableLeaderElection bool
@@ -127,6 +126,12 @@ func main() {
 
 	c.Log = &logger
 
+	ghClient, err = c.NewClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)
+		os.Exit(1)
+	}
+
 	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -140,6 +145,74 @@ func main() {
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	runnerReconciler := &controllers.RunnerReconciler{
+		Client:               mgr.GetClient(),
+		Log:                  log.WithName("runner"),
+		Scheme:               mgr.GetScheme(),
+		GitHubClient:         ghClient,
+		DockerImage:          dockerImage,
+		DockerRegistryMirror: dockerRegistryMirror,
+		// Defaults for self-hosted runner containers
+		RunnerImage:            runnerImage,
+		RunnerImagePullSecrets: runnerImagePullSecrets,
+	}
+
+	if err = runnerReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "Runner")
+		os.Exit(1)
+	}
+
+	runnerReplicaSetReconciler := &controllers.RunnerReplicaSetReconciler{
+		Client:       mgr.GetClient(),
+		Log:          log.WithName("runnerreplicaset"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
+	}
+
+	if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
+		os.Exit(1)
+	}
+
+	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
+		Client:             mgr.GetClient(),
+		Log:                log.WithName("runnerdeployment"),
+		Scheme:             mgr.GetScheme(),
+		CommonRunnerLabels: commonRunnerLabels,
+	}
+
+	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerDeployment")
+		os.Exit(1)
+	}
+
+	runnerSetReconciler := &controllers.RunnerSetReconciler{
+		Client:               mgr.GetClient(),
+		Log:                  log.WithName("runnerset"),
+		Scheme:               mgr.GetScheme(),
+		CommonRunnerLabels:   commonRunnerLabels,
+		DockerImage:          dockerImage,
+		DockerRegistryMirror: dockerRegistryMirror,
+		GitHubBaseURL:        ghClient.GithubBaseURL,
+		// Defaults for self-hosted runner containers
+		RunnerImage:            runnerImage,
+		RunnerImagePullSecrets: runnerImagePullSecrets,
+	}
+
+	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerSet")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.AutoscalingRunnerSetReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 		os.Exit(1)
 	}
 
@@ -164,16 +237,77 @@ func main() {
 		"watch-namespace", namespace,
 	)
 
-	if err = (&controllers.AutoscalingRunnerSetReconciler{
+	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
+		Client:                mgr.GetClient(),
+		Log:                   log.WithName("horizontalrunnerautoscaler"),
+		Scheme:                mgr.GetScheme(),
+		GitHubClient:          ghClient,
+		CacheDuration:         gitHubAPICacheDuration,
+		DefaultScaleDownDelay: defaultScaleDownDelay,
+	}
+
+	runnerPodReconciler := &controllers.RunnerPodReconciler{
+		Client:       mgr.GetClient(),
+		Log:          log.WithName("runnerpod"),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: ghClient,
+	}
+
+	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
+		Log:    log.WithName("runnerpersistentvolume"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+	}
+
+	runnerPersistentVolumeClaimReconciler := &controllers.RunnerPersistentVolumeClaimReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolumeclaim"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPod")
 		os.Exit(1)
 	}
 
+	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
+		os.Exit(1)
+	}
+
+	if err = (&actionsv1alpha1.Runner{}).SetupWebhookWithManager(mgr); err != nil {
+		log.Error(err, "unable to create webhook", "webhook", "Runner")
+		os.Exit(1)
+	}
+	if err = (&actionsv1alpha1.RunnerDeployment{}).SetupWebhookWithManager(mgr); err != nil {
+		log.Error(err, "unable to create webhook", "webhook", "RunnerDeployment")
+		os.Exit(1)
+	}
+	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
+		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
+
+	injector := &controllers.PodRunnerTokenInjector{
+		Client:       mgr.GetClient(),
+		GitHubClient: ghClient,
+		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
+	}
+	if err = injector.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
+		os.Exit(1)
+	}
 
 	log.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

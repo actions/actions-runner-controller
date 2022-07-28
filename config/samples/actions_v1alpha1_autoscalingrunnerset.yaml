@@ -1,4 +1,4 @@
-apiVersion: actions.summerwind.dev/v1
+apiVersion: actions.summerwind.dev/v1alpha1
 kind: AutoscalingRunnerSet
 metadata:
   name: autoscalingrunnerset-sample
