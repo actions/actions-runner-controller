@@ -96,13 +96,7 @@ func getAutoscalerApplicationPodRef(org, repo, scaleSet, token string) *corev1.P
 }
 
 func isPodReady(pod *corev1.Pod) bool {
-	for _, c := range pod.Status.Conditions {
-		if c.Type == corev1.PodReady {
-			return true
-		}
-	}
-
-	return false
+	return true
 }
 
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
@@ -120,27 +114,20 @@ func isPodReady(pod *corev1.Pod) bool {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	klog := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
-
-	// Check for pods with label matching the autoscaler
-
-	// 1: Load the CronJob by name
+	kvlog := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
 
 	var runnerSet actionsv1.AutoscalingRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &runnerSet); err != nil {
-		klog.Error(err, "unable to fetch AutoscalingRunnerSet")
+		kvlog.Error(err, "unable to fetch AutoscalingRunnerSet")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// 2: List all active jobs, and update the status
-
 	var childPods corev1.PodList
 	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}, labels); err != nil {
-		klog.Error(err, "unable to list child Jobs")
+		kvlog.Error(err, "unable to list child Jobs")
 		return ctrl.Result{}, err
 	}
 
@@ -150,23 +137,30 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	for _, pod := range childPods.Items {
 		if pod.Name != name {
-			klog.Info("%v is not a known autoscaler pod, skipping", pod.Name)
+			kvlog.Info("%v is not a known autoscaler pod, skipping", pod.Name)
 			continue
 		}
 
 		if !isPodReady(&pod) {
-			klog.Info("%v is not ready, skipping", pod.Name)
+			kvlog.Info("%v is not ready, skipping", pod.Name)
 			continue
 		}
 
 		activePods = append(activePods, pod)
 	}
 
+	if len(activePods) > 1 {
+		// TODO(cory-miller): Delete all but one, based on creation time?
+		kvlog.Info("too many pods running. need to delete")
+		return ctrl.Result{}, nil
+	}
+
 	runnerSet.Status.ActiveAutoscalers = nil
+
 	for _, activePod := range activePods {
 		podRef, err := reference.GetReference(r.Scheme, &activePod)
 		if err != nil {
-			klog.Error(err, "unable to make reference to active job", "job", activePod)
+			kvlog.Error(err, "unable to make reference to active job", "job", activePod)
 			continue
 		}
 		runnerSet.Status.ActiveAutoscalers = append(runnerSet.Status.ActiveAutoscalers, *podRef)
@@ -179,11 +173,11 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	pod := getAutoscalerApplicationPodRef(runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
 	if err := r.Create(ctx, pod); err != nil {
-		klog.Error(err, "unable to create Autoscaler for AutoscalingRunnerSet", "pod", pod)
+		kvlog.Error(err, "unable to create Autoscaler for AutoscalingRunnerSet", "pod", pod)
 		return ctrl.Result{}, err
 	}
 
-	klog.Info("Created pod", "podName", pod.ObjectMeta.Name)
+	kvlog.Info("Created pod", "podName", pod.ObjectMeta.Name)
 
 	return ctrl.Result{}, nil
 }

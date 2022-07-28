@@ -134,11 +134,11 @@ func TestCleanup(t *testing.T) {
 
 	client := newTestClient()
 	client.regTokens = map[string]*github.RegistrationToken{
-		"active": &github.RegistrationToken{
+		"active": {
 			Token:     &token,
 			ExpiresAt: &github.Timestamp{Time: time.Now().Add(time.Hour * 1)},
 		},
-		"expired": &github.RegistrationToken{
+		"expired": {
 			Token:     &token,
 			ExpiresAt: &github.Timestamp{Time: time.Now().Add(-time.Hour * 1)},
 		},
