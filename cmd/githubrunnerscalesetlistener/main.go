@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
@@ -152,8 +153,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerScaleSetSession, err := actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
-	if err != nil {
+	retries := 3
+	var lastErr error
+	var runnerScaleSetSession *github.RunnerScaleSetSession
+	for i := 0; i < retries; i++ {
+		runnerScaleSetSession, err = actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
+		lastErr = err
+		if err == nil {
+			break
+		}
+		retries--
+		time.Sleep(30 * time.Second)
+	}
+
+	if lastErr != nil {
 		fmt.Fprintln(os.Stderr, "Error: Create message session failed.", err)
 		os.Exit(1)
 	}
