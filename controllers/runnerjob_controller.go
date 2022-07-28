@@ -18,13 +18,15 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
+	batchv1 "k8s.io/api/batch/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 )
 
 // RunnerJobReconciler reconciles a RunnerJob object
@@ -47,17 +49,42 @@ type RunnerJobReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
 func (r *RunnerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("runnerjob", req.NamespacedName)
+	log := r.Log.WithValues("runnerjob", req.NamespacedName)
 
-	// TODO(user): your logic here
+	var runnerJob v1alpha1.RunnerJob
+	if err := r.Get(ctx, req.NamespacedName, &runnerJob); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
+	if !runnerJob.ObjectMeta.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
+	}
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      make(map[string]string),
+			Annotations: make(map[string]string),
+			Name:        fmt.Sprintf("%s-runnerjob", runnerJob.Name), // TODO: how to name it?
+			Namespace:   runnerJob.Namespace,
+		},
+		Spec: *runnerJob.Spec.JobSpec.DeepCopy(),
+	}
+
+	if err := ctrl.SetControllerReference(&runnerJob, job, r.Scheme); err != nil {
+		log.Info("failed to set controller reference", "error", err.Error())
+		return ctrl.Result{}, err
+	}
+
+	if err := r.Create(ctx, job); err != nil {
+		log.Info("failed to create job", "error", err.Error())
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RunnerJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&actionsv1alpha1.RunnerJob{}).
+		For(&v1alpha1.RunnerJob{}).
 		Complete(r)
 }

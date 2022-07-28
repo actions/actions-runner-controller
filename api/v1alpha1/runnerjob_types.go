@@ -26,7 +26,7 @@ import (
 
 // RunnerJobSpec defines the desired state of RunnerJob
 type RunnerJobSpec struct {
-	batchv1.JobSpec
+	batchv1.JobSpec `json:",inline"`
 }
 
 // RunnerJobStatus defines the observed state of RunnerJob
