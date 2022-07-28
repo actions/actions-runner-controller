@@ -60,6 +60,9 @@ type HorizontalRunnerAutoscalerSpec struct {
 	// The earlier a scheduled override is, the higher it is prioritized.
 	// +optional
 	ScheduledOverrides []ScheduledOverride `json:"scheduledOverrides,omitempty"`
+
+	// +optional
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
 }
 
 type ScaleUpTrigger struct {

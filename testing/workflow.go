@@ -1,7 +1,7 @@
 package testing
 
 const (
-	ActionsCheckoutV2 = "actions/checkout@v2"
+	ActionsCheckout = "actions/checkout@v3"
 )
 
 type Workflow struct {
@@ -30,8 +30,9 @@ type InputSpec struct {
 }
 
 type Job struct {
-	RunsOn string `json:"runs-on"`
-	Steps  []Step `json:"steps"`
+	RunsOn    string `json:"runs-on"`
+	Container string `json:"container,omitempty"`
+	Steps     []Step `json:"steps"`
 }
 
 type Step struct {

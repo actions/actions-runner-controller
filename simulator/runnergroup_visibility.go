@@ -5,10 +5,12 @@ import (
 	"fmt"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/go-logr/logr"
 )
 
 type Simulator struct {
 	Client *github.Client
+	Log    logr.Logger
 }
 
 func (c *Simulator) GetRunnerGroupsVisibleToRepository(ctx context.Context, org, repo string, managed *VisibleRunnerGroups) (*VisibleRunnerGroups, error) {
@@ -22,6 +24,10 @@ func (c *Simulator) GetRunnerGroupsVisibleToRepository(ctx context.Context, org,
 		runnerGroups, err := c.Client.ListOrganizationRunnerGroupsForRepository(ctx, org, repo)
 		if err != nil {
 			return visible, err
+		}
+
+		if c.Log.V(3).Enabled() {
+			c.Log.V(3).Info("ListOrganizationRunnerGroupsForRepository succeeded", "runerGroups", runnerGroups)
 		}
 
 		for _, runnerGroup := range runnerGroups {
