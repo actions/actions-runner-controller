@@ -73,7 +73,7 @@ func main() {
 	hasBasicAuth := len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0
 
 	if !hasToken && !hasPrivateKeyConfig && !hasBasicAuth {
-		fmt.Fprintln(os.Stderr, "GitHub client is not initialized.")
+		fmt.Fprintln(os.Stderr, "GitHub client cannot initialize. Must provide any of token or private key or basic auth creds.")
 		os.Exit(1)
 	}
 
