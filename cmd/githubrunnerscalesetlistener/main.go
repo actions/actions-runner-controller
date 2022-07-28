@@ -162,6 +162,7 @@ func main() {
 		if err == nil {
 			break
 		}
+		logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
 		retries--
 		time.Sleep(30 * time.Second)
 	}
