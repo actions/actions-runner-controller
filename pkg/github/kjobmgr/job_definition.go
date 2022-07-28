@@ -2,9 +2,7 @@ package kjobmgr
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/google/uuid"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,23 +22,22 @@ var (
 	}
 )
 
-func defaultJobResource(jitConfig string) *batchv1.Job {
-	// Use runner ID instead
-	uid := strings.Split(uuid.New().String(), "-")[0]
+func defaultJobResource(jitConfig string, runnerID int) *batchv1.Job {
+	name := fmt.Sprintf("%v-%v", jobName, runnerID)
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%v-%v", jobName, uid),
+			Name:      name,
 			Namespace: namespace,
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%v-%v", podName, uid),
+					Name:      name,
 					Namespace: namespace,
 					Labels:    labels,
 				},

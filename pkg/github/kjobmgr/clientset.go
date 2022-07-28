@@ -23,7 +23,7 @@ func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerCon
 		return nil, err
 	}
 
-	job := defaultJobResource(jitConfig.EncodedJITConfig)
+	job := defaultJobResource(jitConfig.EncodedJITConfig, jitConfig.Runner.Id)
 	createdJob, err := clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create job")
