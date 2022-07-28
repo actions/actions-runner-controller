@@ -173,7 +173,7 @@ func main() {
 			logger.Info("Message queue listener is stopped.")
 			return
 		default:
-			// Feels bad to do this, but also feels bad to try type casting...
+			// Feels bad to do this, but also feels bad to try type assertion...
 			expiredError := &github.MessageQueueTokenExpiredError{}
 
 			message, err := getMessage(ctx, actionsServiceClient, logger, runnerScaleSetSession.MessageQueueUrl, runnerScaleSetSession.MessageQueueAccessToken, lastMessageId)
