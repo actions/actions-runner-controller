@@ -213,15 +213,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.AutoscalingRunnerSetReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
-		os.Exit(1)
-	}
-
 	log.Info(
 		"Initializing actions-runner-controller",
 		"default-scale-down-delay", defaultScaleDownDelay,
@@ -291,6 +282,17 @@ func main() {
 	}
 	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
 		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+		os.Exit(1)
+	}
+
+	autoscalingRunnerSetReconciler := &controllers.AutoscalingRunnerSetReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("AutoscalingRunnerSet"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	if err = autoscalingRunnerSetReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
