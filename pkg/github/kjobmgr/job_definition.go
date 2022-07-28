@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	namespace = "default"
-	image     = "huangtingluo/jit-runner-image"
-	jobName   = "autoscaler-prototype-runner-job"
-	podName   = "autoscaler-prototype-runner-pod"
+	image   = "huangtingluo/jit-runner-image"
+	jobName = "autoscaler-prototype-runner-job"
+	podName = "autoscaler-prototype-runner-pod"
 )
 
 var (
@@ -22,7 +21,7 @@ var (
 	}
 )
 
-func defaultJobResource(jitConfig string, runnerID int) *batchv1.Job {
+func defaultJobResource(jitConfig string, runnerID int, namespace string) *batchv1.Job {
 	name := fmt.Sprintf("%v-%v", jobName, runnerID)
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{

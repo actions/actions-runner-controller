@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerConfig) (*batchv1.Job, error) {
+func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerConfig, namespace string) (*batchv1.Job, error) {
 	conf, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -23,7 +23,7 @@ func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerCon
 		return nil, err
 	}
 
-	job := defaultJobResource(jitConfig.EncodedJITConfig, jitConfig.Runner.Id)
+	job := defaultJobResource(jitConfig.EncodedJITConfig, jitConfig.Runner.Id, namespace)
 	createdJob, err := clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create job")
