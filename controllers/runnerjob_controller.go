@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
@@ -35,6 +36,10 @@ type RunnerJobReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
+
+const jobOwnerKey string = ".metadata.controller"
+
+var apiGVStr = v1alpha1.GroupVersion.String()
 
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerjobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerjobs/status,verbs=get;update;patch
@@ -62,6 +67,42 @@ func (r *RunnerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	var childJobs batchv1.JobList
+	if err := r.List(ctx, &childJobs, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
+		log.Error(err, "unable to list child Jobs")
+		return ctrl.Result{}, err
+	}
+
+	switch len(childJobs.Items) {
+	case 0:
+		if err := r.createJob(ctx, runnerJob); err != nil {
+			log.Info("failed to create a job from a RunnerJob, requeueing in 30s", runnerJob.Name, err.Error())
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+	case 1:
+		childJob := childJobs.Items[0]
+		if childJob.Status.Active > 0 {
+			return ctrl.Result{}, nil
+		}
+
+		if childJob.Status.Succeeded > 0 {
+			if err := r.Delete(ctx, &runnerJob); err != nil {
+				log.Info("failed to delete runner job", "RunnerJob", runnerJob.Name)
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
+			return ctrl.Result{}, nil
+		}
+
+		log.Info("more than one child pods failed", "RunnerJob", runnerJob.Name, "Job", childJob.Name)
+	default:
+		log.V(0).Info("found runner job with more than one kubernetes job", "RunnerJob", runnerJob.Name)
+		return ctrl.Result{}, fmt.Errorf("found runner job with more than one kubernetes job")
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *RunnerJobReconciler) createJob(ctx context.Context, runnerJob v1alpha1.RunnerJob) error {
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      make(map[string]string),
@@ -73,19 +114,34 @@ func (r *RunnerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if err := ctrl.SetControllerReference(&runnerJob, job, r.Scheme); err != nil {
-		log.Info("failed to set controller reference", "error", err.Error())
-		return ctrl.Result{}, err
+		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	if err := r.Create(ctx, job); err != nil {
-		log.Info("failed to create job", "error", err.Error())
-		return ctrl.Result{}, err
+		return fmt.Errorf("call to create failed: %w", err)
 	}
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RunnerJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &batchv1.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
+		// grab the job object, extract the owner...
+		job := rawObj.(*batchv1.Job)
+		owner := metav1.GetControllerOf(job)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a CronJob...
+		if owner.APIVersion != apiGVStr || owner.Kind != "RunnerJob" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerJob{}).
 		Complete(r)
