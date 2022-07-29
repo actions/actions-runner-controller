@@ -439,12 +439,6 @@ func splitOwnerAndRepo(repo string) (string, string, error) {
 	}
 	return chunk[0], chunk[1], nil
 }
-func getVersion(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
 func getEnterpriseApiUrl(baseURL string) (string, error) {
 	baseEndpoint, err := url.Parse(baseURL)
 	if err != nil {
