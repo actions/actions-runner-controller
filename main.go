@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"os"
 	"strings"
 	"time"
@@ -61,12 +62,6 @@ func (i *stringSlice) String() string {
 func (i *stringSlice) Set(value string) error {
 	*i = append(*i, value)
 	return nil
-}
-func getVersion(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
 }
 func main() {
 	var (
@@ -126,7 +121,6 @@ func main() {
 	flag.Parse()
 
 	logger := logging.NewLogger(logLevel)
-	version := getVersion("ARC_VERSION", "dev")
 	c.Log = &logger
 
 	ghClient, err = c.NewClient()
@@ -218,7 +212,7 @@ func main() {
 
 	log.Info(
 		"Initializing actions-runner-controller",
-		"version", version,
+		"version", build.Version,
 		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
 		"default-runner-image", runnerImage,

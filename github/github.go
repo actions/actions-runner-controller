@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"net/http"
 	"net/url"
 	"os"
@@ -134,8 +135,7 @@ func (c *Config) NewClient() (*Client, error) {
 			}
 		}
 	}
-	version := getVersion("ARC_VERSION", "dev")
-	client.UserAgent = "actions-runner-controller:" + version + ""
+	client.UserAgent = "actions-runner-controller/" + build.Version
 
 	return &Client{
 		Client:        client,
