@@ -50,7 +50,6 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = actionsv1alpha1.AddToScheme(scheme)
-	utilruntime.Must(actionsv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -290,7 +289,7 @@ func main() {
 		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
