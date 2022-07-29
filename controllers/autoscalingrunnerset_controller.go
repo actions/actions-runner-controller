@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -100,8 +101,8 @@ func isPodReady(pod *corev1.Pod) bool {
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/finalizers,verbs=update
-//+kubebuilder:rbac:groups=*,resources=pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=*,resources=pods/status,verbs=get
+//+kubebuilder:rbac:groups=*,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=*,resources=namespaces;pods/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -169,6 +170,21 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		runnerSet.Status.ActiveAutoscalers = append(runnerSet.Status.ActiveAutoscalers, *podRef)
 	}
 
+	var childNamespace corev1.Namespace
+	childNamespaceType := types.NamespacedName{
+		Namespace: runnerSet.Spec.RunnerScaleSet,
+		Name:      runnerSet.Spec.RunnerScaleSet,
+	}
+	if err := r.Get(ctx, childNamespaceType, &childNamespace); err != nil {
+		childNamespace.Name = childNamespaceType.Name
+		childNamespace.Namespace = childNamespaceType.Namespace
+		if err := r.Create(ctx, &childNamespace); err != nil {
+			// clientset.CoreV1().Namespaces().Create(context.Background(), nsName, metav1.CreateOptions{})
+			kvlog.Error(err, "could not detect namespace existence for runners")
+			return ctrl.Result{}, nil
+		}
+	}
+
 	if len(activePods) == 1 {
 		// TODO(cory-miller): Why did I get here / why was the controller called?
 		kvlog.Info("Pod already running. Nothing to reconcile")
@@ -205,19 +221,39 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, jobOwnerKey, func(rawObj client.Object) []string {
 
 		// grab the job object, extract the owner...
-		pod := rawObj.(*corev1.Pod)
-		owner := metav1.GetControllerOf(pod)
-		if owner == nil {
-			return nil
+		pod, ok := rawObj.(*corev1.Pod)
+		if ok {
+			owner := metav1.GetControllerOf(pod)
+			if owner == nil {
+				return nil
+			}
+
+			// ...make sure it's a Pod...
+			if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
+				return nil
+			}
+
+			// ...and if so, return it
+			return []string{owner.Name}
 		}
 
-		// ...make sure it's a Pod...
-		if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
-			return nil
+		namespace, ok := rawObj.(*corev1.Namespace)
+		if ok {
+			owner := metav1.GetControllerOf(namespace)
+			if owner == nil {
+				return nil
+			}
+
+			// ...make sure it's a Namespace...
+			if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
+				return nil
+			}
+
+			// ...and if so, return it
+			return []string{owner.Name}
 		}
 
-		// ...and if so, return it
-		return []string{owner.Name}
+		return []string{}
 	}); err != nil {
 		return err
 	}
@@ -225,5 +261,6 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&actionsv1alpha1.AutoscalingRunnerSet{}).
 		Owns(&corev1.Pod{}).
+		Owns(&corev1.Namespace{}).
 		Complete(r)
 }
