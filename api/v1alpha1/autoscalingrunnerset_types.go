@@ -26,21 +26,27 @@ import (
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
 	//+kubebuilder:validation:MinLength=0
-	// GITHUB_RUNNER_ORG
+	// A container image providing our autoscaler app.
+	//
+	// Temporary so we can test different versions by simply changing the YAML.
+	AutoscalerImage string `json:"autoscalerImage,omitempty"`
+
+	//+kubebuilder:validation:MinLength=0
+	// Sets the envvar of GITHUB_RUNNER_ORG in the Autoscaler container.
 	RunnerOrg string `json:"githubRunnerOrg,omitempty"`
 
 	//+kubebuilder:validation:MinLength=0
-	// GITHUB_RUNNER_REPOSITORY
+	// Sets the envvar of GITHUB_RUNNER_REPOSITORY in the Autoscaler container.
 	RunnerRepo string `json:"githubRunnerRepository,omitempty"`
 
 	//+kubebuilder:validation:MinLength=0
-	// GITHUB_RUNNER_SCALE_SET_NAME
+	// Sets the envvar of GITHUB_RUNNER_SCALE_SET_NAME in the Autoscaler container.
 	RunnerScaleSet string `json:"githubRunnerScaleSet,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
-	ActiveAutoscalers []corev1.ObjectReference `json:"active,omitempty"`
+	ActiveAutoscaler corev1.ObjectReference `json:"active,omitempty"`
 }
 
 //+kubebuilder:object:root=true

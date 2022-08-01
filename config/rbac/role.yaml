@@ -55,26 +55,6 @@ rules:
 - apiGroups:
   - actions.summerwind.dev
   resources:
-  - autoscalingrunnersets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - actions.summerwind.dev
-  resources:
-  - autoscalingrunnersets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - actions.summerwind.dev
-  resources:
   - horizontalrunnerautoscalers
   verbs:
   - create
@@ -253,6 +233,24 @@ rules:
   - patch
   - update
 - apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs/status
+  verbs:
+  - get
+- apiGroups:
   - coordination.k8s.io
   resources:
   - leases
@@ -331,6 +329,27 @@ rules:
   verbs:
   - create
   - delete
+  - get
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - role
+  - rolebinding
+  verbs:
+  - create
+  - delete
+  - escalate
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - role/status
+  - rolebinding/status
+  verbs:
   - get
 - apiGroups:
   - rbac.authorization.k8s.io

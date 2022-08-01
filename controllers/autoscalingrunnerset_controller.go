@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
@@ -25,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,8 +36,9 @@ import (
 )
 
 const (
-	image = "ghcr.io/cory-miller/autoscaler-prototype"
-	name  = "autoscaler-prototype"
+	image       = "ghcr.io/cory-miller/autoscaler-prototype"
+	name        = "autoscaler-prototype"
+	jobOwnerKey = ".metadata.controller"
 )
 
 var (
@@ -43,7 +46,7 @@ var (
 		"app": "autoscaler",
 	}
 
-	jobOwnerKey = ".metadata.controller"
+	apiGVStr = actionsv1alpha1.GroupVersion.String()
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
@@ -94,127 +97,183 @@ func getAutoscalerApplicationPodRef(namespace, org, repo, scaleSet, token string
 	}
 }
 
-func isPodReady(pod *corev1.Pod) bool {
-	return true
-}
-
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/finalizers,verbs=update
 //+kubebuilder:rbac:groups=*,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=*,resources=namespaces;pods/status,verbs=get
+// batch.jobs is added to give implicit permission to the role+rolebinding.
+// It would be probably be better to do this another way if possible.
+//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=role;rolebinding,verbs=get;list;watch;create;update;patch;delete;escalate
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=role/status;rolebinding/status,verbs=get
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-//
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the AutoscalingRunnerSet object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
+// Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	kvlog := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
 
 	var runnerSet actionsv1alpha1.AutoscalingRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &runnerSet); err != nil {
 		kvlog.Error(err, "unable to fetch AutoscalingRunnerSet")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	kvlog.Info("Listing pods", "namespace", req.Namespace, "name", req.Name, "labels", labels)
-
-	var childPods corev1.PodList
-	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}, labels); err != nil {
-		kvlog.Error(err, "unable to list child Jobs")
-		return ctrl.Result{}, err
-	}
-
-	kvlog.Info("Child pods", "pods", len(childPods.Items))
-
-	activePods := []*corev1.Pod{}
-
-	// TODO(cory-miller): Track inactive/old Pods and remove them
-
-	for i, pod := range childPods.Items {
-		kvlog.Info("Evaluating pod", "pod", pod.Name)
-
-		if !isPodReady(&pod) {
-			kvlog.Info("%v is not ready, skipping", pod.Name)
-			continue
-		}
-
-		activePods = append(activePods, &childPods.Items[i])
-	}
-
-	kvlog.Info("Active pod count", "pods", len(activePods))
-
-	if len(activePods) > 1 {
-		// TODO(cory-miller): Delete all but one, based on creation time?
-		kvlog.Info("too many pods running. need to delete")
+	if !runnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
 
-	runnerSet.Status.ActiveAutoscalers = nil
+	namespaceForManagement := runnerSet.Namespace
 
-	for _, activePod := range activePods {
-		podRef, err := reference.GetReference(r.Scheme, activePod)
-		if err != nil {
-			kvlog.Error(err, "unable to make reference to active job", "job", activePod)
-			continue
-		}
-		runnerSet.Status.ActiveAutoscalers = append(runnerSet.Status.ActiveAutoscalers, *podRef)
+	// Start of reconciliation for Autoscaler pod.
+	var childPods corev1.PodList
+	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}, labels); err != nil {
+		kvlog.Error(err, "unable to list child pods")
+		return ctrl.Result{}, err
 	}
 
-	var childNamespace corev1.Namespace
+	switch len(childPods.Items) {
+	case 0:
+		// Create Autoscaler pod
+		var c github.Config
+		if err := envconfig.Process("github", &c); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pod := getAutoscalerApplicationPodRef(namespaceForManagement, runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
+
+		if err := ctrl.SetControllerReference(&runnerSet, pod, r.Scheme); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := r.Create(ctx, pod); err != nil {
+			kvlog.Error(err, "unable to create Autoscaler for AutoscalingRunnerSet", "pod", pod)
+			return ctrl.Result{}, err
+		}
+
+		kvlog.Info("Created pod", "podName", pod.ObjectMeta.Name)
+	case 1:
+		childPod := childPods.Items[0]
+
+		// Give the pod more time to start.
+		if childPod.Status.Phase == corev1.PodPending {
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		// Set active ref to this pod.
+		if childPod.Status.Phase == corev1.PodRunning {
+			podRef, err := reference.GetReference(r.Scheme, &childPod)
+			if err != nil {
+				kvlog.Error(err, "unable to make reference to active job", "job", childPod)
+				return ctrl.Result{}, err
+			}
+
+			runnerSet.Status.ActiveAutoscaler = *podRef
+
+			break
+		}
+
+		// Clean up old pods.
+		if childPod.Status.Phase == corev1.PodSucceeded || childPod.Status.Phase == corev1.PodFailed {
+			if err := r.Delete(ctx, &runnerSet); err != nil {
+				kvlog.Info("failed to delete runner set", "AutoscalingRunnerSet", runnerSet.Name)
+				return ctrl.Result{Requeue: true}, nil
+			}
+
+			break
+		}
+
+		if childPod.Status.Phase == corev1.PodUnknown {
+			kvlog.Info("Pod is in unknown status", "AutoscalingRunnerSet", runnerSet.Name)
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		kvlog.Info("Pod is in unexpected status", "AutoscalingRunnerSet", runnerSet.Name, "status", childPod.Status.Phase)
+	default:
+		// Tell the user to intervene
+		kvlog.Error(errors.New("AutoscalingRunnerSet cannot reconcile"), "multiple Autoscaler applications are detected. manual clean-up required")
+	}
+	// End of reconciliation for Autoscaler pod.
+
 	childNamespaceType := types.NamespacedName{
 		Namespace: runnerSet.Spec.RunnerScaleSet,
 		Name:      runnerSet.Spec.RunnerScaleSet,
 	}
-	if err := r.Get(ctx, childNamespaceType, &childNamespace); err != nil {
+
+	// Start of reconciliation for RunnerJob namespace.
+	if err := r.Get(ctx, childNamespaceType, &corev1.Namespace{}); err != nil {
+		childNamespace := &corev1.Namespace{}
 		childNamespace.Name = childNamespaceType.Name
 		childNamespace.Namespace = childNamespaceType.Namespace
-		if err := r.Create(ctx, &childNamespace); err != nil {
-			// clientset.CoreV1().Namespaces().Create(context.Background(), nsName, metav1.CreateOptions{})
-			kvlog.Error(err, "could not detect namespace existence for runners")
+		if err := r.Create(ctx, childNamespace); err != nil {
+			kvlog.Error(err, "could not create namespace for runners")
+			return ctrl.Result{}, nil
+		}
+	}
+	// End of reconciliation for RunnerJob namespace.
+
+	roleName := fmt.Sprintf("%v-runner-creator", runnerSet.Spec.RunnerScaleSet)
+
+	// Start of reconciliation for RunnerJob RBAC.
+	if err := r.Get(ctx, childNamespaceType, &rbacv1.Role{}); err != nil {
+		role := &rbacv1.Role{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Role",
+				APIVersion: "rbac.authorization.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      roleName,
+				Namespace: namespaceForManagement,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					Verbs:           []string{"*"},
+					APIGroups:       []string{"batch"},
+					Resources:       []string{"*"},
+					ResourceNames:   []string{},
+					NonResourceURLs: []string{},
+				},
+			},
+		}
+		if err := r.Create(ctx, role); err != nil {
+			kvlog.Error(err, "could not create role for runner creation")
 			return ctrl.Result{}, nil
 		}
 	}
 
-	if len(activePods) == 1 {
-		// TODO(cory-miller): Why did I get here / why was the controller called?
-		kvlog.Info("Pod already running. Nothing to reconcile")
-		return ctrl.Result{}, nil
+	if err := r.Get(ctx, childNamespaceType, &rbacv1.RoleBinding{}); err != nil {
+		rolebinding := &rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "RoleBinding",
+				APIVersion: "rbac.authorization.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%v-rolebinding", roleName),
+				Namespace: namespaceForManagement,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					APIGroup:  "",
+					Name:      "default",
+					Namespace: namespaceForManagement,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io/v1",
+				Name:     roleName,
+				Kind:     "Role",
+			},
+		}
+		if err := r.Create(ctx, rolebinding); err != nil {
+			kvlog.Error(err, "could not create rolebinding for runner creation")
+			return ctrl.Result{}, nil
+		}
 	}
-
-	var c github.Config
-	if err := envconfig.Process("github", &c); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pod := getAutoscalerApplicationPodRef(runnerSet.Namespace, runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
-
-	if err := ctrl.SetControllerReference(&runnerSet, pod, r.Scheme); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.Create(ctx, pod); err != nil {
-		kvlog.Error(err, "unable to create Autoscaler for AutoscalingRunnerSet", "pod", pod)
-		return ctrl.Result{}, err
-	}
-
-	kvlog.Info("Created pod", "podName", pod.ObjectMeta.Name)
+	// End of reconciliation for RunnerJob namespace and RBAC.
 
 	return ctrl.Result{}, nil
 }
-
-var (
-	apiGVStr = actionsv1alpha1.GroupVersion.String()
-)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -262,5 +321,9 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		For(&actionsv1alpha1.AutoscalingRunnerSet{}).
 		Owns(&corev1.Pod{}).
 		Owns(&corev1.Namespace{}).
+		// Below does not work unless this controller has cluster scoped role.list and rolebinding.list.
+		// Don't think we want to force that, but it does mean we won't reconcile changes to these resource types.
+		// Owns(&rbacv1.Role{}).
+		// Owns(&rbacv1.RoleBinding{}).
 		Complete(r)
 }
