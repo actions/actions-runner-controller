@@ -272,7 +272,7 @@ Alternatively, you can install each controller stack into a unique namespace (re
 - The organization level
 - The enterprise level
 
-Runners can be deployed as 1 of 2 abstractions: 
+Runners can be deployed as 1 of 2 abstractions:
 
 - A `RunnerDeployment` (similar to k8s's `Deployments`, based on `Pods`)
 - A `RunnerSet` (based on k8s's `StatefulSets`)
@@ -1786,9 +1786,11 @@ kind: RunnerDeployment
 metadata:
   namespace: org1-runners
 spec:
-  githubAPICredentialsFrom:
-    secretRef:
-      name: org1-github-app
+  template:
+    spec:
+      githubAPICredentialsFrom:
+        secretRef:
+          name: org1-github-app
 ---
 kind: HorizontalRunnerAutoscaler
 metadata:
