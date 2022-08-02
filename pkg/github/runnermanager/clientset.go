@@ -1,5 +1,5 @@
-// Package kjobmgr is a poorly named k8s job manager used to start a Runner with a given JIT config.
-package kjobmgr
+// Package runnermanager is a poorly named k8s job manager used to start a Runner with a given JIT config.
+package runnermanager
 
 import (
 	"context"

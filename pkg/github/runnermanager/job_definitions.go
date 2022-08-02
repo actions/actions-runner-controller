@@ -1,4 +1,4 @@
-package kjobmgr
+package runnermanager
 
 import (
 	"fmt"

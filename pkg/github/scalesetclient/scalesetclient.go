@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/pkg/github/kjobmgr"
+	"github.com/actions-runner-controller/actions-runner-controller/pkg/github/runnermanager"
 	"github.com/go-logr/logr"
 )
 
@@ -69,7 +69,7 @@ func HandleJobAssignment(ctx context.Context, logger logr.Logger, client *github
 
 	logger.Info("Generated JIT runner config.", "RequestId", jobAssigned.RunnerRequestId, "RunnerId", jitConfig.Runner.Id, "JitConfig", jitConfig.EncodedJITConfig)
 
-	createdJob, err := kjobmgr.CreateJob(ctx, jitConfig, runnerScaleSet.Name)
+	createdJob, err := runnermanager.CreateJob(ctx, jitConfig, runnerScaleSet.Name)
 	if err != nil {
 		// TODO: Need to handle this.
 		logger.Error(err, "Error: Could not create job.")
