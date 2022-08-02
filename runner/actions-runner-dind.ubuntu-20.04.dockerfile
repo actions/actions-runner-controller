@@ -9,6 +9,10 @@ ARG DOCKER_VERSION=20.10.18
 ARG DOCKER_COMPOSE_VERSION=v2.6.0
 ARG DUMB_INIT_VERSION=1.2.5
 
+# Use 1001 and 121 for compatibility with GitHub-hosted runners
+ARG RUNNER_UID=1000
+ARG DOCKER_GID=1001
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y \
     && apt-get install -y software-properties-common \
@@ -51,8 +55,8 @@ RUN apt-get update -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Runner user
-RUN adduser --disabled-password --gecos "" --uid 1000 runner \
-    && groupadd docker \
+RUN adduser --disabled-password --gecos "" --uid $RUNNER_UID runner \
+    && groupadd docker --gid $DOCKER_GID \
     && usermod -aG sudo runner \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers \
