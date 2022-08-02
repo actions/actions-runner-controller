@@ -58,8 +58,12 @@ var apiGVStr = v1alpha1.GroupVersion.String()
 func (r *RunnerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runnerjob", req.NamespacedName)
 
+	log.Info("reading the runner job", "RunnerJob", req.NamespacedName)
+	defer log.Info("finishing reconciling")
+
 	var runnerJob v1alpha1.RunnerJob
 	if err := r.Get(ctx, req.NamespacedName, &runnerJob); err != nil {
+		log.Info("resource could not be loaded", "error", err.Error())
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -73,30 +77,37 @@ func (r *RunnerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	for _, childJob := range childJobs.Items {
+		log.Info("Child Job", "Status", childJob.Status)
+	}
+
 	switch len(childJobs.Items) {
 	case 0:
+		log.Info("Create job")
 		if err := r.createJob(ctx, runnerJob); err != nil {
-			log.Info("failed to create a job from a RunnerJob, requeueing in 30s", runnerJob.Name, err.Error())
+			log.Info("Failed to create a job from a RunnerJob, requeueing in 30s", runnerJob.Name, err.Error())
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 	case 1:
+		log.Info("We have 1 child job")
 		childJob := childJobs.Items[0]
+		// if runner pod is running, don't reconcile again on this state
 		if childJob.Status.Active > 0 {
 			return ctrl.Result{}, nil
 		}
 
 		if childJob.Status.Succeeded > 0 {
+			// cleanup runner job
 			if err := r.Delete(ctx, &runnerJob); err != nil {
-				log.Info("failed to delete runner job", "RunnerJob", runnerJob.Name)
+				log.Info("Failed to delete runner job", "RunnerJob", runnerJob.Name)
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("more than one child pods failed", "RunnerJob", runnerJob.Name, "Job", childJob.Name)
 	default:
-		log.V(0).Info("found runner job with more than one kubernetes job", "RunnerJob", runnerJob.Name)
-		return ctrl.Result{}, fmt.Errorf("found runner job with more than one kubernetes job")
+		log.V(0).Info("Found runner job with more than one kubernetes job", "RunnerJob", runnerJob.Name)
+		return ctrl.Result{}, fmt.Errorf("Found runner job with more than one kubernetes job")
 	}
 
 	return ctrl.Result{}, nil
@@ -144,5 +155,6 @@ func (r *RunnerJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerJob{}).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
