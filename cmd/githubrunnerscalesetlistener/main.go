@@ -55,7 +55,8 @@ func main() {
 	)
 
 	var c github.Config
-	if err := envconfig.Process("github", &c); err != nil {
+	err = envconfig.Process("github", &c)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: processing environment variables: %v\n", err)
 		os.Exit(1)
 	}
@@ -186,7 +187,7 @@ func main() {
 			logger.Info("Message queue listener is stopped.")
 			return
 		default:
-			// Feels bad to do this, but also feels bad to try type assertion...
+			// We will recursively check against this error type in errors.As call below
 			expiredError := &github.MessageQueueTokenExpiredError{}
 
 			message, err := getMessage(ctx, actionsServiceClient, logger, runnerScaleSetSession.MessageQueueUrl, runnerScaleSetSession.MessageQueueAccessToken, lastMessageId)
