@@ -715,7 +715,7 @@ spec:
 
 The lifecycle of a runner provisioned from a webhook is different to a runner provisioned from the pull based scaling method:
 
-1. ARC receieves a `workflow_job` event of `status=queued`
+1. GitHub sends a `workflow_job` event to ARC with `status=queued`
 2. ARC finds HRAs with a `workflow_job` webhook scale trigger that and back a RunnerDeployment / RunnerSet with matching runner labels
 3. The matched HRAs adds a unit to its `capacityReservations` list
 4. ARC adds a replica and sets the EffectiveTime of that replica to current + `HRA.spec.scaleUpTriggers[].duration`
@@ -723,7 +723,7 @@ The lifecycle of a runner provisioned from a webhook is different to a runner pr
 At this point there are a few things that can happen, either the job gets allocated to the runner or the runner is left dangling due to it not being used, if the runner gets assigned the job that triggered the scale up the lifecycle looks like this:
 
 1. The new runner gets allocated the job and processes it
-2. Upon the job ending ARC receieves a `workflow_job` event of `status=completed`
+2. Upon the job ending GitHub sends another `workflow_job` event to ARC but with `status=completed`
 3. The HRA removes a capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
 
 If the job is cancelled before it is allocated to a runner or the runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
