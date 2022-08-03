@@ -47,6 +47,9 @@ jobs:
           - name: actions-runner-dind
             os-name: ubuntu
             os-version: 20.04
+          - name: actions-runner-dind-rootless
+            os-name: ubuntu
+            os-version: 20.04
 
     steps:
       - name: Checkout
