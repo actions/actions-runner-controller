@@ -149,10 +149,10 @@ _Note: All API routes mapped to their permissions can be found [here](https://do
 
 **Subscribe to events**
 
-At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case the event details are:
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the same events:
 
-* Check run (required for all webhook driven scaling events)
-* Workflow job (optionally) (required for [webhook driven scaling with workflow_job events](https://github.com/actions-runner-controller/actions-runner-controller#example-1-scale-on-each-workflow_job-event)
+* Check run
+* Workflow job
 
 ---
 
@@ -393,8 +393,6 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
-_Ensure you see the limitations before using this kind!!!!!_
-
 We can also deploy sets of RunnerSets the same way, a basic `RunnerSet` would look like this:
 
 ```yaml
@@ -482,10 +480,6 @@ You can also read the design and usage documentation written in the original pul
 
 Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A `statefulset` is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each `statefulset-managed` pod gets the same persistent volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
 
-**Limitations**
-
-* For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-
 ### Persistent Runners
 
 Every runner managed by ARC is "ephemeral" by default. The life of an ephemeral runner managed by ARC looks like this- ARC creates a runner pod for the runner. As it's an ephemeral runner, the `--ephemeral` flag is passed to the `actions/runner` agent that runs within the `runner` container of the runner pod.
@@ -502,11 +496,9 @@ Persistent runners are available as an option for some edge cases however they a
 
 ### Autoscaling
 
-> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to set up.
-
 > If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
 
-A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [RunnerSets](#runnersets) for caveats of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
+A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event. Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
 **_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
