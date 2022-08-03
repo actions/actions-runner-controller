@@ -31,6 +31,7 @@ ToC:
     - [Scheduled Overrides](#scheduled-overrides)
   - [Alternative Runners](#alternative-runners)
     - [Runner with DinD](#runner-with-dind)
+    - [Runner with rootless DinD](#runner-with-rootless-dind)
     - [Runner with k8s jobs](#runner-with-k8s-jobs)
   - [Additional Tweaks](#additional-tweaks)
   - [Custom Volume mounts](#custom-volume-mounts)
@@ -1162,6 +1163,10 @@ spec:
       repository: mumoshu/actions-runner-controller-ci
       env: []
 ```
+
+#### Runner with rootless DinD
+
+When using the DinD runner, it assumes that the main runner is rootful, which can be problematic in a regulated or more security-conscious environment, such as co-tenanting across enterprise projects.  The `actions-runner-dind-rootless` image runs rootless Docker inside the container as `runner` user.  Note that this user does not have sudo access, so anything requiring admin privileges must be built into the runner's base image (like running `apt` to install additional software).
 
 #### Runner with K8s Jobs
 
