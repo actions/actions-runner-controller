@@ -29,7 +29,6 @@ RUN apt update -y \
     ca-certificates \
     dnsutils \
     ftp \
-    fuse-overlayfs \
     git \
     iproute2 \
     iputils-ping \
