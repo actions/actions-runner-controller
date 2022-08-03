@@ -1770,7 +1770,7 @@ Or `spec.template.spec.githubAPICredentialsFrom.secretRef.name` field for the fo
 
 Usually, you should have a set of GitHub App credentials per a GitHub organization and you would have a RunnerDeployment and a HorizontalRunnerAutoscaler per an organization runner group. So, you might end up having the following resources for each organization:
 
-- 1 Kuernetes secret that contains GitHub App credentials
+- 1 Kubernetes secret that contains GitHub App credentials
 - 1 RunnerDeployment/RunnerSet and 1 HorizontalRunnerAutoscaler per Runner Group
 
 And the RunnerDeployment/RunnerSet and HorizontalRunnerAutoscaler should have the same value for `spec.githubAPICredentialsFrom.secretRef.name`, which refers to the name of the Kubernetes secret.
