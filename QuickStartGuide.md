@@ -107,7 +107,7 @@ spec:
 
 Apply this file to your K8s cluster
 ```shell
-$ kubectl apply -f runnerdeployment.yaml
+kubectl apply -f runnerdeployment.yaml
 ````
  
 
