@@ -30,7 +30,6 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/pkg/github/scalesetclient"
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func getRunnerScaleSet(scaleSetName string) *github.RunnerScaleSet {
@@ -67,8 +66,6 @@ func main() {
 	}
 
 	logger := logging.NewLogger(logging.LogLevelDebug)
-	ctrl.SetLogger(logger)
-
 	hasToken := len(c.Token) > 0
 	hasPrivateKeyConfig := c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != ""
 	hasBasicAuth := len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0
@@ -155,12 +152,13 @@ func main() {
 	}
 
 	retries := 3
-	var lastErr error
-	var runnerScaleSetSession *github.RunnerScaleSetSession
+	var (
+		messageSessionErr     error
+		runnerScaleSetSession *github.RunnerScaleSetSession
+	)
 	for i := 0; i < retries; i++ {
-		runnerScaleSetSession, err = actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
-		lastErr = err
-		if err == nil {
+		runnerScaleSetSession, messageSessionErr = actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
+		if messageSessionErr == nil {
 			break
 		}
 		logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
@@ -168,7 +166,7 @@ func main() {
 		time.Sleep(30 * time.Second)
 	}
 
-	if lastErr != nil {
+	if messageSessionErr != nil {
 		fmt.Fprintln(os.Stderr, "Error: Create message session failed.", err)
 		os.Exit(1)
 	}
