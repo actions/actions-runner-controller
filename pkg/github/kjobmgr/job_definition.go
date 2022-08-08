@@ -3,6 +3,7 @@ package kjobmgr
 import (
 	"fmt"
 
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,42 @@ var (
 		"app": "autoscaler",
 	}
 )
+
+func runnerJobResource(jitConfig string, runnerID int, namespace string) *v1alpha1.RunnerJob {
+	name := fmt.Sprintf("%v-%v", jobName, runnerID)
+	return &v1alpha1.RunnerJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "RunnerJob",
+			APIVersion: "actions.summerwind.dev/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    labels,
+		},
+		Spec: v1alpha1.RunnerJobSpec{
+			JobSpec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: namespace,
+						Labels:    labels,
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  podName,
+								Image: image,
+								Args:  []string{"--jitconfig", jitConfig},
+							},
+						},
+						RestartPolicy: corev1.RestartPolicyNever,
+					},
+				},
+			},
+		},
+	}
+}
 
 func defaultJobResource(jitConfig string, runnerID int, namespace string) *batchv1.Job {
 	name := fmt.Sprintf("%v-%v", jobName, runnerID)

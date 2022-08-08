@@ -3,16 +3,18 @@ package kjobmgr
 
 import (
 	"context"
+	"fmt"
 
+	"encoding/json"
+
+	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/pkg/errors"
-	batchv1 "k8s.io/api/batch/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
-func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerConfig, namespace string) (*batchv1.Job, error) {
+func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerConfig, namespace string) (*v1alpha1.RunnerJob, error) {
 	conf, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -23,11 +25,21 @@ func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerCon
 		return nil, err
 	}
 
-	job := defaultJobResource(jitConfig.EncodedJITConfig, jitConfig.Runner.Id, namespace)
-	createdJob, err := clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	job := runnerJobResource(jitConfig.EncodedJITConfig, jitConfig.Runner.Id, namespace) // defaultJobResource(jitConfig.EncodedJITConfig, jitConfig.Runner.Id, namespace)
+
+	body, err := json.Marshal(job)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not marshal job")
+	}
+
+	_, err = clientset.RESTClient().
+		Post().
+		AbsPath(fmt.Sprintf("/apis/actions.summerwind.dev/v1alpha1/namespaces/%s/runnerjobs", namespace)).
+		Body(body).
+		DoRaw(context.TODO())
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create job")
 	}
 
-	return createdJob, nil
+	return job, nil
 }
