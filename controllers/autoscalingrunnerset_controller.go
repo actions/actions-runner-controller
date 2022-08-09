@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
@@ -36,6 +37,7 @@ import (
 )
 
 const (
+	// TODO: Replace with shared image.
 	image       = "ghcr.io/cory-miller/autoscaler-prototype"
 	name        = "autoscaler-prototype"
 	jobOwnerKey = ".metadata.controller"
@@ -56,7 +58,7 @@ type AutoscalingRunnerSetReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func getAutoscalerApplicationPodRef(namespace, org, repo, scaleSet, token string) *corev1.Pod {
+func getAutoscalerApplicationPodRef(namespace, autoscalerImage, org, repo, scaleSet, token string) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -71,7 +73,7 @@ func getAutoscalerApplicationPodRef(namespace, org, repo, scaleSet, token string
 			Containers: []corev1.Container{
 				{
 					Name:  name,
-					Image: image,
+					Image: autoscalerImage,
 					Env: []corev1.EnvVar{
 						{
 							Name:  "GITHUB_RUNNER_ORG",
@@ -100,8 +102,8 @@ func getAutoscalerApplicationPodRef(namespace, org, repo, scaleSet, token string
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/finalizers,verbs=update
-//+kubebuilder:rbac:groups=*,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=*,resources=namespaces;pods/status,verbs=get
+//+kubebuilder:rbac:groups=core,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=namespaces/status;pods/status,verbs=get
 // batch.jobs is added to give implicit permission to the role+rolebinding.
 // It would be probably be better to do this another way if possible.
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
@@ -140,7 +142,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		pod := getAutoscalerApplicationPodRef(namespaceForManagement, runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
+		autoscalerImage := runnerSet.Spec.AutoscalerImage
+		if strings.TrimSpace(autoscalerImage) == "" {
+			autoscalerImage = image
+		}
+
+		pod := getAutoscalerApplicationPodRef(namespaceForManagement, autoscalerImage, runnerSet.Spec.RunnerOrg, runnerSet.Spec.RunnerRepo, runnerSet.Spec.RunnerScaleSet, c.Token)
 
 		if err := ctrl.SetControllerReference(&runnerSet, pod, r.Scheme); err != nil {
 			return ctrl.Result{}, err
