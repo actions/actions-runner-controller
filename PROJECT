@@ -13,4 +13,7 @@ resources:
 - group: actions
   kind: RunnerJob
   version: v1alpha1
+- group: actions
+  kind: AutoscalingRunnerSet
+  version: v1alpha1
 version: "2"

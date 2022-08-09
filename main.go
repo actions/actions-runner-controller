@@ -295,6 +295,14 @@ func main() {
 		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
 		os.Exit(1)
 	}
+	if err = (&controllers.AutoscalingRunnerSetReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	injector := &controllers.PodRunnerTokenInjector{
