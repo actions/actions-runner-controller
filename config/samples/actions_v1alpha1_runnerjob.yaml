@@ -1,0 +1,16 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerJob
+metadata:
+  name: runnerjob-sample
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      containers:
+      - name: runner-container
+        image: huangtingluo/jit-runner-image
+        env:
+          - name: ACTIONS_RUNNER_INPUT_JITCONFIG
+            value: <JIT Token Here>
+      restartPolicy: Never
+  backoffLimit: 0

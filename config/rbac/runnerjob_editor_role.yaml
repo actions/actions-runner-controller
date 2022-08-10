@@ -1,0 +1,24 @@
+# permissions for end users to edit runnerjobs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: runnerjob-editor-role
+rules:
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerjobs/status
+  verbs:
+  - get

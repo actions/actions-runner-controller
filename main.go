@@ -213,6 +213,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	runnerJobReconciler := &controllers.RunnerJobReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RunnerJob"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	if err = runnerJobReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerJob")
+		os.Exit(1)
+	}
+
 	log.Info(
 		"Initializing actions-runner-controller",
 		"default-scale-down-delay", defaultScaleDownDelay,

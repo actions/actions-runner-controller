@@ -69,14 +69,14 @@ func HandleJobAssignment(ctx context.Context, logger logr.Logger, client *github
 
 	logger.Info("Generated JIT runner config.", "RequestId", jobAssigned.RunnerRequestId, "RunnerId", jitConfig.Runner.Id, "JitConfig", jitConfig.EncodedJITConfig)
 
-	createdJob, err := runnermanager.CreateJob(ctx, jitConfig, runnerScaleSet.Name)
+	runnerJob, err := runnermanager.CreateJob(ctx, jitConfig, runnerScaleSet.Name)
 	if err != nil {
 		// TODO: Need to handle this.
 		logger.Error(err, "Error: Could not create job.")
 		return
 	}
 
-	logger.Info("Started a job", "job", createdJob)
+	logger.Info("Started a job", "job", runnerJob)
 }
 
 func NoopHandleJobCompletion(logger logr.Logger, message *github.RunnerScaleSetMessage) {
