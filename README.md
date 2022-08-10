@@ -684,7 +684,7 @@ spec:
 
 Alternatively ARC can be configured to scale based on the `workflow_job` webhook event. The primary benefit of autoscaling on webhooks compared to the pull driven scaling is that ARC is immediately notified of the scaling need.
 
-Webhooks are processed by a separate webhook server. The webhook server receives `workflow_job` webhook events and scales RunnerDeployments / RunnerSets by updating corresponding HRA. Below is an example set-up where a HRA has been configured to scale a `RunnerDeployment` from a `workflow_job` event:
+Webhooks are processed by a separate webhook server. The webhook server receives `workflow_job` webhook events and scales RunnerDeployments / RunnerSets by updating HRAs configured for the webhook trigger. Below is an example set-up where a HRA has been configured to scale a `RunnerDeployment` from a `workflow_job` event:
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
