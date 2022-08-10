@@ -152,13 +152,10 @@ func main() {
 	}
 
 	retries := 3
-	var (
-		messageSessionErr     error
-		runnerScaleSetSession *github.RunnerScaleSetSession
-	)
+	var runnerScaleSetSession *github.RunnerScaleSetSession
 	for i := 0; i < retries; i++ {
-		runnerScaleSetSession, messageSessionErr = actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
-		if messageSessionErr == nil {
+		runnerScaleSetSession, err = actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
+		if err == nil {
 			break
 		}
 		logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
@@ -166,7 +163,7 @@ func main() {
 		time.Sleep(30 * time.Second)
 	}
 
-	if messageSessionErr != nil {
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: Create message session failed.", err)
 		os.Exit(1)
 	}

@@ -1,0 +1,20 @@
+# permissions for end users to view runnerjobs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: runnerjob-viewer-role
+rules:
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerjobs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerjobs/status
+  verbs:
+  - get
