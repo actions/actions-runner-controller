@@ -38,17 +38,15 @@ import (
 
 const (
 	// TODO: Replace with shared image.
-	image       = "ghcr.io/cory-miller/autoscaler-prototype"
-	name        = "autoscaler-prototype"
-	jobOwnerKey = ".metadata.controller"
+	image                        = "ghcr.io/cory-miller/autoscaler-prototype"
+	name                         = "autoscaler-prototype"
+	autoscalingRunnerSetOwnerKey = ".metadata.controller"
 )
 
 var (
 	labels = client.MatchingLabels{
 		"app": "autoscaler",
 	}
-
-	apiGVStr = actionsv1alpha1.GroupVersion.String()
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
@@ -99,15 +97,16 @@ func getAutoscalerApplicationPodRef(namespace, autoscalerImage, org, repo, scale
 	}
 }
 
+// runnerjobs is added to give implicit permission to the role+rolebinding.
+// It would be probably be better to do this another way if possible.
+
+//+kubebuilder:rbac:groups=core,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=namespaces/status;pods/status,verbs=get
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/finalizers,verbs=update
-//+kubebuilder:rbac:groups=core,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=namespaces/status;pods/status,verbs=get
-// batch.jobs is added to give implicit permission to the role+rolebinding.
-// It would be probably be better to do this another way if possible.
-//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
+//+kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerjobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerjobs/status,verbs=get
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=role;rolebinding,verbs=get;list;watch;create;update;patch;delete;escalate
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=role/status;rolebinding/status,verbs=get
 
@@ -129,7 +128,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Start of reconciliation for Autoscaler pod.
 	var childPods corev1.PodList
-	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}, labels); err != nil {
+	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{autoscalingRunnerSetOwnerKey: req.Name}, labels); err != nil {
 		kvlog.Error(err, "unable to list child pods")
 		return ctrl.Result{}, err
 	}
@@ -284,7 +283,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, jobOwnerKey, func(rawObj client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, autoscalingRunnerSetOwnerKey, func(rawObj client.Object) []string {
+
+		groupVersion := actionsv1alpha1.GroupVersion.String()
 
 		// grab the job object, extract the owner...
 		pod, ok := rawObj.(*corev1.Pod)
@@ -295,7 +296,7 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			}
 
 			// ...make sure it's a Pod...
-			if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
+			if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
 				return nil
 			}
 
@@ -311,7 +312,7 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			}
 
 			// ...make sure it's a Namespace...
-			if owner.APIVersion != apiGVStr || owner.Kind != "AutoscalingRunnerSet" {
+			if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
 				return nil
 			}
 
