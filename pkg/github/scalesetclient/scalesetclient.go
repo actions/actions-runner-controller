@@ -76,7 +76,7 @@ func HandleJobAssignment(ctx context.Context, logger logr.Logger, client *github
 		return
 	}
 
-	logger.Info("Started a job", "job", runnerJob)
+	logger.Info("Started a job", "job", runnerJob.Name)
 }
 
 func NoopHandleJobCompletion(logger logr.Logger, message *github.RunnerScaleSetMessage) {
