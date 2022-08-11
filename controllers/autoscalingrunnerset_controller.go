@@ -295,7 +295,7 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 				return nil
 			}
 
-			// ...make sure it's a Pod...
+			// ...make sure the Pod owner is AutoscalingRunnerSet...
 			if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
 				return nil
 			}
