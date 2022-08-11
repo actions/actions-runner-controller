@@ -295,11 +295,14 @@ func main() {
 		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
 		os.Exit(1)
 	}
-	if err = (&controllers.AutoscalingRunnerSetReconciler{
+
+	autoscalingRunnerSetReconciler := &controllers.AutoscalingRunnerSetReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AutoscalingRunnerSet"),
+		Log:    log.WithName("AutoscalingRunnerSet"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}
+
+	if err = autoscalingRunnerSetReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 		os.Exit(1)
 	}

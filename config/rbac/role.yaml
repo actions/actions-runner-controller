@@ -21,6 +21,12 @@ rules:
 - apiGroups:
   - actions.summerwind.dev
   resources:
+  - autoscalingrunnersets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
   - autoscalingrunnersets/status
   verbs:
   - get
@@ -260,6 +266,26 @@ rules:
   verbs:
   - create
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces/status
+  - pods/status
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:

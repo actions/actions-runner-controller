@@ -17,25 +17,36 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	//+kubebuilder:validation:MinLength=0
+	// A container image providing our autoscaler app.
+	//
+	// Temporary so we can test different versions by simply changing the YAML.
+	AutoscalerImage string `json:"autoscalerImage,omitempty"`
 
-	// Foo is an example field of AutoscalingRunnerSet. Edit autoscalingrunnerset_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	//+kubebuilder:validation:MinLength=0
+	// Sets the envvar of GITHUB_RUNNER_ORG in the Autoscaler container.
+	RunnerOrg string `json:"githubRunnerOrg,omitempty"`
+
+	//+kubebuilder:validation:MinLength=0
+	// Sets the envvar of GITHUB_RUNNER_REPOSITORY in the Autoscaler container.
+	RunnerRepo string `json:"githubRunnerRepository,omitempty"`
+
+	//+kubebuilder:validation:MinLength=0
+	// Sets the envvar of GITHUB_RUNNER_SCALE_SET_NAME in the Autoscaler container.
+	RunnerScaleSet string `json:"githubRunnerScaleSet,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	ActiveAutoscaler corev1.ObjectReference `json:"active,omitempty"`
 }
 
 //+kubebuilder:object:root=true
