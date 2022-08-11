@@ -27,7 +27,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -97,7 +96,7 @@ func getAutoscalerApplicationPodRef(namespace, autoscalerImage, org, repo, scale
 	}
 }
 
-// runnerjobs is added to give implicit permission to the role+rolebinding.
+// runnerjobs is added below to give implicit permission to the role+rolebinding.
 // It would be probably be better to do this another way if possible.
 
 //+kubebuilder:rbac:groups=core,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
@@ -107,8 +106,6 @@ func getAutoscalerApplicationPodRef(namespace, autoscalerImage, org, repo, scale
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=autoscalingrunnersets/finalizers,verbs=update
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerjobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerjobs/status,verbs=get
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=role;rolebinding,verbs=get;list;watch;create;update;patch;delete;escalate
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=role/status;rolebinding/status,verbs=get
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -201,12 +198,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	// End of reconciliation for Autoscaler pod.
 
+	// Start of reconciliation for RunnerJob namespace.
 	childNamespaceType := types.NamespacedName{
 		Namespace: runnerSet.Spec.RunnerScaleSet,
 		Name:      runnerSet.Spec.RunnerScaleSet,
 	}
 
-	// Start of reconciliation for RunnerJob namespace.
 	if err := r.Get(ctx, childNamespaceType, &corev1.Namespace{}); err != nil {
 		childNamespace := &corev1.Namespace{}
 		childNamespace.Name = childNamespaceType.Name
@@ -217,67 +214,6 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 	// End of reconciliation for RunnerJob namespace.
-
-	roleName := fmt.Sprintf("%v-runner-creator", runnerSet.Spec.RunnerScaleSet)
-
-	// Start of reconciliation for RunnerJob RBAC.
-	if err := r.Get(ctx, childNamespaceType, &rbacv1.Role{}); err != nil {
-		role := &rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Role",
-				APIVersion: "rbac.authorization.k8s.io/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      roleName,
-				Namespace: namespaceForManagement,
-			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					Verbs:           []string{"*"},
-					APIGroups:       []string{"batch"},
-					Resources:       []string{"*"},
-					ResourceNames:   []string{},
-					NonResourceURLs: []string{},
-				},
-			},
-		}
-		if err := r.Create(ctx, role); err != nil {
-			kvlog.Error(err, "could not create role for runner creation")
-			return ctrl.Result{}, nil
-		}
-	}
-
-	if err := r.Get(ctx, childNamespaceType, &rbacv1.RoleBinding{}); err != nil {
-		rolebinding := &rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "RoleBinding",
-				APIVersion: "rbac.authorization.k8s.io/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%v-rolebinding", roleName),
-				Namespace: namespaceForManagement,
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					APIGroup:  "",
-					Name:      "default",
-					Namespace: namespaceForManagement,
-				},
-			},
-			RoleRef: rbacv1.RoleRef{
-				APIGroup: "rbac.authorization.k8s.io/v1",
-				Name:     roleName,
-				Kind:     "Role",
-			},
-		}
-		if err := r.Create(ctx, rolebinding); err != nil {
-			kvlog.Error(err, "could not create rolebinding for runner creation")
-			return ctrl.Result{}, nil
-		}
-	}
-	// End of reconciliation for RunnerJob namespace and RBAC.
-
 	return ctrl.Result{}, nil
 }
 
@@ -301,7 +237,6 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 
 		// ...and if so, return it
 		return []string{owner.Name}
-
 	}); err != nil {
 		return err
 	}
@@ -332,9 +267,5 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		For(&actionsv1alpha1.AutoscalingRunnerSet{}).
 		Owns(&corev1.Pod{}).
 		Owns(&corev1.Namespace{}).
-		// Below does not work unless this controller has cluster scoped role.list and rolebinding.list.
-		// Don't think we want to force that, but it does mean we won't reconcile changes to these resource types.
-		// Owns(&rbacv1.Role{}).
-		// Owns(&rbacv1.RoleBinding{}).
 		Complete(r)
 }

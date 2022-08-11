@@ -353,27 +353,6 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
-  - role
-  - rolebinding
-  verbs:
-  - create
-  - delete
-  - escalate
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - role/status
-  - rolebinding/status
-  verbs:
-  - get
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
   - rolebindings
   verbs:
   - create
