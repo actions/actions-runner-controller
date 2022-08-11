@@ -288,39 +288,42 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		groupVersion := actionsv1alpha1.GroupVersion.String()
 
 		// grab the job object, extract the owner...
-		pod, ok := rawObj.(*corev1.Pod)
-		if ok {
-			owner := metav1.GetControllerOf(pod)
-			if owner == nil {
-				return nil
-			}
-
-			// ...make sure it's a Pod...
-			if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
-				return nil
-			}
-
-			// ...and if so, return it
-			return []string{owner.Name}
+		pod := rawObj.(*corev1.Pod)
+		owner := metav1.GetControllerOf(pod)
+		if owner == nil {
+			return nil
 		}
 
-		namespace, ok := rawObj.(*corev1.Namespace)
-		if ok {
-			owner := metav1.GetControllerOf(namespace)
-			if owner == nil {
-				return nil
-			}
-
-			// ...make sure it's a Namespace...
-			if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
-				return nil
-			}
-
-			// ...and if so, return it
-			return []string{owner.Name}
+		// ...make sure it is owned by this controller
+		if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
+			return nil
 		}
 
-		return []string{}
+		// ...and if so, return it
+		return []string{owner.Name}
+
+	}); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Namespace{}, autoscalingRunnerSetOwnerKey, func(rawObj client.Object) []string {
+
+		groupVersion := actionsv1alpha1.GroupVersion.String()
+
+		// grab the job object, extract the owner...
+		namespace := rawObj.(*corev1.Namespace)
+		owner := metav1.GetControllerOf(namespace)
+		if owner == nil {
+			return nil
+		}
+
+		// ...make sure it is owned by this controller
+		if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
 	}); err != nil {
 		return err
 	}
