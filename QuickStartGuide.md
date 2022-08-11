@@ -44,16 +44,6 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 
 <details><summary>Helm deployment</summary>
 
- ##### Create a new file called `custom-values.yaml` containing...
-
- ```yaml
-authSecret:
-  github_token: REPLACE_YOUR_TOKEN_HERE
-  create: true
-
-```
-<sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated in Step 1 </sub>
-
 ##### Add repository
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -61,10 +51,12 @@ helm repo add actions-runner-controller https://actions-runner-controller.github
 
 ##### Install Helm chart
 ```shell
-helm install -f custom-values.yaml --wait --namespace actions-runner-system \
-  --create-namespace actions-runner-controller \
-  actions-runner-controller/actions-runner-controller
+helm upgrade --install --namespace actions-runner-system --create-namespace\
+  --set=authSecret.create=true\
+  --set=authSecret.github_token="REPLACE_YOUR_TOKEN_HERE"\
+  --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
+<sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated in Step 1 </sub>
 </details>
 
 <details><summary>Kubectl deployment</summary>
