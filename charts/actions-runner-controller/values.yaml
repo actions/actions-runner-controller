@@ -270,3 +270,5 @@ githubWebhookServer:
     enabled: false
     # minAvailable: 1
     # maxUnavailable: 3
+  ## Queue limit size override, by default its 100
+  # queueLimit: 1000
