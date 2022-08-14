@@ -133,7 +133,7 @@ type ScaleTargetRef struct {
 
 type MetricSpec struct {
 	// Type is the type of metric to be used for autoscaling.
-	// The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns
+	// It can be TotalNumberOfQueuedAndInProgressWorkflowRuns or PercentageRunnersBusy.
 	Type string `json:"type,omitempty"`
 
 	// RepositoryNames is the list of repository names to be used for calculating the metric.
@@ -173,7 +173,7 @@ type MetricSpec struct {
 }
 
 // ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
-// A schedule can optionally be recurring, so that the correspoding override happens every day, week, month, or year.
+// A schedule can optionally be recurring, so that the corresponding override happens every day, week, month, or year.
 type ScheduledOverride struct {
 	// StartTime is the time at which the first override starts.
 	StartTime metav1.Time `json:"startTime"`
