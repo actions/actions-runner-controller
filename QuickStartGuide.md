@@ -3,7 +3,7 @@
 GitHub Actions can be run in GitHub-hosted cloud or self hosted environments. Self-hosted runners offer more control of hardware, operating system, and software tools than GitHub-hosted runners provide
 
 With just a few steps, you can set up your kubernetes (K8s) cluster to be a self-hosted environment.
-In this guide, we will setup pre-requistes ,deploy Actions Runner controller (ARC) and then target that cluster to run GitHub Action workflows.
+In this guide, we will setup prerequistes, deploy Actions Runner controller (ARC) and then target that cluster to run GitHub Action workflows.
 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/53718047/181159115-dbf41416-89a7-408c-b575-bb0d059a1a36.png" />
@@ -119,7 +119,7 @@ $ kubectl get pods
 NAME                           READY   STATUS    RESTARTS   AGE
 example-runnerdeploy2475ht2qbr 2/2     Running   0          1m
 ````
-Also,this runner has been registered directly to the specified repository, you can see it in repository settings. For more information , see [settings](https://docs.github.com/en/actions/hosting-your-own-runners/monitoring-and-troubleshooting-self-hosted-runners#checking-the-status-of-a-self-hosted-runner)
+Also, this runner has been registered directly to the specified repository, you can see it in repository settings. For more information , see [settings](https://docs.github.com/en/actions/hosting-your-own-runners/monitoring-and-troubleshooting-self-hosted-runners#checking-the-status-of-a-self-hosted-runner)
 
 :two: You are ready to execute workflows against this self hosted runner. 
 GitHub documentation lists the steps to target Actions against self hosted runners. For more information, see [Using self-hosted runners in a workflow - GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#using-self-hosted-runners-in-a-workflow)
