@@ -61,42 +61,42 @@ var (
 	horizontalRunnerAutoscalerReplicasDesiredBefore = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_replicas_desired_before",
-			Help: "", // TODO: Update this
+			Help: "replicas_desired_before of PercentageRunnersBusy",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerReplicasDesired = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_replicas_desired",
-			Help: "", // TODO: Update this
+			Help: "replicas_desired of PercentageRunnersBusy",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerNumRunners = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_num_runners",
-			Help: "", // TODO: Update this
+			Help: "num_runners of PercentageRunnersBusy",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerNumRunnersRegistered = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_num_runners_registered",
-			Help: "", // TODO: Update this
+			Help: "num_runners_registered of PercentageRunnersBusy",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerNumRunnersBusy = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_num_runners_busy",
-			Help: "", // TODO: Update this
+			Help: "num_runners_busy of PercentageRunnersBusy",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerNumTerminatingBusy = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_num_terminating_busy",
-			Help: "", // TODO: Update this
+			Help: "num_terminating_busy of PercentageRunnersBusy",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
@@ -104,35 +104,35 @@ var (
 	horizontalRunnerAutoscalerNecessaryReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_necessary_replicas",
-			Help: "", // TODO: Update this
+			Help: "necessary_replicas of QueuedAndInProgressWorkflowRuns",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerWorkflowRunsCompleted = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_workflow_runs_completed",
-			Help: "", // TODO: Update this
+			Help: "workflow_runs_completed oQueuedAndInProgressWorkflowRunsf ",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerWorkflowRunsInProgress = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_workflow_runs_in_progress",
-			Help: "", // TODO: Update this
+			Help: "workflow_runs_in_progressQueuedAndInProgressWorkflowRuns of ",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerWorkflowRunsQueued = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_workflow_runs_queued",
-			Help: "", // TODO: Update this
+			Help: "workflow_runs_queued of QueuedAndInProgressWorkflowRuns",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerWorkflowRunsUnknown = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_workflow_runs_unknown",
-			Help: "", // TODO: Update this
+			Help: "workflow_runs_unknown of QueuedAndInProgressWorkflowRuns",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
