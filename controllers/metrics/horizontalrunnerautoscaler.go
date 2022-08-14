@@ -111,14 +111,14 @@ var (
 	horizontalRunnerAutoscalerWorkflowRunsCompleted = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_workflow_runs_completed",
-			Help: "workflow_runs_completed oQueuedAndInProgressWorkflowRunsf ",
+			Help: "workflow_runs_completed of QueuedAndInProgressWorkflowRuns",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
 	horizontalRunnerAutoscalerWorkflowRunsInProgress = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_workflow_runs_in_progress",
-			Help: "workflow_runs_in_progressQueuedAndInProgressWorkflowRuns of ",
+			Help: "workflow_runs_in_progress of QueuedAndInProgressWorkflowRuns",
 		},
 		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
 	)
