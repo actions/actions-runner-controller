@@ -7,8 +7,13 @@ import (
 )
 
 const (
-	hraName      = "horizontalrunnerautoscaler"
-	hraNamespace = "namespace"
+	hraName        = "horizontalrunnerautoscaler"
+	hraNamespace   = "namespace"
+	stEnterprise   = "enterprise"
+	stOrganization = "organization"
+	stRepository   = "repository"
+	stKind         = "kind"
+	stName         = "name"
 )
 
 var (
@@ -16,6 +21,17 @@ var (
 		horizontalRunnerAutoscalerMinReplicas,
 		horizontalRunnerAutoscalerMaxReplicas,
 		horizontalRunnerAutoscalerDesiredReplicas,
+		horizontalRunnerAutoscalerReplicasDesiredBefore,
+		horizontalRunnerAutoscalerReplicasDesired,
+		horizontalRunnerAutoscalerNumRunners,
+		horizontalRunnerAutoscalerNumRunnersRegistered,
+		horizontalRunnerAutoscalerNumRunnersBusy,
+		horizontalRunnerAutoscalerNumTerminatingBusy,
+		horizontalRunnerAutoscalerNecessaryReplicas,
+		horizontalRunnerAutoscalerWorkflowRunsCompleted,
+		horizontalRunnerAutoscalerWorkflowRunsInProgress,
+		horizontalRunnerAutoscalerWorkflowRunsQueued,
+		horizontalRunnerAutoscalerWorkflowRunsUnknown,
 	}
 )
 
@@ -41,6 +57,85 @@ var (
 		},
 		[]string{hraName, hraNamespace},
 	)
+	// PercentageRunnersBusy
+	horizontalRunnerAutoscalerReplicasDesiredBefore = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_replicas_desired_before",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerReplicasDesired = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_replicas_desired",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerNumRunners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_num_runners",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerNumRunnersRegistered = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_num_runners_registered",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerNumRunnersBusy = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_num_runners_busy",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerNumTerminatingBusy = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_num_terminating_busy",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	// QueuedAndInProgressWorkflowRuns
+	horizontalRunnerAutoscalerNecessaryReplicas = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_necessary_replicas",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerWorkflowRunsCompleted = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_workflow_runs_completed",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerWorkflowRunsInProgress = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_workflow_runs_in_progress",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerWorkflowRunsQueued = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_workflow_runs_queued",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
+	horizontalRunnerAutoscalerWorkflowRunsUnknown = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "horizontalrunnerautoscaler_workflow_runs_unknown",
+			Help: "", // TODO: Update this
+		},
+		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
+	)
 )
 
 func SetHorizontalRunnerAutoscalerSpec(o metav1.ObjectMeta, spec v1alpha1.HorizontalRunnerAutoscalerSpec) {
@@ -64,4 +159,64 @@ func SetHorizontalRunnerAutoscalerStatus(o metav1.ObjectMeta, status v1alpha1.Ho
 	if status.DesiredReplicas != nil {
 		horizontalRunnerAutoscalerDesiredReplicas.With(labels).Set(float64(*status.DesiredReplicas))
 	}
+}
+
+func SetHorizontalRunnerAutoscalerPercentageRunnersBusy(
+	o metav1.ObjectMeta,
+	enterprise string,
+	organization string,
+	repository string,
+	kind string,
+	name string,
+	desiredReplicasBefore int,
+	desiredReplicas int,
+	numRunners int,
+	numRunnersRegistered int,
+	numRunnersBusy int,
+	numTerminatingBusy int,
+) {
+	labels := prometheus.Labels{
+		hraName:        o.Name,
+		hraNamespace:   o.Namespace,
+		stEnterprise:   enterprise,
+		stOrganization: organization,
+		stRepository:   repository,
+		stKind:         kind,
+		stName:         name,
+	}
+	horizontalRunnerAutoscalerReplicasDesiredBefore.With(labels).Set(float64(desiredReplicasBefore))
+	horizontalRunnerAutoscalerReplicasDesired.With(labels).Set(float64(desiredReplicas))
+	horizontalRunnerAutoscalerNumRunners.With(labels).Set(float64(numRunners))
+	horizontalRunnerAutoscalerNumRunnersRegistered.With(labels).Set(float64(numRunnersRegistered))
+	horizontalRunnerAutoscalerNumRunnersBusy.With(labels).Set(float64(numRunnersBusy))
+	horizontalRunnerAutoscalerNumTerminatingBusy.With(labels).Set(float64(numTerminatingBusy))
+}
+
+func SetHorizontalRunnerAutoscalerQueuedAndInProgressWorkflowRuns(
+	o metav1.ObjectMeta,
+	enterprise string,
+	organization string,
+	repository string,
+	kind string,
+	name string,
+	necessaryReplicas int,
+	workflowRunsCompleted int,
+	workflowRunsInProgress int,
+	workflowRunsQueued int,
+	workflowRunsUnknown int,
+) {
+	labels := prometheus.Labels{
+		hraName:        o.Name,
+		hraNamespace:   o.Namespace,
+		stEnterprise:   enterprise,
+		stOrganization: organization,
+		stRepository:   repository,
+		stKind:         kind,
+		stName:         name,
+	}
+	horizontalRunnerAutoscalerNecessaryReplicas.With(labels).Set(float64(necessaryReplicas))
+	horizontalRunnerAutoscalerWorkflowRunsCompleted.With(labels).Set(float64(workflowRunsCompleted))
+	horizontalRunnerAutoscalerWorkflowRunsInProgress.With(labels).Set(float64(workflowRunsInProgress))
+	horizontalRunnerAutoscalerWorkflowRunsQueued.With(labels).Set(float64(workflowRunsQueued))
+	horizontalRunnerAutoscalerWorkflowRunsUnknown.With(labels).Set(float64(workflowRunsUnknown))
 }
