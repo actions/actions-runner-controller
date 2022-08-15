@@ -31,6 +31,7 @@ ToC:
     - [Scheduled Overrides](#scheduled-overrides)
   - [Alternative Runners](#alternative-runners)
     - [Runner with DinD](#runner-with-dind)
+    - [Runner with rootless DinD](#runner-with-rootless-dind)
     - [Runner with k8s jobs](#runner-with-k8s-jobs)
   - [Additional Tweaks](#additional-tweaks)
   - [Custom Volume mounts](#custom-volume-mounts)
@@ -273,7 +274,7 @@ Alternatively, you can install each controller stack into a unique namespace (re
 - The organization level
 - The enterprise level
 
-Runners can be deployed as 1 of 2 abstractions: 
+Runners can be deployed as 1 of 2 abstractions:
 
 - A `RunnerDeployment` (similar to k8s's `Deployments`, based on `Pods`)
 - A `RunnerSet` (based on k8s's `StatefulSets`)
@@ -535,9 +536,10 @@ spec:
   # for 5 minutes instead of the default 10 minutes now
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -563,10 +565,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    # Your RunnerDeployment Here
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
@@ -607,9 +609,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # IMPORTANT : If your HRA is targeting a RunnerSet you must specify the kind in the scaleTargetRef:, uncomment the below
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -642,9 +645,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -663,9 +667,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -704,9 +709,10 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runners
-    # If you the HRA is backing a RunnerSet instead of a RunnerDeployment uncomment the below
-    #kind: RunnerSet
   scaleUpTriggers:
     - githubEvent:
         workflowJob: {}
@@ -923,9 +929,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 100 only between 2021-06-01T00:00:00+09:00 and 2021-06-03T00:00:00+09:00
   - startTime: "2021-06-01T00:00:00+09:00"
@@ -945,9 +952,10 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
+    type: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
     name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
   scheduledOverrides:
   # Override minReplicas to 0 only between 0am sat to 0am mon
   - startTime: "2021-05-01T00:00:00+09:00"
@@ -1004,6 +1012,10 @@ spec:
       repository: mumoshu/actions-runner-controller-ci
       env: []
 ```
+
+#### Runner with rootless DinD
+
+When using the DinD runner, it assumes that the main runner is rootful, which can be problematic in a regulated or more security-conscious environment, such as co-tenanting across enterprise projects.  The `actions-runner-dind-rootless` image runs rootless Docker inside the container as `runner` user.  Note that this user does not have sudo access, so anything requiring admin privileges must be built into the runner's base image (like running `apt` to install additional software).
 
 #### Runner with K8s Jobs
 
@@ -1613,7 +1625,7 @@ Or `spec.template.spec.githubAPICredentialsFrom.secretRef.name` field for the fo
 
 Usually, you should have a set of GitHub App credentials per a GitHub organization and you would have a RunnerDeployment and a HorizontalRunnerAutoscaler per an organization runner group. So, you might end up having the following resources for each organization:
 
-- 1 Kuernetes secret that contains GitHub App credentials
+- 1 Kubernetes secret that contains GitHub App credentials
 - 1 RunnerDeployment/RunnerSet and 1 HorizontalRunnerAutoscaler per Runner Group
 
 And the RunnerDeployment/RunnerSet and HorizontalRunnerAutoscaler should have the same value for `spec.githubAPICredentialsFrom.secretRef.name`, which refers to the name of the Kubernetes secret.
@@ -1629,9 +1641,11 @@ kind: RunnerDeployment
 metadata:
   namespace: org1-runners
 spec:
-  githubAPICredentialsFrom:
-    secretRef:
-      name: org1-github-app
+  template:
+    spec:
+      githubAPICredentialsFrom:
+        secretRef:
+          name: org1-github-app
 ---
 kind: HorizontalRunnerAutoscaler
 metadata:

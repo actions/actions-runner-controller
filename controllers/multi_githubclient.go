@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -270,17 +269,6 @@ func (c *MultiGitHubClient) derefClient(ns, secretName string, dependent *runner
 	}
 }
 
-func decodeBase64(s []byte) (string, error) {
-	enc := base64.RawStdEncoding
-	dbuf := make([]byte, enc.DecodedLen(len(s)))
-	n, err := enc.Decode(dbuf, []byte(s))
-	if err != nil {
-		return "", err
-	}
-
-	return string(dbuf[:n]), nil
-}
-
 func secretDataToGitHubClientConfig(data map[string][]byte) (*github.Config, error) {
 	var (
 		conf github.Config
@@ -288,55 +276,31 @@ func secretDataToGitHubClientConfig(data map[string][]byte) (*github.Config, err
 		err error
 	)
 
-	conf.URL, err = decodeBase64(data["github_url"])
-	if err != nil {
-		return nil, err
-	}
+	conf.URL = string(data["github_url"])
 
-	conf.UploadURL, err = decodeBase64(data["github_upload_url"])
-	if err != nil {
-		return nil, err
-	}
+	conf.UploadURL = string(data["github_upload_url"])
 
-	conf.EnterpriseURL, err = decodeBase64(data["github_enterprise_url"])
-	if err != nil {
-		return nil, err
-	}
+	conf.EnterpriseURL = string(data["github_enterprise_url"])
 
-	conf.RunnerGitHubURL, err = decodeBase64(data["github_runner_url"])
-	if err != nil {
-		return nil, err
-	}
+	conf.RunnerGitHubURL = string(data["github_runner_url"])
 
-	conf.Token, err = decodeBase64(data["github_token"])
-	if err != nil {
-		return nil, err
-	}
+	conf.Token = string(data["github_token"])
 
-	appID, err := decodeBase64(data["github_app_id"])
-	if err != nil {
-		return nil, err
-	}
+	appID := string(data["github_app_id"])
 
 	conf.AppID, err = strconv.ParseInt(appID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	instID, err := decodeBase64(data["github_app_installation_id"])
-	if err != nil {
-		return nil, err
-	}
+	instID := string(data["github_app_installation_id"])
 
 	conf.AppInstallationID, err = strconv.ParseInt(instID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	conf.AppPrivateKey, err = decodeBase64(data["github_app_private_key"])
-	if err != nil {
-		return nil, err
-	}
+	conf.AppPrivateKey = string(data["github_app_private_key"])
 
 	return &conf, nil
 }

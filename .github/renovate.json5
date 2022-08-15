@@ -31,7 +31,8 @@
     {
       "fileMatch": [
         "runner/actions-runner.dockerfile",
-        "runner/actions-runner-dind.dockerfile"
+        "runner/actions-runner-dind.dockerfile",
+        "runner/actions-runner-dind-rootless.dockerfile"
       ],
       "matchStrings": ["RUNNER_VERSION=+(?<currentValue>.*?)\\n"],
       "depNameTemplate": "actions/runner",
