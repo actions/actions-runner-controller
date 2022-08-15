@@ -22,11 +22,11 @@ on:
 # https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
 permissions:
   contents: read
-  packages: write  
+  packages: write
 
 jobs:
   canary-build:
-    name: Build and Publish Canary Image  
+    name: Build and Publish Canary Image
     runs-on: ubuntu-latest
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
@@ -53,6 +53,6 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
-            ghcr.io/actions-runner-controller/actions-runner-controller:canary
+            ghcr.io/${{ github.repository }}:canary
           cache-from: type=gha,scope=arc-canary
           cache-to: type=gha,mode=max,scope=arc-canary
