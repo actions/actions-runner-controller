@@ -21,7 +21,6 @@ var (
 		horizontalRunnerAutoscalerMinReplicas,
 		horizontalRunnerAutoscalerMaxReplicas,
 		horizontalRunnerAutoscalerDesiredReplicas,
-		horizontalRunnerAutoscalerReplicasDesiredBefore,
 		horizontalRunnerAutoscalerReplicasDesired,
 		horizontalRunnerAutoscalerNumRunners,
 		horizontalRunnerAutoscalerNumRunnersRegistered,
@@ -58,13 +57,6 @@ var (
 		[]string{hraName, hraNamespace},
 	)
 	// PercentageRunnersBusy
-	horizontalRunnerAutoscalerReplicasDesiredBefore = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "horizontalrunnerautoscaler_replicas_desired_before",
-			Help: "replicas_desired_before of PercentageRunnersBusy",
-		},
-		[]string{hraName, hraNamespace, stEnterprise, stOrganization, stRepository, stKind, stName},
-	)
 	horizontalRunnerAutoscalerReplicasDesired = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "horizontalrunnerautoscaler_replicas_desired",
@@ -168,7 +160,6 @@ func SetHorizontalRunnerAutoscalerPercentageRunnersBusy(
 	repository string,
 	kind string,
 	name string,
-	desiredReplicasBefore int,
 	desiredReplicas int,
 	numRunners int,
 	numRunnersRegistered int,
@@ -184,7 +175,6 @@ func SetHorizontalRunnerAutoscalerPercentageRunnersBusy(
 		stKind:         kind,
 		stName:         name,
 	}
-	horizontalRunnerAutoscalerReplicasDesiredBefore.With(labels).Set(float64(desiredReplicasBefore))
 	horizontalRunnerAutoscalerReplicasDesired.With(labels).Set(float64(desiredReplicas))
 	horizontalRunnerAutoscalerNumRunners.With(labels).Set(float64(numRunners))
 	horizontalRunnerAutoscalerNumRunnersRegistered.With(labels).Set(float64(numRunnersRegistered))

@@ -404,7 +404,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		st.repo,
 		st.kind,
 		st.st,
-		desiredReplicasBefore,
 		desiredReplicas,
 		numRunners,
 		numRunnersRegistered,
