@@ -198,6 +198,11 @@ func (c *MultiGitHubClient) initClientForSecret(secret *corev1.Secret, dependent
 			return nil, err
 		}
 
+		if conf.EnterpriseURL == "" {
+			// fallback to the controller-wide setting
+			conf.EnterpriseURL = c.githubClient.GithubBaseURL
+		}
+
 		cli, err := conf.NewClient()
 		if err != nil {
 			return nil, err
