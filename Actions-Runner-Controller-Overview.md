@@ -76,9 +76,7 @@ When this configuration is applied with `kubectl apply -f runnerdeployment.yaml`
 ### The Runner container image
 The GitHub hosted runners include a large amount of pre-installed software packages. For complete list, see "[Runner images](https://github.com/actions/virtual-environments/tree/main/images/linux)."
 
-ARC maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. They contain subset of packages from the GitHub runners: Basic CLI packages, git, docker and build-essentials.
-
-The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) .Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
+ARC maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. They contain subset of packages from the GitHub runners: Basic CLI packages, git, docker and build-essentials. To install additional software, it is recommended to use the corresponding setup actions. For instance, `actions/setup-java` for Java or `actions/setup-node` for Node.
 
 ## Executing workflows
 Now, all the setup and configuration is done. A workflow can be created in the same repository that could target the self hosted runner created from ARC. The workflow needs to have `runs-on: self-hosted` so it can target the self host pool. For more information on targeting workflows to run on self hosted runners, see "[Using Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow)."
@@ -97,10 +95,7 @@ ARC also allows for scaling the runners dynamically. There are two mechanisms fo
 You can enable scaling with 3 steps
 1) Enable `HorizontalRunnerAutoscaler` - Create a `deployment.yaml` file of type `HorizontalRunnerAutoscaler`. The schema for this file is defined below.
 2) Scaling parameters - `minReplicas` and `maxReplicas` indicates the min and max number of replicas to scale to.
-3) Scaling metrics - ARC supports two types of scaling metrics. `TotalNumberOfQueuedAndInProgressWorkflowRuns` and `PercentageRunnersBusy`. These indicate the type of scaling to employ.
-
-The `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric polls GitHub for all pending workflow runs against a given set of repositories. The metric will scale the runner count up to the total number of pending jobs at the sync time up to the `maxReplicas` configuration.
-The `PercentageRunnersBusy` will poll GitHub for the number of runners in the `busy` state which live in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
+3) Scaling metrics - ARC currently supports `PercentageRunnersBusy` as a metric type. The `PercentageRunnersBusy` will poll GitHub for the number of runners in the `busy` state in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
 
 ### Pull Driven Scaling Schema
 ```code
