@@ -1,20 +1,21 @@
 ## Introduction
-This document provides a high level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes(K8s) clusters.
+This document provides a high level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes (K8s) clusters.
 
-This document provides a background of Github Actions, Self-hosted Runners and overview of ARCis also provided. By the end of the doc, the reader is expected to have a good understanding of ARC, setup and try out basic scenarios and set the foundation to review other advanced topics covered outside of the doc.
+This document provides a background of Github Actions, self-hosted runners and ARC overview. By the end of the doc, the reader should have a foundation with basic scenarios and be capable of reviewing other advanced topics.
 
 ## GitHub Actions
-GitHub Actions is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
+[GitHub Actions]](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
 
-You can create workflows that build and test every pull request to your repository, or deploy merged pull requests to production. Your workflow contains one or more jobs which can run in sequential order or in parallel. Each job will run inside its own runner and has one or more steps that either run a script that you define or run an action, which is a reusable extension that can simplify your workflow. To learn more about about Actions - see "[Github Actions](https://docs.github.com/en/actions/learn-github-actions)."
+You can create workflows that build and test every pull request to your repository, or deploy merged pull requests to production. Your workflow contains one or more jobs which can run in sequential order or in parallel. Each job will run inside its own runner and has one or more steps that either run a script that you define or run an action, which is a reusable extension that can simplify your workflow. To learn more about about Actions - see "[Learn Github Actions](https://docs.github.com/en/actions/learn-github-actions)".
 
 ## Runners
-Runners execute the job that is assigned to them by Github Actions workflow. There are two types of Runners.. 
-- Github hosted runners - GitHub provides Linux, Windows, and macOS virtual machines to run your workflows. These virtual machines are hosted in the cloud by Github.
-- Self hosted runners - you can host your own self-hosted runners in your own data center or cloud infrastructure. ARC deploys self hosted runners.
+Runners execute the job that is assigned to them by Github Actions workflow. There are two types of Runners:
+
+- [Github-hosted runners](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners) - GitHub provides Linux, Windows, and macOS virtual machines to run your workflows. These virtual machines are hosted in the cloud by Github.
+- [Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners) - you can host your own self-hosted runners in your own data center or cloud infrastructure. ARC deploys self-hosted runners.
 
 ## Self hosted runners
-Self-hosted runners offer more control of hardware, operating system, and software tools than GitHub-hosted runners. With self-hosted runners, you can create custom hardware configurations that meet your needs with processing power or memory to run larger jobs, install software available on your local network, and choose an operating system not offered by GitHub-hosted runners. 
+Self-hosted runners offer more control of hardware, operating system, and software tools than GitHub-hosted runners. With self-hosted runners, you can create custom hardware configurations that meet your needs with processing power or memory to run larger jobs, install software available on your local network, and choose an operating system not offered by GitHub-hosted runners.
 
 ### Types of Self hosted runners
 Self-hosted runners can be physical, virtual, in a container, on-premises, or in a cloud.
@@ -37,7 +38,7 @@ ARC basically consists of a set of custom resources. An ARC deployment is applyi
 ARC consists of several custom resource definitions (Runner, Runner Set, Runner Deployment, Runner Replica Set and Horizontal Runner AutoScaler). For more information on CRDs, refer "[Kubernetes Custom Resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)."
 
 The helm command (in the QuickStart guide) installs the custom resources into the actions-runner-system namespace.
-```code
+```console
 helm install -f custom-values.yaml --wait --namespace actions-runner-system \
   --create-namespace actions-runner-controller \
   actions-runner-controller/actions-runner-controller
@@ -50,10 +51,10 @@ Once the custom resources are installed, another command deploys ARC into your K
 
 
 
-The `Deployment and Configure ARC` section in the `Quick Start guide` lists the steps to deploy ARC using a `runnerdeployment.yaml` file. Here, we will explain the details 
+The `Deployment and Configure ARC` section in the `Quick Start guide` lists the steps to deploy ARC using a `runnerdeployment.yaml` file. Here, we will explain the details
 For more details, see "[QuickStart Guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/QuickStartGuide.md)."
 
-```code
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
@@ -67,7 +68,7 @@ spec:
 
 - `kind: RunnerDeployment`: indicates its a kind of custom resource RunnerDeployment.
 - `replicas: 1` : will deploy one replica. Multiple replicas can also be deployed ( more on that later).
-- `repository: mumoshu/actions-runner-controller-ci` : is the repository to link to when the pod comes up with the Actions runner (Note, this can configured to link at Enterprise or Organization level also).
+- `repository: mumoshu/actions-runner-controller-ci` : is the repository to link to when the pod comes up with the Actions runner (Note, this can be configured to link at the Enterprise or Organization level also).
 
 When this configuration is applied with `kubectl apply -f runnerdeployment.yaml` , ARC creates one pod `example-runnerdeploy-[**]` with 2 containers `runner` and `docker`.
 `runner` container has the github runner component installed, `docker` container has docker installed.
@@ -76,7 +77,7 @@ When this configuration is applied with `kubectl apply -f runnerdeployment.yaml`
 ### The Runner container image
 The GitHub hosted runners include a large amount of pre-installed software packages. For complete list, see "[Runner images](https://github.com/actions/virtual-environments/tree/main/images/linux)."
 
-ARC maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. They contain subset of packages from the GitHub runners: Basic CLI packages, git, docker and build-essentials. To install additional software, it is recommended to use the corresponding setup actions. For instance, `actions/setup-java` for Java or `actions/setup-node` for Node.
+ARC maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. These images do not contain all of the software installed on the GitHub runners. They contain subset of packages from the GitHub runners: Basic CLI packages, git, docker and build-essentials. To install additional software, it is recommended to use the corresponding setup actions. For instance, `actions/setup-java` for Java or `actions/setup-node` for Node.
 
 ## Executing workflows
 Now, all the setup and configuration is done. A workflow can be created in the same repository that could target the self hosted runner created from ARC. The workflow needs to have `runs-on: self-hosted` so it can target the self host pool. For more information on targeting workflows to run on self hosted runners, see "[Using Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow)."
@@ -98,7 +99,7 @@ You can enable scaling with 3 steps
 3) Scaling metrics - ARC currently supports `PercentageRunnersBusy` as a metric type. The `PercentageRunnersBusy` will poll GitHub for the number of runners in the `busy` state in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
 
 ### Pull Driven Scaling Schema
-```code
+```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
 metadata:
@@ -106,9 +107,8 @@ metadata:
 spec:
   scaleTargetRef:
     # Your RunnerDeployment Here
-    name: example-runner-deployment
-    # Uncomment the below in case the target is not RunnerDeployment but RunnerSet
-    #kind: RunnerSet
+    name: example-runnerdeploy
+    kind: RunnerDeployment
   minReplicas: 1
   maxReplicas: 5
   # Your chosen scaling metrics here
@@ -123,6 +123,6 @@ For examples - please see "[Pull Driven Scaling examples](https://github.com/act
 ARC supports several different advanced configuration. 
 - support for alternate runners : Setting up runner pods with Docker-In-Docker configuration.
 - managing runner groups : Managing a set of running with runner groups thus making it easy to manage different groups within enterprise
-- Webhook driven scaling. 
+- Webhook driven scaling.
 
 Please refer to the documentation in this repo for further details.
