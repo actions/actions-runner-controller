@@ -5,8 +5,6 @@ WORKDIR /workspace
 
 # Make it runnable on a distroless image/without libc
 ENV CGO_ENABLED=0
-# Enviroment Variable used inside main to display current ARC version
-ENV ARC_VERSION=$VERSION
 # Copy the Go Modules manifests
 COPY go.mod go.sum ./
 
@@ -26,7 +24,7 @@ RUN go mod download
 # With the above commmand,
 # TARGETOS can be "linux", TARGETARCH can be "amd64", "arm64", and "arm", TARGETVARIANT can be "v7".
 
-ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT
+ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT VERSION=dev
 
 # We intentionally avoid `--mount=type=cache,mode=0777,target=/go/pkg/mod` in the `go mod download` and the `go build` runs
 # to avoid https://github.com/moby/buildkit/issues/2334
