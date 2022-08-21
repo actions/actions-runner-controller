@@ -1154,7 +1154,7 @@ A common use case for this may be to have 1 override to scale to 0 during the we
 
 ### Alternative Runners
 
-ARC also offers a few altenrative runner options
+ARC also offers a few alternative runner options
 
 #### Runner with DinD
 
