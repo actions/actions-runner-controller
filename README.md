@@ -543,7 +543,7 @@ spec:
   # for 5 minutes instead of the default 10 minutes now
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -572,7 +572,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -616,7 +616,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -652,7 +652,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -674,7 +674,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -704,7 +704,7 @@ More concretely, you can configure the targeted GitHub event types and the `N` i
 kind: HorizontalRunnerAutoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -915,7 +915,7 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -951,7 +951,7 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -980,7 +980,7 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -1013,7 +1013,7 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -1044,7 +1044,7 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -1092,7 +1092,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -1115,7 +1115,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
