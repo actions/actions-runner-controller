@@ -734,8 +734,7 @@ At this point there are a few things that can happen, either the job gets alloca
 
 If the job is cancelled before it is allocated to a runner or the runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
 
-1. The new runner is retained until its `EffectiveTime` passes
-3. The HRA removes a capacity reservation from its `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
+1. The HRA removes a capacity reservation from its `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
 
 Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to account for 2 things:
 
