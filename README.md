@@ -358,7 +358,7 @@ Now you can see the runner on the enterprise level (if you have enterprise acces
 
 ### RunnerDeployments
 
-In our previous examples we were deploying a single runner via the `RunnerDeployment` kind, the amount of runners deployed can be statically set via the `replicas:` field, we can increase this value to deploy additioanl sets of runners instead:
+In our previous examples we were deploying a single runner via the `RunnerDeployment` kind, the amount of runners deployed can be statically set via the `replicas:` field, we can increase this value to deploy additional sets of runners instead:
 
 ```yaml
 # runnerdeployment.yaml
@@ -505,7 +505,7 @@ Persistent runners are available as an option for some edge cases however they a
 
 > Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to set up.
 
-> If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
+> If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so you can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
 
 A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [RunnerSets](#runnersets) for caveats of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
