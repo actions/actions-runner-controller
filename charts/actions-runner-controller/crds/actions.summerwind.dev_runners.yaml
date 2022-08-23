@@ -24,11 +24,17 @@ spec:
         - jsonPath: .spec.repository
           name: Repository
           type: string
+        - jsonPath: .spec.group
+          name: Group
+          type: string
         - jsonPath: .spec.labels
           name: Labels
           type: string
         - jsonPath: .status.phase
           name: Status
+          type: string
+        - jsonPath: .status.message
+          name: Message
           type: string
         - jsonPath: .metadata.creationTimestamp
           name: Age
@@ -2353,6 +2359,16 @@ spec:
                       - name
                     type: object
                   type: array
+                githubAPICredentialsFrom:
+                  properties:
+                    secretRef:
+                      properties:
+                        name:
+                          type: string
+                      required:
+                        - name
+                      type: object
+                  type: object
                 group:
                   type: string
                 hostAliases:

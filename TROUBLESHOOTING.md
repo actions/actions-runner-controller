@@ -4,6 +4,7 @@
 * [Installation](#installation)
   * [InternalError when calling webhook: context deadline exceeded](#internalerror-when-calling-webhook-context-deadline-exceeded)
   * [Invalid header field value](#invalid-header-field-value)
+  * [Helm chart install failure: certificate signed by unknown authority](#helm-chart-install-failure-certificate-signed-by-unknown-authority)
 * [Operations](#operations)
   * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
   * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
@@ -105,6 +106,37 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documented flags
 
+### Helm chart install failure: certificate signed by unknown authority
+
+**Problem**
+
+```
+Error: UPGRADE FAILED: failed to create resource: Internal error occurred: failed calling webhook "webhook.cert-manager.io": failed to call webhook: Post "https://cert-manager-webhook.cert-manager.svc:443/mutate?timeout=10s": x509: certificate signed by unknown authority
+```
+
+Apparently, it's failing while `helm` is creating one of resources defined in the ARC chart and the cause was that cert-manager's webhook is not working correctly, due to the missing or the invalid CA certficate.
+
+You'd try to tail logs from the `cert-manager-cainjector` and see it's failing with an error like:
+
+```
+$ kubectl -n cert-manager logs cert-manager-cainjector-7cdbb9c945-g6bt4
+I0703 03:31:55.159339       1 start.go:91] "starting" version="v1.1.1" revision="3ac7418070e22c87fae4b22603a6b952f797ae96"
+I0703 03:31:55.615061       1 leaderelection.go:243] attempting to acquire leader lease  kube-system/cert-manager-cainjector-leader-election...
+I0703 03:32:10.738039       1 leaderelection.go:253] successfully acquired lease kube-system/cert-manager-cainjector-leader-election
+I0703 03:32:10.739941       1 recorder.go:52] cert-manager/controller-runtime/manager/events "msg"="Normal"  "message"="cert-manager-cainjector-7cdbb9c945-g6bt4_88e4bc70-eded-4343-a6fb-0ddd6434eb55 became leader" "object"={"kind":"ConfigMap","namespace":"kube-system","name":"cert-manager-cainjector-leader-election","uid":"942a021e-364c-461a-978c-f54a95723cdc","apiVersion":"v1","resourceVersion":"1576"} "reason"="LeaderElection"
+E0703 03:32:11.192128       1 start.go:119] cert-manager/ca-injector "msg"="manager goroutine exited" "error"=null
+I0703 03:32:12.339197       1 request.go:645] Throttling request took 1.047437675s, request: GET:https://10.96.0.1:443/apis/storage.k8s.io/v1beta1?timeout=32s
+E0703 03:32:13.143790       1 start.go:151] cert-manager/ca-injector "msg"="Error registering certificate based controllers. Retrying after 5 seconds." "error"="no matches for kind \"MutatingWebhookConfiguration\" in version \"admissionregistration.k8s.io/v1beta1\""
+Error: error registering secret controller: no matches for kind "MutatingWebhookConfiguration" in version "admissionregistration.k8s.io/v1beta1"
+```
+
+**Solution**
+
+Your cluster is based on a new enough Kubernetes of version 1.22 or greater which does not support the legacy `admissionregistration.k8s.io/v1beta1` API anymore, and your `cert-manager` is not up-to-date hence it's still trying to use the leagcy Kubernetes API.
+
+In many cases, it's not an option to downgrade Kubernetes. So, just upgrade `cert-manager` to a more recent version that does have have the support for the specific Kubernetes version you're using.
+
+See https://cert-manager.io/docs/installation/supported-releases/ for the list of available cert-manager versions.
 
 ## Operations
 

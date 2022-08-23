@@ -21,53 +21,7 @@ const (
 )
 
 var (
-	controllerImageRepo = "actionsrunnercontrollere2e/actions-runner-controller"
-	controllerImageTag  = "e2e"
-	controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
-	runnerImageRepo     = "actionsrunnercontrollere2e/actions-runner"
-	runnerDindImageRepo = "actionsrunnercontrollere2e/actions-runner-dind"
-	runnerImageTag      = "e2e"
-	runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
-	runnerDindImage     = testing.Img(runnerDindImageRepo, runnerImageTag)
-
-	prebuildImages = []testing.ContainerImage{
-		controllerImage,
-		runnerImage,
-		runnerDindImage,
-	}
-
-	builds = []testing.DockerBuild{
-		{
-			Dockerfile:   "../../Dockerfile",
-			Args:         []testing.BuildArg{},
-			Image:        controllerImage,
-			EnableBuildX: true,
-		},
-		{
-			Dockerfile: "../../runner/actions-runner.dockerfile",
-			Args: []testing.BuildArg{
-				{
-					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
-				},
-			},
-			Image:        runnerImage,
-			EnableBuildX: true,
-		},
-		{
-			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
-			Args: []testing.BuildArg{
-				{
-					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
-				},
-			},
-			Image:        runnerDindImage,
-			EnableBuildX: true,
-		},
-	}
-
-	certManagerVersion = "v1.1.1"
+	certManagerVersion = "v1.8.2"
 
 	images = []testing.ContainerImage{
 		testing.Img("docker", "dind"),
@@ -75,11 +29,6 @@ var (
 		testing.Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
 		testing.Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
 		testing.Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
-	}
-
-	commonScriptEnv = []string{
-		"SYNC_PERIOD=" + "30s",
-		"RUNNER_TAG=" + runnerImageTag,
 	}
 
 	testResultCMNamePrefix = "test-result-"
@@ -126,12 +75,26 @@ func TestE2E(t *testing.T) {
 	skipRunnerCleanUp := os.Getenv("ARC_E2E_SKIP_RUNNER_CLEANUP") != ""
 	retainCluster := os.Getenv("ARC_E2E_RETAIN_CLUSTER") != ""
 	skipTestIDCleanUp := os.Getenv("ARC_E2E_SKIP_TEST_ID_CLEANUP") != ""
+	skipArgoTunnelCleanUp := os.Getenv("ARC_E2E_SKIP_ARGO_TUNNEL_CLEAN_UP") != ""
 
-	env := initTestEnv(t, k8sMinorVer)
+	vars := buildVars(os.Getenv("ARC_E2E_IMAGE_REPO"))
+
+	env := initTestEnv(t, k8sMinorVer, vars)
+	if vt := os.Getenv("ARC_E2E_VERIFY_TIMEOUT"); vt != "" {
+		var err error
+		env.VerifyTimeout, err = time.ParseDuration(vt)
+		if err != nil {
+			t.Fatalf("Failed to parse duration %q: %v", vt, err)
+		}
+	}
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
 	})
+
+	if t.Failed() {
+		return
+	}
 
 	t.Run("install cert-manager", func(t *testing.T) {
 		env.installCertManager(t)
@@ -142,6 +105,10 @@ func TestE2E(t *testing.T) {
 	}
 
 	t.Run("RunnerSets", func(t *testing.T) {
+		if os.Getenv("ARC_E2E_SKIP_RUNNERSETS") != "" {
+			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
+		}
+
 		var (
 			testID string
 		)
@@ -160,6 +127,16 @@ func TestE2E(t *testing.T) {
 			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
 		})
 
+		t.Run("install argo-tunnel", func(t *testing.T) {
+			env.installArgoTunnel(t)
+		})
+
+		if !skipArgoTunnelCleanUp {
+			t.Cleanup(func() {
+				env.uninstallArgoTunnel(t)
+			})
+		}
+
 		t.Run("deploy runners", func(t *testing.T) {
 			env.deploy(t, RunnerSets, testID)
 		})
@@ -171,7 +148,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		t.Run("install edge actions-runner-controller", func(t *testing.T) {
-			env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag, testID)
+			env.installActionsRunnerController(t, vars.controllerImageRepo, vars.controllerImageTag, testID)
 		})
 
 		if t.Failed() {
@@ -210,6 +187,16 @@ func TestE2E(t *testing.T) {
 			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
 		})
 
+		t.Run("install argo-tunnel", func(t *testing.T) {
+			env.installArgoTunnel(t)
+		})
+
+		if !skipArgoTunnelCleanUp {
+			t.Cleanup(func() {
+				env.uninstallArgoTunnel(t)
+			})
+		}
+
 		t.Run("deploy runners", func(t *testing.T) {
 			env.deploy(t, RunnerDeployments, testID)
 		})
@@ -221,7 +208,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		t.Run("install edge actions-runner-controller", func(t *testing.T) {
-			env.installActionsRunnerController(t, controllerImageRepo, controllerImageTag, testID)
+			env.installActionsRunnerController(t, vars.controllerImageRepo, vars.controllerImageTag, testID)
 		})
 
 		if t.Failed() {
@@ -249,6 +236,8 @@ func TestE2E(t *testing.T) {
 type env struct {
 	*testing.Env
 
+	Kind *testing.Kind
+
 	// Uses GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, and GITHUB_APP_PRIVATE_KEY
 	// to let ARC authenticate as a GitHub App
 	useApp bool
@@ -263,12 +252,99 @@ type env struct {
 	scaleDownDelaySecondsAfterScaleOut          int64
 	minReplicas                                 int64
 	dockerdWithinRunnerContainer                bool
+	remoteKubeconfig                            string
+	imagePullSecretName                         string
+	imagePullPolicy                             string
+
+	vars          vars
+	VerifyTimeout time.Duration
 }
 
-func initTestEnv(t *testing.T, k8sMinorVer string) *env {
+type vars struct {
+	controllerImageRepo, controllerImageTag string
+
+	runnerImageRepo     string
+	runnerDindImageRepo string
+
+	prebuildImages []testing.ContainerImage
+	builds         []testing.DockerBuild
+
+	commonScriptEnv []string
+}
+
+func buildVars(repo string) vars {
+	if repo == "" {
+		repo = "actionsrunnercontrollere2e"
+	}
+
+	var (
+		controllerImageRepo = repo + "/actions-runner-controller"
+		controllerImageTag  = "e2e"
+		controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
+		runnerImageRepo     = repo + "/actions-runner"
+		runnerDindImageRepo = repo + "/actions-runner-dind"
+		runnerImageTag      = "e2e"
+		runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
+		runnerDindImage     = testing.Img(runnerDindImageRepo, runnerImageTag)
+	)
+
+	var vs vars
+
+	vs.controllerImageRepo, vs.controllerImageTag = controllerImageRepo, controllerImageTag
+	vs.runnerDindImageRepo = runnerDindImageRepo
+	vs.runnerImageRepo = runnerImageRepo
+
+	// vs.controllerImage, vs.controllerImageTag
+
+	vs.prebuildImages = []testing.ContainerImage{
+		controllerImage,
+		runnerImage,
+		runnerDindImage,
+	}
+
+	vs.builds = []testing.DockerBuild{
+		{
+			Dockerfile:   "../../Dockerfile",
+			Args:         []testing.BuildArg{},
+			Image:        controllerImage,
+			EnableBuildX: true,
+		},
+		{
+			Dockerfile: "../../runner/actions-runner.dockerfile",
+			Args: []testing.BuildArg{
+				{
+					Name:  "RUNNER_VERSION",
+					Value: "2.294.0",
+				},
+			},
+			Image:        runnerImage,
+			EnableBuildX: true,
+		},
+		{
+			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
+			Args: []testing.BuildArg{
+				{
+					Name:  "RUNNER_VERSION",
+					Value: "2.294.0",
+				},
+			},
+			Image:        runnerDindImage,
+			EnableBuildX: true,
+		},
+	}
+
+	vs.commonScriptEnv = []string{
+		"SYNC_PERIOD=" + "30s",
+		"RUNNER_TAG=" + runnerImageTag,
+	}
+
+	return vs
+}
+
+func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	t.Helper()
 
-	testingEnv := testing.Start(t, k8sMinorVer, testing.Preload(images...))
+	testingEnv := testing.Start(t, k8sMinorVer)
 
 	e := &env{Env: testingEnv}
 
@@ -288,6 +364,29 @@ func initTestEnv(t *testing.T, k8sMinorVer string) *env {
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
+	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
+	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
+	e.vars = vars
+
+	if e.remoteKubeconfig != "" {
+		e.imagePullPolicy = "Always"
+	} else {
+		e.imagePullPolicy = "IfNotPresent"
+	}
+
+	if e.remoteKubeconfig == "" {
+		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
+		e.Env.Kubeconfig = e.Kind.Kubeconfig()
+	} else {
+		e.Env.Kubeconfig = e.remoteKubeconfig
+
+		// Kind automatically installs https://github.com/rancher/local-path-provisioner for PVs.
+		// But assuming the remote cluster isn't a kind Kubernetes cluster,
+		// we need to install any provisioner manually.
+		// Here, we install the local-path-provisioner on the remote cluster too,
+		// so that we won't suffer from E2E failures due to the provisioner difference.
+		e.KubectlApply(t, "https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.22/deploy/local-path-storage.yaml", testing.KubectlConfig{})
+	}
 
 	e.scaleDownDelaySecondsAfterScaleOut, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT", "10"), 10, 32)
 	e.minReplicas, _ = strconv.ParseInt(testing.Getenv(t, "TEST_RUNNER_MIN_REPLICAS", "1"), 10, 32)
@@ -307,8 +406,29 @@ func (e *env) f() {
 func (e *env) buildAndLoadImages(t *testing.T) {
 	t.Helper()
 
-	e.DockerBuild(t, builds)
-	e.KindLoadImages(t, prebuildImages)
+	e.DockerBuild(t, e.vars.builds)
+
+	if e.remoteKubeconfig == "" {
+		e.KindLoadImages(t, e.vars.prebuildImages)
+	} else {
+		// If it fails with `no basic auth credentials` here, you might have missed logging into the container registry beforehand.
+		// For ECR, run something like:
+		//   aws ecr get-login-password | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+		// Also note that the authenticated session can be expired in a day or so(probably depends on your AWS config),
+		// so you might better write a script to do docker login before running the E2E test.
+		e.DockerPush(t, e.vars.prebuildImages)
+	}
+}
+
+func (e *env) KindLoadImages(t *testing.T, prebuildImages []testing.ContainerImage) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	if err := e.Kind.LoadImages(ctx, prebuildImages); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (e *env) installCertManager(t *testing.T) {
@@ -334,7 +454,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID str
 	e.createControllerNamespaceAndServiceAccount(t)
 
 	scriptEnv := []string{
-		"KUBECONFIG=" + e.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
 	}
 
@@ -343,6 +463,8 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID str
 		"TEST_ID=" + testID,
 		"NAME=" + repo,
 		"VERSION=" + tag,
+		"IMAGE_PULL_SECRET=" + e.imagePullSecretName,
+		"IMAGE_PULL_POLICY=" + e.imagePullPolicy,
 	}
 
 	if e.useApp {
@@ -360,7 +482,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID str
 	}
 
 	scriptEnv = append(scriptEnv, varEnv...)
-	scriptEnv = append(scriptEnv, commonScriptEnv...)
+	scriptEnv = append(scriptEnv, e.vars.commonScriptEnv...)
 
 	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
@@ -381,7 +503,7 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 	e.createControllerNamespaceAndServiceAccount(t)
 
 	scriptEnv := []string{
-		"KUBECONFIG=" + e.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 		"OP=" + op,
 	}
 
@@ -410,19 +532,41 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 	if e.dockerdWithinRunnerContainer {
 		varEnv = append(varEnv,
 			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=true",
-			"RUNNER_NAME="+runnerDindImageRepo,
+			"RUNNER_NAME="+e.vars.runnerDindImageRepo,
 		)
 	} else {
 		varEnv = append(varEnv,
 			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=false",
-			"RUNNER_NAME="+runnerImageRepo,
+			"RUNNER_NAME="+e.vars.runnerImageRepo,
 		)
 	}
 
 	scriptEnv = append(scriptEnv, varEnv...)
-	scriptEnv = append(scriptEnv, commonScriptEnv...)
+	scriptEnv = append(scriptEnv, e.vars.commonScriptEnv...)
 
 	e.RunScript(t, "../../acceptance/deploy_runners.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
+}
+
+func (e *env) installArgoTunnel(t *testing.T) {
+	e.doArgoTunnel(t, "apply")
+}
+
+func (e *env) uninstallArgoTunnel(t *testing.T) {
+	e.doArgoTunnel(t, "delete")
+}
+
+func (e *env) doArgoTunnel(t *testing.T, op string) {
+	t.Helper()
+
+	scriptEnv := []string{
+		"KUBECONFIG=" + e.Kubeconfig,
+		"OP=" + op,
+		"TUNNEL_ID=" + os.Getenv("TUNNEL_ID"),
+		"TUNNE_NAME=" + os.Getenv("TUNNEL_NAME"),
+		"TUNNEL_HOSTNAME=" + os.Getenv("TUNNEL_HOSTNAME"),
+	}
+
+	e.RunScript(t, "../../acceptance/argotunnel.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
 func (e *env) runnerLabel(testID string) string {
@@ -449,7 +593,15 @@ func (e *env) testJobs(testID string) []job {
 func (e *env) verifyActionsWorkflowRun(t *testing.T, testID string) {
 	t.Helper()
 
-	verifyActionsWorkflowRun(t, e.Env, e.testJobs(testID))
+	verifyActionsWorkflowRun(t, e.Env, e.testJobs(testID), e.verifyTimeout())
+}
+
+func (e *env) verifyTimeout() time.Duration {
+	if e.VerifyTimeout > 0 {
+		return e.VerifyTimeout
+	}
+
+	return 8 * 60 * time.Second
 }
 
 type job struct {
@@ -626,7 +778,7 @@ kubectl create cm %s$id --from-literal=status=ok
 	}
 }
 
-func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job) {
+func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, timeout time.Duration) {
 	t.Helper()
 
 	var expected []string
@@ -644,7 +796,7 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job) {
 			testResultCMName := testJobs[i].configMapName
 
 			kubectlEnv := []string{
-				"KUBECONFIG=" + env.Kubeconfig(),
+				"KUBECONFIG=" + env.Kubeconfig,
 			}
 
 			cmCfg := testing.KubectlConfig{
@@ -676,5 +828,5 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job) {
 		}
 
 		return results, err
-	}, 8*60*time.Second, 30*time.Second).Should(gomega.Equal(expected))
+	}, timeout, 30*time.Second).Should(gomega.Equal(expected))
 }

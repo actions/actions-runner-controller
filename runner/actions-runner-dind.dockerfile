@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.294.0
+ARG RUNNER_VERSION=2.295.0
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
@@ -98,9 +98,12 @@ RUN mkdir /opt/hostedtoolcache \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint.sh logger.bash startup.sh /usr/bin/
+COPY entrypoint.sh logger.bash startup.sh update-status /usr/bin/
 COPY supervisor/ /etc/supervisor/conf.d/
 RUN chmod +x /usr/bin/startup.sh /usr/bin/entrypoint.sh
+
+# Configure hooks folder structure.
+COPY hooks /etc/arc/hooks/
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \

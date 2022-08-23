@@ -10,7 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func newWorkGenericEphemeralVolume(t *testing.T, storageReq string) corev1.Volume {
@@ -124,6 +126,10 @@ func TestNewRunnerPod(t *testing.T) {
 						{
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
 						},
 						{
 							Name:  "DOCKER_HOST",
@@ -255,6 +261,10 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
 						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -332,6 +342,10 @@ func TestNewRunnerPod(t *testing.T) {
 						{
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -515,7 +529,7 @@ func TestNewRunnerPod(t *testing.T) {
 	for i := range testcases {
 		tc := testcases[i]
 		t.Run(tc.description, func(t *testing.T) {
-			got, err := newRunnerPod(tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL)
+			got, err := newRunnerPod(tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, false)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -623,6 +637,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						{
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
 						},
 						{
 							Name:  "DOCKER_HOST",
@@ -770,6 +788,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "true",
 						},
 						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
+						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -865,6 +887,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						{
 							Name:  "RUNNER_EPHEMERAL",
 							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
 						},
 						{
 							Name:  "RUNNER_NAME",
@@ -1105,13 +1131,20 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 
 	for i := range testcases {
 		tc := testcases[i]
+
+		rr := &testResourceReader{
+			objects: map[types.NamespacedName]client.Object{},
+		}
+
+		multiClient := NewMultiGitHubClient(rr, &github.Client{GithubBaseURL: githubBaseURL})
+
 		t.Run(tc.description, func(t *testing.T) {
 			r := &RunnerReconciler{
 				RunnerImage:            defaultRunnerImage,
 				RunnerImagePullSecrets: defaultRunnerImagePullSecrets,
 				DockerImage:            defaultDockerImage,
 				DockerRegistryMirror:   defaultDockerRegistryMirror,
-				GitHubClient:           &github.Client{GithubBaseURL: githubBaseURL},
+				GitHubClient:           multiClient,
 				Scheme:                 scheme,
 			}
 			got, err := r.newPod(tc.runner)
