@@ -151,10 +151,7 @@ _Note: All API routes mapped to their permissions can be found [here](https://do
 
 **Subscribe to events**
 
-At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the same events:
-
-* Check run
-* Workflow job
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the `Workflow Job` event.
 
 ---
 
@@ -840,14 +837,6 @@ if you followed the example ingress above the URL would be something like this:
 > Remember to replace `your.domain.com` with your own domain.
 
 Then click on "let me select individual events" and choose `Workflow Jobs`.
-
-You may also want to choose the following event(s) if you use it as a scale trigger in your HRA spec:
-
-- Check runs
-- Pushes
-- Pull Requests
-
-Later you can remove any of these you are not using to reduce the amount of data sent to your server.
 
 Then click on `Add Webhook`.
 
