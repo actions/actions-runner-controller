@@ -741,7 +741,7 @@ If runner is never used due to other runners matching needed runner group and re
 
 1. The HRA removes a capacity reservation from its `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
 
-Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to account for 2 things:
+Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to account for the following things:
 
 1. the potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node avaliable 
 2. the amount of time it takes for GitHub to allocate a job to that runner
