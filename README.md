@@ -1797,6 +1797,9 @@ spec:
 
 #### Dockerfile
 
+> Note that you'd need to patch the below Dockerfile if you need a graceful termination.
+> See https://github.com/actions-runner-controller/actions-runner-controller/pull/1608/files#r917319574 for more information.
+
 ```Dockerfile
 FROM mcr.microsoft.com/windows/servercore:ltsc2019
 
