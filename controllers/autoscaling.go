@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	prometheus_metrics "github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
 	arcgithub "github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/google/go-github/v45/github"
 	corev1 "k8s.io/api/core/v1"
@@ -211,6 +212,20 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 
 	necessaryReplicas := queued + inProgress
 
+	prometheus_metrics.SetHorizontalRunnerAutoscalerQueuedAndInProgressWorkflowRuns(
+		hra.ObjectMeta,
+		st.enterprise,
+		st.org,
+		st.repo,
+		st.kind,
+		st.st,
+		necessaryReplicas,
+		completed,
+		inProgress,
+		queued,
+		unknown,
+	)
+
 	r.Log.V(1).Info(
 		fmt.Sprintf("Suggested desired replicas of %d by TotalNumberOfQueuedAndInProgressWorkflowRuns", necessaryReplicas),
 		"workflow_runs_completed", completed,
@@ -382,6 +397,19 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	//
 	// - num_runners can be as twice as large as replicas_desired_before while
 	//   the runnerdeployment controller is replacing RunnerReplicaSet for runner update.
+	prometheus_metrics.SetHorizontalRunnerAutoscalerPercentageRunnersBusy(
+		hra.ObjectMeta,
+		st.enterprise,
+		st.org,
+		st.repo,
+		st.kind,
+		st.st,
+		desiredReplicas,
+		numRunners,
+		numRunnersRegistered,
+		numRunnersBusy,
+		numTerminatingBusy,
+	)
 
 	r.Log.V(1).Info(
 		fmt.Sprintf("Suggested desired replicas of %d by PercentageRunnersBusy", desiredReplicas),

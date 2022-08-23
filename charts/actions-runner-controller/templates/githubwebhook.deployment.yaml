@@ -48,6 +48,9 @@ spec:
         {{- if .Values.runnerGithubURL  }}
         - "--runner-github-url={{ .Values.runnerGithubURL }}"
         {{- end }}
+        {{- if .Values.githubWebhookServer.queueLimit }}
+        - "--queue-limit={{ .Values.githubWebhookServer.queueLimit }}"
+        {{- end }}
         command:
         - "/github-webhook-server"
         env:

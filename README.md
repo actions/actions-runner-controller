@@ -84,8 +84,8 @@ After installing cert-manager, install the custom resource definitions and actio
 **Kubectl Deployment:**
 
 ```shell
-# REPLACE "v0.22.0" with the version you wish to deploy
-kubectl apply -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.22.0/actions-runner-controller.yaml
+# REPLACE "v0.25.2" with the version you wish to deploy
+kubectl create -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.25.2/actions-runner-controller.yaml
 ```
 
 **Helm Deployment:**
@@ -536,7 +536,7 @@ spec:
   # for 5 minutes instead of the default 10 minutes now
   scaleDownDelaySecondsAfterScaleOut: 300
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -565,7 +565,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -609,7 +609,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -645,7 +645,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -667,7 +667,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -709,7 +709,7 @@ spec:
   minReplicas: 1
   maxReplicas: 10
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
@@ -928,7 +928,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -951,7 +951,7 @@ metadata:
   name: example-runner-deployment-autoscaler
 spec:
   scaleTargetRef:
-    type: RunnerDeployment
+    kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runner-deployment
@@ -990,7 +990,7 @@ A common use case for this may be to have 1 override to scale to 0 during the we
 
 ### Alternative Runners
 
-ARC also offers a few altenrative runner options
+ARC also offers a few alternative runner options
 
 #### Runner with DinD
 
