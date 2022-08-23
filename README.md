@@ -730,7 +730,7 @@ At this point there are a few things that can happen, either the job gets alloca
 
 1. The new runner gets allocated the job and processes it
 2. Upon the job ending GitHub sends another `workflow_job` event to ARC but with `status=completed`
-3. The HRA removes a capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
+3. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
 
 If the job is cancelled before it is allocated to a runner or the runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
 
