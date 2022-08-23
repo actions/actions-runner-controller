@@ -1756,7 +1756,7 @@ For the first step, you need to set the `nodeSelector.kubernetes.io/os` property
 
 ```yaml
 nodeSelector:
-      kubernetes.io/os: linux
+  kubernetes.io/os: linux
 ```
 
 `cert-manager` has 4 different application within it the main application, the `webhook`, the `cainjector` and the `startupapicheck`. In the parameters or values file you use for the deployment you need to add the `nodeSelector` property four times, one for each application.
