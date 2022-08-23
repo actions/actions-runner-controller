@@ -33,7 +33,7 @@ type RunnerDeploymentSpec struct {
 
 	// EffectiveTime is the time the upstream controller requested to sync Replicas.
 	// It is usually populated by the webhook-based autoscaler via HRA.
-	// The value is inherited to RunnerRepicaSet(s) and used to prevent ephemeral runners from unnecessarily recreated.
+	// The value is inherited to RunnerReplicaSet(s) and used to prevent ephemeral runners from unnecessarily recreated.
 	//
 	// +optional
 	// +nullable

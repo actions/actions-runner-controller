@@ -102,7 +102,7 @@ spec:
                         description: ScaleUpThreshold is the percentage of busy runners greater than which will trigger the hpa to scale runners up.
                         type: string
                       type:
-                        description: Type is the type of metric to be used for autoscaling. The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns
+                        description: Type is the type of metric to be used for autoscaling. It can be TotalNumberOfQueuedAndInProgressWorkflowRuns or PercentageRunnersBusy.
                         type: string
                     type: object
                   type: array
@@ -180,7 +180,7 @@ spec:
                 scheduledOverrides:
                   description: ScheduledOverrides is the list of ScheduledOverride. It can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule. The earlier a scheduled override is, the higher it is prioritized.
                   items:
-                    description: ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule. A schedule can optionally be recurring, so that the correspoding override happens every day, week, month, or year.
+                    description: ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule. A schedule can optionally be recurring, so that the corresponding override happens every day, week, month, or year.
                     properties:
                       endTime:
                         description: EndTime is the time at which the first override ends.
