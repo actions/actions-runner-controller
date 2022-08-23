@@ -729,7 +729,15 @@ At this point there are a few things that can happen, either the job gets alloca
 2. Upon the job ending GitHub sends another `workflow_job` event to ARC but with `status=completed`
 3. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
 
-If the job is cancelled before it is allocated to a runner or the runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
+If the job is cancelled before it is allocated to a runner then the lifecycle looks like this:
+
+1. Upon the job cancellation GitHub sends another `workflow_job` event to ARC but with `status=cancelled`
+2. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
+
+If runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
+
+1. The scale trigger duration specified via `HRA.spec.scaleUpTriggers[].duration` elapses
+2. The HRA thinks the capacity reservation is expired, removes it from HRA's `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
 
 1. The HRA removes a capacity reservation from its `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
 
