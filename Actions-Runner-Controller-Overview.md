@@ -111,8 +111,12 @@ spec:
     kind: RunnerDeployment
   minReplicas: 1
   maxReplicas: 5
-  # Your chosen scaling metrics here
-  metrics: []
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.25'
+    scaleUpFactor: '2'
+    scaleDownFactor: '0.5'
   ```
 
 For examples - please see "[Pull Driven Scaling examples](https://github.com/actions-runner-controller/actions-runner-controller#pull-driven-scaling)."
