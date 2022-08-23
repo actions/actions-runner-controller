@@ -740,6 +740,7 @@ Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to ac
 
 1. the potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node avaliable 
 2. the amount of time it takes for GitHub to allocate a job to that runner
+3. the amount of time it takes for the runner to notice the allocated job and starts running it
 
 ##### Install with Helm
 
