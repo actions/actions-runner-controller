@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"os"
 	"strings"
 	"time"
@@ -62,7 +63,6 @@ func (i *stringSlice) Set(value string) error {
 	*i = append(*i, value)
 	return nil
 }
-
 func main() {
 	var (
 		err      error
@@ -87,7 +87,6 @@ func main() {
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
-
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {
@@ -122,7 +121,6 @@ func main() {
 	flag.Parse()
 
 	logger := logging.NewLogger(logLevel)
-
 	c.Log = &logger
 
 	ghClient, err = c.NewClient()
@@ -214,6 +212,7 @@ func main() {
 
 	log.Info(
 		"Initializing actions-runner-controller",
+		"version", build.Version,
 		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
 		"default-runner-image", runnerImage,

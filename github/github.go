@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"net/http"
 	"net/url"
 	"os"
@@ -134,8 +135,7 @@ func (c *Config) NewClient() (*Client, error) {
 			}
 		}
 	}
-
-	client.UserAgent = "actions-runner-controller"
+	client.UserAgent = "actions-runner-controller/" + build.Version
 
 	return &Client{
 		Client:        client,
@@ -439,7 +439,6 @@ func splitOwnerAndRepo(repo string) (string, string, error) {
 	}
 	return chunk[0], chunk[1], nil
 }
-
 func getEnterpriseApiUrl(baseURL string) (string, error) {
 	baseEndpoint, err := url.Parse(baseURL)
 	if err != nil {

@@ -4,7 +4,7 @@ else
 	NAME ?= summerwind/actions-runner-controller
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
-VERSION ?= latest
+VERSION ?= dev
 RUNNER_VERSION ?= 2.295.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
@@ -119,6 +119,7 @@ docker-buildx:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+		--build-arg VERSION=${VERSION} \
 		-t "${NAME}:${VERSION}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}

@@ -58,6 +58,7 @@ jobs:
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ env.VERSION }}
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest

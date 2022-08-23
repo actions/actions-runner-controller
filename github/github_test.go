@@ -155,7 +155,7 @@ func TestCleanup(t *testing.T) {
 
 func TestUserAgent(t *testing.T) {
 	client := newTestClient()
-	if client.UserAgent != "actions-runner-controller" {
-		t.Errorf("UserAgent should be set to actions-runner-controller")
+	if client.UserAgent != "actions-runner-controller/NA" {
+		t.Errorf("UserAgent should be set to actions-runner-controller/NA")
 	}
 }
