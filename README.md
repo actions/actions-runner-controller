@@ -103,7 +103,7 @@ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
 
-If you are deploying this solution into a GHES environment then you will need to be running version >= [3.3.0](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes).
+If you are deploying this solution into a GHES environment then you will need to be running version >= [3.6.0](https://docs.github.com/en/enterprise-server@3.6/admin/release-notes).
 
 When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
 
