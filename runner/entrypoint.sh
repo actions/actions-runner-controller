@@ -4,17 +4,16 @@ source logger.bash
 RUNNER_ASSETS_DIR=${RUNNER_ASSETS_DIR:-/runnertmp}
 RUNNER_HOME=${RUNNER_HOME:-/runner}
 
+# Let GitHub runner execute these hooks. These environment variables are used by GitHub's Runner as described here
+# https://github.com/actions/runner/blob/main/docs/adrs/1751-runner-job-hooks.md
+# Scripts referenced in the ACTIONS_RUNNER_HOOK_ environment variables must end in .sh or .ps1
+# for it to become a valid hook script, otherwise GitHub will fail to run the hook
+export ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/arc/hooks/job-started.sh
+export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/etc/arc/hooks/job-completed.sh
+
 if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   log.notice "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds"
   sleep ${STARTUP_DELAY_IN_SECONDS}
-fi
-
-if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
-    log.debug 'Docker enabled runner detected and Docker daemon wait is enabled'
-    log.debug 'Waiting until Docker is available or the timeout is reached'
-    timeout 120s bash -c 'until docker ps ;do sleep 1; done'
-else
-  log.notice 'Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint'
 fi
 
 if [ -z "${GITHUB_URL}" ]; then
@@ -85,6 +84,8 @@ if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
   log.debug 'Passing --disableupdate to config.sh to disable automatic runner updates.'
 fi
 
+update-status "Registering"
+
 retries_left=10
 while [[ ${retries_left} -gt 0 ]]; do
   log.debug 'Configuring the runner.'
@@ -140,13 +141,12 @@ if [ -z "${UNITTEST:-}" ] && [ -e ./externalstmp ]; then
   mv ./externalstmp/* ./externals/
 fi
 
-args=()
-if [ "${RUNNER_FEATURE_FLAG_ONCE:-}" == "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
-  args+=(--once)
-  log.warning 'Passing --once is deprecated and will be removed as an option' \
-    'from the image and actions-runner-controller at the release of 0.25.0.' \
-    'Upgrade to GHES => 3.3 to continue using actions-runner-controller. If' \
-    'you are using github.com ignore this warning.'
+if [[ "${DISABLE_WAIT_FOR_DOCKER}" != "true" ]] && [[ "${DOCKER_ENABLED}" == "true" ]]; then
+    log.debug 'Docker enabled runner detected and Docker daemon wait is enabled'
+    log.debug 'Waiting until Docker is available or the timeout is reached'
+    timeout 120s bash -c 'until docker ps ;do sleep 1; done'
+else
+  log.notice 'Docker wait check skipped. Either Docker is disabled or the wait is disabled, continuing with entrypoint'
 fi
 
 # Unset entrypoint environment variables so they don't leak into the runner environment
@@ -164,4 +164,5 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT
 if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
-exec env -- "${env[@]}" ./run.sh "${args[@]}"
+update-status "Idle"
+exec env -- "${env[@]}" ./run.sh

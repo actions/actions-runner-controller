@@ -69,9 +69,8 @@ func main() {
 
 		watchNamespace string
 
-		enableLeaderElection bool
-		syncPeriod           time.Duration
-		logLevel             string
+		logLevel   string
+		queueLimit int
 
 		ghClient *github.Client
 	)
@@ -88,10 +87,8 @@ func main() {
 	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "The namespace to watch for HorizontalRunnerAutoscaler's to scale on Webhook. Set to empty for letting it watch for all namespaces.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
-		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
-	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
+	flag.IntVar(&queueLimit, "queue-limit", controllers.DefaultQueueLimit, `The maximum length of the scale operation queue. The scale opration is enqueued per every matching webhook event, and the server returns a 500 HTTP status when the queue was already full on enqueue attempt.`)
 	flag.StringVar(&webhookSecretToken, "github-webhook-secret-token", "", "The personal access token of GitHub.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -142,10 +139,10 @@ func main() {
 		setupLog.Info("GitHub client is not initialized. Runner groups with custom visibility are not supported. If needed, please provide GitHub authentication. This will incur in extra GitHub API calls")
 	}
 
+	syncPeriod := 10 * time.Minute
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		SyncPeriod:         &syncPeriod,
-		LeaderElection:     enableLeaderElection,
 		Namespace:          watchNamespace,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
@@ -164,6 +161,7 @@ func main() {
 		SecretKeyBytes: []byte(webhookSecretToken),
 		Namespace:      watchNamespace,
 		GitHubClient:   ghClient,
+		QueueLimit:     queueLimit,
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {

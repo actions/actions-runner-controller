@@ -4,16 +4,21 @@ import "time"
 
 const (
 	LabelKeyRunnerSetName = "runnerset-name"
+	LabelKeyRunner        = "actions-runner"
 )
 
 const (
 	// This names requires at least one slash to work.
 	// See https://github.com/google/knative-gcp/issues/378
-	runnerPodFinalizerName = "actions.summerwind.dev/runner-pod"
+	runnerPodFinalizerName             = "actions.summerwind.dev/runner-pod"
+	runnerLinkedResourcesFinalizerName = "actions.summerwind.dev/linked-resources"
 
 	annotationKeyPrefix = "actions-runner/"
 
 	AnnotationKeyLastRegistrationCheckTime = "actions-runner-controller/last-registration-check-time"
+
+	// AnnotationKeyUnregistrationFailureMessage is the annotation that is added onto the pod once it failed to be unregistered from GitHub due to e.g. 422 error
+	AnnotationKeyUnregistrationFailureMessage = annotationKeyPrefix + "unregistration-failure-message"
 
 	// AnnotationKeyUnregistrationCompleteTimestamp is the annotation that is added onto the pod once the previously started unregistration process has been completed.
 	AnnotationKeyUnregistrationCompleteTimestamp = annotationKeyPrefix + "unregistration-complete-timestamp"
@@ -61,4 +66,7 @@ const (
 
 	EnvVarRunnerName  = "RUNNER_NAME"
 	EnvVarRunnerToken = "RUNNER_TOKEN"
+
+	// defaultHookPath is path to the hook script used when the "containerMode: kubernetes" is specified
+	defaultRunnerHookPath = "/runner/k8s/index.js"
 )

@@ -22,8 +22,6 @@ bases:
 - ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
-# [GH_WEBHOOK_SERVER] To enable the GitHub webhook server, uncomment all sections with 'GH_WEBHOOK_SERVER'.
-#- ../github-webhook-server
 
 patchesStrategicMerge:
 # Protect the /metrics endpoint by putting it behind auth.
@@ -45,10 +43,6 @@ patchesStrategicMerge:
 # Uncomment 'CERTMANAGER' sections in crd/kustomization.yaml to enable the CA injection in the admission webhooks.
 # 'CERTMANAGER' needs to be enabled to use ca injection
 - webhookcainjection_patch.yaml
-
-# [GH_WEBHOOK_SERVER] To enable the GitHub webhook server, uncomment all sections with 'GH_WEBHOOK_SERVER'.
-# Protect the GitHub webhook server metrics endpoint by putting it behind auth.
-# - gh-webhook-server-auth-proxy-patch.yaml
 
 # the following config is for teaching kustomize how to do var substitution
 vars:

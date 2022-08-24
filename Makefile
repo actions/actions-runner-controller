@@ -4,8 +4,8 @@ else
 	NAME ?= summerwind/actions-runner-controller
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
-VERSION ?= latest
-RUNNER_VERSION ?= 2.292.0
+VERSION ?= dev
+RUNNER_VERSION ?= 2.296.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -92,7 +92,7 @@ manifests: manifests-gen-crds chart-crds
 manifests-gen-crds: controller-gen yq
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	for YAMLFILE in config/crd/bases/actions*.yaml; do \
-		$(YQ) write --inplace "$$YAMLFILE" spec.preserveUnknownFields false; \
+		$(YQ) '.spec.preserveUnknownFields = false' --inplace "$$YAMLFILE" ; \
 	done
 
 chart-crds:
@@ -119,6 +119,7 @@ docker-buildx:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+		--build-arg VERSION=${VERSION} \
 		-t "${NAME}:${VERSION}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
@@ -242,7 +243,7 @@ ifeq (, $(wildcard $(GOBIN)/yq))
 	YQ_TMP_DIR=$$(mktemp -d) ;\
 	cd $$YQ_TMP_DIR ;\
 	go mod init tmp ;\
-	go install github.com/mikefarah/yq/v3@3.4.0 ;\
+	go install github.com/mikefarah/yq/v4@v4.25.3 ;\
 	rm -rf $$YQ_TMP_DIR ;\
 	}
 endif

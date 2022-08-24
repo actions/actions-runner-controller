@@ -86,6 +86,16 @@ func (k *Kubectl) CreateCMLiterals(ctx context.Context, name string, literals ma
 	return nil
 }
 
+func (k *Kubectl) DeleteCM(ctx context.Context, name string, cfg KubectlConfig) error {
+	args := []string{"cm", name}
+
+	if _, err := k.CombinedOutput(k.kubectlCmd(ctx, "delete", args, cfg)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (k *Kubectl) Apply(ctx context.Context, path string, cfg KubectlConfig) error {
 	if _, err := k.CombinedOutput(k.kubectlCmd(ctx, "apply", []string{"-f", path}, cfg)); err != nil {
 		return err

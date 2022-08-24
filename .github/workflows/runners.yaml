@@ -6,7 +6,16 @@ on:
       - opened
       - synchronize
       - reopened
-      - closed
+    branches:
+      - 'master'
+    paths:
+      - 'runner/**'
+      - '!runner/Makefile'
+      - '.github/workflows/runners.yaml'
+      - '!**.md'
+  # We must do a trigger on a push: instead of a types: closed so GitHub Secrets 
+  # are available to the workflow run
+  push:
     branches:
       - 'master'
     paths:
@@ -16,9 +25,10 @@ on:
       - '!**.md'
 
 env:
-  RUNNER_VERSION: 2.292.0
+  RUNNER_VERSION: 2.296.0
   DOCKER_VERSION: 20.10.12
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+  RUNNER_CONTAINER_HOOKS_VERSION: 0.1.2
+  DOCKERHUB_USERNAME: summerwind
 
 jobs:
   build-runners:
@@ -35,6 +45,9 @@ jobs:
             os-name: ubuntu
             os-version: 20.04
           - name: actions-runner-dind
+            os-name: ubuntu
+            os-version: 20.04
+          - name: actions-runner-dind-rootless
             os-name: ubuntu
             os-version: 20.04
 
@@ -57,10 +70,11 @@ jobs:
           context: ./runner
           file: ./runner/${{ matrix.name }}.dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.ref == 'master' && github.event.pull_request.merged == true }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           build-args: |
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
+            RUNNER_CONTAINER_HOOKS_VERSION=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}

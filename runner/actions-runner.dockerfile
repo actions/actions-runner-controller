@@ -1,7 +1,8 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.292.0
+ARG RUNNER_VERSION=2.296.0
+ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
 ARG DUMB_INIT_VERSION=1.2.5
@@ -66,8 +67,6 @@ RUN set -vx; \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-ENV HOME=/home/runner
-
 # Uncomment the below COPY to use your own custom build of actions-runner.
 #
 # To build a custom runner:
@@ -105,6 +104,11 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN cd "$RUNNER_ASSETS_DIR" \
+    && curl -f -L -o runner-container-hooks.zip https://github.com/actions/runner-container-hooks/releases/download/v${RUNNER_CONTAINER_HOOKS_VERSION}/actions-runner-hooks-k8s-${RUNNER_CONTAINER_HOOKS_VERSION}.zip \
+    && unzip ./runner-container-hooks.zip -d ./k8s \
+    && rm runner-container-hooks.zip
+
 ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
@@ -112,8 +116,12 @@ RUN mkdir /opt/hostedtoolcache \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint.sh logger.bash /usr/bin/
+COPY entrypoint.sh logger.bash update-status /usr/bin/
 
+# Configure hooks folder structure.
+COPY hooks /etc/arc/hooks/
+
+ENV HOME=/home/runner
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
