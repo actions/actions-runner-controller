@@ -52,4 +52,7 @@ type With struct {
 	// This can be either the address or the context name
 	// https://github.com/docker/buildx/blob/master/docs/reference/buildx_create.md#description
 	Endpoint string `json:"endpoint,omitempty"`
+	// Needs to be "docker" in rootless mode
+	// https://stackoverflow.com/questions/66142872/how-to-solve-error-with-rootless-docker-in-github-actions-self-hosted-runner-wr
+	Driver string `json:"driver,omitempty"`
 }

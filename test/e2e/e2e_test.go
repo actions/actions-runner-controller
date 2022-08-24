@@ -123,9 +123,17 @@ func TestE2E(t *testing.T) {
 			})
 		}
 
+		if t.Failed() {
+			return
+		}
+
 		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
 			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
 		})
+
+		if t.Failed() {
+			return
+		}
 
 		t.Run("install argo-tunnel", func(t *testing.T) {
 			env.installArgoTunnel(t)
@@ -137,6 +145,10 @@ func TestE2E(t *testing.T) {
 			})
 		}
 
+		if t.Failed() {
+			return
+		}
+
 		t.Run("deploy runners", func(t *testing.T) {
 			env.deploy(t, RunnerSets, testID)
 		})
@@ -145,6 +157,10 @@ func TestE2E(t *testing.T) {
 			t.Cleanup(func() {
 				env.undeploy(t, RunnerSets, testID)
 			})
+		}
+
+		if t.Failed() {
+			return
 		}
 
 		t.Run("install edge actions-runner-controller", func(t *testing.T) {
@@ -183,9 +199,17 @@ func TestE2E(t *testing.T) {
 			})
 		}
 
+		if t.Failed() {
+			return
+		}
+
 		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
 			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
 		})
+
+		if t.Failed() {
+			return
+		}
 
 		t.Run("install argo-tunnel", func(t *testing.T) {
 			env.installArgoTunnel(t)
@@ -197,6 +221,10 @@ func TestE2E(t *testing.T) {
 			})
 		}
 
+		if t.Failed() {
+			return
+		}
+
 		t.Run("deploy runners", func(t *testing.T) {
 			env.deploy(t, RunnerDeployments, testID)
 		})
@@ -205,6 +233,10 @@ func TestE2E(t *testing.T) {
 			t.Cleanup(func() {
 				env.undeploy(t, RunnerDeployments, testID)
 			})
+		}
+
+		if t.Failed() {
+			return
 		}
 
 		t.Run("install edge actions-runner-controller", func(t *testing.T) {
@@ -252,6 +284,8 @@ type env struct {
 	scaleDownDelaySecondsAfterScaleOut          int64
 	minReplicas                                 int64
 	dockerdWithinRunnerContainer                bool
+	rootlessDocker                              bool
+	containerMode                               string
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
@@ -263,8 +297,9 @@ type env struct {
 type vars struct {
 	controllerImageRepo, controllerImageTag string
 
-	runnerImageRepo     string
-	runnerDindImageRepo string
+	runnerImageRepo             string
+	runnerDindImageRepo         string
+	runnerRootlessDindImageRepo string
 
 	prebuildImages []testing.ContainerImage
 	builds         []testing.DockerBuild
@@ -278,20 +313,23 @@ func buildVars(repo string) vars {
 	}
 
 	var (
-		controllerImageRepo = repo + "/actions-runner-controller"
-		controllerImageTag  = "e2e"
-		controllerImage     = testing.Img(controllerImageRepo, controllerImageTag)
-		runnerImageRepo     = repo + "/actions-runner"
-		runnerDindImageRepo = repo + "/actions-runner-dind"
-		runnerImageTag      = "e2e"
-		runnerImage         = testing.Img(runnerImageRepo, runnerImageTag)
-		runnerDindImage     = testing.Img(runnerDindImageRepo, runnerImageTag)
+		controllerImageRepo         = repo + "/actions-runner-controller"
+		controllerImageTag          = "e2e"
+		controllerImage             = testing.Img(controllerImageRepo, controllerImageTag)
+		runnerImageRepo             = repo + "/actions-runner"
+		runnerDindImageRepo         = repo + "/actions-runner-dind"
+		runnerRootlessDindImageRepo = repo + "/actions-runner-rootless-dind"
+		runnerImageTag              = "e2e"
+		runnerImage                 = testing.Img(runnerImageRepo, runnerImageTag)
+		runnerDindImage             = testing.Img(runnerDindImageRepo, runnerImageTag)
+		runnerRootlessDindImage     = testing.Img(runnerRootlessDindImageRepo, runnerImageTag)
 	)
 
 	var vs vars
 
 	vs.controllerImageRepo, vs.controllerImageTag = controllerImageRepo, controllerImageTag
 	vs.runnerDindImageRepo = runnerDindImageRepo
+	vs.runnerRootlessDindImageRepo = runnerRootlessDindImageRepo
 	vs.runnerImageRepo = runnerImageRepo
 
 	// vs.controllerImage, vs.controllerImageTag
@@ -300,6 +338,7 @@ func buildVars(repo string) vars {
 		controllerImage,
 		runnerImage,
 		runnerDindImage,
+		runnerRootlessDindImage,
 	}
 
 	vs.builds = []testing.DockerBuild{
@@ -329,6 +368,17 @@ func buildVars(repo string) vars {
 				},
 			},
 			Image:        runnerDindImage,
+			EnableBuildX: true,
+		},
+		{
+			Dockerfile: "../../runner/actions-runner-dind-rootless.dockerfile",
+			Args: []testing.BuildArg{
+				{
+					Name:  "RUNNER_VERSION",
+					Value: "2.294.0",
+				},
+			},
+			Image:        runnerRootlessDindImage,
 			EnableBuildX: true,
 		},
 	}
@@ -395,6 +445,16 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.dockerdWithinRunnerContainer, err = strconv.ParseBool(testing.Getenv(t, "TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER", "false"))
 	if err != nil {
 		panic(fmt.Sprintf("unable to parse bool from TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER: %v", err))
+	}
+
+	e.rootlessDocker, err = strconv.ParseBool(testing.Getenv(t, "TEST_RUNNER_ROOTLESS_DOCKER", "false"))
+	if err != nil {
+		panic(fmt.Sprintf("unable to parse bool from TEST_RUNNER_ROOTLESS_DOCKER: %v", err))
+	}
+
+	e.containerMode = testing.Getenv(t, "TEST_CONTAINER_MODE", "")
+	if err != nil {
+		panic(fmt.Sprintf("unable to parse bool from TEST_CONTAINER_MODE: %v", err))
 	}
 
 	return e
@@ -527,13 +587,27 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 		fmt.Sprintf("REPO_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ORG_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
 		fmt.Sprintf("ENTERPRISE_RUNNER_MIN_REPLICAS=%d", e.minReplicas),
+		"RUNNER_CONTAINER_MODE=" + e.containerMode,
+	}
+
+	if e.dockerdWithinRunnerContainer && e.containerMode == "kubernetes" {
+		t.Fatalf("TEST_RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER cannot be set along with TEST_CONTAINER_MODE=kubernetes")
+		t.FailNow()
 	}
 
 	if e.dockerdWithinRunnerContainer {
 		varEnv = append(varEnv,
 			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=true",
-			"RUNNER_NAME="+e.vars.runnerDindImageRepo,
 		)
+		if e.rootlessDocker {
+			varEnv = append(varEnv,
+				"RUNNER_NAME="+e.vars.runnerRootlessDindImageRepo,
+			)
+		} else {
+			varEnv = append(varEnv,
+				"RUNNER_NAME="+e.vars.runnerDindImageRepo,
+			)
+		}
 	} else {
 		varEnv = append(varEnv,
 			"RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER=false",
@@ -583,7 +657,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T, kind DeployKind, testID string) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID))
+	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID), !e.rootlessDocker)
 }
 
 func (e *env) testJobs(testID string) []job {
@@ -624,7 +698,8 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 
 const Branch = "main"
 
-func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job) {
+// useSudo also implies rootful docker and the use of buildx cache export/import
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job, useSudo bool) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -655,11 +730,41 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			},
 		}
 
+		var sudo string
+		if useSudo {
+			sudo = "sudo "
+		}
+
 		if !kubernetesContainerMode {
 			if kind == RunnerDeployments {
 				steps = append(steps,
 					testing.Step{
-						Run: "sudo mkdir -p \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
+						Run: sudo + "mkdir -p \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
+					},
+				)
+
+				if useSudo {
+					steps = append(steps,
+						testing.Step{
+							// This might be the easiest way to handle permissions without use of securityContext
+							// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+							Run: sudo + "mkdir -p \"/var/lib/docker\"",
+						},
+					)
+				}
+			}
+
+			steps = append(steps,
+				testing.Step{
+					// This might be the easiest way to handle permissions without use of securityContext
+					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+					Run: sudo + "chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
+				},
+			)
+			if useSudo {
+				steps = append(steps,
+					testing.Step{
+						Run: sudo + "chmod 777 -R \"/var/lib/docker\"",
 					},
 				)
 			}
@@ -668,12 +773,12 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					// This might be the easiest way to handle permissions without use of securityContext
 					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: "sudo chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
+					Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
 				},
 				testing.Step{
 					// This might be the easiest way to handle permissions without use of securityContext
 					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\" \"/var/lib/docker\"",
+					Run: "ls -lah \"/var/lib/docker\" || echo ls failed.",
 				},
 				testing.Step{
 					Uses: "actions/setup-go@v3",
@@ -694,6 +799,26 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 		)
 
 		if !kubernetesContainerMode {
+			setupBuildXActionWith := &testing.With{
+				BuildkitdFlags: "--debug",
+				Endpoint:       "mycontext",
+				// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
+				// so we need to use `docker buildx build` in the next step
+				Install: false,
+			}
+			var dockerBuildCache, dockerfile string
+			if useSudo {
+				// This needs to be set only when rootful docker mode.
+				// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
+				// so we end up with the below error on docker-build:
+				//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+				dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
+					"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
+				dockerfile = "Dockerfile"
+			} else {
+				setupBuildXActionWith.Driver = "docker"
+				dockerfile = "Dockerfile.nocache"
+			}
 			steps = append(steps,
 				testing.Step{
 					// https://github.com/docker/buildx/issues/413#issuecomment-710660155
@@ -707,28 +832,29 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Name: "Set up Docker Buildx",
 					Uses: "docker/setup-buildx-action@v1",
-					With: &testing.With{
-						BuildkitdFlags: "--debug",
-						Endpoint:       "mycontext",
-						// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
-						// so we need to use `docker buildx build` in the next step
-						Install: false,
-					},
+					With: setupBuildXActionWith,
 				},
 				testing.Step{
 					Run: "docker buildx build --platform=linux/amd64 " +
-						"--cache-from=type=local,src=/home/runner/.cache/buildx " +
-						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max " +
-						".",
+						dockerBuildCache +
+						fmt.Sprintf("-f %s .", dockerfile),
 				},
-				testing.Step{
-					// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
-					// See https://github.com/moby/buildkit/issues/1896 for why this is needed
-					Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
-				},
-				testing.Step{
-					Run: "ls -lah /home/runner/.cache/*",
-				},
+			)
+
+			if useSudo {
+				steps = append(steps,
+					testing.Step{
+						// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+						// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+						Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
+					},
+					testing.Step{
+						Run: "ls -lah /home/runner/.cache/*",
+					},
+				)
+			}
+
+			steps = append(steps,
 				testing.Step{
 					Uses: "azure/setup-kubectl@v1",
 					With: &testing.With{
