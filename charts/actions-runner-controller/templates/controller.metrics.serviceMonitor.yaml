@@ -8,7 +8,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   name: {{ include "actions-runner-controller.serviceMonitorName" . }}
-  namespace: {{ .Values.metrics.serviceMonitorNamespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   endpoints:
     - path: /metrics
