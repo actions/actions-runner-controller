@@ -56,7 +56,7 @@ spec:
 
       # # Uncomment the below to enable the kubernetes container mode
       # # See https://github.com/actions-runner-controller/actions-runner-controller#runner-with-k8s-jobs
-      containerMode: kubernetes
+      containerMode: ${RUNNER_CONTAINER_MODE}
       workVolumeClaimTemplate:
         accessModes:
         - ReadWriteOnce
