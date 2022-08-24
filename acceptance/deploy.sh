@@ -41,15 +41,23 @@ TEST_ID=${TEST_ID:-default}
 
 if [ "${tool}" == "helm" ]; then
   set -v
+
+  CHART=${CHART:-charts/actions-runner-controller}
+
   flags=()
   if [ "${IMAGE_PULL_SECRET}" != "" ]; then
     flags+=( --set imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
     flags+=( --set image.actionsRunnerImagePullSecrets[0].name=${IMAGE_PULL_SECRET})
     flags+=( --set githubWebhookServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
   fi
+  if [ "${CHART_VERSION}" != "" ]; then
+    flags+=( --version ${CHART_VERSION})
+  fi
+
   set -vx
+
   helm upgrade --install actions-runner-controller \
-    charts/actions-runner-controller \
+    ${CHART} \
     -n actions-runner-system \
     --create-namespace \
     --set syncPeriod=${SYNC_PERIOD} \
