@@ -50,7 +50,7 @@ jobs:
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
-          build-args: VERSION=canary
+          build-args: VERSION=canary-${{ github.sha }}
           push: true
           tags: |
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
