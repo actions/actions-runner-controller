@@ -15,7 +15,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v45/github"
+	"github.com/google/go-github/v47/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
@@ -241,29 +241,6 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	}
 
 	return runners, nil
-}
-
-// ListOrganizationRunnerGroups returns all the runner groups defined in the organization and
-// inherited to the organization from an enterprise.
-func (c *Client) ListOrganizationRunnerGroups(ctx context.Context, org string) ([]*github.RunnerGroup, error) {
-	var runnerGroups []*github.RunnerGroup
-
-	opts := github.ListOrgRunnerGroupOptions{}
-	opts.PerPage = 100
-	for {
-		list, res, err := c.Client.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
-		if err != nil {
-			return runnerGroups, fmt.Errorf("failed to list organization runner groups: %w", err)
-		}
-
-		runnerGroups = append(runnerGroups, list.RunnerGroups...)
-		if res.NextPage == 0 {
-			break
-		}
-		opts.Page = res.NextPage
-	}
-
-	return runnerGroups, nil
 }
 
 // ListOrganizationRunnerGroupsForRepository returns all the runner groups defined in the organization and
