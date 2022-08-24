@@ -145,16 +145,14 @@ _Note: Links are provided further down to create an app for your logged in user 
 * Metadata (read)
 
 **Organization Permissions**
+
 * Self-hosted runners (read / write)
 
 _Note: All API routes mapped to their permissions can be found [here](https://docs.github.com/en/rest/reference/permissions-required-for-github-apps) if you wish to review_
 
 **Subscribe to events**
 
-At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case the event details are:
-
-* Check run (required for all webhook driven scaling events)
-* Workflow job (optionally) (required for [webhook driven scaling with workflow_job events](https://github.com/actions-runner-controller/actions-runner-controller#example-1-scale-on-each-workflow_job-event)
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the `Workflow Job` event.
 
 ---
 
@@ -395,8 +393,6 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
 
-_Ensure you see the limitations before using this kind!!!!!_
-
 We can also deploy sets of RunnerSets the same way, a basic `RunnerSet` would look like this:
 
 ```yaml
@@ -484,10 +480,6 @@ You can also read the design and usage documentation written in the original pul
 
 Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A `statefulset` is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each `statefulset-managed` pod gets the same persistent volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
 
-**Limitations**
-
-* For autoscaling the `RunnerSet` kind only supports pull driven scaling or the `workflow_job` event for webhook driven scaling.
-
 ### Persistent Runners
 
 Every runner managed by ARC is "ephemeral" by default. The life of an ephemeral runner managed by ARC looks like this- ARC creates a runner pod for the runner. As it's an ephemeral runner, the `--ephemeral` flag is passed to the `actions/runner` agent that runs within the `runner` container of the runner pod.
@@ -504,11 +496,9 @@ Persistent runners are available as an option for some edge cases however they a
 
 ### Autoscaling
 
-> Since the release of GitHub's [`workflow_job` webhook](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job), webhook driven scaling is the preferred way of autoscaling as it enables targeted scaling of your `RunnerDeployment` / `RunnerSet` as it includes the `runs-on` information needed to scale the appropriate runners for that workflow run. More broadly, webhook driven scaling is the preferred scaling option as it is far quicker compared to the pull driven scaling and is easy to set up.
-
 > If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so you can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
 
-A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event (see limitations section of [RunnerSets](#runnersets) for caveats of this kind). Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
+A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event. Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
 **_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
@@ -691,44 +681,72 @@ spec:
 
 #### Webhook Driven Scaling
 
+> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+
 > To configure pull driven scaling see the [Pull Driven Scaling](#pull-driven-scaling) section
 
-Webhooks are processed by a separate webhook server. The webhook server receives GitHub Webhook events and scales
-[`RunnerDeployments`](#runnerdeployments) by updating corresponding [`HorizontalRunnerAutoscalers`](#autoscaling).
+Alternatively ARC can be configured to scale based on the `workflow_job` webhook event. The primary benefit of autoscaling on webhooks compared to the pull driven scaling is that ARC is immediately notified of the scaling need.
 
-Today, the Webhook server can be configured to respond to GitHub's `check_run`, `workflow_job`, `pull_request`, and `push`  events
-by scaling up the matching `HorizontalRunnerAutoscaler` by N replica(s), where `N` is configurable within `HorizontalRunnerAutoscaler`'s `spec:`.
-
-More concretely, you can configure the targeted GitHub event types and the `N` in `scaleUpTriggers`:
+Webhooks are processed by a separate webhook server. The webhook server receives `workflow_job` webhook events and scales RunnerDeployments / RunnerSets by updating HRAs configured for the webhook trigger. Below is an example set-up where a HRA has been configured to scale a `RunnerDeployment` from a `workflow_job` event:
 
 ```yaml
-kind: HorizontalRunnerAutoscaler
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runners
 spec:
+  template:
+    spec:
+      repository: example/myrepo
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runners
+spec:
+  minReplicas: 1
+  maxReplicas: 10
   scaleTargetRef:
     kind: RunnerDeployment
     # # In case the scale target is RunnerSet:
     # kind: RunnerSet
     name: example-runners
   scaleUpTriggers:
-  - githubEvent:
-      checkRun:
-        types: ["created"]
-        status: "queued"
-    amount: 1
-    duration: "5m"
+    - githubEvent:
+        workflowJob: {}
+      duration: "30m"
 ```
 
-With the above example, the webhook server scales `example-runners` by `1` replica for 5 minutes on each `check_run` event with the type of `created` and the status of `queued` received.
+The lifecycle of a runner provisioned from a webhook is different to a runner provisioned from the pull based scaling method:
 
-Of note is the `HRA.spec.scaleUpTriggers[].duration` attribute. This attribute is used to calculate if the replica number added via the trigger is expired or not. On each reconciliation loop, the controller sums up all the non-expiring replica numbers from previous scale-up triggers. It then compares the summed desired replica number against the current replica number. If the summed desired replica number > the current number then it means the replica count needs to scale up.
+1. GitHub sends a `workflow_job` event to ARC with `status=queued`
+2. ARC finds a HRA with a `workflow_job` webhook scale trigger that backs a RunnerDeployment / RunnerSet with matching runner labels
+3. The matched HRA adds a unit to its `capacityReservations` list
+4. ARC adds a replica and sets the EffectiveTime of that replica to current + `HRA.spec.scaleUpTriggers[].duration`
 
-As mentioned previously, the `scaleDownDelaySecondsAfterScaleOut` property has the final say still. If the latest scale-up time + the anti-flapping duration is later than the current time, it doesn’t immediately scale down and instead retries the calculation again later to see if it needs to scale yet.
+At this point there are a few things that can happen, either the job gets allocated to the runner or the runner is left dangling due to it not being used, if the runner gets assigned the job that triggered the scale up the lifecycle looks like this:
 
----
+1. The new runner gets allocated the job and processes it
+2. Upon the job ending GitHub sends another `workflow_job` event to ARC but with `status=completed`
+3. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
 
-The primary benefit of autoscaling on Webhooks compared to the pull driven scaling is that it is far quicker as it allows you to immediately add runner resources rather than waiting for the next sync period.
+If the job is cancelled before it is allocated to a runner then the lifecycle looks like this:
 
-> You can learn the implementation details in [#282](https://github.com/actions-runner-controller/actions-runner-controller/pull/282)
+1. Upon the job cancellation GitHub sends another `workflow_job` event to ARC but with `status=cancelled`
+2. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
+
+If runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
+
+1. The scale trigger duration specified via `HRA.spec.scaleUpTriggers[].duration` elapses
+2. The HRA thinks the capacity reservation is expired, removes it from HRA's `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
+
+1. The HRA removes a capacity reservation from its `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
+
+Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to account for the following things:
+
+1. the potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node avaliable 
+2. the amount of time it takes for GitHub to allocate a job to that runner
+3. the amount of time it takes for the runner to notice the allocated job and starts running it
 
 ##### Install with Helm
 
@@ -829,14 +847,6 @@ if you followed the example ingress above the URL would be something like this:
 
 Then click on "let me select individual events" and choose `Workflow Jobs`.
 
-You may also want to choose the following event(s) if you use it as a scale trigger in your HRA spec:
-
-- Check runs
-- Pushes
-- Pull Requests
-
-Later you can remove any of these you are not using to reduce the amount of data sent to your server.
-
 Then click on `Add Webhook`.
 
 GitHub will then send a `ping` event to your webhook server to check if it is working, if it is you'll see a green V mark
@@ -878,182 +888,6 @@ spec:
               number: 80
         pathType: Exact
 
-```
-
-##### Examples
-
-- [Example 1: Scale on each `workflow_job` event](#example-1-scale-on-each-workflow_job-event)
-- [Example 2: Scale up on each `check_run` event](#example-2-scale-up-on-each-check_run-event)
-- [Example 3: Scale on each `pull_request` event against a given set of branches](#example-3-scale-on-each-pull_request-event-against-a-given-set-of-branches)
-- [Example 4: Scale on each `push` event](#example-4-scale-on-each-push-event)
-
-###### Example 1: Scale on each `workflow_job` event
-
-> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
-
-_Note: GitHub does not include the runner group information of a repository in the payload of `workflow_job` event in the initial `queued` event. The runner group information is only included for `workflow_job` events when the job has already been allocated to a runner (events with a status of `in_progress` or `completed`). Please do raise feature requests against [GitHub](https://support.github.com/tickets/personal/0) for this information to be included in the initial `queued` event if this would improve autoscaling runners for you._
-
-The most flexible webhook GitHub offers is the `workflow_job` webhook, it includes the `runs-on` information in the payload allowing scaling based on runner labels.
-
-This webhook should cover most people's needs, please experiment with this webhook first before considering the others.
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runners
-spec:
-  template:
-    spec:
-      repository: example/myrepo
----
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: HorizontalRunnerAutoscaler
-metadata:
-  name: example-runners
-spec:
-  scaleDownDelaySecondsAfterScaleOut: 300
-  minReplicas: 1
-  maxReplicas: 10
-  scaleTargetRef:
-    kind: RunnerDeployment
-    # # In case the scale target is RunnerSet:
-    # kind: RunnerSet
-    name: example-runners
-  scaleUpTriggers:
-  - githubEvent:
-      workflowJob: {}
-    duration: "30m"
-```
-
-This webhook requires you to explicitly set the labels in the RunnerDeployment / RunnerSet if you are using them in your workflow to match the agents (field `runs-on`). Only `self-hosted` will be considered as included by default.
-
-You can configure your GitHub webhook settings to only include `Workflows Job` events, so that it sends us three kinds of `workflow_job` events per a job run.
-
-Each kind has a `status` of `queued`, `in_progress` and `completed`. With the above configuration, `actions-runner-controller` adds one runner for a `workflow_job` event whose `status` is `queued`. Similarly, it removes one runner for a `workflow_job` event whose `status` is `completed`. The caveat to this to remember is that this scale-down is within the bounds of your `scaleDownDelaySecondsAfterScaleOut` configuration, if this time hasn't passed the scale down will be deferred.
-
-###### Example 2: Scale up on each `check_run` event
-
-> Note: This should work almost like https://github.com/philips-labs/terraform-aws-github-runner
-
-To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `check_run`, you write manifests like the below:
-
-```yaml
-kind: RunnerDeployment
-metadata:
-   name: example-runners
-spec:
-  template:
-    spec:
-      repository: example/myrepo
----
-kind: HorizontalRunnerAutoscaler
-spec:
-  minReplicas: 1
-  maxReplicas: 10
-  scaleTargetRef:
-    kind: RunnerDeployment
-    # # In case the scale target is RunnerSet:
-    # kind: RunnerSet
-    name: example-runners
-  scaleUpTriggers:
-  - githubEvent:
-      checkRun:
-        types: ["created"]
-        status: "queued"
-    amount: 1
-    duration: "5m"
-```
-
-To scale up replicas of the runners for `myorg` organization by 1 for 5 minutes on each `check_run`, you write manifests like the below:
-
-```yaml
-kind: RunnerDeployment
-metadata:
-   name: example-runners
-spec:
-  template:
-    spec:
-      organization: myorg
----
-kind: HorizontalRunnerAutoscaler
-spec:
-  minReplicas: 1
-  maxReplicas: 10
-  scaleTargetRef:
-    kind: RunnerDeployment
-    # # In case the scale target is RunnerSet:
-    # kind: RunnerSet
-    name: example-runners
-  scaleUpTriggers:
-  - githubEvent:
-      checkRun:
-        types: ["created"]
-        status: "queued"
-        # Optionally restrict autoscaling to being triggered by events from specific repositories within your organization still
-        # repositories: ["myrepo", "myanotherrepo"]
-    amount: 1
-    duration: "5m"
-```
-
-###### Example 3: Scale on each `pull_request` event against a given set of branches
-
-To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `pull_request` against the `main` or `develop` branch you write manifests like the below:
-
-```yaml
-kind: RunnerDeployment
-metadata:
-   name: example-runners
-spec:
-  template:
-    spec:
-      repository: example/myrepo
----
-kind: HorizontalRunnerAutoscaler
-spec:
-  minReplicas: 1
-  maxReplicas: 10
-  scaleTargetRef:
-    kind: RunnerDeployment
-    # # In case the scale target is RunnerSet:
-    # kind: RunnerSet
-    name: example-runners
-  scaleUpTriggers:
-  - githubEvent:
-      pullRequest:
-        types: ["synchronize"]
-        branches: ["main", "develop"]
-    amount: 1
-    duration: "5m"
-```
-
-See ["activity types"](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request) for the list of valid values for `scaleUpTriggers[].githubEvent.pullRequest.types`.
-
-###### Example 4: Scale on each push event
-
-To scale up replicas of the runners for `example/myrepo` by 1 for 5 minutes on each `push` write manifests like the below:
-
-```yaml
-kind: RunnerDeployment
-metadata:
-   name: example-runners
-spec:
-  repository: example/myrepo
----
-kind: HorizontalRunnerAutoscaler
-spec:
-  minReplicas: 1
-  maxReplicas: 10
-  scaleTargetRef:
-    kind: RunnerDeployment
-    # # In case the scale target is RunnerSet:
-    # kind: RunnerSet
-    name: example-runners
-  scaleUpTriggers:
-  - githubEvent:
-      push:
-    amount: 1
-    duration: "5m"
 ```
 
 #### Autoscaling to/from 0
@@ -1168,7 +1002,7 @@ kind: RunnerDeployment
 metadata:
   name: example-dindrunnerdeploy
 spec:
-  replicas: 2
+  replicas: 1
   template:
     spec:
       image: summerwind/actions-runner-dind
@@ -1375,6 +1209,7 @@ spec:
 ```
 
 ### Custom Volume mounts
+
 You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME SSD, for
 i/o intensive builds. Other custom volume mounts should be possible as well, see [kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volumes/)
 
@@ -1458,7 +1293,7 @@ spec:
 
 > **Note**: Ensure that the volume mount is added to the container that is running the Docker daemon.
 
-`docker` stores pulled and built image layers in the [daemon's (note not client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
+`docker` stores pulled and built image layers in the [daemon's (not client)](https://docs.docker.com/get-started/overview/#docker-architecture) [local storage area](https://docs.docker.com/storage/storagedriver/#sharing-promotes-smaller-images) which is usually at `/var/lib/docker`.
 
 By leveraging RunnerSet's dynamic PV provisioning feature and your CSI driver, you can let ARC maintain a pool of PVs that are
 reused across runner pods to retain `/var/lib/docker`.
