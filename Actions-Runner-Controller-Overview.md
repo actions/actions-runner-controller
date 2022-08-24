@@ -4,7 +4,7 @@ This document provides a high level overview of Actions Runner Controller (ARC).
 This document provides a background of Github Actions, self-hosted runners and ARC overview. By the end of the doc, the reader should have a foundation with basic scenarios and be capable of reviewing other advanced topics.
 
 ## GitHub Actions
-[GitHub Actions]](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
+[GitHub Actions](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
 
 You can create workflows that build and test every pull request to your repository, or deploy merged pull requests to production. Your workflow contains one or more jobs which can run in sequential order or in parallel. Each job will run inside its own runner and has one or more steps that either run a script that you define or run an action, which is a reusable extension that can simplify your workflow. To learn more about about Actions - see "[Learn Github Actions](https://docs.github.com/en/actions/learn-github-actions)".
 
