@@ -25,6 +25,8 @@ const (
 )
 
 var (
+	// See the below link for maintained versions of cert-manager
+	// https://cert-manager.io/docs/installation/supported-releases/
 	certManagerVersion = "v1.8.2"
 
 	images = []testing.ContainerImage{
