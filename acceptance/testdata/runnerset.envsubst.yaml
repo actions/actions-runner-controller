@@ -112,6 +112,7 @@ spec:
       labels:
         app: ${NAME}
     spec:
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
       containers:
       - name: runner
         imagePullPolicy: IfNotPresent

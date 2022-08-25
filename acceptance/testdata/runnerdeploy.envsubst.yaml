@@ -64,6 +64,7 @@ spec:
         resources:
           requests:
             storage: 10Gi
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler

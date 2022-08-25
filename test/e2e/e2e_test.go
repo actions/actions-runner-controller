@@ -320,6 +320,8 @@ type env struct {
 	rootlessDocker                              bool
 	doDockerBuild                               bool
 	containerMode                               string
+	runnerServiceAccuontName                    string
+	runnerNamespace                             string
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
@@ -448,6 +450,8 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
+	e.runnerServiceAccuontName = testing.Getenv(t, "TEST_RUNNER_SERVICE_ACCOUNT_NAME", "")
+	e.runnerNamespace = testing.Getenv(t, "TEST_RUNNER_NAMESPACE", "default")
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
 	e.vars = vars
@@ -642,6 +646,8 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 	scriptEnv := []string{
 		"KUBECONFIG=" + e.Kubeconfig,
 		"OP=" + op,
+		"RUNNER_NAMESPACE=" + e.runnerNamespace,
+		"RUNNER_SERVICE_ACCOUNT_NAME=" + e.runnerServiceAccuontName,
 	}
 
 	switch kind {
