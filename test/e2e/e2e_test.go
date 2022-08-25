@@ -3,13 +3,17 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
+	"github.com/google/go-github/v47/github"
 	"github.com/onsi/gomega"
+	"golang.org/x/oauth2"
 	"sigs.k8s.io/yaml"
 )
 
@@ -43,7 +47,8 @@ var (
 // But messages logged via Logf shows up only when the test failed by default.
 // To always enable logging, do not forget to pass `-test.v` to `go test`.
 // If you're using VS Code, open `Workspace Settings` and search for `go test flags`, edit the `.vscode/settings.json` and put the below:
-//   "go.testFlags": ["-v"]
+//
+//	"go.testFlags": ["-v"]
 //
 // This function requires a few environment variables to be set to provide some test data.
 // If you're using VS Code and wanting to run this test locally,
@@ -57,12 +62,16 @@ var (
 // https://terratest.gruntwork.io/docs/testing-best-practices/iterating-locally-using-test-stages/
 //
 // This functions leaves PVs undeleted. To delete PVs, run:
-//   kubectl get pv -ojson | jq -rMc '.items[] | select(.status.phase == "Available") | {name:.metadata.name, status:.status.phase} | .name' | xargs kubectl delete pv
+//
+//	kubectl get pv -ojson | jq -rMc '.items[] | select(.status.phase == "Available") | {name:.metadata.name, status:.status.phase} | .name' | xargs kubectl delete pv
 //
 // If you disk full after dozens of test runs, try:
-//   docker system prune
+//
+//	docker system prune
+//
 // and
-//   kind delete cluster --name teste2e
+//
+//	kind delete cluster --name teste2e
 //
 // The former tend to release 200MB-3GB and the latter can result in releasing like 100GB due to kind node contains loaded container images and
 // (in case you use it) local provisioners disk image(which is implemented as a directory within the kind node).
@@ -78,6 +87,29 @@ func TestE2E(t *testing.T) {
 	skipArgoTunnelCleanUp := os.Getenv("ARC_E2E_SKIP_ARGO_TUNNEL_CLEAN_UP") != ""
 
 	vars := buildVars(os.Getenv("ARC_E2E_IMAGE_REPO"))
+
+	var testedVersions = []struct {
+		label                     string
+		controller, controllerVer string
+		chart, chartVer           string
+	}{
+		{
+			label:         "stable",
+			controller:    "summerwind/actions-runner-controller",
+			controllerVer: "v0.25.2",
+			chart:         "actions-runner-controller/actions-runner-controller",
+			// 0.20.2 accidentally added support for runner-status-update which isn't supported by ARC 0.25.2.
+			// With some chart values, the controller end up with crashlooping with `flag provided but not defined: -runner-status-update-hook`.
+			chartVer: "0.20.1",
+		},
+		{
+			label:         "edge",
+			controller:    vars.controllerImageRepo,
+			controllerVer: vars.controllerImageTag,
+			chart:         "",
+			chartVer:      "",
+		},
+	}
 
 	env := initTestEnv(t, k8sMinorVer, vars)
 	if vt := os.Getenv("ARC_E2E_VERIFY_TIMEOUT"); vt != "" {
@@ -127,14 +159,6 @@ func TestE2E(t *testing.T) {
 			return
 		}
 
-		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
-			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
-		})
-
-		if t.Failed() {
-			return
-		}
-
 		t.Run("install argo-tunnel", func(t *testing.T) {
 			env.installArgoTunnel(t)
 		})
@@ -149,26 +173,33 @@ func TestE2E(t *testing.T) {
 			return
 		}
 
-		t.Run("deploy runners", func(t *testing.T) {
-			env.deploy(t, RunnerSets, testID)
-		})
-
-		if !skipRunnerCleanUp {
-			t.Cleanup(func() {
-				env.undeploy(t, RunnerSets, testID)
+		for i, v := range testedVersions {
+			t.Run("install actions-runner-controller "+v.label, func(t *testing.T) {
+				t.Logf("Using controller %s:%s and chart %s:%s", v.controller, v.controllerVer, v.chart, v.chartVer)
+				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer)
 			})
-		}
 
-		if t.Failed() {
-			return
-		}
+			if t.Failed() {
+				return
+			}
 
-		t.Run("install edge actions-runner-controller", func(t *testing.T) {
-			env.installActionsRunnerController(t, vars.controllerImageRepo, vars.controllerImageTag, testID)
-		})
+			if i > 0 {
+				continue
+			}
 
-		if t.Failed() {
-			return
+			t.Run("deploy runners", func(t *testing.T) {
+				env.deploy(t, RunnerSets, testID)
+			})
+
+			if !skipRunnerCleanUp {
+				t.Cleanup(func() {
+					env.undeploy(t, RunnerSets, testID)
+				})
+			}
+
+			if t.Failed() {
+				return
+			}
 		}
 
 		t.Run("Install workflow", func(t *testing.T) {
@@ -203,14 +234,6 @@ func TestE2E(t *testing.T) {
 			return
 		}
 
-		t.Run("install actions-runner-controller v0.24.1", func(t *testing.T) {
-			env.installActionsRunnerController(t, "summerwind/actions-runner-controller", "v0.24.1", testID)
-		})
-
-		if t.Failed() {
-			return
-		}
-
 		t.Run("install argo-tunnel", func(t *testing.T) {
 			env.installArgoTunnel(t)
 		})
@@ -225,26 +248,33 @@ func TestE2E(t *testing.T) {
 			return
 		}
 
-		t.Run("deploy runners", func(t *testing.T) {
-			env.deploy(t, RunnerDeployments, testID)
-		})
-
-		if !skipRunnerCleanUp {
-			t.Cleanup(func() {
-				env.undeploy(t, RunnerDeployments, testID)
+		for i, v := range testedVersions {
+			t.Run("install actions-runner-controller "+v.label, func(t *testing.T) {
+				t.Logf("Using controller %s:%s and chart %s:%s", v.controller, v.controllerVer, v.chart, v.chartVer)
+				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer)
 			})
-		}
 
-		if t.Failed() {
-			return
-		}
+			if t.Failed() {
+				return
+			}
 
-		t.Run("install edge actions-runner-controller", func(t *testing.T) {
-			env.installActionsRunnerController(t, vars.controllerImageRepo, vars.controllerImageTag, testID)
-		})
+			if i > 0 {
+				continue
+			}
 
-		if t.Failed() {
-			return
+			t.Run("deploy runners", func(t *testing.T) {
+				env.deploy(t, RunnerDeployments, testID)
+			})
+
+			if !skipRunnerCleanUp {
+				t.Cleanup(func() {
+					env.undeploy(t, RunnerDeployments, testID)
+				})
+			}
+
+			if t.Failed() {
+				return
+			}
 		}
 
 		t.Run("Install workflow", func(t *testing.T) {
@@ -457,7 +487,48 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 		panic(fmt.Sprintf("unable to parse bool from TEST_CONTAINER_MODE: %v", err))
 	}
 
+	if err := e.checkGitHubToken(t, e.githubToken); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.checkGitHubToken(t, e.githubTokenWebhook); err != nil {
+		t.Fatal(err)
+	}
+
 	return e
+}
+
+func (e *env) checkGitHubToken(t *testing.T, tok string) error {
+	t.Helper()
+
+	ctx := context.Background()
+
+	transport := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok})).Transport
+	c := github.NewClient(&http.Client{Transport: transport})
+	aa, res, err := c.Octocat(context.Background(), "hello")
+	if err != nil {
+		b, err := io.ReadAll(res.Body)
+		if err != nil {
+			t.Logf("%v", err)
+			return err
+		}
+		t.Logf(string(b))
+		return err
+	}
+
+	t.Logf("%s", aa)
+
+	if _, res, err := c.Actions.CreateRegistrationToken(ctx, e.testOrg, e.testOrgRepo); err != nil {
+		b, err := io.ReadAll(res.Body)
+		if err != nil {
+			t.Logf("%v", err)
+			return err
+		}
+		t.Logf(string(b))
+		return err
+	}
+
+	return nil
 }
 
 func (e *env) f() {
@@ -508,7 +579,7 @@ func (e *env) installCertManager(t *testing.T) {
 	e.KubectlWaitUntilDeployAvailable(t, "cert-manager", waitCfg.WithTimeout(60*time.Second))
 }
 
-func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID string) {
+func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, chart, chartVer string) {
 	t.Helper()
 
 	e.createControllerNamespaceAndServiceAccount(t)
@@ -516,6 +587,8 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID str
 	scriptEnv := []string{
 		"KUBECONFIG=" + e.Kubeconfig,
 		"ACCEPTANCE_TEST_DEPLOYMENT_TOOL=" + "helm",
+		"CHART=" + chart,
+		"CHART_VERSION=" + chartVer,
 	}
 
 	varEnv := []string{
