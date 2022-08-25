@@ -121,6 +121,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("Failed to parse duration %q: %v", vt, err)
 		}
 	}
+	env.doDockerBuild = os.Getenv("ARC_E2E_DO_DOCKER_BUILD") != ""
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -317,6 +318,7 @@ type env struct {
 	minReplicas                                 int64
 	dockerdWithinRunnerContainer                bool
 	rootlessDocker                              bool
+	doDockerBuild                               bool
 	containerMode                               string
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
@@ -732,7 +734,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T, kind DeployKind, testID string) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID), !e.rootlessDocker)
+	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID), !e.rootlessDocker, e.doDockerBuild)
 }
 
 func (e *env) testJobs(testID string) []job {
@@ -774,7 +776,7 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 const Branch = "main"
 
 // useSudo also implies rootful docker and the use of buildx cache export/import
-func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job, useSudo bool) {
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job, useSudo, doDockerBuild bool) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -873,74 +875,76 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			},
 		)
 
-		if !kubernetesContainerMode {
-			setupBuildXActionWith := &testing.With{
-				BuildkitdFlags: "--debug",
-				Endpoint:       "mycontext",
-				// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
-				// so we need to use `docker buildx build` in the next step
-				Install: false,
-			}
-			var dockerBuildCache, dockerfile string
-			if useSudo {
-				// This needs to be set only when rootful docker mode.
-				// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
-				// so we end up with the below error on docker-build:
-				//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
-				dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
-					"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
-				dockerfile = "Dockerfile"
-			} else {
-				setupBuildXActionWith.Driver = "docker"
-				dockerfile = "Dockerfile.nocache"
-			}
-			steps = append(steps,
-				testing.Step{
-					// https://github.com/docker/buildx/issues/413#issuecomment-710660155
-					// To prevent setup-buildx-action from failing with:
-					//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
-					Run: "docker context create mycontext",
-				},
-				testing.Step{
-					Run: "docker context use mycontext",
-				},
-				testing.Step{
-					Name: "Set up Docker Buildx",
-					Uses: "docker/setup-buildx-action@v1",
-					With: setupBuildXActionWith,
-				},
-				testing.Step{
-					Run: "docker buildx build --platform=linux/amd64 " +
-						dockerBuildCache +
-						fmt.Sprintf("-f %s .", dockerfile),
-				},
-			)
-
-			if useSudo {
+		if doDockerBuild {
+			if !kubernetesContainerMode {
+				setupBuildXActionWith := &testing.With{
+					BuildkitdFlags: "--debug",
+					Endpoint:       "mycontext",
+					// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
+					// so we need to use `docker buildx build` in the next step
+					Install: false,
+				}
+				var dockerBuildCache, dockerfile string
+				if useSudo {
+					// This needs to be set only when rootful docker mode.
+					// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
+					// so we end up with the below error on docker-build:
+					//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+					dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
+						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
+					dockerfile = "Dockerfile"
+				} else {
+					setupBuildXActionWith.Driver = "docker"
+					dockerfile = "Dockerfile.nocache"
+				}
 				steps = append(steps,
 					testing.Step{
-						// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
-						// See https://github.com/moby/buildkit/issues/1896 for why this is needed
-						Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
+						// https://github.com/docker/buildx/issues/413#issuecomment-710660155
+						// To prevent setup-buildx-action from failing with:
+						//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
+						Run: "docker context create mycontext",
 					},
 					testing.Step{
-						Run: "ls -lah /home/runner/.cache/*",
+						Run: "docker context use mycontext",
+					},
+					testing.Step{
+						Name: "Set up Docker Buildx",
+						Uses: "docker/setup-buildx-action@v1",
+						With: setupBuildXActionWith,
+					},
+					testing.Step{
+						Run: "docker buildx build --platform=linux/amd64 " +
+							dockerBuildCache +
+							fmt.Sprintf("-f %s .", dockerfile),
 					},
 				)
 			}
+		}
 
+		if useSudo {
 			steps = append(steps,
 				testing.Step{
-					Uses: "azure/setup-kubectl@v1",
-					With: &testing.With{
-						Version: "v1.20.2",
-					},
+					// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+					// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+					Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
 				},
 				testing.Step{
-					Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
+					Run: "ls -lah /home/runner/.cache/*",
 				},
 			)
 		}
+
+		steps = append(steps,
+			testing.Step{
+				Uses: "azure/setup-kubectl@v1",
+				With: &testing.With{
+					Version: "v1.20.2",
+				},
+			},
+			testing.Step{
+				Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
+			},
+		)
 
 		wf.Jobs[j.name] = testing.Job{
 			RunsOn:    runnerLabel,
