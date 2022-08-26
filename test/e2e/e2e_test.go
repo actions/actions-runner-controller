@@ -205,6 +205,27 @@ func TestE2E(t *testing.T) {
 			}
 		}
 
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			for i := 1; ; i++ {
+				select {
+				case _, ok := <-ctx.Done():
+					if !ok {
+						t.Logf("Stopping the continuous rolling-update of runners")
+					}
+				default:
+					time.Sleep(10 * time.Second)
+
+					t.Run(fmt.Sprintf("update runners attempt %d", i), func(t *testing.T) {
+						env.deploy(t, RunnerSets, testID, fmt.Sprintf("ROLLING_UPDATE_PHASE=%d", i))
+					})
+				}
+			}
+		}()
+		t.Cleanup(func() {
+			cancel()
+		})
+
 		t.Run("Install workflow", func(t *testing.T) {
 			env.installActionsWorkflow(t, RunnerSets, testID)
 		})
@@ -279,6 +300,27 @@ func TestE2E(t *testing.T) {
 				return
 			}
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			for i := 1; ; i++ {
+				select {
+				case _, ok := <-ctx.Done():
+					if !ok {
+						t.Logf("Stopping the continuous rolling-update of runners")
+					}
+				default:
+					time.Sleep(10 * time.Second)
+
+					t.Run(fmt.Sprintf("update runners - attempt %d", i), func(t *testing.T) {
+						env.deploy(t, RunnerDeployments, testID, fmt.Sprintf("ROLLING_UPDATE_PHASE=%d", i))
+					})
+				}
+			}
+		}()
+		t.Cleanup(func() {
+			cancel()
+		})
 
 		t.Run("Install workflow", func(t *testing.T) {
 			env.installActionsWorkflow(t, RunnerDeployments, testID)
@@ -628,9 +670,9 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
-func (e *env) deploy(t *testing.T, kind DeployKind, testID string) {
+func (e *env) deploy(t *testing.T, kind DeployKind, testID string, env ...string) {
 	t.Helper()
-	e.do(t, "apply", kind, testID)
+	e.do(t, "apply", kind, testID, env...)
 }
 
 func (e *env) undeploy(t *testing.T, kind DeployKind, testID string) {
@@ -638,7 +680,7 @@ func (e *env) undeploy(t *testing.T, kind DeployKind, testID string) {
 	e.do(t, "delete", kind, testID)
 }
 
-func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
+func (e *env) do(t *testing.T, op string, kind DeployKind, testID string, env ...string) {
 	t.Helper()
 
 	e.createControllerNamespaceAndServiceAccount(t)
@@ -649,6 +691,7 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 		"RUNNER_NAMESPACE=" + e.runnerNamespace,
 		"RUNNER_SERVICE_ACCOUNT_NAME=" + e.runnerServiceAccuontName,
 	}
+	scriptEnv = append(scriptEnv, env...)
 
 	switch kind {
 	case RunnerSets:

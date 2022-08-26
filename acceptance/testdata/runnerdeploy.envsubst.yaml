@@ -49,6 +49,10 @@ spec:
       labels:
       - "${RUNNER_LABEL}"
 
+      env:
+      - name: ROLLING_UPDATE_PHASE
+        value: "${ROLLING_UPDATE_PHASE}"
+
       #
       # Non-standard working directory
       #

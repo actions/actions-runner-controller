@@ -121,6 +121,8 @@ spec:
           value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
         - name: GOMODCACHE
           value: "/home/runner/.cache/go-mod"
+        - name: ROLLING_UPDATE_PHASE
+          value: "${ROLLING_UPDATE_PHASE}"
         # PV-backed runner work dir
         volumeMounts:
         # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
