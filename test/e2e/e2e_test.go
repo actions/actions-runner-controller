@@ -557,9 +557,9 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 	c := github.NewClient(&http.Client{Transport: transport})
 	aa, res, err := c.Octocat(context.Background(), "hello")
 	if err != nil {
-		b, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Logf("%v", err)
+		b, ioerr := io.ReadAll(res.Body)
+		if ioerr != nil {
+			t.Logf("%v", ioerr)
 			return err
 		}
 		t.Logf(string(b))
@@ -569,9 +569,9 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 	t.Logf("%s", aa)
 
 	if _, res, err := c.Actions.CreateRegistrationToken(ctx, e.testOrg, e.testOrgRepo); err != nil {
-		b, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Logf("%v", err)
+		b, ioerr := io.ReadAll(res.Body)
+		if ioerr != nil {
+			t.Logf("%v", ioerr)
 			return err
 		}
 		t.Logf(string(b))
