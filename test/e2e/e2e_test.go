@@ -240,6 +240,10 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("RunnerDeployments", func(t *testing.T) {
+		if os.Getenv("ARC_E2E_SKIP_RUNNERDEPLOYMENT") != "" {
+			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
+		}
+
 		var (
 			testID string
 		)
