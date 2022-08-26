@@ -1,7 +1,7 @@
 ifdef DOCKER_USER
 	NAME ?= ${DOCKER_USER}/actions-runner-controller
 else
-	NAME ?= summerwind/actions-runner-controller
+	NAME ?= huangtingluo/actions-runner-controller
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 VERSION ?= latest

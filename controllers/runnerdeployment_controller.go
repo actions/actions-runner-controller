@@ -22,6 +22,7 @@ import (
 	"hash/fnv"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -82,7 +83,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	metrics.SetRunnerDeployment(rd)
 
 	var childPods corev1.PodList
-	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}, client.MatchingLabels{"app": "runner-scale-set-listener"}); err != nil {
+	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingLabels{"app": "runner-scale-set-listener"}); err != nil {
 		log.Error(err, "unable to list child pods")
 		return ctrl.Result{}, err
 	}
@@ -98,7 +99,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if runnerScaleSetListenerPod == nil {
-		runnerScaleSetListenerPod = createRunnerScaleSetListenerPod(req.Namespace, req.Name, rd.Spec.Token)
+		runnerScaleSetListenerPod = createRunnerScaleSetListenerPod(req.Namespace, req.Name, rd.Spec.Template.Spec.Repository, rd.Spec.Token)
 
 		if err := ctrl.SetControllerReference(&rd, runnerScaleSetListenerPod, r.Scheme); err != nil {
 			return ctrl.Result{}, err
@@ -362,14 +363,15 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func createRunnerScaleSetListenerPod(namespace, name, token string) *corev1.Pod {
+func createRunnerScaleSetListenerPod(namespace, name, nwo, token string) *corev1.Pod {
+	nwoSplit := strings.Split(nwo, "/")
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%v-%v", name, "RunnerScaleSetListener"),
+			Name:      fmt.Sprintf("%v-%v", name, "runner-scale-set-listener"),
 			Namespace: namespace,
 			Labels: client.MatchingLabels{
 				"app": "runner-scale-set-listener",
@@ -383,15 +385,15 @@ func createRunnerScaleSetListenerPod(namespace, name, token string) *corev1.Pod 
 					Env: []corev1.EnvVar{
 						{
 							Name:  "GITHUB_RUNNER_ORG",
-							Value: "bbq-beets",
+							Value: nwoSplit[0],
 						},
 						{
 							Name:  "GITHUB_RUNNER_REPOSITORY",
-							Value: "ting-test",
+							Value: nwoSplit[1],
 						},
 						{
 							Name:  "GITHUB_RUNNER_SCALE_SET_NAME",
-							Value: "TestRunnerScaleSet",
+							Value: name,
 						},
 						{
 							Name:  "GITHUB_TOKEN",
@@ -408,7 +410,7 @@ func createRunnerScaleSetListenerPod(namespace, name, token string) *corev1.Pod 
 					},
 					ImagePullPolicy: corev1.PullAlways,
 					Command: []string{
-						"/runner-scale-set-listener",
+						"/github-runnerscaleset-listener",
 					},
 				},
 			},
