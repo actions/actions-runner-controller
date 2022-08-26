@@ -24,20 +24,16 @@ import (
 
 // Config contains configuration for Github client
 type Config struct {
-	EnterpriseURL      string `split_words:"true"`
-	AppID              int64  `split_words:"true"`
-	AppInstallationID  int64  `split_words:"true"`
-	AppPrivateKey      string `split_words:"true"`
-	Token              string
-	URL                string `split_words:"true"`
-	UploadURL          string `split_words:"true"`
-	BasicauthUsername  string `split_words:"true"`
-	BasicauthPassword  string `split_words:"true"`
-	RunnerGitHubURL    string `split_words:"true"`
-	RunnerScaleSetName string `split_words:"true"`
-	RunnerEnterprise   string `split_words:"true"`
-	RunnerOrg          string `split_words:"true"`
-	RunnerRepository   string `split_words:"true"`
+	EnterpriseURL     string `split_words:"true"`
+	AppID             int64  `split_words:"true"`
+	AppInstallationID int64  `split_words:"true"`
+	AppPrivateKey     string `split_words:"true"`
+	Token             string
+	URL               string `split_words:"true"`
+	UploadURL         string `split_words:"true"`
+	BasicauthUsername string `split_words:"true"`
+	BasicauthPassword string `split_words:"true"`
+	RunnerGitHubURL   string `split_words:"true"`
 
 	Log *logr.Logger
 }

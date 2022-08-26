@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -46,6 +47,15 @@ func getRunnerScaleSet(scaleSetName string) *github.RunnerScaleSet {
 	}
 }
 
+type RunnerScaleSetListenerConfig struct {
+	RunnerDeploymentNameSpace string `split_words:"true"`
+	RunnerDeploymentName      string `split_words:"true"`
+	RunnerScaleSetName        string `split_words:"true"`
+	RunnerEnterprise          string `split_words:"true"`
+	RunnerOrg                 string `split_words:"true"`
+	RunnerRepository          string `split_words:"true"`
+}
+
 func main() {
 	var (
 		err error
@@ -56,12 +66,24 @@ func main() {
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: processing environment variables: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: processing environment variables for github.Config: %v\n", err)
 		os.Exit(1)
 	}
 
-	if len(c.RunnerRepository) == 0 || len(c.RunnerOrg) == 0 || len(c.Token) == 0 || len(c.RunnerScaleSetName) == 0 {
-		fmt.Fprintln(os.Stderr, "GitHub config is not provided:", c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName)
+	var rc RunnerScaleSetListenerConfig
+	err = envconfig.Process("github", &rc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: processing environment variables for RunnerScaleSetListenerConfig: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(rc.RunnerRepository) == 0 || len(rc.RunnerOrg) == 0 || len(c.Token) == 0 || len(rc.RunnerScaleSetName) == 0 {
+		fmt.Fprintln(os.Stderr, "GitHub config is not provided:", rc.RunnerRepository, rc.RunnerOrg, c.Token, rc.RunnerScaleSetName)
+		os.Exit(1)
+	}
+
+	if len(rc.RunnerDeploymentNameSpace) == 0 || len(rc.RunnerDeploymentName) == 0 {
+		fmt.Fprintln(os.Stderr, "RunnerDeployment config is not provided:", rc.RunnerDeploymentNameSpace, rc.RunnerDeploymentName)
 		os.Exit(1)
 	}
 
@@ -99,7 +121,7 @@ func main() {
 		}
 	}()
 
-	actionsAdminConnection, err := ghClient.GetActionsServiceAdminConnection(ctx, c.RunnerEnterprise, c.RunnerOrg, c.RunnerRepository)
+	actionsAdminConnection, err := ghClient.GetActionsServiceAdminConnection(ctx, rc.RunnerEnterprise, rc.RunnerOrg, rc.RunnerRepository)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: Could not create an Actions Service admin connection.", err)
 		os.Exit(1)
@@ -115,7 +137,7 @@ func main() {
 		UserAgent:                "actions-runner-controller-message-queue-listener",
 	}
 
-	runnerScaleSet, err := actionsServiceClient.GetRunnerScaleSet(ctx, c.RunnerScaleSetName)
+	runnerScaleSet, err := actionsServiceClient.GetRunnerScaleSet(ctx, rc.RunnerScaleSetName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: Can not found runner scale set.", err)
 		os.Exit(1)
@@ -123,18 +145,12 @@ func main() {
 
 	if runnerScaleSet != nil {
 		logger.Info("Get runner scale set.", "id", runnerScaleSet.Id, "name", runnerScaleSet.Name)
-
-		replaceRunnerScaleSet := getRunnerScaleSet(c.RunnerScaleSetName)
-
-		runnerScaleSet, err = actionsServiceClient.ReplaceRunnerScaleSet(ctx, runnerScaleSet.Id, replaceRunnerScaleSet)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: Create runner scale set failed.", err)
-			os.Exit(1)
-		}
+		statistics, _ := json.Marshal(runnerScaleSet.Statistics)
+		logger.Info("Current runner scale set statistics.", "statistics", string(statistics))
 	} else {
 		logger.Info("Runner scale set is not found, creating a new one.")
 
-		newRunnerScaleSet := getRunnerScaleSet(c.RunnerScaleSetName)
+		newRunnerScaleSet := getRunnerScaleSet(rc.RunnerScaleSetName)
 
 		runnerScaleSet, err = actionsServiceClient.CreateRunnerScaleSet(ctx, newRunnerScaleSet)
 		if err != nil {
@@ -151,21 +167,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	retries := 3
 	var runnerScaleSetSession *github.RunnerScaleSetSession
-	for i := 0; i < retries; i++ {
+	for {
 		runnerScaleSetSession, err = actionsServiceClient.CreateMessageSession(ctx, runnerScaleSet.Id, hostName)
 		if err == nil {
 			break
 		}
-		logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
-		retries--
-		time.Sleep(30 * time.Second)
-	}
 
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error: Create message session failed.", err)
-		os.Exit(1)
+		clientSideError := &github.HttpClientSideError{}
+		if errors.As(err, &clientSideError) {
+			logger.Info("Unable to create message session. The error indicates something is wrong on the client side, won't make any retry.", "error", err.Error())
+			fmt.Fprintln(os.Stderr, "Error: Create message session failed.", err)
+			os.Exit(1)
+		} else {
+			logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
+			time.Sleep(30 * time.Second)
+		}
 	}
 
 	logger.Info("Created runner scale set message queue session.", "sessionId", runnerScaleSetSession.SessionId, "url", runnerScaleSetSession.MessageQueueUrl, "token", runnerScaleSetSession.MessageQueueAccessToken)
@@ -189,7 +206,7 @@ func main() {
 			if errors.As(err, &expiredError) {
 				logger.Info("Message queue token is expired, refreshing...")
 
-				actionsAdminConnection, err = ghClient.GetActionsServiceAdminConnection(ctx, c.RunnerEnterprise, c.RunnerOrg, c.RunnerRepository)
+				actionsAdminConnection, err = ghClient.GetActionsServiceAdminConnection(ctx, rc.RunnerEnterprise, rc.RunnerOrg, rc.RunnerRepository)
 				if err != nil {
 					logger.Error(err, "Error: Get Actions service admin connection failed during message session refresh.")
 					continue
@@ -213,6 +230,9 @@ func main() {
 
 			lastMessageId = message.MessageId
 
+			statistics, _ := json.Marshal(message.Statistics)
+			logger.Info("Current runner scale set statistics.", "statistics", string(statistics))
+
 			switch message.MessageType {
 			case "RunnerScaleSetJobAvailable":
 				scalesetclient.MaybeAcquireJob(ctx, logger, actionsServiceClient, runnerScaleSetSession, message)
@@ -220,6 +240,8 @@ func main() {
 				scalesetclient.HandleJobAssignment(ctx, logger, actionsServiceClient, runnerScaleSet, message)
 			case "RunnerScaleSetJobCompleted":
 				scalesetclient.NoopHandleJobCompletion(logger, message)
+			case "RunnerScaleSetJobMessages":
+				scalesetclient.HandleBatchedRunnerScaleSetMessages(ctx, logger, rc.RunnerDeploymentNameSpace, rc.RunnerDeploymentName, actionsServiceClient, runnerScaleSetSession, message)
 			default:
 				logger.Info("Unknown message type received.", "messageType", message.MessageType)
 			}

@@ -38,6 +38,7 @@ RUN --mount=target=. \
   --mount=type=cache,mode=0777,target=${GOCACHE} \
   export GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} && \
   go build -o /out/manager main.go && \
+  go build -o /out/github-runnerscaleset-listener ./cmd/githubrunnerscalesetlistener && \
   go build -o /out/github-webhook-server ./cmd/githubwebhookserver
 
 # Use distroless as minimal base image to package the manager binary
@@ -48,6 +49,7 @@ WORKDIR /
 
 COPY --from=builder /out/manager .
 COPY --from=builder /out/github-webhook-server .
+COPY --from=builder /out/github-runnerscaleset-listener .
 
 USER nonroot:nonroot
 

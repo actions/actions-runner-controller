@@ -64,6 +64,8 @@ type RunnerDeploymentReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnerreplicasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=namespaces/status;pods/status,verbs=get
+// +kubebuilder:rbac:groups=core,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
 
 func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runnerdeployment", req.NamespacedName)
@@ -78,6 +80,37 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	metrics.SetRunnerDeployment(rd)
+
+	var childPods corev1.PodList
+	if err := r.List(ctx, &childPods, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}, client.MatchingLabels{"app": "runner-scale-set-listener"}); err != nil {
+		log.Error(err, "unable to list child pods")
+		return ctrl.Result{}, err
+	}
+
+	var runnerScaleSetListenerPod *corev1.Pod
+	if len(childPods.Items) > 0 {
+		for _, scaleControllerPod := range childPods.Items {
+			if metav1.IsControlledBy(&scaleControllerPod, &rd) {
+				runnerScaleSetListenerPod = &scaleControllerPod
+				break
+			}
+		}
+	}
+
+	if runnerScaleSetListenerPod == nil {
+		runnerScaleSetListenerPod = createRunnerScaleSetListenerPod(req.Namespace, req.Name, rd.Spec.Token)
+
+		if err := ctrl.SetControllerReference(&rd, runnerScaleSetListenerPod, r.Scheme); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := r.Create(ctx, runnerScaleSetListenerPod); err != nil {
+			log.Error(err, "unable to create Autoscaler for AutoscalingRunnerSet", "pod", runnerScaleSetListenerPod)
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Created pod", "podName", runnerScaleSetListenerPod.ObjectMeta.Name)
+	}
 
 	var myRunnerReplicaSetList v1alpha1.RunnerReplicaSetList
 	if err := r.List(ctx, &myRunnerReplicaSetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
@@ -327,6 +360,61 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func createRunnerScaleSetListenerPod(namespace, name, token string) *corev1.Pod {
+	return &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%v-%v", name, "RunnerScaleSetListener"),
+			Namespace: namespace,
+			Labels: client.MatchingLabels{
+				"app": "runner-scale-set-listener",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  name,
+					Image: "huangtingluo/actions-runner-controller:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "GITHUB_RUNNER_ORG",
+							Value: "bbq-beets",
+						},
+						{
+							Name:  "GITHUB_RUNNER_REPOSITORY",
+							Value: "ting-test",
+						},
+						{
+							Name:  "GITHUB_RUNNER_SCALE_SET_NAME",
+							Value: "TestRunnerScaleSet",
+						},
+						{
+							Name:  "GITHUB_TOKEN",
+							Value: token,
+						},
+						{
+							Name:  "GITHUB_RUNNER_DEPLOYMENT_NAME_SPACE",
+							Value: namespace,
+						},
+						{
+							Name:  "GITHUB_RUNNER_DEPLOYMENT_NAME",
+							Value: name,
+						},
+					},
+					ImagePullPolicy: corev1.PullAlways,
+					Command: []string{
+						"/runner-scale-set-listener",
+					},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyOnFailure,
+		},
+	}
 }
 
 func getIntOrDefault(p *int, d int) int {
