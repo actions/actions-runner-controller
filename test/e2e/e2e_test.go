@@ -915,32 +915,30 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				}
 			}
 
-			steps = append(steps,
-				testing.Step{
-					// This might be the easiest way to handle permissions without use of securityContext
-					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: sudo + "chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
-				},
-			)
 			if useSudo {
 				steps = append(steps,
 					testing.Step{
+						// This might be the easiest way to handle permissions without use of securityContext
+						// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+						Run: sudo + "chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
+					},
+					testing.Step{
 						Run: sudo + "chmod 777 -R \"/var/lib/docker\"",
+					},
+					testing.Step{
+						// This might be the easiest way to handle permissions without use of securityContext
+						// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+						Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
+					},
+					testing.Step{
+						// This might be the easiest way to handle permissions without use of securityContext
+						// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+						Run: "ls -lah \"/var/lib/docker\" || echo ls failed.",
 					},
 				)
 			}
 
 			steps = append(steps,
-				testing.Step{
-					// This might be the easiest way to handle permissions without use of securityContext
-					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
-				},
-				testing.Step{
-					// This might be the easiest way to handle permissions without use of securityContext
-					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: "ls -lah \"/var/lib/docker\" || echo ls failed.",
-				},
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
