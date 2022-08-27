@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
@@ -574,14 +575,42 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 
 	t.Logf("%s", aa)
 
-	if _, res, err := c.Actions.CreateRegistrationToken(ctx, e.testOrg, e.testOrgRepo); err != nil {
-		b, ioerr := io.ReadAll(res.Body)
-		if ioerr != nil {
-			t.Logf("%v", ioerr)
+	if e.testEnterprise != "" {
+		if _, res, err := c.Enterprise.CreateRegistrationToken(ctx, e.testEnterprise); err != nil {
+			b, ioerr := io.ReadAll(res.Body)
+			if ioerr != nil {
+				t.Logf("%v", ioerr)
+				return err
+			}
+			t.Logf(string(b))
 			return err
 		}
-		t.Logf(string(b))
-		return err
+	}
+
+	if e.testOrg != "" {
+		if _, res, err := c.Actions.CreateOrganizationRegistrationToken(ctx, e.testOrg); err != nil {
+			b, ioerr := io.ReadAll(res.Body)
+			if ioerr != nil {
+				t.Logf("%v", ioerr)
+				return err
+			}
+			t.Logf(string(b))
+			return err
+		}
+	}
+
+	if e.testRepo != "" {
+		s := strings.Split(e.testRepo, "/")
+		owner, repo := s[0], s[1]
+		if _, res, err := c.Actions.CreateRegistrationToken(ctx, owner, repo); err != nil {
+			b, ioerr := io.ReadAll(res.Body)
+			if ioerr != nil {
+				t.Logf("%v", ioerr)
+				return err
+			}
+			t.Logf(string(b))
+			return err
+		}
 	}
 
 	return nil
