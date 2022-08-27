@@ -207,6 +207,14 @@ func TestE2E(t *testing.T) {
 			}
 		}
 
+		t.Run("Install workflow", func(t *testing.T) {
+			env.installActionsWorkflow(t, RunnerSets, testID)
+		})
+
+		if t.Failed() {
+			return
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			for i := 1; ; i++ {
@@ -227,14 +235,6 @@ func TestE2E(t *testing.T) {
 		t.Cleanup(func() {
 			cancel()
 		})
-
-		t.Run("Install workflow", func(t *testing.T) {
-			env.installActionsWorkflow(t, RunnerSets, testID)
-		})
-
-		if t.Failed() {
-			return
-		}
 
 		t.Run("Verify workflow run result", func(t *testing.T) {
 			env.verifyActionsWorkflowRun(t, testID)
@@ -307,6 +307,14 @@ func TestE2E(t *testing.T) {
 			}
 		}
 
+		t.Run("Install workflow", func(t *testing.T) {
+			env.installActionsWorkflow(t, RunnerDeployments, testID)
+		})
+
+		if t.Failed() {
+			return
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			for i := 1; ; i++ {
@@ -327,14 +335,6 @@ func TestE2E(t *testing.T) {
 		t.Cleanup(func() {
 			cancel()
 		})
-
-		t.Run("Install workflow", func(t *testing.T) {
-			env.installActionsWorkflow(t, RunnerDeployments, testID)
-		})
-
-		if t.Failed() {
-			return
-		}
 
 		t.Run("Verify workflow run result", func(t *testing.T) {
 			env.verifyActionsWorkflowRun(t, testID)
