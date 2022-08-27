@@ -38,6 +38,8 @@ var (
 	}
 
 	testResultCMNamePrefix = "test-result-"
+
+	RunnerVersion = "2.296.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -435,7 +437,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: RunnerVersion,
 				},
 			},
 			Image:        runnerImage,
@@ -446,7 +448,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: RunnerVersion,
 				},
 			},
 			Image:        runnerDindImage,
@@ -457,7 +459,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: RunnerVersion,
 				},
 			},
 			Image:        runnerRootlessDindImage,
