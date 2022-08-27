@@ -225,7 +225,7 @@ func TestE2E(t *testing.T) {
 						t.Logf("Stopping the continuous rolling-update of runners")
 					}
 				default:
-					time.Sleep(10 * time.Second)
+					time.Sleep(60 * time.Second)
 
 					t.Run(fmt.Sprintf("update runners attempt %d", i), func(t *testing.T) {
 						env.deploy(t, RunnerSets, testID, fmt.Sprintf("ROLLING_UPDATE_PHASE=%d", i))
