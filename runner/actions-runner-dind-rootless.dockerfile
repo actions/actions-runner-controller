@@ -102,7 +102,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/local/bin/dumb-init
 
-COPY entrypoint.sh logger.bash rootless-startup.sh update-status /usr/bin/
+COPY entrypoint.sh logger.bash graceful-stop.bash rootless-startup.sh update-status /usr/bin/
 
 RUN chmod +x /usr/bin/rootless-startup.sh /usr/bin/entrypoint.sh
 
@@ -140,5 +140,5 @@ RUN curl -fsSL https://get.docker.com/rootless | sh
 RUN curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
     chmod +x /home/runner/bin/docker-compose
 
-ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
+ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["rootless-startup.sh"]

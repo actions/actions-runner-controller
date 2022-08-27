@@ -1,21 +1,6 @@
 #!/bin/bash
 source logger.bash
-
-function wait_for_process () {
-    local max_time_wait=30
-    local process_name="$1"
-    local waited_sec=0
-    while ! pgrep "$process_name" >/dev/null && ((waited_sec < max_time_wait)); do
-        log.debug "Process $process_name is not running yet. Retrying in 1 seconds"
-        log.debug "Waited $waited_sec seconds of $max_time_wait seconds"
-        sleep 1
-        ((waited_sec=waited_sec+1))
-        if ((waited_sec >= max_time_wait)); then
-            return 1
-        fi
-    done
-    return 0
-}
+source graceful-stop.bash
 
 sudo /bin/bash <<SCRIPT
 mkdir -p /etc/docker
@@ -34,6 +19,10 @@ if [ -n "${DOCKER_REGISTRY_MIRROR}" ]; then
 jq ".\"registry-mirrors\"[0] = \"${DOCKER_REGISTRY_MIRROR}\"" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
 fi
 SCRIPT
+
+dumb-init bash <<'SCRIPT' &
+source logger.bash
+source wait.bash
 
 dump() {
   local path=${1:?missing required <path> argument}
@@ -68,5 +57,10 @@ if [ -n "${MTU}" ]; then
   sudo ifconfig docker0 mtu "${MTU}" up
 fi
 
-# Wait processes to be running
 entrypoint.sh
+SCRIPT
+
+runner_init_pid=$!
+log.notice "Runner init started with pid $runner_init_pid"
+wait $runner_init_pid
+log.notice "Runner init exited. Exiting this process with code 0 so that the container and the pod is GC'ed Kubernetes soon."

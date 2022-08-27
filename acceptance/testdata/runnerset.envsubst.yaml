@@ -113,10 +113,13 @@ spec:
         app: ${NAME}
     spec:
       serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
+      terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
       containers:
       - name: runner
         imagePullPolicy: IfNotPresent
         env:
+        - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+          value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
         - name: RUNNER_FEATURE_FLAG_EPHEMERAL
           value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
         - name: GOMODCACHE

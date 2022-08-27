@@ -49,7 +49,12 @@ spec:
       labels:
       - "${RUNNER_LABEL}"
 
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
+      terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
+
       env:
+      - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+        value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
       - name: ROLLING_UPDATE_PHASE
         value: "${ROLLING_UPDATE_PHASE}"
       - name: ARC_DOCKER_MTU_PROPAGATION
@@ -72,7 +77,6 @@ spec:
         resources:
           requests:
             storage: 10Gi
-      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
