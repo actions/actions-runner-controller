@@ -112,6 +112,7 @@ spec:
       labels:
         app: ${NAME}
     spec:
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
       containers:
       - name: runner
         imagePullPolicy: IfNotPresent
@@ -120,6 +121,8 @@ spec:
           value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
         - name: GOMODCACHE
           value: "/home/runner/.cache/go-mod"
+        - name: ROLLING_UPDATE_PHASE
+          value: "${ROLLING_UPDATE_PHASE}"
         # PV-backed runner work dir
         volumeMounts:
         # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
@@ -152,19 +155,19 @@ spec:
           # https://github.com/actions/setup-go/blob/56a61c9834b4a4950dbbf4740af0b8a98c73b768/src/installer.ts#L144
           mountPath: "/opt/hostedtoolcache"
       # Valid only when dockerdWithinRunnerContainer=false
-      - name: docker
-        # PV-backed runner work dir
-        volumeMounts:
-        - name: work
-          mountPath: /runner/_work
-        # Cache docker image layers, in case dockerdWithinRunnerContainer=false
-        - name: var-lib-docker
-          mountPath: /var/lib/docker
-        # image: mumoshu/actions-runner-dind:dev
+      # - name: docker
+      #   # PV-backed runner work dir
+      #   volumeMounts:
+      #   - name: work
+      #     mountPath: /runner/_work
+      #   # Cache docker image layers, in case dockerdWithinRunnerContainer=false
+      #   - name: var-lib-docker
+      #     mountPath: /var/lib/docker
+      #   # image: mumoshu/actions-runner-dind:dev
 
-        # For buildx cache
-        - name: cache
-          mountPath: "/home/runner/.cache"
+      #   # For buildx cache
+      #   - name: cache
+      #     mountPath: "/home/runner/.cache"
         # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
       # volumes:
       # - name: work

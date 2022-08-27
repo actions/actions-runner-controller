@@ -20,6 +20,10 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "delete"]
+# Needed to report test success by crating a cm from within workflow job step
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -33,7 +37,7 @@ rules:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: runner
+  name: ${RUNNER_SERVICE_ACCOUNT_NAME}
   namespace: ${NAMESPACE}
 ---
 # To verify it's working, try:
@@ -50,7 +54,7 @@ metadata:
   namespace: ${NAMESPACE}
 subjects:
 - kind: ServiceAccount
-  name: runner
+  name: ${RUNNER_SERVICE_ACCOUNT_NAME}
   namespace: ${NAMESPACE}
 roleRef:
   kind: ClusterRole
@@ -64,7 +68,7 @@ metadata:
   namespace: ${NAMESPACE}
 subjects:
 - kind: ServiceAccount
-  name: runner
+  name: ${RUNNER_SERVICE_ACCOUNT_NAME}
   namespace: ${NAMESPACE}
 roleRef:
   kind: ClusterRole

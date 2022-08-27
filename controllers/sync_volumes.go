@@ -75,6 +75,10 @@ func syncPVC(ctx context.Context, c client.Client, log logr.Logger, ns string, p
 
 	log.V(2).Info("Reconciling runner PVC")
 
+	// TODO: Probably we'd better remove PVCs related to the RunnetSet that is nowhere now?
+	// Otherwise, a bunch of continuously recreated StatefulSet
+	// can leave dangling PVCs forever, which might stress the cluster.
+
 	var sts appsv1.StatefulSet
 	if err := c.Get(ctx, types.NamespacedName{Namespace: ns, Name: stsName}, &sts); err != nil {
 		if !kerrors.IsNotFound(err) {

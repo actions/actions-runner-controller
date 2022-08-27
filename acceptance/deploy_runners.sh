@@ -6,6 +6,8 @@ OP=${OP:-apply}
 
 RUNNER_LABEL=${RUNNER_LABEL:-self-hosted}
 
+cat acceptance/testdata/kubernetes_container_mode.envsubst.yaml  | NAMESPACE=${RUNNER_NAMESPACE} envsubst  | kubectl apply -f -
+
 if [ -n "${TEST_REPO}" ]; then
   if [ "${USE_RUNNERSET}" != "false" ]; then
     cat acceptance/testdata/runnerset.envsubst.yaml | TEST_ENTERPRISE= TEST_ORG= RUNNER_MIN_REPLICAS=${REPO_RUNNER_MIN_REPLICAS} NAME=repo-runnerset envsubst | kubectl ${OP} -f -

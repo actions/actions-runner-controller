@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
@@ -25,6 +26,8 @@ const (
 )
 
 var (
+	// See the below link for maintained versions of cert-manager
+	// https://cert-manager.io/docs/installation/supported-releases/
 	certManagerVersion = "v1.8.2"
 
 	images = []testing.ContainerImage{
@@ -36,6 +39,8 @@ var (
 	}
 
 	testResultCMNamePrefix = "test-result-"
+
+	RunnerVersion = "2.296.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -119,6 +124,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("Failed to parse duration %q: %v", vt, err)
 		}
 	}
+	env.doDockerBuild = os.Getenv("ARC_E2E_DO_DOCKER_BUILD") != ""
 
 	t.Run("build and load images", func(t *testing.T) {
 		env.buildAndLoadImages(t)
@@ -210,12 +216,37 @@ func TestE2E(t *testing.T) {
 			return
 		}
 
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			for i := 1; ; i++ {
+				select {
+				case _, ok := <-ctx.Done():
+					if !ok {
+						t.Logf("Stopping the continuous rolling-update of runners")
+					}
+				default:
+					time.Sleep(60 * time.Second)
+
+					t.Run(fmt.Sprintf("update runners attempt %d", i), func(t *testing.T) {
+						env.deploy(t, RunnerSets, testID, fmt.Sprintf("ROLLING_UPDATE_PHASE=%d", i))
+					})
+				}
+			}
+		}()
+		t.Cleanup(func() {
+			cancel()
+		})
+
 		t.Run("Verify workflow run result", func(t *testing.T) {
 			env.verifyActionsWorkflowRun(t, testID)
 		})
 	})
 
 	t.Run("RunnerDeployments", func(t *testing.T) {
+		if os.Getenv("ARC_E2E_SKIP_RUNNERDEPLOYMENT") != "" {
+			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
+		}
+
 		var (
 			testID string
 		)
@@ -285,6 +316,27 @@ func TestE2E(t *testing.T) {
 			return
 		}
 
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			for i := 1; ; i++ {
+				select {
+				case _, ok := <-ctx.Done():
+					if !ok {
+						t.Logf("Stopping the continuous rolling-update of runners")
+					}
+				default:
+					time.Sleep(10 * time.Second)
+
+					t.Run(fmt.Sprintf("update runners - attempt %d", i), func(t *testing.T) {
+						env.deploy(t, RunnerDeployments, testID, fmt.Sprintf("ROLLING_UPDATE_PHASE=%d", i))
+					})
+				}
+			}
+		}()
+		t.Cleanup(func() {
+			cancel()
+		})
+
 		t.Run("Verify workflow run result", func(t *testing.T) {
 			env.verifyActionsWorkflowRun(t, testID)
 		})
@@ -315,7 +367,10 @@ type env struct {
 	minReplicas                                 int64
 	dockerdWithinRunnerContainer                bool
 	rootlessDocker                              bool
+	doDockerBuild                               bool
 	containerMode                               string
+	runnerServiceAccuontName                    string
+	runnerNamespace                             string
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
@@ -383,7 +438,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: RunnerVersion,
 				},
 			},
 			Image:        runnerImage,
@@ -394,7 +449,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: RunnerVersion,
 				},
 			},
 			Image:        runnerDindImage,
@@ -405,7 +460,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: RunnerVersion,
 				},
 			},
 			Image:        runnerRootlessDindImage,
@@ -444,6 +499,8 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.testOrgRepo = testing.Getenv(t, "TEST_ORG_REPO", "")
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
+	e.runnerServiceAccuontName = testing.Getenv(t, "TEST_RUNNER_SERVICE_ACCOUNT_NAME", "")
+	e.runnerNamespace = testing.Getenv(t, "TEST_RUNNER_NAMESPACE", "default")
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
 	e.vars = vars
@@ -507,9 +564,9 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 	c := github.NewClient(&http.Client{Transport: transport})
 	aa, res, err := c.Octocat(context.Background(), "hello")
 	if err != nil {
-		b, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Logf("%v", err)
+		b, ioerr := io.ReadAll(res.Body)
+		if ioerr != nil {
+			t.Logf("%v", ioerr)
 			return err
 		}
 		t.Logf(string(b))
@@ -518,14 +575,42 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 
 	t.Logf("%s", aa)
 
-	if _, res, err := c.Actions.CreateRegistrationToken(ctx, e.testOrg, e.testOrgRepo); err != nil {
-		b, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Logf("%v", err)
+	if e.testEnterprise != "" {
+		if _, res, err := c.Enterprise.CreateRegistrationToken(ctx, e.testEnterprise); err != nil {
+			b, ioerr := io.ReadAll(res.Body)
+			if ioerr != nil {
+				t.Logf("%v", ioerr)
+				return err
+			}
+			t.Logf(string(b))
 			return err
 		}
-		t.Logf(string(b))
-		return err
+	}
+
+	if e.testOrg != "" {
+		if _, res, err := c.Actions.CreateOrganizationRegistrationToken(ctx, e.testOrg); err != nil {
+			b, ioerr := io.ReadAll(res.Body)
+			if ioerr != nil {
+				t.Logf("%v", ioerr)
+				return err
+			}
+			t.Logf(string(b))
+			return err
+		}
+	}
+
+	if e.testRepo != "" {
+		s := strings.Split(e.testRepo, "/")
+		owner, repo := s[0], s[1]
+		if _, res, err := c.Actions.CreateRegistrationToken(ctx, owner, repo); err != nil {
+			b, ioerr := io.ReadAll(res.Body)
+			if ioerr != nil {
+				t.Logf("%v", ioerr)
+				return err
+			}
+			t.Logf(string(b))
+			return err
+		}
 	}
 
 	return nil
@@ -620,9 +705,9 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 	e.RunScript(t, "../../acceptance/deploy.sh", testing.ScriptConfig{Dir: "../..", Env: scriptEnv})
 }
 
-func (e *env) deploy(t *testing.T, kind DeployKind, testID string) {
+func (e *env) deploy(t *testing.T, kind DeployKind, testID string, env ...string) {
 	t.Helper()
-	e.do(t, "apply", kind, testID)
+	e.do(t, "apply", kind, testID, env...)
 }
 
 func (e *env) undeploy(t *testing.T, kind DeployKind, testID string) {
@@ -630,7 +715,7 @@ func (e *env) undeploy(t *testing.T, kind DeployKind, testID string) {
 	e.do(t, "delete", kind, testID)
 }
 
-func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
+func (e *env) do(t *testing.T, op string, kind DeployKind, testID string, env ...string) {
 	t.Helper()
 
 	e.createControllerNamespaceAndServiceAccount(t)
@@ -638,7 +723,10 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string) {
 	scriptEnv := []string{
 		"KUBECONFIG=" + e.Kubeconfig,
 		"OP=" + op,
+		"RUNNER_NAMESPACE=" + e.runnerNamespace,
+		"RUNNER_SERVICE_ACCOUNT_NAME=" + e.runnerServiceAccuontName,
 	}
+	scriptEnv = append(scriptEnv, env...)
 
 	switch kind {
 	case RunnerSets:
@@ -730,7 +818,7 @@ func (e *env) createControllerNamespaceAndServiceAccount(t *testing.T) {
 func (e *env) installActionsWorkflow(t *testing.T, kind DeployKind, testID string) {
 	t.Helper()
 
-	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID), !e.rootlessDocker)
+	installActionsWorkflow(t, e.testName+" "+testID, e.runnerLabel(testID), testResultCMNamePrefix, e.repoToCommit, kind, e.testJobs(testID), !e.rootlessDocker, e.doDockerBuild)
 }
 
 func (e *env) testJobs(testID string) []job {
@@ -772,7 +860,7 @@ func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 const Branch = "main"
 
 // useSudo also implies rootful docker and the use of buildx cache export/import
-func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job, useSudo bool) {
+func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNamePrefix, testRepo string, kind DeployKind, testJobs []job, useSudo, doDockerBuild bool) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -827,32 +915,30 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				}
 			}
 
-			steps = append(steps,
-				testing.Step{
-					// This might be the easiest way to handle permissions without use of securityContext
-					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: sudo + "chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
-				},
-			)
 			if useSudo {
 				steps = append(steps,
 					testing.Step{
+						// This might be the easiest way to handle permissions without use of securityContext
+						// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+						Run: sudo + "chmod 777 -R \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
+					},
+					testing.Step{
 						Run: sudo + "chmod 777 -R \"/var/lib/docker\"",
+					},
+					testing.Step{
+						// This might be the easiest way to handle permissions without use of securityContext
+						// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+						Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
+					},
+					testing.Step{
+						// This might be the easiest way to handle permissions without use of securityContext
+						// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
+						Run: "ls -lah \"/var/lib/docker\" || echo ls failed.",
 					},
 				)
 			}
 
 			steps = append(steps,
-				testing.Step{
-					// This might be the easiest way to handle permissions without use of securityContext
-					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: "ls -lah \"${RUNNER_TOOL_CACHE}\" \"${HOME}/.cache\"",
-				},
-				testing.Step{
-					// This might be the easiest way to handle permissions without use of securityContext
-					// https://stackoverflow.com/questions/50156124/kubernetes-nfs-persistent-volumes-permission-denied#comment107483717_53186320
-					Run: "ls -lah \"/var/lib/docker\" || echo ls failed.",
-				},
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
@@ -871,74 +957,76 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			},
 		)
 
-		if !kubernetesContainerMode {
-			setupBuildXActionWith := &testing.With{
-				BuildkitdFlags: "--debug",
-				Endpoint:       "mycontext",
-				// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
-				// so we need to use `docker buildx build` in the next step
-				Install: false,
-			}
-			var dockerBuildCache, dockerfile string
-			if useSudo {
-				// This needs to be set only when rootful docker mode.
-				// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
-				// so we end up with the below error on docker-build:
-				//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
-				dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
-					"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
-				dockerfile = "Dockerfile"
-			} else {
-				setupBuildXActionWith.Driver = "docker"
-				dockerfile = "Dockerfile.nocache"
-			}
-			steps = append(steps,
-				testing.Step{
-					// https://github.com/docker/buildx/issues/413#issuecomment-710660155
-					// To prevent setup-buildx-action from failing with:
-					//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
-					Run: "docker context create mycontext",
-				},
-				testing.Step{
-					Run: "docker context use mycontext",
-				},
-				testing.Step{
-					Name: "Set up Docker Buildx",
-					Uses: "docker/setup-buildx-action@v1",
-					With: setupBuildXActionWith,
-				},
-				testing.Step{
-					Run: "docker buildx build --platform=linux/amd64 " +
-						dockerBuildCache +
-						fmt.Sprintf("-f %s .", dockerfile),
-				},
-			)
-
-			if useSudo {
+		if doDockerBuild {
+			if !kubernetesContainerMode {
+				setupBuildXActionWith := &testing.With{
+					BuildkitdFlags: "--debug",
+					Endpoint:       "mycontext",
+					// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
+					// so we need to use `docker buildx build` in the next step
+					Install: false,
+				}
+				var dockerBuildCache, dockerfile string
+				if useSudo {
+					// This needs to be set only when rootful docker mode.
+					// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
+					// so we end up with the below error on docker-build:
+					//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+					dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
+						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
+					dockerfile = "Dockerfile"
+				} else {
+					setupBuildXActionWith.Driver = "docker"
+					dockerfile = "Dockerfile.nocache"
+				}
 				steps = append(steps,
 					testing.Step{
-						// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
-						// See https://github.com/moby/buildkit/issues/1896 for why this is needed
-						Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
+						// https://github.com/docker/buildx/issues/413#issuecomment-710660155
+						// To prevent setup-buildx-action from failing with:
+						//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
+						Run: "docker context create mycontext",
 					},
 					testing.Step{
-						Run: "ls -lah /home/runner/.cache/*",
+						Run: "docker context use mycontext",
+					},
+					testing.Step{
+						Name: "Set up Docker Buildx",
+						Uses: "docker/setup-buildx-action@v1",
+						With: setupBuildXActionWith,
+					},
+					testing.Step{
+						Run: "docker buildx build --platform=linux/amd64 " +
+							dockerBuildCache +
+							fmt.Sprintf("-f %s .", dockerfile),
 					},
 				)
 			}
+		}
 
+		if useSudo {
 			steps = append(steps,
 				testing.Step{
-					Uses: "azure/setup-kubectl@v1",
-					With: &testing.With{
-						Version: "v1.20.2",
-					},
+					// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+					// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+					Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
 				},
 				testing.Step{
-					Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
+					Run: "ls -lah /home/runner/.cache/*",
 				},
 			)
 		}
+
+		steps = append(steps,
+			testing.Step{
+				Uses: "azure/setup-kubectl@v1",
+				With: &testing.With{
+					Version: "v1.20.2",
+				},
+			},
+			testing.Step{
+				Run: fmt.Sprintf("./test.sh %s %s", t.Name(), j.testArg),
+			},
+		)
 
 		wf.Jobs[j.name] = testing.Job{
 			RunsOn:    runnerLabel,
