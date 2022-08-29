@@ -72,20 +72,22 @@ func PatchRunnerDeployment(ctx context.Context, namespace, runnerDeploymentName 
 
 	body, err := json.Marshal(patchRunnerDeployment)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal job")
+		return nil, errors.Wrap(err, "could not marshal runner deployment")
 	}
 
 	patchedRunnerDeployment := &v1alpha1.RunnerDeployment{}
 
 	err = kubeClient.RESTClient().
 		Patch(types.MergePatchType).
+		Prefix("apis", "actions.summerwind.dev", "v1alpha1").
 		Namespace(namespace).
 		Resource("RunnerDeployments").
+		Name(runnerDeploymentName).
 		Body(body).
 		Do(ctx).
 		Into(patchedRunnerDeployment)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create job")
+		return nil, errors.Wrap(err, "could not patch runner deployment")
 	}
 
 	return patchedRunnerDeployment, nil
