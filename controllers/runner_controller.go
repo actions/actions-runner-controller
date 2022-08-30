@@ -258,11 +258,13 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	newPod, err := r.newPod(runner)
+	log.Info("Start creating new pod")
+	newPod, err := r.newPod(ctx, runner, log)
 	if err != nil {
 		log.Error(err, "Could not create pod")
 		return ctrl.Result{}, err
 	}
+	log.Info("Created new pod spec")
 
 	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
 	if needsServiceAccount {
@@ -420,13 +422,24 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 		return false, err
 	}
 
+	// runnerJit, err := ghc.GetRunnerScaleSetRunnerJitConfig(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, "example-runnerdeploy", runner.Name, runner.Spec.WorkDir)
+	// if err != nil {
+	// 	r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedGenerateRunnerJit", "Getting runner JIT config failed")
+	// 	log.Error(err, "Failed to get runner JIT config")
+	// 	return false, err
+	// }
+
 	updated := runner.DeepCopy()
 	updated.Status.Registration = v1alpha1.RunnerStatusRegistration{
 		Organization: runner.Spec.Organization,
 		Repository:   runner.Spec.Repository,
 		Labels:       runner.Spec.Labels,
-		Token:        rt.GetToken(),
-		ExpiresAt:    metav1.NewTime(rt.GetExpiresAt().Time),
+		// RunnerId:      runnerJit.Runner.Id,
+		// RunnerName:    runnerJit.Runner.Name,
+		// JITConfig:     runnerJit.EncodedJITConfig,
+		// RunnerWorkDir: runner.Spec.WorkDir,
+		Token:     rt.GetToken(),
+		ExpiresAt: metav1.NewTime(rt.GetExpiresAt().Time),
 	}
 
 	if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
@@ -440,7 +453,25 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 	return true, nil
 }
 
-func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
+// func (r *RunnerReconciler) getRunnerJitConfig(ctx context.Context, runner v1alpha1.Runner) (string, error) {
+// 	log := r.Log.WithValues("runner", runner.Name)
+
+// 	ghc, err := r.GitHubClient.InitForRunner(ctx, &runner)
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	runnerJit, err := ghc.GetRunnerScaleSetRunnerJitConfig(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, "example-runnerdeploy", runner.Name, runner.Spec.WorkDir)
+// 	if err != nil {
+// 		r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedGenerateRunnerJit", "Getting runner JIT config failed")
+// 		log.Error(err, "Failed to get runner JIT config")
+// 		return "", err
+// 	}
+
+// 	return runnerJit.EncodedJITConfig, nil
+// }
+
+func (r *RunnerReconciler) newPod(ctx context.Context, runner v1alpha1.Runner, log logr.Logger) (corev1.Pod, error) {
 	var template corev1.Pod
 
 	labels := map[string]string{}
@@ -658,10 +689,36 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.RuntimeClassName = runnerSpec.RuntimeClassName
 	}
 
+	log.Info("Creating JITConfig for runner pod")
+	org := runner.Spec.Organization
+	repo := runner.Spec.Repository
+	if strings.ContainsAny(runner.Spec.Repository, "/") {
+		nwo := strings.Split(runner.Spec.Repository, "/")
+		org = nwo[0]
+		repo = nwo[1]
+	}
+
+	runnerJit, err := ghc.GetRunnerScaleSetRunnerJitConfig(ctx, runner.Spec.Enterprise, org, repo, "example-runnerdeploy", runner.Name, runner.Spec.WorkDir)
+	if err != nil {
+		log.Error(err, "Fail to create JITConfig for runner")
+		return corev1.Pod{}, err
+	}
+	log.Info("Created JITConfig for runner pod", "runnerId", runnerJit.Runner.Id)
+
+	setRunnerEnv(&pod, EnvVarRunnerJITConfig, runnerJit.EncodedJITConfig)
+
 	pod.ObjectMeta.Name = runner.ObjectMeta.Name
 
 	// Inject the registration token and the runner name
 	updated := mutatePod(&pod, runner.Status.Registration.Token)
+
+	// if getRunnerEnv(&pod, EnvVarRunnerJITConfig) == "" {
+	// 	jitConfig, err := r.getRunnerJitConfig(context.TODO(), runner)
+	// 	if err != nil {
+	// 		return corev1.Pod{}, err
+	// 	}
+	// 	setRunnerEnv(updated, EnvVarRunnerJITConfig, jitConfig)
+	// }
 
 	if err := ctrl.SetControllerReference(&runner, updated, r.Scheme); err != nil {
 		return pod, err

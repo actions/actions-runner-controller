@@ -138,14 +138,12 @@ func HandleBatchedRunnerScaleSetMessages(ctx context.Context, logger logr.Logger
 		}
 	}
 
-	if message.Statistics.TotalAssignedJobs > 0 {
-		logger.Info("Need to patched runner deployment.", "patch replicas", message.Statistics.TotalAssignedJobs)
-		if patched, err := runnermanager.PatchRunnerDeployment(ctx, namespace, deploymentName, &message.Statistics.TotalAssignedJobs); err != nil {
-			logger.Error(err, "Error: Patch runner deployment failed.")
-			return
-		} else {
-			logger.Info("Patched runner deployment.", "patched replicas", patched.Spec.Replicas)
-		}
+	logger.Info("Need to patched runner deployment.", "patch replicas", message.Statistics.TotalAssignedJobs)
+	if patched, err := runnermanager.PatchRunnerDeployment(ctx, namespace, deploymentName, &message.Statistics.TotalAssignedJobs); err != nil {
+		logger.Error(err, "Error: Patch runner deployment failed.")
+		return
+	} else {
+		logger.Info("Patched runner deployment.", "patched replicas", patched.Spec.Replicas)
 	}
 }
 

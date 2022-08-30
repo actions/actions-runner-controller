@@ -47,6 +47,9 @@ type RunnerConfig struct {
 	Repository string `json:"repository,omitempty"`
 
 	// +optional
+	// RunnerScaleSetName string `json:"runnerScaleSetName,omitempty"`
+
+	// +optional
 	Labels []string `json:"labels,omitempty"`
 
 	// +optional
@@ -257,6 +260,10 @@ type RunnerStatusRegistration struct {
 	Labels       []string    `json:"labels,omitempty"`
 	Token        string      `json:"token"`
 	ExpiresAt    metav1.Time `json:"expiresAt"`
+	// JITConfig     string      `json:"jitConfig,omitempty"`
+	// RunnerId      int         `json:"runnerId,omitempty"`
+	// RunnerName    string      `json:"runnerName,omitempty"`
+	// RunnerWorkDir string      `json:"runnerWorkDir,omitempty"`
 }
 
 type WorkVolumeClaimTemplate struct {

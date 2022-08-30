@@ -63,7 +63,7 @@ type RunnerScaleSetMessage struct {
 	MessageId   int64                    `json:"messageId"`
 	MessageType string                   `json:"messageType"`
 	Body        string                   `json:"body"`
-	Statistics  *RunnerScaleSetStatistic `json:"statistic"` // TODO: change to statistics after fixing the service
+	Statistics  *RunnerScaleSetStatistic `json:"statistics"`
 }
 
 type RunnerScaleSetJitRunnerSetting struct {
@@ -143,9 +143,7 @@ func (c *ActionsClient) GetRunnerScaleSet(ctx context.Context, runnerScaleSetNam
 			return nil, fmt.Errorf("Multiple runner scale sets found with name %s", runnerScaleSetName)
 		}
 
-		// TODO: remove this after fixing the service
-		return c.GetRunnerScaleSetById(ctx, runnerScaleSetList.RunnerScaleSets[0].Id)
-		// return &runnerScaleSetList.RunnerScaleSets[0], nil
+		return &runnerScaleSetList.RunnerScaleSets[0], nil
 	} else {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {

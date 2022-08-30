@@ -314,7 +314,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: "2.296.0",
 				},
 			},
 			Image:        runnerImage,
@@ -325,7 +325,7 @@ func buildVars(repo string) vars {
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
-					Value: "2.294.0",
+					Value: "2.296.0",
 				},
 			},
 			Image:        runnerDindImage,
