@@ -28,67 +28,169 @@ func New(ghConfig *github.Config, logger logr.Logger, message chan struct{}) *Li
 	}
 }
 
+func (l *Listener) Validate() error {
+	c := l.ghConfig
+	if anyEmpty(c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName) {
+		return fmt.Errorf("GitHub config is not provided: %q, %q, %q, %q", c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName)
+	}
+
+	hasToken := len(c.Token) > 0
+	hasPrivateKeyConfig := c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != ""
+	hasBasicAuth := len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0
+
+	if !hasToken && !hasPrivateKeyConfig && !hasBasicAuth {
+		return fmt.Errorf("GitHub client cannot initialize. Must provide any of token or private key or basic auth creds.")
+	}
+	return nil
+}
+
 func (l *Listener) Run(ctx context.Context) error {
 	ghClient, err := l.ghConfig.NewClient()
 	if err != nil {
 		return fmt.Errorf("Client creation failed: %v", err)
 	}
 
-	actionsAdminConnection, err := ghClient.GetActionsServiceAdminConnection(ctx, l.ghConfig.RunnerEnterprise, l.ghConfig.RunnerOrg, l.ghConfig.RunnerRepository)
-	if err != nil {
-		return fmt.Errorf("Could not create an Actions Service admin connection: %v", err)
+	builder := &builder{
+		ctx:                ctx,
+		runnerEnterprise:   l.ghConfig.RunnerEnterprise,
+		runnerOrg:          l.ghConfig.RunnerOrg,
+		runnerRepository:   l.ghConfig.RunnerRepository,
+		runnerScaleSetName: l.ghConfig.RunnerScaleSetName,
+		ghClient:           ghClient,
+		logger:             l.logger,
 	}
-
-	actionsServiceClient := newActionsClient(actionsAdminConnection)
-
-	runnerScaleSet, err := createRunnerScaleSet(ctx, actionsServiceClient, l.ghConfig.RunnerScaleSetName)
+	err = builder.createAdminConn().
+		createServiceClient().
+		createRunnerScaleSet().
+		createSession()
 	if err != nil {
 		return err
+	}
+	defer builder.destroy()
+
+	messageLoop := &messageLoop{
+		logger: l.logger,
+		b:      builder,
+	}
+
+	return messageLoop.runAndNotify(ctx, l.message)
+}
+
+type builder struct {
+	// fields that should be passed by the caller
+
+	ctx                context.Context
+	runnerEnterprise   string
+	runnerOrg          string
+	runnerRepository   string
+	runnerScaleSetName string
+	ghClient           *github.Client
+	logger             logr.Logger
+
+	// fields built by the builder
+
+	actionsAdminConnection *github.ActionsServiceAdminConnection
+	actionsServiceClient   *github.ActionsClient
+	runnerScaleSet         *github.RunnerScaleSet
+	session                *github.RunnerScaleSetSession
+
+	// err is the first error encountered during building steps
+	err error
+}
+
+func (b *builder) createAdminConn() *builder {
+	var err error
+	b.actionsAdminConnection, err = b.ghClient.GetActionsServiceAdminConnection(b.ctx, b.runnerEnterprise, b.runnerOrg, b.runnerRepository)
+	if err != nil {
+		b.err = fmt.Errorf("Could not create an Actions Service admin connection: %v", err)
+	}
+	return b
+}
+
+func (b *builder) createServiceClient() *builder {
+	if b.err != nil {
+		return b
+	}
+	b.actionsServiceClient = newActionsClient(b.actionsAdminConnection)
+	return b
+}
+
+func (b *builder) createRunnerScaleSet() *builder {
+	if b.err != nil {
+		return b
+	}
+	b.runnerScaleSet, b.err = createRunnerScaleSet(b.ctx, b.logger, b.actionsServiceClient, b.runnerScaleSetName)
+	return b
+}
+
+func (b *builder) createSession() error {
+	if b.err != nil {
+		return b.err
 	}
 
 	hostName, err := os.Hostname()
 	if err != nil {
-		return fmt.Errorf("Get host name failed: %v", err)
+		b.err = fmt.Errorf("Get host name failed: %v", err)
 	}
 
-	session, err := createRunnerScaleSetSession(ctx, actionsServiceClient, runnerScaleSet.Id, hostName)
-	if err != nil {
-		return err
-	}
+	b.session, b.err = createRunnerScaleSetSession(b.ctx, b.actionsServiceClient, b.runnerScaleSet.Id, hostName)
+	return b.err
+}
 
-	defer actionsServiceClient.DeleteMessageSession(ctx, session.RunnerScaleSet.Id, session.SessionId)
+func (b *builder) destroy() error {
+	return b.actionsServiceClient.DeleteMessageSession(b.ctx, b.session.RunnerScaleSet.Id, b.session.SessionId)
+}
+
+type messageLoop struct {
+	logger logr.Logger
+	b      *builder
+}
+
+func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan struct{}) error {
+	var (
+		actionsAdminConnection = ml.b.actionsAdminConnection
+		actionsServiceClient   = ml.b.actionsServiceClient
+		session                = ml.b.session
+		ghClient               = ml.b.ghClient
+	)
+
+	var (
+		runnerEnterprise = ml.b.runnerEnterprise
+		runnerOrg        = ml.b.runnerOrg
+		runnerRepository = ml.b.runnerRepository
+	)
 
 	var lastMessageId int64 = 0
 	for {
-		l.logger.Info("Waiting for message...")
+		ml.logger.Info("Waiting for message...")
 
 		select {
 		case <-ctx.Done():
-			l.logger.Info("Message queue listener is stopped.")
+			ml.logger.Info("Message queue listener is stopped.")
 			return nil
 		default:
 		}
 
-		message, err := getMessage(ctx, actionsServiceClient, l.logger, session.MessageQueueUrl, session.MessageQueueAccessToken, lastMessageId)
+		message, err := getMessage(ctx, actionsServiceClient, ml.logger, session.MessageQueueUrl, session.MessageQueueAccessToken, lastMessageId)
 		if err != nil {
 			var tokenExpiredErr *github.MessageQueueTokenExpiredError
 			if !errors.As(err, &tokenExpiredErr) {
-				l.logger.Error(err, "Error: Get message failed.")
+				ml.logger.Error(err, "Error: Get message failed.")
 				continue
 			}
 
-			l.logger.Info("Message queue token is expired, refreshing...")
-			actionsAdminConnection, err = ghClient.GetActionsServiceAdminConnection(ctx, l.ghConfig.RunnerEnterprise, l.ghConfig.RunnerOrg, l.ghConfig.RunnerRepository)
+			ml.logger.Info("Message queue token is expired, refreshing...")
+			ml.b.actionsAdminConnection, err = ghClient.GetActionsServiceAdminConnection(ctx, runnerEnterprise, runnerOrg, runnerRepository)
 			if err != nil {
-				l.logger.Error(err, "Error: Get Actions service admin connection failed during message session refresh.")
+				ml.logger.Error(err, "Error: Get Actions service admin connection failed during message session refresh.")
 				continue
 			}
 
 			actionsServiceClient.ActionsServiceAdminToken = actionsAdminConnection.AdminToken
 
-			session, err = actionsServiceClient.RefreshMessageSession(ctx, session.RunnerScaleSet.Id, session.SessionId)
+			session, err = ml.b.actionsServiceClient.RefreshMessageSession(ctx, session.RunnerScaleSet.Id, session.SessionId)
 			if err != nil {
-				l.logger.Error(err, "Error: Refresh message session failed.")
+				ml.logger.Error(err, "Error: Refresh message session failed.")
 				continue
 			}
 		}
@@ -101,13 +203,13 @@ func (l *Listener) Run(ctx context.Context) error {
 
 		switch message.MessageType {
 		case "RunnerScaleSetJobAvailable":
-			scalesetclient.MaybeAcquireJob(ctx, l.logger, actionsServiceClient, session, message)
+			scalesetclient.MaybeAcquireJob(ctx, ml.logger, ml.b.actionsServiceClient, ml.b.session, message)
 		case "RunnerScaleSetJobAssigned":
-			scalesetclient.HandleJobAssignment(ctx, l.logger, actionsServiceClient, runnerScaleSet, message)
+			scalesetclient.HandleJobAssignment(ctx, ml.logger, ml.b.actionsServiceClient, ml.b.runnerScaleSet, message)
 		case "RunnerScaleSetJobCompleted":
-			scalesetclient.NoopHandleJobCompletion(l.logger, message)
+			scalesetclient.NoopHandleJobCompletion(ml.logger, message)
 		default:
-			l.logger.Info("Unknown message type received.", "messageType", message.MessageType)
+			ml.logger.Info("Unknown message type received.", "messageType", message.MessageType)
 		}
 	}
 }
@@ -135,14 +237,14 @@ func newRunnerScaleSet(scaleSetName string) *github.RunnerScaleSet {
 	}
 }
 
-func createRunnerScaleSet(ctx context.Context, actionsServiceClient *github.ActionsClient, name string) (*github.RunnerScaleSet, error) {
+func createRunnerScaleSet(ctx context.Context, logger logr.Logger, actionsServiceClient *github.ActionsClient, name string) (*github.RunnerScaleSet, error) {
 	runnerScaleSet, err := actionsServiceClient.GetRunnerScaleSet(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("Can not found runner scale set: %v", err)
 	}
 
 	if runnerScaleSet != nil {
-		// logger.Info("Get runner scale set.", "id", runnerScaleSet.Id, "name", runnerScaleSet.Name)
+		logger.Info("Get runner scale set.", "id", runnerScaleSet.Id, "name", runnerScaleSet.Name)
 
 		replaceRunnerScaleSet := newRunnerScaleSet(name)
 
@@ -151,7 +253,7 @@ func createRunnerScaleSet(ctx context.Context, actionsServiceClient *github.Acti
 			return nil, fmt.Errorf("Create runner scale set failed: %v", err)
 		}
 	} else {
-		//logger.Info("Runner scale set is not found, creating a new one.")
+		logger.Info("Runner scale set is not found, creating a new one.")
 
 		newRunnerScaleSet := newRunnerScaleSet(name)
 
