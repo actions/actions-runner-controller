@@ -67,6 +67,9 @@ spec:
         {{- if .Values.runner.statusUpdateHook.enabled }}
         - "--runner-status-update-hook"
         {{- end }}
+        {{- if .Values.logFormat  }}  
+        - "--log-format={{ .Values.logFormat }}"
+        {{- end }}
         command:
         - "/manager"
         env:

@@ -235,6 +235,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				"repository.owner.type", e.Repo.Owner.GetType(),
 				"enterprise.slug", enterpriseSlug,
 				"action", e.GetAction(),
+				"workflowJob.runID", e.WorkflowJob.GetRunID(),
+				"workflowJob.ID", e.WorkflowJob.GetID(),
 			)
 		}
 
@@ -343,7 +345,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 
 	msg := fmt.Sprintf("scaled %s by %d", target.Name, target.Amount)
 
-	autoscaler.Log.Info(msg)
+	log.Info(msg)
 
 	if written, err := w.Write([]byte(msg)); err != nil {
 		log.Error(err, "failed writing http response", "msg", msg, "written", written)
