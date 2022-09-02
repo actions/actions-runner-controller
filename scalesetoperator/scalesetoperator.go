@@ -38,7 +38,7 @@ func (op *Operator) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch the state: %v", err)
 	}
-	jobOperator.state = len(runnerJobList.Items)
+	prevState := len(runnerJobList.Items)
 	go jobOperator.consume(ctx)
 
 	stream := op.l.MessageStream()
@@ -50,7 +50,10 @@ func (op *Operator) Run(ctx context.Context) error {
 		default:
 		}
 		message := <-stream
-		scale := message.N - len(jobOperator.buffer) // if < 0, scale down is graceful so don't do anything
+		// at first, it is going to be N - previous state - 0
+		// every other time, it is going to be N - number of elements we haven't created yet
+		scale := message.N - prevState - len(jobOperator.buffer)
+		prevState = 0
 		for i := 0; i < scale; i++ {
 			jobOperator.buffer <- struct{}{} // empty struct since this is essentially call for work with no memory usage
 		}
@@ -59,7 +62,6 @@ func (op *Operator) Run(ctx context.Context) error {
 
 type jobOperator struct {
 	max            int
-	state          int
 	actionsClient  *github.ActionsClient
 	runnerScaleSet *github.RunnerScaleSet
 	logger         logr.Logger
