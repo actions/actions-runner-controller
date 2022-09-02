@@ -14,34 +14,34 @@ import (
 	"github.com/go-logr/logr"
 )
 
-type Listener struct {
-	ghConfig *github.Config
-	logger   logr.Logger
-	message  chan struct{}
+type Message struct {
+	// N is number of acquired jobs
+	N int
 }
 
-func New(ghConfig *github.Config, logger logr.Logger, message chan struct{}) *Listener {
+type Listener struct {
+	ghConfig *github.Config
+	config   *Config
+	logger   logr.Logger
+	message  chan *Message
+
+	builder *builder
+}
+
+type Config struct {
+	RunnerScaleSetName string
+	RunnerEnterprise   string
+	RunnerOrg          string
+	RunnerRepository   string
+}
+
+func New(config *Config, ghConfig *github.Config, logger logr.Logger, message chan *Message) *Listener {
 	return &Listener{
 		ghConfig: ghConfig,
+		config:   config,
 		logger:   logger,
 		message:  message,
 	}
-}
-
-func (l *Listener) Validate() error {
-	c := l.ghConfig
-	if anyEmpty(c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName) {
-		return fmt.Errorf("GitHub config is not provided: %q, %q, %q, %q", c.RunnerRepository, c.RunnerOrg, c.Token, c.RunnerScaleSetName)
-	}
-
-	hasToken := len(c.Token) > 0
-	hasPrivateKeyConfig := c.AppID > 0 && c.AppInstallationID > 0 && c.AppPrivateKey != ""
-	hasBasicAuth := len(c.BasicauthUsername) > 0 && len(c.BasicauthPassword) > 0
-
-	if !hasToken && !hasPrivateKeyConfig && !hasBasicAuth {
-		return fmt.Errorf("GitHub client cannot initialize. Must provide any of token or private key or basic auth creds.")
-	}
-	return nil
 }
 
 func (l *Listener) Run(ctx context.Context) error {
@@ -50,30 +50,60 @@ func (l *Listener) Run(ctx context.Context) error {
 		return fmt.Errorf("Client creation failed: %v", err)
 	}
 
-	builder := &builder{
+	l.builder = &builder{
 		ctx:                ctx,
-		runnerEnterprise:   l.ghConfig.RunnerEnterprise,
-		runnerOrg:          l.ghConfig.RunnerOrg,
-		runnerRepository:   l.ghConfig.RunnerRepository,
-		runnerScaleSetName: l.ghConfig.RunnerScaleSetName,
+		runnerEnterprise:   l.config.RunnerEnterprise,
+		runnerOrg:          l.config.RunnerOrg,
+		runnerRepository:   l.config.RunnerRepository,
+		runnerScaleSetName: l.config.RunnerScaleSetName,
 		ghClient:           ghClient,
 		logger:             l.logger,
 	}
-	err = builder.createAdminConn().
+
+	err = l.builder.createAdminConn().
 		createServiceClient().
 		createRunnerScaleSet().
 		createSession()
 	if err != nil {
 		return err
 	}
-	defer builder.destroy()
+	defer l.builder.destroy()
 
 	messageLoop := &messageLoop{
 		logger: l.logger,
-		b:      builder,
+		b:      l.builder,
 	}
 
 	return messageLoop.runAndNotify(ctx, l.message)
+}
+
+func (l *Listener) MessageStream() chan *Message {
+	return l.message
+}
+
+func (l *Listener) ActionsServiceClient() *github.ActionsClient {
+	return l.builder.actionsServiceClient
+}
+
+func (l *Listener) RunnerScaleSet() *github.RunnerScaleSet {
+	return l.builder.runnerScaleSet
+}
+
+func (l *Listener) Validate() error {
+	c := l.config
+	gh := l.ghConfig
+	if anyEmpty(c.RunnerRepository, c.RunnerOrg, gh.Token, c.RunnerScaleSetName) {
+		return fmt.Errorf("GitHub config is not provided: %q, %q, %q, %q", c.RunnerRepository, c.RunnerOrg, gh.Token, c.RunnerScaleSetName)
+	}
+
+	hasToken := len(gh.Token) > 0
+	hasPrivateKeyConfig := gh.AppID > 0 && gh.AppInstallationID > 0 && gh.AppPrivateKey != ""
+	hasBasicAuth := len(gh.BasicauthUsername) > 0 && len(gh.BasicauthPassword) > 0
+
+	if !hasToken && !hasPrivateKeyConfig && !hasBasicAuth {
+		return fmt.Errorf("GitHub client cannot initialize. Must provide any of token or private key or basic auth creds.")
+	}
+	return nil
 }
 
 type builder struct {
@@ -146,7 +176,7 @@ type messageLoop struct {
 	b      *builder
 }
 
-func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan struct{}) error {
+func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan *Message) error {
 	var (
 		actionsAdminConnection = ml.b.actionsAdminConnection
 		actionsServiceClient   = ml.b.actionsServiceClient
@@ -162,6 +192,7 @@ func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan struct{}) e
 	)
 
 	var lastMessageId int64 = 0
+
 	for {
 		ml.logger.Info("Waiting for message...")
 
@@ -210,7 +241,13 @@ func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan struct{}) e
 		case "RunnerScaleSetJobCompleted":
 			scalesetclient.NoopHandleJobCompletion(ml.logger, message)
 		case "RunnerScaleSetJobMessages":
-			// TODO
+			n, err := scalesetclient.HandleBatchedRunnerScaleSetMessages(ctx, ml.logger, actionsServiceClient, session, message)
+			if err != nil {
+				// TODO: What now???
+				continue
+			}
+
+			notify <- &Message{N: n}
 		default:
 			ml.logger.Info("Unknown message type received.", "messageType", message.MessageType)
 		}

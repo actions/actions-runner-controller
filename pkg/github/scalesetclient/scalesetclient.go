@@ -94,12 +94,12 @@ func NoopHandleJobCompletion(logger logr.Logger, message *github.RunnerScaleSetM
 	logger.Info("Runner scale set job completed message received.", "messageId", message.MessageId, "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result)
 }
 
-func HandleBatchedRunnerScaleSetMessages(ctx context.Context, logger logr.Logger, namespace, deploymentName string, client *github.ActionsClient, session *github.RunnerScaleSetSession, message *github.RunnerScaleSetMessage) {
+func HandleBatchedRunnerScaleSetMessages(ctx context.Context, logger logr.Logger, client *github.ActionsClient, session *github.RunnerScaleSetSession, message *github.RunnerScaleSetMessage) (int, error) {
 	var batchedMessages []json.RawMessage
 
 	if err := json.NewDecoder(strings.NewReader(message.Body)).Decode(&batchedMessages); err != nil {
 		logger.Error(err, "Error: Decode RunnerScaleSetJobMessages message body failed.")
-		return
+		return 0, err
 	}
 
 	logger.Info("Runner scale set batched job message received.", "messageId", message.MessageId, "BatchCount", len(batchedMessages))
@@ -108,7 +108,7 @@ func HandleBatchedRunnerScaleSetMessages(ctx context.Context, logger logr.Logger
 		var messageType JobMessageType
 		if err := json.Unmarshal(message, &messageType); err != nil {
 			logger.Error(err, "Error: Unmarshal RunnerScaleSetMessageType failed.")
-			return
+			return 0, err
 		}
 
 		switch messageType.MessageType {
@@ -116,21 +116,21 @@ func HandleBatchedRunnerScaleSetMessages(ctx context.Context, logger logr.Logger
 			var jobAvailable JobAvailable
 			if err := json.Unmarshal(message, &jobAvailable); err != nil {
 				logger.Error(err, "Error: Unmarshal RunnerScaleSetJobAvailable failed.")
-				return
+				return 0, err
 			}
 			AcquireJob(ctx, logger, client, session, &jobAvailable)
 		case "JobAssigned":
 			var jobAssigned JobAssigned
 			if err := json.Unmarshal(message, &jobAssigned); err != nil {
 				logger.Error(err, "Error: Unmarshal RunnerScaleSetJobAssigned failed.")
-				return
+				return 0, err
 			}
 			logger.Info("Runner scale set job assigned message received.", "RequestId", jobAssigned.RunnerRequestId)
 		case "JobCompleted":
 			var jobCompleted JobCompleted
 			if err := json.Unmarshal(message, &jobCompleted); err != nil {
 				logger.Error(err, "Error: Unmarshal RunnerScaleSetJobCompleted failed.")
-				return
+				return 0, err
 			}
 			logger.Info("Runner scale set job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result)
 		default:
@@ -139,12 +139,7 @@ func HandleBatchedRunnerScaleSetMessages(ctx context.Context, logger logr.Logger
 	}
 
 	logger.Info("Need to patched runner deployment.", "patch replicas", message.Statistics.TotalAssignedJobs)
-	if patched, err := runnermanager.PatchRunnerDeployment(ctx, namespace, deploymentName, &message.Statistics.TotalAssignedJobs); err != nil {
-		logger.Error(err, "Error: Patch runner deployment failed.")
-		return
-	} else {
-		logger.Info("Patched runner deployment.", "patched replicas", patched.Spec.Replicas)
-	}
+	return message.Statistics.TotalAssignedJobs, nil
 }
 
 func AcquireJob(ctx context.Context, logger logr.Logger, client *github.ActionsClient, session *github.RunnerScaleSetSession, jobAvailable *JobAvailable) {

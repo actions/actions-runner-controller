@@ -4,6 +4,7 @@ package runnermanager
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"encoding/json"
 
@@ -13,20 +14,22 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerConfig, namespace string) (*v1alpha1.RunnerJob, error) {
-	// // Run this app locally (not in cluster) by using a local k8s config to connect to the cluster
-	// var kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
-	// conf, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	// if err != nil {
-	// 	panic(err.Error())
-	// }
-
-	conf, err := rest.InClusterConfig()
+	// Run this app locally (not in cluster) by using a local k8s config to connect to the cluster
+	var kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
+	conf, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		return nil, err
+		panic(err.Error())
 	}
+
+	//conf, err := rest.InClusterConfig()
+	//if err != nil {
+	//return nil, err
+	//}
 
 	clientset, err := kubernetes.NewForConfig(conf)
 	if err != nil {
@@ -51,6 +54,36 @@ func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerCon
 		return nil, errors.Wrap(err, "could not create job")
 	}
 	return runnerJob, nil
+}
+
+func GetScaleSetJobs(ctx context.Context, runnerScaleSet *github.RunnerScaleSet, namespace string) (*v1alpha1.RunnerJobList, error) {
+	// Run this app locally (not in cluster) by using a local k8s config to connect to the cluster
+	var kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
+	conf, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	//conf, err := rest.InClusterConfig()
+	//if err != nil {
+	//return nil, err
+	//}
+
+	clientset, err := kubernetes.NewForConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	var runnerJobList v1alpha1.RunnerJobList
+	if err := clientset.RESTClient().
+		Get().
+		AbsPath(fmt.Sprintf("/apis/actions.summerwind.dev/v1alpha1/namespaces/%s/runnerjobs", namespace)).
+		Do(ctx).
+		Into(&runnerJobList); err != nil {
+		return nil, err
+	}
+
+	return &runnerJobList, nil
 }
 
 func PatchRunnerDeployment(ctx context.Context, namespace, runnerDeploymentName string, desiredReplicas *int) (*v1alpha1.RunnerDeployment, error) {
