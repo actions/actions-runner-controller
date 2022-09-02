@@ -17,6 +17,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/go-logr/logr"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/go-github/v45/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
@@ -24,20 +25,16 @@ import (
 
 // Config contains configuration for Github client
 type Config struct {
-	EnterpriseURL      string `split_words:"true"`
-	AppID              int64  `split_words:"true"`
-	AppInstallationID  int64  `split_words:"true"`
-	AppPrivateKey      string `split_words:"true"`
-	Token              string
-	URL                string `split_words:"true"`
-	UploadURL          string `split_words:"true"`
-	BasicauthUsername  string `split_words:"true"`
-	BasicauthPassword  string `split_words:"true"`
-	RunnerGitHubURL    string `split_words:"true"`
-	RunnerScaleSetName string `split_words:"true"`
-	RunnerEnterprise   string `split_words:"true"`
-	RunnerOrg          string `split_words:"true"`
-	RunnerRepository   string `split_words:"true"`
+	EnterpriseURL     string `split_words:"true"`
+	AppID             int64  `split_words:"true"`
+	AppInstallationID int64  `split_words:"true"`
+	AppPrivateKey     string `split_words:"true"`
+	Token             string
+	URL               string `split_words:"true"`
+	UploadURL         string `split_words:"true"`
+	BasicauthUsername string `split_words:"true"`
+	BasicauthPassword string `split_words:"true"`
+	RunnerGitHubURL   string `split_words:"true"`
 
 	Log *logr.Logger
 }
@@ -45,8 +42,9 @@ type Config struct {
 // Client wraps GitHub client with some additional
 type Client struct {
 	*github.Client
-	regTokens map[string]*github.RegistrationToken
-	mu        sync.Mutex
+	regTokens   map[string]*github.RegistrationToken
+	adminTokens map[string]*ActionsServiceToken
+	mu          sync.Mutex
 	// GithubBaseURL to Github without API suffix.
 	GithubBaseURL string
 }
@@ -54,6 +52,12 @@ type Client struct {
 type BasicAuthTransport struct {
 	Username string
 	Password string
+}
+
+type ActionsServiceToken struct {
+	ActionsServiceUrl *string           `json:"actionsServiceUrl,omitempty"`
+	JWTToken          *string           `json:"token,omitempty"`
+	ExpiresAt         *github.Timestamp `json:"expires_at,omitempty"`
 }
 
 func (p BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -147,6 +151,7 @@ func (c *Config) NewClient() (*Client, error) {
 	return &Client{
 		Client:        client,
 		regTokens:     map[string]*github.RegistrationToken{},
+		adminTokens:   map[string]*ActionsServiceToken{},
 		mu:            sync.Mutex{},
 		GithubBaseURL: githubBaseURL,
 	}, nil
@@ -265,6 +270,71 @@ func (c *Client) GetActionsServiceAdminConnection(ctx context.Context, enterpris
 	}
 
 	return actionsServiceAdminConnection, nil
+}
+
+func (c *Client) GetRunnerScaleSetRunnerJitConfig(ctx context.Context, enterprise, org, repo, rsName, runnerName, workDir string) (*RunnerScaleSetJitRunnerConfig, error) {
+	c.mu.Lock()
+
+	key := getActionsAdminTokenKey(org, repo, enterprise)
+	adminToken, ok := c.adminTokens[key]
+	c.mu.Unlock()
+
+	if !ok || adminToken.ExpiresAt.Before(time.Now().Add(-1*time.Minute)) {
+		// let's refresh the admin token
+		newAdminToken, err := c.GetActionsServiceAdminConnection(ctx, enterprise, org, repo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create actions admin token: %v", err)
+		}
+
+		parsedJwt, _, err := jwt.NewParser().ParseUnverified(*newAdminToken.AdminToken, jwt.MapClaims{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse actions admin JWT: %v", err)
+		}
+
+		claims, ok := parsedJwt.Claims.(jwt.MapClaims)
+		if !ok {
+			return nil, fmt.Errorf("failed to parse actions admin's claims")
+		}
+
+		expiresAt := time.Unix((int64)(claims["exp"].(float64)), 0)
+
+		c.mu.Lock()
+		c.adminTokens[key] = &ActionsServiceToken{
+			ActionsServiceUrl: newAdminToken.ActionsServiceUrl,
+			JWTToken:          newAdminToken.AdminToken,
+			ExpiresAt: &github.Timestamp{
+				Time: expiresAt,
+			},
+		}
+
+		go func() {
+			c.cleanup()
+		}()
+
+		adminToken, _ = c.adminTokens[key]
+		c.mu.Unlock()
+	}
+
+	actionsClient := &ActionsClient{
+		Client:                   http.DefaultClient,
+		ActionsServiceURL:        adminToken.ActionsServiceUrl,
+		ActionsServiceAdminToken: adminToken.JWTToken,
+		UserAgent:                c.UserAgent,
+	}
+
+	rs, err := actionsClient.GetRunnerScaleSet(ctx, rsName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get runner scale set: %v", err)
+	}
+
+	if rs == nil {
+		return nil, fmt.Errorf("failed to get runner scale set with name: %v", rsName)
+	}
+
+	jitUrl := fmt.Sprintf("%s/_apis/runtime/runnerscalesets/%d/generatejitconfig?api-version=6.0-preview", *adminToken.ActionsServiceUrl, rs.Id)
+	jitConfig, err := actionsClient.GenerateJitRunnerConfig(ctx, &RunnerScaleSetJitRunnerSetting{Name: runnerName, WorkFolder: workDir}, jitUrl)
+
+	return jitConfig, err
 }
 
 // RemoveRunner removes a runner with specified runner ID from repository.
@@ -405,6 +475,12 @@ func (c *Client) cleanup() {
 			delete(c.regTokens, key)
 		}
 	}
+
+	for key, adminToken := range c.adminTokens {
+		if adminToken.ExpiresAt.Before(time.Now()) {
+			delete(c.adminTokens, key)
+		}
+	}
 }
 
 // wrappers for github functions (switch between enterprise/organization/repository mode)
@@ -503,6 +579,10 @@ func getEnterpriseOrganizationAndRepo(enterprise, org, repo string) (string, str
 
 func getRegistrationKey(org, repo, enterprise string) string {
 	return fmt.Sprintf("org=%s,repo=%s,enterprise=%s", org, repo, enterprise)
+}
+
+func getActionsAdminTokenKey(org, repo, enterprise string) string {
+	return fmt.Sprintf("actions_admin:org=%s,repo=%s,enterprise=%s", org, repo, enterprise)
 }
 
 func splitOwnerAndRepo(repo string) (string, string, error) {

@@ -1,10 +1,10 @@
-DOCKER_USER ?= summerwind
+DOCKER_USER ?= huangtingluo
 NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
-RUNNER_VERSION ?= 2.294.0
+RUNNER_VERSION ?= 2.296.0
 RUNNER_CONTAINER_HOOKS_VERSION ?= 0.1.2
 DOCKER_VERSION ?= 20.10.12
 

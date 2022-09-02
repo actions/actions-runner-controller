@@ -29,15 +29,26 @@ type RunnerScaleSetList struct {
 	RunnerScaleSets []RunnerScaleSet `json:"value"`
 }
 
+type RunnerScaleSetStatistic struct {
+	TotalAvailableJobs     int `json:"totalAvailableJobs"`
+	TotalAcquiredJobs      int `json:"totalAcquiredJobs"`
+	TotalAssignedJobs      int `json:"totalAssignedJobs"`
+	TotalRunningJobs       int `json:"totalRunningJobs"`
+	TotalRegisteredRunners int `json:"totalRegisteredRunners"`
+	TotalBusyRunners       int `json:"totalBusyRunners"`
+	TotalIdleRunners       int `json:"totalIdleRunners"`
+}
+
 type RunnerScaleSet struct {
-	Id                 int           `json:"id,omitempty"`
-	Name               string        `json:"name,omitempty"`
-	RunnerGroupId      int           `json:"runnerGroupId,omitempty"`
-	RunnerGroupName    string        `json:"runnerGroupName,omitempty"`
-	Labels             []Label       `json:"labels,omitempty"`
-	RunnerSetting      RunnerSetting `json:"RunnerSetting,omitempty"`
-	CreatedOn          time.Time     `json:"createdOn,omitempty"`
-	RunnerJitConfigUrl string        `json:"runnerJitConfigUrl,omitempty"`
+	Id                 int                      `json:"id,omitempty"`
+	Name               string                   `json:"name,omitempty"`
+	RunnerGroupId      int                      `json:"runnerGroupId,omitempty"`
+	RunnerGroupName    string                   `json:"runnerGroupName,omitempty"`
+	Labels             []Label                  `json:"labels,omitempty"`
+	RunnerSetting      RunnerSetting            `json:"RunnerSetting,omitempty"`
+	CreatedOn          time.Time                `json:"createdOn,omitempty"`
+	RunnerJitConfigUrl string                   `json:"runnerJitConfigUrl,omitempty"`
+	Statistics         *RunnerScaleSetStatistic `json:"statistics,omitempty"`
 }
 
 type RunnerScaleSetSession struct {
@@ -49,9 +60,10 @@ type RunnerScaleSetSession struct {
 }
 
 type RunnerScaleSetMessage struct {
-	MessageId   int64  `json:"messageId"`
-	MessageType string `json:"messageType"`
-	Body        string `json:"body"`
+	MessageId   int64                    `json:"messageId"`
+	MessageType string                   `json:"messageType"`
+	Body        string                   `json:"body"`
+	Statistics  *RunnerScaleSetStatistic `json:"statistics"`
 }
 
 type RunnerScaleSetJitRunnerSetting struct {
@@ -84,8 +96,17 @@ func (e *MessageQueueTokenExpiredError) Error() string {
 	return "Message queue token expired" + e.msg
 }
 
+type HttpClientSideError struct {
+	msg  string
+	code int
+}
+
+func (e *HttpClientSideError) Error() string {
+	return fmt.Sprintf("Http request failed with client side error (%d): %s\n", e.code, e.msg)
+}
+
 func (c *ActionsClient) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*RunnerScaleSet, error) {
-	u := fmt.Sprintf("%s/_apis/runtime/runnerscalesets?api-version=6.0-preview", *c.ActionsServiceURL)
+	u := fmt.Sprintf("%s/_apis/runtime/runnerscalesets?name=%s&api-version=6.0-preview", *c.ActionsServiceURL, runnerScaleSetName)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -118,13 +139,51 @@ func (c *ActionsClient) GetRunnerScaleSet(ctx context.Context, runnerScaleSetNam
 			return nil, nil
 		}
 
-		for _, runnerScaleSet := range runnerScaleSetList.RunnerScaleSets {
-			if runnerScaleSet.Name == runnerScaleSetName {
-				return &runnerScaleSet, nil
-			}
+		if runnerScaleSetList.Count > 1 {
+			return nil, fmt.Errorf("Multiple runner scale sets found with name %s", runnerScaleSetName)
 		}
 
-		return nil, nil
+		return &runnerScaleSetList.RunnerScaleSets[0], nil
+	} else {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("unexpected status code: %d - body: %s", resp.StatusCode, string(body))
+	}
+}
+
+func (c *ActionsClient) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int) (*RunnerScaleSet, error) {
+	u := fmt.Sprintf("%s/_apis/runtime/runnerscalesets/%d?api-version=6.0-preview", *c.ActionsServiceURL, runnerScaleSetId)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
+
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
+
+	newClient := &http.Client{}
+
+	resp, err := newClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		var runnerScaleSet *RunnerScaleSet
+		err = json.NewDecoder(resp.Body).Decode(&runnerScaleSet)
+		if err != nil {
+			return nil, err
+		}
+
+		return runnerScaleSet, nil
 	} else {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -300,6 +359,16 @@ func (c *ActionsClient) CreateMessageSession(ctx context.Context, runnerScaleSet
 		if err != nil {
 			return nil, err
 		}
+
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			clientError := &HttpClientSideError{
+				msg:  string(body),
+				code: resp.StatusCode,
+			}
+
+			return nil, clientError
+		}
+
 		return nil, fmt.Errorf("unexpected status code: %d - body: %s", resp.StatusCode, string(body))
 	}
 }

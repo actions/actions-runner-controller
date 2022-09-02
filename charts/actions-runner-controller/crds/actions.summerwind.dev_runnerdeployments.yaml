@@ -5229,6 +5229,9 @@ spec:
                           type: object
                       type: object
                   type: object
+                token:
+                  nullable: true
+                  type: string
               required:
                 - template
               type: object

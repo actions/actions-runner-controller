@@ -64,8 +64,9 @@ const (
 	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1180
 	DefaultRunnerPodRecreationDelayAfterWebhookScale = 10 * time.Minute
 
-	EnvVarRunnerName  = "RUNNER_NAME"
-	EnvVarRunnerToken = "RUNNER_TOKEN"
+	EnvVarRunnerName      = "RUNNER_NAME"
+	EnvVarRunnerToken     = "RUNNER_TOKEN"
+	EnvVarRunnerJITConfig = "ACTIONS_RUNNER_INPUT_JITCONFIG"
 
 	// defaultHookPath is path to the hook script used when the "containerMode: kubernetes" is specified
 	defaultRunnerHookPath = "/runner/k8s/index.js"

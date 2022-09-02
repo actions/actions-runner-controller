@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.294.0
+ARG RUNNER_VERSION=2.296.0
 ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.12
@@ -15,34 +15,16 @@ RUN apt update -y \
     && add-apt-repository -y ppa:git-core/ppa \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
-    build-essential \
     curl \
     ca-certificates \
-    dnsutils \
-    ftp \
     git \
     iproute2 \
     iputils-ping \
-    jq \
     libunwind8 \
     locales \
-    netcat \
-    openssh-client \
-    parallel \
-    python3-pip \
-    rsync \
-    shellcheck \
     sudo \
-    telnet \
     time \
-    tzdata \
     unzip \
-    upx \
-    wget \
-    zip \
-    zstd \
-    && ln -sf /usr/bin/python3 /usr/bin/python \
-    && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness

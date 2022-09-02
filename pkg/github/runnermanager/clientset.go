@@ -10,6 +10,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -50,4 +51,44 @@ func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerCon
 		return nil, errors.Wrap(err, "could not create job")
 	}
 	return runnerJob, nil
+}
+
+func PatchRunnerDeployment(ctx context.Context, namespace, runnerDeploymentName string, desiredReplicas *int) (*v1alpha1.RunnerDeployment, error) {
+	conf, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	kubeClient, err := kubernetes.NewForConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	patchRunnerDeployment := &v1alpha1.RunnerDeployment{
+		Spec: v1alpha1.RunnerDeploymentSpec{
+			Replicas: desiredReplicas,
+		},
+	}
+
+	body, err := json.Marshal(patchRunnerDeployment)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not marshal runner deployment")
+	}
+
+	patchedRunnerDeployment := &v1alpha1.RunnerDeployment{}
+
+	err = kubeClient.RESTClient().
+		Patch(types.MergePatchType).
+		Prefix("apis", "actions.summerwind.dev", "v1alpha1").
+		Namespace(namespace).
+		Resource("RunnerDeployments").
+		Name(runnerDeploymentName).
+		Body(body).
+		Do(ctx).
+		Into(patchedRunnerDeployment)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not patch runner deployment")
+	}
+
+	return patchedRunnerDeployment, nil
 }

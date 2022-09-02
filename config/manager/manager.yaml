@@ -24,6 +24,7 @@ spec:
     spec:
       containers:
       - name: manager
+        imagePullPolicy: Always
         image: controller:latest
         command:
         - /manager

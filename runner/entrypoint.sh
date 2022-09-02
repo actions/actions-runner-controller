@@ -16,42 +16,44 @@ if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
   sleep ${STARTUP_DELAY_IN_SECONDS}
 fi
 
-if [ -z "${GITHUB_URL}" ]; then
-  log.debug 'Working with public GitHub'
-  GITHUB_URL="https://github.com/"
-else
-  length=${#GITHUB_URL}
-  last_char=${GITHUB_URL:length-1:1}
+if [ -z "${ACTIONS_RUNNER_INPUT_JITCONFIG}" ]; then
+  if [ -z "${GITHUB_URL}" ]; then
+    log.debug 'Working with public GitHub'
+    GITHUB_URL="https://github.com/"
+  else
+    length=${#GITHUB_URL}
+    last_char=${GITHUB_URL:length-1:1}
 
-  [[ $last_char != "/" ]] && GITHUB_URL="$GITHUB_URL/"; :
-  log.debug "Github endpoint URL ${GITHUB_URL}"
-fi
+    [[ $last_char != "/" ]] && GITHUB_URL="$GITHUB_URL/"; :
+    log.debug "Github endpoint URL ${GITHUB_URL}"
+  fi
 
-if [ -z "${RUNNER_NAME}" ]; then
-  log.error 'RUNNER_NAME must be set'
-  exit 1
-fi
+  if [ -z "${RUNNER_NAME}" ]; then
+    log.error 'RUNNER_NAME must be set'
+    exit 1
+  fi
 
-if [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_REPO}" ] && [ -n "${RUNNER_ENTERPRISE}" ]; then
-  ATTACH="${RUNNER_ORG}/${RUNNER_REPO}"
-elif [ -n "${RUNNER_ORG}" ]; then
-  ATTACH="${RUNNER_ORG}"
-elif [ -n "${RUNNER_REPO}" ]; then
-  ATTACH="${RUNNER_REPO}"
-elif [ -n "${RUNNER_ENTERPRISE}" ]; then
-  ATTACH="enterprises/${RUNNER_ENTERPRISE}"
-else
-  log.error 'At least one of RUNNER_ORG, RUNNER_REPO, or RUNNER_ENTERPRISE must be set'
-  exit 1
-fi
+  if [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_REPO}" ] && [ -n "${RUNNER_ENTERPRISE}" ]; then
+    ATTACH="${RUNNER_ORG}/${RUNNER_REPO}"
+  elif [ -n "${RUNNER_ORG}" ]; then
+    ATTACH="${RUNNER_ORG}"
+  elif [ -n "${RUNNER_REPO}" ]; then
+    ATTACH="${RUNNER_REPO}"
+  elif [ -n "${RUNNER_ENTERPRISE}" ]; then
+    ATTACH="enterprises/${RUNNER_ENTERPRISE}"
+  else
+    log.error 'At least one of RUNNER_ORG, RUNNER_REPO, or RUNNER_ENTERPRISE must be set'
+    exit 1
+  fi
 
-if [ -z "${RUNNER_TOKEN}" ]; then
-  log.error 'RUNNER_TOKEN must be set'
-  exit 1
-fi
+  if [ -z "${RUNNER_TOKEN}" ]; then
+    log.error 'RUNNER_TOKEN must be set'
+    exit 1
+  fi
 
-if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
-  RUNNER_GROUPS=${RUNNER_GROUP}
+  if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
+    RUNNER_GROUPS=${RUNNER_GROUP}
+  fi
 fi
 
 # Hack due to https://github.com/actions-runner-controller/actions-runner-controller/issues/252#issuecomment-758338483
@@ -86,34 +88,36 @@ fi
 
 update-status "Registering"
 
-retries_left=10
-while [[ ${retries_left} -gt 0 ]]; do
-  log.debug 'Configuring the runner.'
-  ./config.sh --unattended --replace \
-    --name "${RUNNER_NAME}" \
-    --url "${GITHUB_URL}${ATTACH}" \
-    --token "${RUNNER_TOKEN}" \
-    --runnergroup "${RUNNER_GROUPS}" \
-    --labels "${RUNNER_LABELS}" \
-    --work "${RUNNER_WORKDIR}" "${config_args[@]}"
+if [ -z "${ACTIONS_RUNNER_INPUT_JITCONFIG}" ]; then
+  retries_left=10
+  while [[ ${retries_left} -gt 0 ]]; do
+    log.debug 'Configuring the runner.'
+    ./config.sh --unattended --replace \
+      --name "${RUNNER_NAME}" \
+      --url "${GITHUB_URL}${ATTACH}" \
+      --token "${RUNNER_TOKEN}" \
+      --runnergroup "${RUNNER_GROUPS}" \
+      --labels "${RUNNER_LABELS}" \
+      --work "${RUNNER_WORKDIR}" "${config_args[@]}"
 
-  if [ -f .runner ]; then
-    log.debug 'Runner successfully configured.'
-    break
+    if [ -f .runner ]; then
+      log.debug 'Runner successfully configured.'
+      break
+    fi
+
+    log.debug 'Configuration failed. Retrying'
+    retries_left=$((retries_left - 1))
+    sleep 1
+  done
+
+  if [ ! -f .runner ]; then
+    # we couldn't configure and register the runner; no point continuing
+    log.error 'Configuration failed!'
+    exit 2
   fi
 
-  log.debug 'Configuration failed. Retrying'
-  retries_left=$((retries_left - 1))
-  sleep 1
-done
-
-if [ ! -f .runner ]; then
-  # we couldn't configure and register the runner; no point continuing
-  log.error 'Configuration failed!'
-  exit 2
+  cat .runner
 fi
-
-cat .runner
 # Note: the `.runner` file's content should be something like the below:
 #
 # $ cat /runner/.runner
