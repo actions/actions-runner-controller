@@ -150,6 +150,7 @@ func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan struct{}) e
 	var (
 		actionsAdminConnection = ml.b.actionsAdminConnection
 		actionsServiceClient   = ml.b.actionsServiceClient
+		runnerScaleSet         = ml.b.runnerScaleSet
 		session                = ml.b.session
 		ghClient               = ml.b.ghClient
 	)
@@ -203,11 +204,13 @@ func (ml *messageLoop) runAndNotify(ctx context.Context, notify chan struct{}) e
 
 		switch message.MessageType {
 		case "RunnerScaleSetJobAvailable":
-			scalesetclient.MaybeAcquireJob(ctx, ml.logger, ml.b.actionsServiceClient, ml.b.session, message)
+			scalesetclient.MaybeAcquireJob(ctx, ml.logger, actionsServiceClient, session, message)
 		case "RunnerScaleSetJobAssigned":
-			scalesetclient.HandleJobAssignment(ctx, ml.logger, ml.b.actionsServiceClient, ml.b.runnerScaleSet, message)
+			scalesetclient.HandleJobAssignment(ctx, ml.logger, actionsServiceClient, runnerScaleSet, message)
 		case "RunnerScaleSetJobCompleted":
 			scalesetclient.NoopHandleJobCompletion(ml.logger, message)
+		case "RunnerScaleSetJobMessages":
+			// TODO
 		default:
 			ml.logger.Info("Unknown message type received.", "messageType", message.MessageType)
 		}
