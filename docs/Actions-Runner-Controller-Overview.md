@@ -1,7 +1,7 @@
 ## Introduction
-This document provides a high level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes (K8s) clusters.
+This document provides a high-level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes (K8s) clusters.
 
-This document provides a background of Github Actions, self-hosted runners and ARC overview. By the end of the doc, the reader should have a foundation with basic scenarios and be capable of reviewing other advanced topics.
+With this overview, you can get a foundation of basic scenarios and be capable of reviewing other advanced topics.
 
 ## GitHub Actions
 [GitHub Actions](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
