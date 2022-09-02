@@ -2,7 +2,9 @@ package scalesetoperator
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/actions-runner-controller/actions-runner-controller/pkg/github/runnermanager"
@@ -14,6 +16,9 @@ type Operator struct {
 	l          *scalesetlistener.Listener
 	logger     logr.Logger
 	maxRunners int
+
+	mu      sync.Mutex
+	started bool
 }
 
 func New(l *scalesetlistener.Listener, logger logr.Logger, maxRunners int) *Operator {
@@ -24,8 +29,19 @@ func New(l *scalesetlistener.Listener, logger logr.Logger, maxRunners int) *Oper
 	}
 }
 
-func (op *Operator) Run(ctx context.Context) error {
-	go op.l.Run(ctx)
+func (op *Operator) RunJobOperator(ctx context.Context) error {
+	op.mu.Lock()
+	if op.started {
+		op.mu.Unlock()
+		return errors.New("operator started")
+	}
+	op.started = true
+	op.mu.Unlock()
+
+	listenerErr := make(chan error)
+	go func() {
+		listenerErr <- op.l.Run(ctx)
+	}()
 
 	jobOperator := jobOperator{
 		actionsClient:  op.l.ActionsServiceClient(),
@@ -44,6 +60,8 @@ func (op *Operator) Run(ctx context.Context) error {
 	stream := op.l.MessageStream()
 	for {
 		select {
+		case err := <-listenerErr:
+			return err
 		case <-ctx.Done():
 			close(jobOperator.buffer)
 			return nil
@@ -57,6 +75,40 @@ func (op *Operator) Run(ctx context.Context) error {
 		for i := 0; i < scale; i++ {
 			jobOperator.buffer <- struct{}{} // empty struct since this is essentially call for work with no memory usage
 		}
+	}
+}
+
+func (op *Operator) RunDeploymentOperator(ctx context.Context, deploymentName string) error {
+	op.mu.Lock()
+	if op.started {
+		op.mu.Unlock()
+		return errors.New("operator started")
+	}
+	op.started = true
+	op.mu.Unlock()
+
+	listenerErr := make(chan error)
+	go func() {
+		listenerErr <- op.l.Run(ctx)
+	}()
+
+	deploymentOperator := deploymentOperator{
+		// TODO: see from where to get ns
+		namespace:      "default",
+		deploymentName: deploymentName,
+	}
+
+	stream := op.l.MessageStream()
+	for {
+		select {
+		case err := <-listenerErr:
+			return err
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		message := <-stream
+		deploymentOperator.patchDeployment(ctx, message.N)
 	}
 }
 
@@ -83,4 +135,19 @@ func (op *jobOperator) consume(ctx context.Context) {
 			continue
 		}
 	}
+}
+
+type deploymentOperator struct {
+	namespace      string
+	deploymentName string
+	logger         logr.Logger
+}
+
+func (op *deploymentOperator) patchDeployment(ctx context.Context, desiredRunners int) {
+	patched, err := runnermanager.PatchRunnerDeployment(ctx, op.namespace, op.deploymentName, &desiredRunners)
+	if err != nil {
+		op.logger.Error(err, "Error: Patch runner deployment failed.")
+		return
+	}
+	op.logger.Info("Patched runner deployment.", "patched replicas", patched.Spec.Replicas)
 }

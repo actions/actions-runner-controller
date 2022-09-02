@@ -52,7 +52,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	operator := scalesetoperator.New(listener, logger)
+	// TODO: Configurable...
+	maxRunners := 10
+	operator := scalesetoperator.New(listener, logger, maxRunners)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cSig := make(chan os.Signal, 1)
@@ -69,7 +71,9 @@ func main() {
 		case <-ctx.Done():
 		}
 	}()
-	if err := operator.Run(ctx); err != nil {
+
+	// TODO: figure out which operator to use
+	if err := operator.RunJobOperator(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
