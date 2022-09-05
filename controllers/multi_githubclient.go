@@ -198,9 +198,8 @@ func (c *MultiGitHubClient) initClientForSecret(secret *corev1.Secret, dependent
 			return nil, err
 		}
 
-		// Check if EnterpriseURL is set.
-		if conf.EnterpriseURL == "" {
-			// fallback to the controller-wide setting
+		// Fallback to the controller-wide setting if EnterpriseURL is not set and the original client is an enterprise client.
+		if conf.EnterpriseURL == "" && c.githubClient.IsEnterprise {
 			conf.EnterpriseURL = c.githubClient.GithubBaseURL
 		}
 
