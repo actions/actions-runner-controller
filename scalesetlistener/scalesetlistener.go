@@ -44,7 +44,10 @@ func New(config *Config, ghConfig *github.Config, logger logr.Logger, message ch
 	}
 }
 
-func (l *Listener) Run(ctx context.Context) error {
+func (l *Listener) MakeClients(ctx context.Context) error {
+	if err := l.Validate(); err != nil {
+		return fmt.Errorf("validation error: %v", err)
+	}
 	ghClient, err := l.ghConfig.NewClient()
 	if err != nil {
 		return fmt.Errorf("Client creation failed: %v", err)
@@ -67,6 +70,10 @@ func (l *Listener) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (l *Listener) Run(ctx context.Context) error {
 	defer l.builder.destroy()
 
 	messageLoop := &messageLoop{

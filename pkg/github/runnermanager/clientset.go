@@ -4,6 +4,7 @@ package runnermanager
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"encoding/json"
@@ -20,16 +21,26 @@ import (
 
 func CreateJob(ctx context.Context, jitConfig *github.RunnerScaleSetJitRunnerConfig, namespace string) (*v1alpha1.RunnerJob, error) {
 	// Run this app locally (not in cluster) by using a local k8s config to connect to the cluster
-	var kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
-	conf, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
 
-	//conf, err := rest.InClusterConfig()
-	//if err != nil {
-	//return nil, err
-	//}
+	var (
+		conf *rest.Config
+		err  error
+	)
+
+	v, ok := os.LookupEnv("GITHUB_SCALESET_LOCAL")
+	switch {
+	case ok || v == "true":
+		var kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
+		conf, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			panic(err.Error())
+		}
+	default:
+		conf, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	clientset, err := kubernetes.NewForConfig(conf)
 	if err != nil {

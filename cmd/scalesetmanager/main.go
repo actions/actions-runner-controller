@@ -36,6 +36,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	cSig := make(chan os.Signal, 1)
+	signal.Notify(cSig, os.Interrupt)
+	defer func() {
+		signal.Stop(cSig)
+		cancel()
+	}()
+	go func() {
+		select {
+		case <-cSig:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	message := make(chan *scalesetlistener.Message, 1)
 	scaleSetListenerConfig := &scalesetlistener.Config{
 		RunnerScaleSetName: rc.RunnerScaleSetName,
@@ -47,30 +62,14 @@ func main() {
 	logger := logging.NewLogger(logging.LogLevelDebug)
 
 	listener := scalesetlistener.New(scaleSetListenerConfig, &c, logger, message)
-	if err := listener.Validate(); err != nil {
-		logger.Info("validation failed", "error", err.Error())
+	if err := listener.MakeClients(ctx); err != nil {
+		logger.Info("failed to make listener clients", "error", err.Error())
 		os.Exit(1)
 	}
 
 	// TODO: Configurable...
 	maxRunners := 10
 	operator := scalesetoperator.New(listener, logger, maxRunners)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cSig := make(chan os.Signal, 1)
-	signal.Notify(cSig, os.Interrupt)
-	defer func() {
-		signal.Stop(cSig)
-		cancel()
-	}()
-
-	go func() {
-		select {
-		case <-cSig:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	// TODO: figure out which operator to use
 	if err := operator.RunJobOperator(ctx); err != nil {
