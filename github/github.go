@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"fmt"
-	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation/v2"
@@ -43,6 +43,7 @@ type Client struct {
 	mu        sync.Mutex
 	// GithubBaseURL to Github without API suffix.
 	GithubBaseURL string
+	IsEnterprise  bool
 }
 
 type BasicAuthTransport struct {
@@ -95,8 +96,10 @@ func (c *Config) NewClient() (*Client, error) {
 
 	var client *github.Client
 	var githubBaseURL string
+	var isEnterprise bool
 	if len(c.EnterpriseURL) > 0 {
 		var err error
+		isEnterprise = true
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
 		if err != nil {
 			return nil, fmt.Errorf("enterprise client creation failed: %v", err)
@@ -136,12 +139,12 @@ func (c *Config) NewClient() (*Client, error) {
 		}
 	}
 	client.UserAgent = "actions-runner-controller/" + build.Version
-
 	return &Client{
 		Client:        client,
 		regTokens:     map[string]*github.RegistrationToken{},
 		mu:            sync.Mutex{},
 		GithubBaseURL: githubBaseURL,
+		IsEnterprise:  isEnterprise,
 	}, nil
 }
 
