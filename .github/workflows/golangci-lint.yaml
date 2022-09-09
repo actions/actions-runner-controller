@@ -22,4 +22,4 @@ jobs:
         with:
           args: --timeout 3m
           only-new-issues: true
-          version: latest
+          version: v1.49.0

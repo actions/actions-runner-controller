@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -504,7 +503,7 @@ func testServerWithInitObjs(t *testing.T, eventType string, event interface{}, w
 
 	hraWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{}
 
-	client := fake.NewFakeClientWithScheme(sc, initObjs...)
+	client := fake.NewClientBuilder().WithScheme(sc).WithRuntimeObjects(initObjs...).Build()
 
 	logs := installTestLogger(hraWebhook)
 
@@ -537,7 +536,7 @@ func testServerWithInitObjs(t *testing.T, eventType string, event interface{}, w
 		t.Error("status:", resp.StatusCode)
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -575,7 +574,7 @@ func sendWebhook(server *httptest.Server, eventType string, event interface{}) (
 			"X-GitHub-Event": {eventType},
 			"Content-Type":   {"application/json"},
 		},
-		Body: ioutil.NopCloser(bytes.NewBuffer(reqBody)),
+		Body: io.NopCloser(bytes.NewBuffer(reqBody)),
 	}
 
 	return http.DefaultClient.Do(req)
@@ -607,7 +606,7 @@ func (l *testLogSink) Info(_ int, msg string, kvs ...interface{}) {
 	fmt.Fprintf(l.writer, "\n")
 }
 
-func (_ *testLogSink) Enabled(level int) bool {
+func (*testLogSink) Enabled(level int) bool {
 	return true
 }
 

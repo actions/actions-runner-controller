@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -75,10 +75,8 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	// A scale target is enqueued on each retrieval of each eligible webhook event, so that it is processed asynchronously.
 	QueueLimit int
 
-	worker      *worker
-	workerInit  sync.Once
-	workerStart sync.Once
-	batchCh     chan *ScaleTarget
+	worker     *worker
+	workerInit sync.Once
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -133,7 +131,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			return
 		}
 	} else {
-		payload, err = ioutil.ReadAll(r.Body)
+		payload, err = io.ReadAll(r.Body)
 		if err != nil {
 			autoscaler.Log.Error(err, "error reading request body")
 

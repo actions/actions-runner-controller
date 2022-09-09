@@ -616,9 +616,6 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 	return nil
 }
 
-func (e *env) f() {
-}
-
 func (e *env) buildAndLoadImages(t *testing.T) {
 	t.Helper()
 
@@ -1070,7 +1067,7 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, ti
 
 	var expected []string
 
-	for _ = range testJobs {
+	for range testJobs {
 		expected = append(expected, "ok")
 	}
 

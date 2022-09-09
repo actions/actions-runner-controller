@@ -124,7 +124,7 @@ func (k *Kubectl) kubectlCmd(ctx context.Context, c string, args []string, cfg K
 	}
 
 	if cfg.Timeout > 0 {
-		args = append(args, "--timeout="+fmt.Sprintf("%s", cfg.Timeout))
+		args = append(args, fmt.Sprintf("--timeout=%v", cfg.Timeout.String()))
 	}
 
 	cmd := exec.CommandContext(ctx, "kubectl", args...)

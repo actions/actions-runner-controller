@@ -56,8 +56,3 @@ func delete(cmName string) ([]byte, error) {
 	cmd := exec.Command("kubectl", "delete", "cm", cmName)
 	return cmd.CombinedOutput()
 }
-
-func deleteControllerManagerSecret() ([]byte, error) {
-	cmd := exec.Command("kubectl", "-n", "actions-runner-system", "delete", "secret", "controller-manager")
-	return cmd.CombinedOutput()
-}

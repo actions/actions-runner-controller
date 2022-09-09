@@ -11,12 +11,6 @@ const (
 )
 
 var (
-	runnerSetMetrics = []prometheus.Collector{
-		runnerSetReplicas,
-	}
-)
-
-var (
 	runnerSetReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "runnerset_spec_replicas",
