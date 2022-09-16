@@ -15,9 +15,7 @@ In this guide, we will setup prerequistes, deploy Actions Runner controller (ARC
 
 <details><summary><sub>Create a K8s cluster, if not available.</sub></summary>
    <sub>
-If you don't have a K8s cluster, you can install a local environment using minikube. For more information, see "[Installing minikube](https://minikube.sigs.k8s.io/docs/start/)."
-     
-     "[Using workflows](/actions/using-workflows)."
+If you don't have a K8s cluster, you can install a local environment using minikube. For more information, see <a href="https://minikube.sigs.k8s.io/docs/start/">"Installing minikube."</a>
    </sub>
 </details>
 
@@ -33,7 +31,7 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 
 
 :two: Next, Generate a Personal Access Token (PAT) for ARC to authenticate with GitHub.
-   - Login to GitHub account and Navigate to https://github.com/settings/tokens/new.
+   - Login to GitHub account and Navigate to "[Create new Token](https://github.com/settings/tokens/new)."
    - Select  **repo**.
    - Click **Generate Token** and then copy the token locally ( we’ll need it later).
 
@@ -129,7 +127,7 @@ GitHub documentation lists the steps to target Actions against self hosted runne
 There's also has a quick start guide to get started on Actions, For more information, see "[Quick start Guide to GitHub Actions](https://docs.github.com/en/actions/quickstart)."
 
 ## Next steps
-ARC provides several interesting features and capabilities. For more information, see "[readme](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/README.md)."
+ARC provides several interesting features and capabilities. For more information, see "[Readme](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/README.md)."
 
 
 
