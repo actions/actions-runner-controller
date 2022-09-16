@@ -1,5 +1,4 @@
-# Blank issues are mainly for maintainers who are known to write complete issue descriptions without need to following a form
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
 - name: Sponsor ARC Maintainers
   about: If your business relies on the continued maintainance of actions-runner-controller, please consider sponsoring the project and the maintainers.
