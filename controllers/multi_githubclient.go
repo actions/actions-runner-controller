@@ -48,7 +48,7 @@ type savedClient struct {
 }
 
 type resourceReader interface {
-	Get(context.Context, types.NamespacedName, client.Object) error
+	Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
 }
 
 type MultiGitHubClient struct {
