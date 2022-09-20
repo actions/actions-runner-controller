@@ -1,2 +1,9 @@
 run:
   timeout: 3m
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (net/http.ResponseWriter).Write
+      - (*net/http.Server).Shutdown
+      - (*github.com/actions-runner-controller/actions-runner-controller/simulator.VisibleRunnerGroups).Add
+      - (*github.com/actions-runner-controller/actions-runner-controller/testing.Kind).Stop
