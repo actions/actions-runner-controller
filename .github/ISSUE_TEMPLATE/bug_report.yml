@@ -3,6 +3,14 @@ description: File a bug report
 title: "Bug"
 labels: ["bug"]
 body:
+- type: checkboxes
+  id: read-troubleshooting-guide
+  attributes:
+    label: Checks
+    description: Please check the boxes below before submitting
+    options:
+    - label: I've already read https://github.com/actions-runner-controller/actions-runner-controller/blob/master/TROUBLESHOOTING.md and I'm sure my issue is not covered in the troubleshooting guide.
+      required: true
 - type: input
   id: controller-version
   attributes:
