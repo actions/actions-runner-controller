@@ -832,10 +832,9 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 	if containerMode == "kubernetes" {
 		if dockerdContainer != nil {
-			template.Spec.Containers = append(template.Spec.Containers[:dockerdContainerIndex], template.Spec.Containers[dockerdContainerIndex+1:]...)
+			template.Spec.Containers = append(template.Spec.Containers[dockerdContainerIndex+1:], template.Spec.Containers[:dockerdContainerIndex]...)
 		}
-		// TODO: What was the intention here?
-		if runnerContainerIndex < runnerContainerIndex {
+		if dockerdContainerIndex < runnerContainerIndex {
 			runnerContainerIndex--
 		}
 		dockerdContainer = nil
