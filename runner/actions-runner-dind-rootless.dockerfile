@@ -106,6 +106,10 @@ COPY entrypoint.sh logger.bash rootless-startup.sh update-status /usr/bin/
 
 RUN chmod +x /usr/bin/rootless-startup.sh /usr/bin/entrypoint.sh
 
+# Copy the docker shim which propagates the docker MTU to underlying networks
+# to replace the docker binary in the PATH.
+COPY docker-shim.sh /usr/local/bin/docker
+
 # Make the rootless runner directory executable
 RUN mkdir /run/user/1000 \
     && chown runner:runner /run/user/1000 \
