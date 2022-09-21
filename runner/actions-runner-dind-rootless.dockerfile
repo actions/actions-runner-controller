@@ -30,6 +30,7 @@ RUN apt update -y \
     dnsutils \
     ftp \
     git \
+    git-lfs \
     iproute2 \
     iputils-ping \
     iptables \
