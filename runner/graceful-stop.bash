@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # This should be shorter enough than the terminationGracePeriodSeconds,
 # so that the job is cancelled immediately, instead of hanging for 10 minutes or so and failing without any error message.

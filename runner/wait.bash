@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 function wait_for_process () {
     local max_time_wait=30
