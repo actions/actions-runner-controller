@@ -715,7 +715,7 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 				},
 			},
 		},
-		corev1.EnvVar{
+		{
 			Name:  "ACTIONS_RUNNER_REQUIRE_SAME_NODE",
 			Value: strconv.FormatBool(isRequireSameNode),
 		},
@@ -834,7 +834,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		if dockerdContainer != nil {
 			template.Spec.Containers = append(template.Spec.Containers[:dockerdContainerIndex], template.Spec.Containers[dockerdContainerIndex+1:]...)
 		}
-		if runnerContainerIndex < runnerContainerIndex {
+		if dockerdContainerIndex < runnerContainerIndex {
 			runnerContainerIndex--
 		}
 		dockerdContainer = nil
@@ -1225,14 +1225,4 @@ func isRequireSameNode(pod *corev1.Pod) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func overwriteRunnerEnv(runner *v1alpha1.Runner, key string, value string) {
-	for i := range runner.Spec.Env {
-		if runner.Spec.Env[i].Name == key {
-			runner.Spec.Env[i].Value = value
-			return
-		}
-	}
-	runner.Spec.Env = append(runner.Spec.Env, corev1.EnvVar{Name: key, Value: value})
 }

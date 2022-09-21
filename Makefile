@@ -51,6 +51,9 @@ endif
 
 all: manager
 
+lint:
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.49.0 golangci-lint run
+
 GO_TEST_ARGS ?= -short
 
 # Run tests

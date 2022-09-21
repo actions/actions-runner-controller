@@ -47,7 +47,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	status := req.URL.Query().Get("status")
 	if h.Statuses != nil {
 		if body, ok := h.Statuses[status]; ok {
-			fmt.Fprintf(w, body)
+			fmt.Fprint(w, body)
 			return
 		}
 	}
@@ -69,7 +69,7 @@ func (h *MapHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(404)
 	} else {
 		w.WriteHeader(h.Status)
-		fmt.Fprintf(w, body)
+		fmt.Fprint(w, body)
 	}
 }
 

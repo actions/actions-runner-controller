@@ -155,3 +155,7 @@ GINKGO_FOCUS='[It] should create a new Runner resource from the specified templa
 #### Helm Version Bumps
 
 In general we ask you not to bump the version in your PR, the maintainers in general manage the publishing of a new chart.
+
+#### Running linters locally
+
+To run the `golangci-lint` tool locally, we recommend you use `make lint` to run the tool using a Docker container matching the CI version.

@@ -79,7 +79,6 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 				for {
 					select {
 					case <-after:
-						after = nil
 						break batch
 					case st := <-s.queue:
 						nsName := types.NamespacedName{

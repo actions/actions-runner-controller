@@ -334,11 +334,7 @@ func (r Runner) IsRegisterable() bool {
 	}
 
 	now := metav1.Now()
-	if r.Status.Registration.ExpiresAt.Before(&now) {
-		return false
-	}
-
-	return true
+	return !r.Status.Registration.ExpiresAt.Before(&now)
 }
 
 // +kubebuilder:object:root=true

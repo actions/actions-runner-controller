@@ -41,18 +41,3 @@ func (c *Simulator) GetRunnerGroupsVisibleToRepository(ctx context.Context, org,
 
 	return visible, nil
 }
-
-func (c *Simulator) hasRepoAccessToOrganizationRunnerGroup(ctx context.Context, org string, runnerGroupId int64, repo string) (bool, error) {
-	repos, err := c.Client.ListRunnerGroupRepositoryAccesses(ctx, org, runnerGroupId)
-	if err != nil {
-		return false, err
-	}
-
-	for _, githubRepo := range repos {
-		if githubRepo.GetFullName() == repo {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
