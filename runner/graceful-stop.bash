@@ -78,5 +78,3 @@ graceful_stop() {
   
   log.notice "Graceful stop completed."
 }
-
-trap graceful_stop TERM

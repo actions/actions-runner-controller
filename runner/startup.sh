@@ -1,6 +1,7 @@
 #!/bin/bash
 source logger.bash
 source graceful-stop.bash
+trap graceful_stop TERM
 
 sudo /bin/bash <<SCRIPT
 mkdir -p /etc/docker
@@ -64,3 +65,5 @@ runner_init_pid=$!
 log.notice "Runner init started with pid $runner_init_pid"
 wait $runner_init_pid
 log.notice "Runner init exited. Exiting this process with code 0 so that the container and the pod is GC'ed Kubernetes soon."
+
+trap - TERM
