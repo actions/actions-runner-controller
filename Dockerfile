@@ -48,6 +48,6 @@ WORKDIR /
 COPY --from=builder /out/manager .
 COPY --from=builder /out/github-webhook-server .
 
-USER nonroot:nonroot
+USER 65532:65532
 
 ENTRYPOINT ["/manager"]
