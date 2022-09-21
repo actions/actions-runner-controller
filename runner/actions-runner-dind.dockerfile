@@ -103,6 +103,10 @@ COPY entrypoint.sh logger.bash startup.sh update-status /usr/bin/
 COPY supervisor/ /etc/supervisor/conf.d/
 RUN chmod +x /usr/bin/startup.sh /usr/bin/entrypoint.sh
 
+# Copy the docker shim which propagates the docker MTU to underlying networks
+# to replace the docker binary in the PATH.
+COPY docker-shim.sh /usr/local/bin/docker
+
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
 
