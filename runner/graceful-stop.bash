@@ -24,7 +24,7 @@ graceful_stop() {
   #   Cannot connect to server, because config files are missing. Skipping removing runner from the server.
   #   Does not exist. Skipping Removing .credentials
   #   Does not exist. Skipping Removing .runner
-  cd /runner
+  pushd /runner
 
   if ! /runner/config.sh remove --token $RUNNER_TOKEN; then
     i=0
@@ -38,6 +38,8 @@ graceful_stop() {
       i=$((i+1))
     done
   fi
+
+  popd
 
   if pgrep Runner.Listener > /dev/null; then
     # The below procedure fixes the runner to correctly notify the Actions service for the cancellation of this runner.
