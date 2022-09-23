@@ -133,6 +133,7 @@ USER runner
 
 # Docker installation
 ENV SKIP_IPTABLES=1
+# This will install docker under $HOME/bin according to the content of the script
 RUN curl -fsSL https://get.docker.com/rootless | sh
 
 # Docker-compose installation
