@@ -1574,6 +1574,10 @@ spec:
 
 ### Using without cert-manager
 
+There are two methods of deploying without cert-manager, you can generate your own certificates or rely on helm to generate a CA and certificate each time you update the chart.
+
+#### Using custom certificates
+
 Assuming you are installing in the default namespace, ensure your certificate has SANs:
 
 * `webhook-service.actions-runner-system.svc`
@@ -1600,6 +1604,18 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
+
+#### Using helm to generate CA and certificates
+
+Set the Helm chart values as follows:
+
+```shell
+$ CA_BUNDLE=$(cat path/to/ca.pem | base64)
+$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+  certManagerEnabled=false
+```
+
+This generates a temporary CA using the helm `genCA` function and issues a certificate for the webhook. Note that this approach rotates the CA and certificate each time `helm install` or `helm upgrade` are run. In effect, this will cause short interruptions to the mutating webhook while the ARC pods stabilize and use the new certificate each time `helm upgrade` is called for the chart. The outage can affect kube-api activity due to the way mutating webhooks are called.
 
 ### Setting up Windows Runners
 
