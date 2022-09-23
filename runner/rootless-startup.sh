@@ -11,8 +11,8 @@ fi
 
 if [ -n "${MTU}" ]; then
 jq ".\"mtu\" = ${MTU}" /home/runner/.config/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /home/runner/.config/docker/daemon.json
-# See https://docs.docker.com/engine/security/rootless/
-echo "environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=${MTU}" >> /etc/supervisor/conf.d/dockerd.conf
+# See https://docs.docker.com/engine/security/rootless/ and https://github.com/docker/engine/blob/8955d8da8951695a98eb7e15bead19d402c6eb27/contrib/dockerd-rootless.sh#L13
+echo "DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=${MTU}" >> /etc/environment
 fi
 
 if [ -n "${DOCKER_REGISTRY_MIRROR}" ]; then
