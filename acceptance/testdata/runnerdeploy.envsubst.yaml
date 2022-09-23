@@ -52,6 +52,10 @@ spec:
       env:
       - name: ROLLING_UPDATE_PHASE
         value: "${ROLLING_UPDATE_PHASE}"
+      - name: ARC_DOCKER_MTU_PROPAGATION
+        value: "true"
+
+      dockerMTU: 1400
 
       #
       # Non-standard working directory

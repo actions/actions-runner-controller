@@ -1068,6 +1068,74 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				},
 			}...)
 
+			// This let dockerd to create container's network interface to have the specified MTU.
+			// In other words, this is for setting com.docker.network.driver.mtu in the docker bridge options.
+			// You can see the options by running `docker network inspect bridge`, where you will see something like the below when spec.dockerMTU=1400:
+			//
+			// "Options": {
+			// 	 "com.docker.network.bridge.default_bridge": "true",
+			// 	 "com.docker.network.bridge.enable_icc": "true",
+			// 	 "com.docker.network.bridge.enable_ip_masquerade": "true",
+			// 	 "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+			// 	 "com.docker.network.bridge.name": "docker0",
+			// 	 "com.docker.network.driver.mtu": "1400"
+			// },
+			//
+			// See e.g. https://forums.docker.com/t/changing-mtu-value/74114 and https://mlohr.com/docker-mtu/ for more details.
+			//
+			// Note though, this doesn't immediately affect docker0's MTU, and the MTU of the docker network created with docker-create-network:
+			// You can verity that by running `ip link` within the containers:
+			//
+			//   # ip link
+			//   1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+			//   link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+			//   2: eth0@if1118: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue state UP
+			//   link/ether c2:dd:e6:66:8e:8b brd ff:ff:ff:ff:ff:ff
+			//   3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//   link/ether 02:42:ab:1c:83:69 brd ff:ff:ff:ff:ff:ff
+			//   4: br-c5bf6c172bd7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//   link/ether 02:42:e2:91:13:1e brd ff:ff:ff:ff:ff:ff
+			//
+			// br-c5bf6c172bd7 is the interface that corresponds to the docker network created with docker-create-network.
+			// We have another ARC feature to inherit the host's MTU to the docker networks:
+			// https://github.com/actions-runner-controller/actions-runner-controller/pull/1201
+			//
+			// docker's MTU is updated to the specified MTU once any container is created.
+			// You can verity that by running a random container from within the runner or dockerd containers:
+			//
+			// / # docker run -d busybox sh -c 'sleep 10'
+			// e848e6acd6404ca0199e4d9c5ef485d88c974ddfb7aaf2359c66811f68cf5e42
+			//
+			// You'll now see the veth767f1a5@if7 got created with the MTU inherited by dockerd:
+			//
+			// / # ip link
+			// 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+			//     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+			// 2: eth0@if1118: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue state UP
+			//     link/ether c2:dd:e6:66:8e:8b brd ff:ff:ff:ff:ff:ff
+			// 3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1400 qdisc noqueue state UP
+			//     link/ether 02:42:ab:1c:83:69 brd ff:ff:ff:ff:ff:ff
+			// 4: br-c5bf6c172bd7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//     link/ether 02:42:e2:91:13:1e brd ff:ff:ff:ff:ff:ff
+			// 8: veth767f1a5@if7: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1400 qdisc noqueue master docker0 state UP
+			//     link/ether 82:d5:08:28:d8:98 brd ff:ff:ff:ff:ff:ff
+			//
+			// # After 10 seconds sleep, you can see the container stops and the veth767f1a5@if7 interface got deleted:
+			//
+			// / # ip link
+			// 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+			//     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+			// 2: eth0@if1118: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue state UP
+			//     link/ether c2:dd:e6:66:8e:8b brd ff:ff:ff:ff:ff:ff
+			// 3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//     link/ether 02:42:ab:1c:83:69 brd ff:ff:ff:ff:ff:ff
+			// 4: br-c5bf6c172bd7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//     link/ether 02:42:e2:91:13:1e brd ff:ff:ff:ff:ff:ff
+			//
+			// See https://github.com/moby/moby/issues/26382#issuecomment-246906331 for reference.
+			//
+			// Probably we'd better infer DockerMTU from the host's primary interface's MTU and docker0's MTU?
+			// That's another story- if you want it, please start a thread in GitHub Discussions!
 			dockerdContainer.Args = append(dockerdContainer.Args,
 				"--mtu",
 				fmt.Sprintf("%d", *runnerSpec.DockerMTU),
