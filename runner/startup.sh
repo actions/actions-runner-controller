@@ -58,6 +58,7 @@ for process in "${processes[@]}"; do
     if [ $? -ne 0 ]; then
         log.error "$process is not running after max time"
         dump /var/log/dockerd.err.log 'Dumping {path} to aid investigation'
+        dump /var/log/supervisor/supervisord.log 'Dumping {path} to aid investigation'
         exit 1
     else
         log.debug "$process is running"
