@@ -27,9 +27,12 @@ import (
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	arcv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -123,6 +126,21 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		log.V(2).Info("Seen deletion-timestamp is already set")
+
+		// Mark the parent Runner resource for deletion before deleting this runner pod from the cluster.
+		// Otherwise the runner controller can recreate the runner pod thinking it has not created any runner pod yet.
+		var (
+			key    = types.NamespacedName{Namespace: runnerPod.Namespace, Name: runnerPod.Name}
+			runner arcv1alpha1.Runner
+		)
+		if err := r.Get(ctx, key, &runner); err == nil {
+			if runner.Name != "" && runner.DeletionTimestamp == nil {
+				log.Info("This runner pod seems to have been deleted directly, bypassing the parent Runner resource. Marking the runner for deletion to not let it recreate this pod.")
+				if err := r.Delete(ctx, &runner); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 
 		if finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerLinkedResourcesFinalizerName); removed {
 			if err := r.cleanupRunnerLinkedPods(ctx, &runnerPod, log); err != nil {
