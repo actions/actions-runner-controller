@@ -98,11 +98,27 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		// If it's already unregistered in the previous reconcilation loop,
 		// you can safely assume that it won't get registered again so it's safe to delete the runner pod.
 		log.Info("Runner pod is marked as already unregistered.")
-	} else if runnerID == nil {
+	} else if runnerID == nil && !runnerPodOrContainerIsStopped(pod) && !podConditionTransitionTimeAfter(pod, corev1.PodReady, registrationTimeout) {
 		log.Info(
-			"Unregistration started before runner ID is assigned. " +
-				"Perhaps the runner pod was terminated by anyone other than ARC? Was it OOM killed? " +
+			"Unregistration started before runner obtains ID. Waiting for the regisration timeout to elapse, or the runner to obtain ID, or the runner pod to stop",
+			"registrationTimeout", registrationTimeout,
+		)
+		return &ctrl.Result{RequeueAfter: retryDelay}, nil
+	} else if runnerID == nil && runnerPodOrContainerIsStopped(pod) {
+		log.Info(
+			"Unregistration started before runner ID is assigned and the runner stopped before obtaining ID within registration timeout. "+
+				"Perhaps the runner successfully ran the job and stopped normally before the runner ID becomes visible via GitHub API? "+
+				"Perhaps the runner pod was terminated by anyone other than ARC? Was it OOM killed? "+
 				"Marking unregistration as completed anyway because there's nothing ARC can do.",
+			"registrationTimeout", registrationTimeout,
+		)
+	} else if runnerID == nil && podConditionTransitionTimeAfter(pod, corev1.PodReady, registrationTimeout) {
+		log.Info(
+			"Unregistration started before runner ID is assigned and the runner was unable to obtain ID within registration timeout. "+
+				"Perhaps the runner has communication issue, or a firewall egress rule is dropping traffic to GitHub API, or GitHub API is unavailable? "+
+				"Marking unregistration as completed anyway because there's nothing ARC can do. "+
+				"This may result in in cancelling the job depending on your terminationGracePeriodSeconds and RUNNER_GRACEFUL_STOP_TIMEOUT settings.",
+			"registrationTimeout", registrationTimeout,
 		)
 	} else if pod != nil && runnerPodOrContainerIsStopped(pod) {
 		// If it's an ephemeral runner with the actions/runner container exited with 0,
@@ -351,21 +367,22 @@ func setRunnerEnv(pod *corev1.Pod, key, value string) {
 // Case 1. (true, nil) when it has successfully unregistered the runner.
 // Case 2. (false, nil) when (2-1.) the runner has been already unregistered OR (2-2.) the runner will never be created OR (2-3.) the runner is not created yet and it is about to be registered(hence we couldn't see it's existence from GitHub Actions API yet)
 // Case 3. (false, err) when it postponed unregistration due to the runner being busy, or it tried to unregister the runner but failed due to
-//   an error returned by GitHub API.
+//
+//	an error returned by GitHub API.
 //
 // When the returned values is "Case 2. (false, nil)", the caller must handle the three possible sub-cases appropriately.
 // In other words, all those three sub-cases cannot be distinguished by this function alone.
 //
-// - Case "2-1." can happen when e.g. ARC has successfully unregistered in a previous reconcilation loop or it was an ephemeral runner that finished it's job run(an ephemeral runner is designed to stop after a job run).
-//   You'd need to maintain the runner state(i.e. if it's already unregistered or not) somewhere,
-//   so that you can either not call this function at all if the runner state says it's already unregistered, or determine that it's case "2-1." when you got (false, nil).
+//   - Case "2-1." can happen when e.g. ARC has successfully unregistered in a previous reconcilation loop or it was an ephemeral runner that finished it's job run(an ephemeral runner is designed to stop after a job run).
+//     You'd need to maintain the runner state(i.e. if it's already unregistered or not) somewhere,
+//     so that you can either not call this function at all if the runner state says it's already unregistered, or determine that it's case "2-1." when you got (false, nil).
 //
-// - Case "2-2." can happen when e.g. the runner registration token was somehow broken so that `config.sh` within the runner container was never meant to succeed.
-//   Waiting and retrying forever on this case is not a solution, because `config.sh` won't succeed with a wrong token hence the runner gets stuck in this state forever.
-//   There isn't a perfect solution to this, but a practical workaround would be implement a "grace period" in the caller side.
+//   - Case "2-2." can happen when e.g. the runner registration token was somehow broken so that `config.sh` within the runner container was never meant to succeed.
+//     Waiting and retrying forever on this case is not a solution, because `config.sh` won't succeed with a wrong token hence the runner gets stuck in this state forever.
+//     There isn't a perfect solution to this, but a practical workaround would be implement a "grace period" in the caller side.
 //
-// - Case "2-3." can happen when e.g. ARC recreated an ephemral runner pod in a previous reconcilation loop and then it was requested to delete the runner before the runner comes up.
-//   If handled inappropriately, this can cause a race condition betweeen a deletion of the runner pod and GitHub scheduling a workflow job onto the runner.
+//   - Case "2-3." can happen when e.g. ARC recreated an ephemral runner pod in a previous reconcilation loop and then it was requested to delete the runner before the runner comes up.
+//     If handled inappropriately, this can cause a race condition betweeen a deletion of the runner pod and GitHub scheduling a workflow job onto the runner.
 //
 // Once successfully detected case "2-1." or "2-2.", you can safely delete the runner pod because you know that the runner won't come back
 // as long as you recreate the runner pod.
