@@ -137,8 +137,8 @@ body:
 - type: textarea
   id: controller-logs
   attributes:
-    label: Controller Logs
-    description: "NEVER EVER OMIT THIS! Include logs from `actions-runner-controller`'s controller-manager pod"
+    label: Whole Controller Logs
+    description: "NEVER EVER OMIT THIS! Include logs from `actions-runner-controller`'s controller-manager pod. Don't omit the parts you think irrelevant!"
     render: shell
     placeholder: |
       PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
@@ -157,11 +157,11 @@ body:
 - type: textarea
   id: runner-pod-logs
   attributes:
-    label: Runner Pod Logs
-    description: "Include logs from runner pod(s)"
+    label: Whole Runner Pod Logs
+    description: "Include logs from runner pod(s). Please don't omit the parts you think irrelevant!"
     render: shell
     placeholder: |
-      PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+      PROVIDE THE WHOLE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
       
       To grab the runner pod logs:
 
@@ -173,6 +173,8 @@ body:
 
       kubectl -n $NS logs $POD_NAME -c runner > runnerpod_runner.log
       kubectl -n $NS logs $POD_NAME -c docker > runnerpod_docker.log
+      
+      If any of the containers are getting terminated immediately, try adding `--previous` to the kubectl-logs command to obtain logs emitted before the termination.
   validations:
     required: true
 - type: textarea
