@@ -69,7 +69,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 	tar --extract \
 		--file docker.tgz \
 		--strip-components 1 \
-		--directory /usr/local/bin/ \
+		--directory /usr/bin/ \
 	; \
 	rm docker.tgz; \
 	dockerd --version; \

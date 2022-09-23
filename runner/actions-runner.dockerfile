@@ -60,7 +60,7 @@ RUN set -vx; \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
     && curl -f -L -o docker.tgz https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz \
     && tar zxvf docker.tgz \
-    && install -o root -g root -m 755 docker/docker /usr/local/bin/docker \
+    && install -o root -g root -m 755 docker/docker /usr/bin/docker \
     && rm -rf docker docker.tgz \
     && adduser --disabled-password --gecos "" --uid 1000 runner \
     && groupadd docker \
@@ -118,6 +118,10 @@ RUN mkdir /opt/hostedtoolcache \
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
 COPY entrypoint.sh logger.bash update-status /usr/bin/
+
+# Copy the docker shim which propagates the docker MTU to underlying networks
+# to replace the docker binary in the PATH.
+COPY docker-shim.sh /usr/local/bin/docker
 
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
