@@ -19,12 +19,15 @@ graceful_stop() {
   # If we didn't do this atomically, we might end up with a rare race where
   # the runner agent is terminated while it was about to start a job.
 
-  # `cd`` is needed to run the config.sh successfully.
+  # `pushd`` is needed to run the config.sh successfully.
   # Without this the author of this script ended up with errors like the below:
   #   Cannot connect to server, because config files are missing. Skipping removing runner from the server.
   #   Does not exist. Skipping Removing .credentials
   #   Does not exist. Skipping Removing .runner
-  pushd /runner
+  if ! pushd /runner; then
+    log.error "Failed to pushd ${RUNNER_HOME}"
+    exit 1
+  fi
 
   if ! /runner/config.sh remove --token "$RUNNER_TOKEN"; then
     i=0
@@ -39,7 +42,10 @@ graceful_stop() {
     done
   fi
 
-  popd
+  if ! popd; then
+    log.error "Failed to popd from ${RUNNER_HOME}"
+    exit 1
+  fi
 
   if pgrep Runner.Listener > /dev/null; then
     # The below procedure fixes the runner to correctly notify the Actions service for the cancellation of this runner.
