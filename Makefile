@@ -19,6 +19,7 @@ KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
 KUBE_RBAC_PROXY_VERSION ?= v0.11.0
+SHELLCHECK_VERSION ?= 0.8.0
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:generateEmbeddedObjectMeta=true"
@@ -31,6 +32,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 TEST_ASSETS=$(PWD)/test-assets
+TOOLS_PATH=$(PWD)/.tools
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
@@ -57,7 +59,7 @@ lint:
 GO_TEST_ARGS ?= -short
 
 # Run tests
-test: generate fmt vet manifests
+test: generate fmt vet manifests shellcheck
 	go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
 	go test -fuzz=Fuzz -fuzztime=10s -run=Fuzz* ./controllers
 
@@ -112,6 +114,10 @@ vet:
 # Generate code
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
+
+# Run shellcheck on runner scripts
+shellcheck: shellcheck-install
+	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.bash runner/*.sh
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
@@ -251,6 +257,25 @@ ifeq (, $(wildcard $(GOBIN)/yq))
 	}
 endif
 YQ=$(GOBIN)/yq
+
+# find or download shellcheck
+# download shellcheck if necessary
+shellcheck-install:
+ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
+	echo "Downloading shellcheck"
+	@{ \
+	set -e ;\
+	SHELLCHECK_TMP_DIR=$$(mktemp -d) ;\
+	cd $$SHELLCHECK_TMP_DIR ;\
+	curl -LO https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz ;\
+	tar Jxvf shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz ;\
+	cd $(CURDIR) ;\
+	mkdir -p $(TOOLS_PATH) ;\
+	mv $$SHELLCHECK_TMP_DIR/shellcheck-v$(SHELLCHECK_VERSION)/shellcheck $(TOOLS_PATH)/ ;\
+	rm -rf $$SHELLCHECK_TMP_DIR ;\
+	}
+endif
+SHELLCHECK=$(TOOLS_PATH)/shellcheck
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 
