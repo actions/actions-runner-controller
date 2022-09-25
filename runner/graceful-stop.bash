@@ -72,10 +72,10 @@ graceful_stop() {
   # unable to gracefully stop, hence the workflow job hanged like forever.
   log.notice "The actions runner process exited."
   
-  if [ "$runner_init_pid" != "" ]; then
-    log.notice "Holding on until runner init (pid $runner_init_pid) exits, so that there will hopefully be no zombie processes remaining."
-    # We don't need to kill -TERM $runner_init_pid as the init is supposed to exit by itself once the foreground process(=the runner agent) exists.
-    wait $runner_init_pid || :
+  if [ "$RUNNER_INIT_PID" != "" ]; then
+    log.notice "Holding on until runner init (pid $RUNNER_INIT_PID) exits, so that there will hopefully be no zombie processes remaining."
+    # We don't need to kill -TERM $RUNNER_INIT_PID as the init is supposed to exit by itself once the foreground process(=the runner agent) exists.
+    wait $RUNNER_INIT_PID || :
   fi
   
   log.notice "Graceful stop completed."
