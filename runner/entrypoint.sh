@@ -11,9 +11,9 @@ RUNNER_HOME=${RUNNER_HOME:-/runner}
 export ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/arc/hooks/job-started.sh
 export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/etc/arc/hooks/job-completed.sh
 
-if [ ! -z "${STARTUP_DELAY_IN_SECONDS}" ]; then
+if [ -n "${STARTUP_DELAY_IN_SECONDS}" ]; then
   log.notice "Delaying startup by ${STARTUP_DELAY_IN_SECONDS} seconds"
-  sleep ${STARTUP_DELAY_IN_SECONDS}
+  sleep "${STARTUP_DELAY_IN_SECONDS}"
 fi
 
 if [ -z "${GITHUB_URL}" ]; then
@@ -71,11 +71,15 @@ if [[ "${UNITTEST:-}" == '' ]]; then
   shopt -u dotglob
 fi
 
-cd ${RUNNER_HOME}
+if ! cd "${RUNNER_HOME}"; then
+  log.error "Failed to cd into ${RUNNER_HOME}"
+  exit 1
+fi
+
 # past that point, it's all relative pathes from /runner
 
 config_args=()
-if [ "${RUNNER_FEATURE_FLAG_ONCE:-}" != "true" -a "${RUNNER_EPHEMERAL}" == "true" ]; then
+if [ "${RUNNER_FEATURE_FLAG_ONCE:-}" != "true" ] && [ "${RUNNER_EPHEMERAL}" == "true" ]; then
   config_args+=(--ephemeral)
   log.debug 'Passing --ephemeral to config.sh to enable the ephemeral runner.'
 fi
