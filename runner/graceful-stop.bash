@@ -26,7 +26,7 @@ graceful_stop() {
   #   Does not exist. Skipping Removing .runner
   pushd /runner
 
-  if ! /runner/config.sh remove --token $RUNNER_TOKEN; then
+  if ! /runner/config.sh remove --token "$RUNNER_TOKEN"; then
     i=0
     log.notice "Waiting for RUNNER_GRACEFUL_STOP_TIMEOUT=$RUNNER_GRACEFUL_STOP_TIMEOUT seconds until the runner agent to stop by itself."
     while [[ $i -lt $RUNNER_GRACEFUL_STOP_TIMEOUT ]]; do
@@ -55,7 +55,7 @@ graceful_stop() {
     # not even showing `Error: The operation was canceled.`, which is confusing.
     runner_listener_pid=$(pgrep Runner.Listener)
     log.notice "Sending SIGTERM to the actions runner agent ($runner_listener_pid)."
-    kill -TERM $runner_listener_pid
+    kill -TERM "$runner_listener_pid"
 
     log.notice "SIGTERM sent. If the runner is still running a job, you'll probably see \"Error: The operation was canceled.\" in its log."
     log.notice "Waiting for the actions runner agent to stop."
@@ -75,7 +75,7 @@ graceful_stop() {
   if [ "$RUNNER_INIT_PID" != "" ]; then
     log.notice "Holding on until runner init (pid $RUNNER_INIT_PID) exits, so that there will hopefully be no zombie processes remaining."
     # We don't need to kill -TERM $RUNNER_INIT_PID as the init is supposed to exit by itself once the foreground process(=the runner agent) exists.
-    wait $RUNNER_INIT_PID || :
+    wait "$RUNNER_INIT_PID" || :
   fi
   
   log.notice "Graceful stop completed."
