@@ -54,7 +54,8 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && groupadd docker \
     && usermod -aG sudo runner \
     && usermod -aG docker runner \
-    && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
+    && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers \
+    && echo "Defaults env_keep += \"DEBIAN_FRONTEND\"" >> /etc/sudoers
 
 # arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 # Docker download supports arm64 as aarch64 & amd64 / i386 as x86_64
