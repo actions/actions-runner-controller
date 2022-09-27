@@ -29,6 +29,17 @@ graceful_stop() {
     exit 1
   fi
 
+  # We need to wait for the registration first.
+  # Otherwise a direct runner pod deletion triggered while the runner entrypoint.sh is about to register itself with
+  # config.sh can result in this graceful stop process to get skipped.
+  # In that case, the pod is eventually and forcefully terminated by ARC and K8s, resulting
+  # in the possible running workflow job after this graceful stop process failed might get cancelled prematurely.
+  log.notice "Waiting for the runner to register first."
+  while ! -f /runner/.runner; do
+    sleep 1
+  done
+  log.notice "Observed that the runner has been registered."
+
   if ! /runner/config.sh remove --token "$RUNNER_TOKEN"; then
     i=0
     log.notice "Waiting for RUNNER_GRACEFUL_STOP_TIMEOUT=$RUNNER_GRACEFUL_STOP_TIMEOUT seconds until the runner agent to stop by itself."
