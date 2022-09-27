@@ -1034,10 +1034,18 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
 					// so we end up with the below error on docker-build:
 					//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+					// See https://docs.docker.com/engine/reference/commandline/buildx_create/#docker-container-driver
+					// for the `docker-container` driver.
 					dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
 						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
 					dockerfile = "Dockerfile"
+					// Note though, if the cache does not exist yet, the buildx build seem to write cache data to /home/runner/.cache/buildx,
+					// not buildx-new.
+					// I think the following message emitted by buildx in the end is relevant to this behaviour, but not 100% sure:
+					//   WARNING: local cache import at /home/runner/.cache/buildx not found due to err: could not read /home/runner/.cache/buildx/index.json: open /home/runner/.cache/buildx/index.json: no such file or directory
 				} else {
+					// See https://docs.docker.com/engine/reference/commandline/buildx_create/#docker-driver
+					// for the `docker` driver.
 					setupBuildXActionWith.Driver = "docker"
 					dockerfile = "Dockerfile.nocache"
 				}
@@ -1063,16 +1071,18 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					},
 				)
 
-				steps = append(steps,
-					testing.Step{
-						// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
-						// See https://github.com/moby/buildkit/issues/1896 for why this is needed
-						Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
-					},
-					testing.Step{
-						Run: "ls -lah /home/runner/.cache/*",
-					},
-				)
+				if useSudo {
+					steps = append(steps,
+						testing.Step{
+							// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+							// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+							Run: "if -d /home/runner/.cache/buildx-new; then " + sudo + "rm -rf /home/runner/.cache/buildx && " + sudo + `mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx; else echo "/home/runner/.cache/buildx-new is not found. Perhaps you're running this on a stateleess runner?"; fi`,
+						},
+						testing.Step{
+							Run: "ls -lah /home/runner/.cache/*",
+						},
+					)
+				}
 			}
 
 			if useSudo {
