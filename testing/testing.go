@@ -113,7 +113,7 @@ func (e *Env) DeleteTestID(t *testing.T) {
 func (e *Env) DockerBuild(t *testing.T, builds []DockerBuild) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 450*time.Second)
 	defer cancel()
 
 	if err := e.docker.Build(ctx, builds); err != nil {
