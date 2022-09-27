@@ -1151,6 +1151,17 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				fmt.Sprintf("--registry-mirror=%s", dockerRegistryMirror),
 			)
 		}
+
+		dockerdContainer.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh", "-c",
+						`echo "Waiting for actions runner agent to stop."; while [ -f /runner/.runner ]; do sleep 1; done; echo "actions runner agent has stopped."`,
+					},
+				},
+			},
+		}
 	}
 
 	if runnerContainerIndex == -1 {

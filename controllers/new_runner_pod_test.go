@@ -190,6 +190,17 @@ func TestNewRunnerPod(t *testing.T) {
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: func(b bool) *bool { return &b }(true),
 					},
+					Lifecycle: &corev1.Lifecycle{
+						PreStop: &corev1.LifecycleHandler{
+							Exec: &corev1.ExecAction{
+								Command: []string{
+									"/bin/sh",
+									"-c",
+									"echo \"Waiting for actions runner agent to stop.\"; while [ -f /runner/.runner ]; do sleep 1; done; echo \"actions runner agent has stopped.\"",
+								},
+							},
+						},
+					},
 				},
 			},
 			RestartPolicy: corev1.RestartPolicyNever,
@@ -708,6 +719,17 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: func(b bool) *bool { return &b }(true),
+					},
+					Lifecycle: &corev1.Lifecycle{
+						PreStop: &corev1.LifecycleHandler{
+							Exec: &corev1.ExecAction{
+								Command: []string{
+									"/bin/sh",
+									"-c",
+									"echo \"Waiting for actions runner agent to stop.\"; while [ -f /runner/.runner ]; do sleep 1; done; echo \"actions runner agent has stopped.\"",
+								},
+							},
+						},
 					},
 				},
 			},
