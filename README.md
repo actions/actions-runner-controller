@@ -617,7 +617,8 @@ spec:
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
-    - example/myrepo
+    # A repository name is the REPO part of `github.com/OWNER/REPO`
+    - myrepo
 ```
 
 **PercentageRunnersBusy**
