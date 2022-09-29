@@ -147,7 +147,7 @@ There is also a quick start guide to get started on Actions, For more informatio
 
 ## Learn more
 
-For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/QuickStartGuide.md)."
+For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/detailed-docs.md)."
 
 ## Contributing
 
