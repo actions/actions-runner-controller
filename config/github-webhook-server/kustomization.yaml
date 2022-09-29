@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+images:
+- name: controller
+  newName: summerwind/actions-runner-controller
+  newTag: latest
+
+resources:
+- deployment.yaml
+- rbac.yaml
+- service.yaml
+
+patchesStrategicMerge:
+- gh-webhook-server-auth-proxy-patch.yaml

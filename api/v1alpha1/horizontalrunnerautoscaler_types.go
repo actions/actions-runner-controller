@@ -60,6 +60,9 @@ type HorizontalRunnerAutoscalerSpec struct {
 	// The earlier a scheduled override is, the higher it is prioritized.
 	// +optional
 	ScheduledOverrides []ScheduledOverride `json:"scheduledOverrides,omitempty"`
+
+	// +optional
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
 }
 
 type ScaleUpTrigger struct {
@@ -72,10 +75,12 @@ type GitHubEventScaleUpTriggerSpec struct {
 	CheckRun    *CheckRunSpec    `json:"checkRun,omitempty"`
 	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
 	Push        *PushSpec        `json:"push,omitempty"`
+	WorkflowJob *WorkflowJobSpec `json:"workflowJob,omitempty"`
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
 type CheckRunSpec struct {
+	// One of: created, rerequested, or completed
 	Types  []string `json:"types,omitempty"`
 	Status string   `json:"status,omitempty"`
 
@@ -88,6 +93,10 @@ type CheckRunSpec struct {
 	// Repositories is a list of GitHub repositories.
 	// Any check_run event whose repository matches one of repositories in the list can trigger autoscaling.
 	Repositories []string `json:"repositories,omitempty"`
+}
+
+// https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job
+type WorkflowJobSpec struct {
 }
 
 // https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
@@ -107,6 +116,9 @@ type CapacityReservation struct {
 	Name           string      `json:"name,omitempty"`
 	ExpirationTime metav1.Time `json:"expirationTime,omitempty"`
 	Replicas       int         `json:"replicas,omitempty"`
+
+	// +optional
+	EffectiveTime metav1.Time `json:"effectiveTime,omitempty"`
 }
 
 type ScaleTargetRef struct {
@@ -121,7 +133,7 @@ type ScaleTargetRef struct {
 
 type MetricSpec struct {
 	// Type is the type of metric to be used for autoscaling.
-	// The only supported Type is TotalNumberOfQueuedAndInProgressWorkflowRuns
+	// It can be TotalNumberOfQueuedAndInProgressWorkflowRuns or PercentageRunnersBusy.
 	Type string `json:"type,omitempty"`
 
 	// RepositoryNames is the list of repository names to be used for calculating the metric.
@@ -161,7 +173,7 @@ type MetricSpec struct {
 }
 
 // ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
-// A schedule can optionally be recurring, so that the correspoding override happens every day, week, month, or year.
+// A schedule can optionally be recurring, so that the corresponding override happens every day, week, month, or year.
 type ScheduledOverride struct {
 	// StartTime is the time at which the first override starts.
 	StartTime metav1.Time `json:"startTime"`

@@ -3,7 +3,7 @@ package hookdeliveryforwarder
 import (
 	"context"
 
-	gogithub "github.com/google/go-github/v39/github"
+	gogithub "github.com/google/go-github/v47/github"
 )
 
 type hooksAPI struct {

@@ -25,6 +25,20 @@ import (
 type RunnerSetSpec struct {
 	RunnerConfig `json:",inline"`
 
+	// EffectiveTime is the time the upstream controller requested to sync Replicas.
+	// It is usually populated by the webhook-based autoscaler via HRA.
+	// It is used to prevent ephemeral runners from unnecessarily recreated.
+	//
+	// +optional
+	// +nullable
+	EffectiveTime *metav1.Time `json:"effectiveTime,omitempty"`
+
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// +optional
+	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
+
 	appsv1.StatefulSetSpec `json:",inline"`
 }
 

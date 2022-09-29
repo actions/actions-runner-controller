@@ -118,6 +118,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
+		log.Info("Created runnerreplicaset", "runnerreplicaset", desiredRS.Name)
+
 		return ctrl.Result{}, nil
 	}
 
@@ -142,6 +144,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
+		log.Info("Created runnerreplicaset", "runnerreplicaset", desiredRS.Name)
+
 		// We requeue in order to clean up old runner replica sets later.
 		// Otherwise, they aren't cleaned up until the next re-sync interval.
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -161,6 +165,8 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 
+		log.V(1).Info("Updated runnerreplicaset due to selector change")
+
 		// At this point, we are already sure that there's no need to create a new replicaset
 		// as the runner template hash is not changed.
 		//
@@ -175,14 +181,32 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	newDesiredReplicas := getIntOrDefault(desiredRS.Spec.Replicas, defaultReplicas)
 
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
-	if currentDesiredReplicas != newDesiredReplicas {
+	//
+	// If we missed taking the EffectiveTime diff into account, you might end up experiencing scale-ups being delayed scale-down.
+	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1477#issuecomment-1164154496
+	var et1, et2 time.Time
+	if newestSet.Spec.EffectiveTime != nil {
+		et1 = newestSet.Spec.EffectiveTime.Time
+	}
+	if rd.Spec.EffectiveTime != nil {
+		et2 = rd.Spec.EffectiveTime.Time
+	}
+	if currentDesiredReplicas != newDesiredReplicas || et1 != et2 {
 		newestSet.Spec.Replicas = &newDesiredReplicas
+		newestSet.Spec.EffectiveTime = rd.Spec.EffectiveTime
 
 		if err := r.Client.Update(ctx, newestSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
 
 			return ctrl.Result{}, err
 		}
+
+		log.V(1).Info("Updated runnerreplicaset due to spec change",
+			"currentDesiredReplicas", currentDesiredReplicas,
+			"newDesiredReplicas", newDesiredReplicas,
+			"currentEffectiveTime", newestSet.Spec.EffectiveTime,
+			"newEffectiveTime", rd.Spec.EffectiveTime,
+		)
 
 		return ctrl.Result{}, err
 	}
@@ -221,15 +245,38 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		for i := range oldSets {
 			rs := oldSets[i]
 
+			rslog := log.WithValues("runnerreplicaset", rs.Name)
+
+			if rs.Status.Replicas != nil && *rs.Status.Replicas > 0 {
+				if rs.Spec.Replicas != nil && *rs.Spec.Replicas == 0 {
+					rslog.V(2).Info("Waiting for runnerreplicaset to scale to zero")
+
+					continue
+				}
+
+				updated := rs.DeepCopy()
+				zero := 0
+				updated.Spec.Replicas = &zero
+				if err := r.Client.Update(ctx, updated); err != nil {
+					rslog.Error(err, "Failed to scale runnerreplicaset to zero")
+
+					return ctrl.Result{}, err
+				}
+
+				rslog.Info("Scaled runnerreplicaset to zero")
+
+				continue
+			}
+
 			if err := r.Client.Delete(ctx, &rs); err != nil {
-				log.Error(err, "Failed to delete runnerreplicaset resource")
+				rslog.Error(err, "Failed to delete runnerreplicaset resource")
 
 				return ctrl.Result{}, err
 			}
 
 			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
 
-			log.Info("Deleted runnerreplicaset", "runnerdeployment", rd.ObjectMeta.Name, "runnerreplicaset", rs.Name)
+			rslog.Info("Deleted runnerreplicaset")
 		}
 	}
 
@@ -393,9 +440,7 @@ func getSelector(rd *v1alpha1.RunnerDeployment) *metav1.LabelSelector {
 func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []string, scheme *runtime.Scheme) (*v1alpha1.RunnerReplicaSet, error) {
 	newRSTemplate := *rd.Spec.Template.DeepCopy()
 
-	for _, l := range commonRunnerLabels {
-		newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, l)
-	}
+	newRSTemplate.Spec.Labels = append(newRSTemplate.Spec.Labels, commonRunnerLabels...)
 
 	templateHash := ComputeHash(&newRSTemplate)
 
@@ -417,9 +462,10 @@ func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []str
 			Labels:       newRSTemplate.ObjectMeta.Labels,
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
-			Replicas: rd.Spec.Replicas,
-			Selector: newRSSelector,
-			Template: newRSTemplate,
+			Replicas:      rd.Spec.Replicas,
+			Selector:      newRSSelector,
+			Template:      newRSTemplate,
+			EffectiveTime: rd.Spec.EffectiveTime,
 		},
 	}
 

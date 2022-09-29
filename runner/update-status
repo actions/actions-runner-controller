@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ ${1:-} == '' ]]; then
+  # shellcheck source=runner/logger.bash
+  source logger.bash
+  log.error "Missing required argument -- '<phase>'"
+  exit 64
+fi
+
+if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
+
+    apiserver=https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}
+    serviceaccount=/var/run/secrets/kubernetes.io/serviceaccount
+    namespace=$(cat ${serviceaccount}/namespace)
+    token=$(cat ${serviceaccount}/token)
+    phase=$1
+    shift
+
+    jq -n --arg phase "$phase" --arg message "${*:-}" '.status.phase = $phase | .status.message = $message' | curl \
+        --cacert ${serviceaccount}/ca.crt \
+        --data @- \
+        --noproxy '*' \
+        --header "Content-Type: application/merge-patch+json" \
+        --header "Authorization: Bearer ${token}" \
+        --show-error \
+        --silent \
+        --request PATCH \
+        "${apiserver}/apis/actions.summerwind.dev/v1alpha1/namespaces/${namespace}/runners/${HOSTNAME}/status"
+        1>&-
+fi

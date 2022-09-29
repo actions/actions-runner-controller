@@ -8,7 +8,7 @@ import (
 	"time"
 
 	github2 "github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/google/go-github/v39/github"
+	"github.com/google/go-github/v47/github"
 
 	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
 
@@ -99,28 +99,30 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			return fmt.Sprintf("%s%s", ns.Name, name)
 		}
 
+		multiClient := NewMultiGitHubClient(mgr.GetClient(), env.ghClient)
+
 		runnerController := &RunnerReconciler{
 			Client:                      mgr.GetClient(),
 			Scheme:                      scheme.Scheme,
 			Log:                         logf.Log,
 			Recorder:                    mgr.GetEventRecorderFor("runnerreplicaset-controller"),
-			GitHubClient:                env.ghClient,
+			GitHubClient:                multiClient,
 			RunnerImage:                 "example/runner:test",
 			DockerImage:                 "example/docker:test",
 			Name:                        controllerName("runner"),
-			RegistrationRecheckInterval: time.Millisecond,
-			RegistrationRecheckJitter:   time.Millisecond,
+			RegistrationRecheckInterval: time.Millisecond * 100,
+			RegistrationRecheckJitter:   time.Millisecond * 10,
+			UnregistrationRetryDelay:    1 * time.Second,
 		}
 		err = runnerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runner controller")
 
 		replicasetController := &RunnerReplicaSetReconciler{
-			Client:       mgr.GetClient(),
-			Scheme:       scheme.Scheme,
-			Log:          logf.Log,
-			Recorder:     mgr.GetEventRecorderFor("runnerreplicaset-controller"),
-			GitHubClient: env.ghClient,
-			Name:         controllerName("runnerreplicaset"),
+			Client:   mgr.GetClient(),
+			Scheme:   scheme.Scheme,
+			Log:      logf.Log,
+			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Name:     controllerName("runnerreplicaset"),
 		}
 		err = replicasetController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runnerreplicaset controller")
@@ -136,13 +138,12 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runnerdeployment controller")
 
 		autoscalerController := &HorizontalRunnerAutoscalerReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        scheme.Scheme,
-			Log:           logf.Log,
-			GitHubClient:  env.ghClient,
-			Recorder:      mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
-			CacheDuration: 1 * time.Second,
-			Name:          controllerName("horizontalrunnerautoscaler"),
+			Client:       mgr.GetClient(),
+			Scheme:       scheme.Scheme,
+			Log:          logf.Log,
+			GitHubClient: multiClient,
+			Recorder:     mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Name:         controllerName("horizontalrunnerautoscaler"),
 		}
 		err = autoscalerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup autoscaler controller")
@@ -268,7 +269,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2)
-				ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx, ns.Name, name, 1)
 			}
 
 			{
@@ -371,7 +371,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 
 				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
 				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3)
-				ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx, ns.Name, name, 1)
 			}
 
 			{
@@ -538,6 +537,106 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 		})
 
+		It("should create and scale organization's repository runners on workflow_job event", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 1 replica via ScaleUpTriggers.GitHubEvent.WorkflowJob based scaling
+			{
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first workflow_job.queued webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+
+			// Scale-up to 3 replicas on second workflow_job.queued webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after second webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
+			}
+
+			// Do not scale-up on third workflow_job.queued webhook event
+			// repo "example" doesn't match our Spec
+			{
+				env.SendWorkflowJobEvent("test", "example", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 3, "runners after third webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(3, "count of fake list runners")
+			}
+		})
+
 		It("should create and scale organization's repository runners only on check_run event", func() {
 			name := "example-runnerdeploy"
 
@@ -582,9 +681,7 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
 			}
 
-			// Scale-up to 3 replicas by the default TotalNumberOfQueuedAndInProgressWorkflowRuns-based scaling
-			// See workflowRunsFor3Replicas_queued and workflowRunsFor3Replicas_in_progress for GitHub List-Runners API responses
-			// used while testing.
+			// Scale-up to 1 replica via ScaleUpTriggers.GitHubEvent.CheckRun based scaling
 			{
 				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1077,23 +1174,175 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 			}
 		})
 
+		It("should be able to scale visible organization runner group with default labels", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first workflow_job webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"self-hosted"})
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+		})
+
+		It("should be able to scale visible organization runner group with custom labels", func() {
+			name := "example-runnerdeploy"
+
+			{
+				rd := &actionsv1alpha1.RunnerDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.RunnerDeploymentSpec{
+						Replicas: intPtr(1),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"foo": "bar",
+							},
+						},
+						Template: actionsv1alpha1.RunnerTemplate{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"foo": "bar",
+								},
+							},
+							Spec: actionsv1alpha1.RunnerSpec{
+								RunnerConfig: actionsv1alpha1.RunnerConfig{
+									Repository: "test/valid",
+									Image:      "bar",
+									Group:      "baz",
+									Labels:     []string{"custom-label"},
+								},
+								RunnerPodSpec: actionsv1alpha1.RunnerPodSpec{
+									Env: []corev1.EnvVar{
+										{Name: "FOO", Value: "FOOVALUE"},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, rd, "test RunnerDeployment")
+
+				hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: ns.Name,
+					},
+					Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+						ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+							Name: name,
+						},
+						MinReplicas:                       intPtr(1),
+						MaxReplicas:                       intPtr(5),
+						ScaleDownDelaySecondsAfterScaleUp: intPtr(1),
+						ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+							{
+								GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+									WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+								},
+								Amount:   1,
+								Duration: metav1.Duration{Duration: time.Minute},
+							},
+						},
+					},
+				}
+
+				ExpectCreate(ctx, hra, "test HorizontalRunnerAutoscaler")
+
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1)
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 1)
+			}
+
+			{
+				env.ExpectRegisteredNumberCountEventuallyEquals(1, "count of fake list runners")
+			}
+
+			// Scale-up to 2 replicas on first workflow_job webhook event
+			{
+				env.SendWorkflowJobEvent("test", "valid", "queued", []string{"custom-label"})
+				ExpectRunnerSetsCountEventuallyEquals(ctx, ns.Name, 1, "runner sets after webhook")
+				ExpectRunnerSetsManagedReplicasCountEventuallyEquals(ctx, ns.Name, 2, "runners after first webhook event")
+				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
+			}
+		})
+
 	})
 })
-
-func ExpectHRAStatusCacheEntryLengthEventuallyEquals(ctx context.Context, ns string, name string, value int, optionalDescriptions ...interface{}) {
-	EventuallyWithOffset(
-		1,
-		func() int {
-			var hra actionsv1alpha1.HorizontalRunnerAutoscaler
-
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, &hra)
-
-			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to get test HRA resource")
-
-			return len(hra.Status.CacheEntries)
-		},
-		time.Second*5, time.Millisecond*500).Should(Equal(value), optionalDescriptions...)
-}
 
 func ExpectHRADesiredReplicasEquals(ctx context.Context, ns, name string, desired int, optionalDescriptions ...interface{}) {
 	var rd actionsv1alpha1.HorizontalRunnerAutoscaler
@@ -1118,7 +1367,7 @@ func (env *testEnvironment) ExpectRegisteredNumberCountEventuallyEquals(want int
 
 			return len(rs)
 		},
-		time.Second*5, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
+		time.Second*10, time.Millisecond*500).Should(Equal(want), optionalDescriptions...)
 }
 
 func (env *testEnvironment) SendOrgPullRequestEvent(org, repo, branch, action string) {
@@ -1162,6 +1411,30 @@ func (env *testEnvironment) SendOrgCheckRunEvent(org, repo, status, action strin
 	})
 
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send check_run event")
+
+	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
+}
+
+func (env *testEnvironment) SendWorkflowJobEvent(org, repo, statusAndAction string, labels []string) {
+	resp, err := sendWebhook(env.webhookServer, "workflow_job", &github.WorkflowJobEvent{
+		WorkflowJob: &github.WorkflowJob{
+			Status: &statusAndAction,
+			Labels: labels,
+		},
+		Org: &github.Organization{
+			Login: github.String(org),
+		},
+		Repo: &github.Repository{
+			Name: github.String(repo),
+			Owner: &github.User{
+				Login: github.String(org),
+				Type:  github.String("Organization"),
+			},
+		},
+		Action: github.String(statusAndAction),
+	})
+
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "failed to send workflow_job event")
 
 	ExpectWithOffset(1, resp.StatusCode).To(Equal(200))
 }

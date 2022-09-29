@@ -24,7 +24,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,6 +37,7 @@ import (
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
+	arcgithub "github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 const (
@@ -47,13 +47,12 @@ const (
 // HorizontalRunnerAutoscalerReconciler reconciles a HorizontalRunnerAutoscaler object
 type HorizontalRunnerAutoscalerReconciler struct {
 	client.Client
-	GitHubClient *github.Client
-	Log          logr.Logger
-	Recorder     record.EventRecorder
-	Scheme       *runtime.Scheme
-
-	CacheDuration time.Duration
-	Name          string
+	GitHubClient          *MultiGitHubClient
+	Log                   logr.Logger
+	Recorder              record.EventRecorder
+	Scheme                *runtime.Scheme
+	DefaultScaleDownDelay time.Duration
+	Name                  string
 }
 
 const defaultReplicas = 1
@@ -73,6 +72,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 	}
 
 	if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+		r.GitHubClient.DeinitForHRA(&hra)
+
 		return ctrl.Result{}, nil
 	}
 
@@ -99,10 +100,32 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 		return r.reconcile(ctx, req, log, hra, st, func(newDesiredReplicas int) error {
 			currentDesiredReplicas := getIntOrDefault(rd.Spec.Replicas, defaultReplicas)
 
+			ephemeral := rd.Spec.Template.Spec.Ephemeral == nil || *rd.Spec.Template.Spec.Ephemeral
+
+			var effectiveTime *time.Time
+
+			for _, r := range hra.Spec.CapacityReservations {
+				t := r.EffectiveTime
+				if effectiveTime == nil || effectiveTime.Before(t.Time) {
+					effectiveTime = &t.Time
+				}
+			}
+
 			// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 			if currentDesiredReplicas != newDesiredReplicas {
 				copy := rd.DeepCopy()
 				copy.Spec.Replicas = &newDesiredReplicas
+
+				if ephemeral && effectiveTime != nil {
+					copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
+				}
+
+				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
+					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
+				}
+			} else if ephemeral && effectiveTime != nil {
+				copy := rd.DeepCopy()
+				copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
 
 				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
 					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
@@ -137,6 +160,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			org:        rs.Spec.Organization,
 			repo:       rs.Spec.Repository,
 			replicas:   replicas,
+			labels:     rs.Spec.RunnerConfig.Labels,
 			getRunnerMap: func() (map[string]struct{}, error) {
 				// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 				var runnerPodList corev1.PodList
@@ -180,15 +204,38 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			}
 			currentDesiredReplicas := getIntOrDefault(replicas, defaultReplicas)
 
+			ephemeral := rs.Spec.Ephemeral == nil || *rs.Spec.Ephemeral
+
+			var effectiveTime *time.Time
+
+			for _, r := range hra.Spec.CapacityReservations {
+				t := r.EffectiveTime
+				if effectiveTime == nil || effectiveTime.Before(t.Time) {
+					effectiveTime = &t.Time
+				}
+			}
+
 			if currentDesiredReplicas != newDesiredReplicas {
 				copy := rs.DeepCopy()
 				v := int32(newDesiredReplicas)
 				copy.Spec.Replicas = &v
 
+				if ephemeral && effectiveTime != nil {
+					copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
+				}
+
+				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
+					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
+				}
+			} else if ephemeral && effectiveTime != nil {
+				copy := rs.DeepCopy()
+				copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
+
 				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
 					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
 				}
 			}
+
 			return nil
 		})
 	}
@@ -206,6 +253,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) scaleTargetFromRD(ctx context.Con
 		org:        rd.Spec.Template.Spec.Organization,
 		repo:       rd.Spec.Template.Spec.Repository,
 		replicas:   rd.Spec.Replicas,
+		labels:     rd.Spec.Template.Spec.RunnerConfig.Labels,
 		getRunnerMap: func() (map[string]struct{}, error) {
 			// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 			var runnerList v1alpha1.RunnerList
@@ -248,6 +296,7 @@ type scaleTarget struct {
 	st, kind              string
 	enterprise, repo, org string
 	replicas              *int
+	labels                []string
 
 	getRunnerMap func() (map[string]struct{}, error)
 }
@@ -262,7 +311,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 		return ctrl.Result{}, err
 	}
 
-	newDesiredReplicas, computedReplicas, computedReplicasFromCache, err := r.computeReplicasWithCache(log, now, st, hra, minReplicas)
+	ghc, err := r.GitHubClient.InitForHRA(context.Background(), &hra)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	newDesiredReplicas, err := r.computeReplicasWithCache(ghc, log, now, st, hra, minReplicas)
 	if err != nil {
 		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -285,24 +339,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 		}
 
 		updated.Status.DesiredReplicas = &newDesiredReplicas
-	}
-
-	if computedReplicasFromCache == nil {
-		cacheEntries := getValidCacheEntries(updated, now)
-
-		var cacheDuration time.Duration
-
-		if r.CacheDuration > 0 {
-			cacheDuration = r.CacheDuration
-		} else {
-			cacheDuration = 10 * time.Minute
-		}
-
-		updated.Status.CacheEntries = append(cacheEntries, v1alpha1.CacheEntry{
-			Key:            v1alpha1.CacheEntryKeyDesiredReplicas,
-			Value:          computedReplicas,
-			ExpirationTime: metav1.Time{Time: time.Now().Add(cacheDuration)},
-		})
 	}
 
 	var overridesSummary string
@@ -337,18 +373,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func getValidCacheEntries(hra *v1alpha1.HorizontalRunnerAutoscaler, now time.Time) []v1alpha1.CacheEntry {
-	var cacheEntries []v1alpha1.CacheEntry
-
-	for _, ent := range hra.Status.CacheEntries {
-		if ent.ExpirationTime.After(now) {
-			cacheEntries = append(cacheEntries, ent)
-		}
-	}
-
-	return cacheEntries
 }
 
 func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -443,32 +467,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) getMinReplicas(log logr.Logger, n
 	return minReplicas, active, upcoming, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, int, *int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(ghc *arcgithub.Client, log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, error) {
 	var suggestedReplicas int
 
-	suggestedReplicasFromCache := r.fetchSuggestedReplicasFromCache(hra)
+	v, err := r.suggestDesiredReplicas(ghc, st, hra)
+	if err != nil {
+		return 0, err
+	}
 
-	var cached *int
-
-	if suggestedReplicasFromCache != nil {
-		cached = suggestedReplicasFromCache
-
-		if cached == nil {
-			suggestedReplicas = minReplicas
-		} else {
-			suggestedReplicas = *cached
-		}
+	if v == nil {
+		suggestedReplicas = minReplicas
 	} else {
-		v, err := r.suggestDesiredReplicas(st, hra)
-		if err != nil {
-			return 0, 0, nil, err
-		}
-
-		if v == nil {
-			suggestedReplicas = minReplicas
-		} else {
-			suggestedReplicas = *v
-		}
+		suggestedReplicas = *v
 	}
 
 	var reserved int
@@ -496,7 +506,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 	if hra.Spec.ScaleDownDelaySecondsAfterScaleUp != nil {
 		scaleDownDelay = time.Duration(*hra.Spec.ScaleDownDelaySecondsAfterScaleUp) * time.Second
 	} else {
-		scaleDownDelay = DefaultScaleDownDelay
+		scaleDownDelay = r.DefaultScaleDownDelay
 	}
 
 	var scaleDownDelayUntil *time.Time
@@ -527,8 +537,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 		"min", minReplicas,
 	}
 
-	if cached != nil {
-		kvs = append(kvs, "cached", *cached)
+	if maxReplicas := hra.Spec.MaxReplicas; maxReplicas != nil {
+		kvs = append(kvs, "max", *maxReplicas)
 	}
 
 	if scaleDownDelayUntil != nil {
@@ -536,13 +546,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(log logr
 		kvs = append(kvs, "scale_down_delay_until", scaleDownDelayUntil)
 	}
 
-	if maxReplicas := hra.Spec.MaxReplicas; maxReplicas != nil {
-		kvs = append(kvs, "max", *maxReplicas)
-	}
-
 	log.V(1).Info(fmt.Sprintf("Calculated desired replicas of %d", newDesiredReplicas),
 		kvs...,
 	)
 
-	return newDesiredReplicas, suggestedReplicas, suggestedReplicasFromCache, nil
+	return newDesiredReplicas, nil
 }

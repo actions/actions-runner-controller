@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	"gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -29,7 +28,7 @@ type PodRunnerTokenInjector struct {
 	Name         string
 	Log          logr.Logger
 	Recorder     record.EventRecorder
-	GitHubClient *github.Client
+	GitHubClient *MultiGitHubClient
 	decoder      *admission.Decoder
 }
 
@@ -59,14 +58,19 @@ func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Reque
 		return newEmptyResponse()
 	}
 
-	enterprise, okEnterprise := getEnv(runnerContainer, "RUNNER_ENTERPRISE")
-	repo, okRepo := getEnv(runnerContainer, "RUNNER_REPO")
-	org, okOrg := getEnv(runnerContainer, "RUNNER_ORG")
+	enterprise, okEnterprise := getEnv(runnerContainer, EnvVarEnterprise)
+	repo, okRepo := getEnv(runnerContainer, EnvVarRepo)
+	org, okOrg := getEnv(runnerContainer, EnvVarOrg)
 	if !okRepo || !okOrg || !okEnterprise {
 		return newEmptyResponse()
 	}
 
-	rt, err := t.GitHubClient.GetRegistrationToken(context.Background(), enterprise, org, repo, pod.Name)
+	ghc, err := t.GitHubClient.InitForRunnerPod(ctx, &pod)
+	if err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	rt, err := ghc.GetRegistrationToken(context.Background(), enterprise, org, repo, pod.Name)
 	if err != nil {
 		t.Log.Error(err, "Failed to get new registration token")
 		return admission.Errored(http.StatusInternalServerError, err)
@@ -78,9 +82,7 @@ func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Reque
 
 	updated.Annotations[AnnotationKeyTokenExpirationDate] = ts
 
-	if pod.Spec.RestartPolicy != corev1.RestartPolicyOnFailure {
-		updated.Spec.RestartPolicy = corev1.RestartPolicyOnFailure
-	}
+	forceRunnerPodRestartPolicyNever(updated)
 
 	buf, err := json.Marshal(updated)
 	if err != nil {

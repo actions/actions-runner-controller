@@ -10,9 +10,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"github.com/actions-runner-controller/actions-runner-controller/github/metrics"
-	"github.com/bradleyfalzon/ghinstallation"
-	"github.com/google/go-github/v39/github"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
+	"github.com/bradleyfalzon/ghinstallation/v2"
+	"github.com/go-logr/logr"
+	"github.com/google/go-github/v47/github"
+	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
 
@@ -28,6 +32,8 @@ type Config struct {
 	BasicauthUsername string `split_words:"true"`
 	BasicauthPassword string `split_words:"true"`
 	RunnerGitHubURL   string `split_words:"true"`
+
+	Log *logr.Logger
 }
 
 // Client wraps GitHub client with some additional
@@ -37,6 +43,7 @@ type Client struct {
 	mu        sync.Mutex
 	// GithubBaseURL to Github without API suffix.
 	GithubBaseURL string
+	IsEnterprise  bool
 }
 
 type BasicAuthTransport struct {
@@ -46,7 +53,6 @@ type BasicAuthTransport struct {
 
 func (p BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.SetBasicAuth(p.Username, p.Password)
-	req.Header.Set("User-Agent", "actions-runner-controller")
 	return http.DefaultTransport.RoundTrip(req)
 }
 
@@ -82,13 +88,18 @@ func (c *Config) NewClient() (*Client, error) {
 		transport = tr
 	}
 
-	transport = metrics.Transport{Transport: transport}
-	httpClient := &http.Client{Transport: transport}
+	cached := httpcache.NewTransport(httpcache.NewMemoryCache())
+	cached.Transport = transport
+	loggingTransport := logging.Transport{Transport: cached, Log: c.Log}
+	metricsTransport := metrics.Transport{Transport: loggingTransport}
+	httpClient := &http.Client{Transport: metricsTransport}
 
 	var client *github.Client
 	var githubBaseURL string
+	var isEnterprise bool
 	if len(c.EnterpriseURL) > 0 {
 		var err error
+		isEnterprise = true
 		client, err = github.NewEnterpriseClient(c.EnterpriseURL, c.EnterpriseURL, httpClient)
 		if err != nil {
 			return nil, fmt.Errorf("enterprise client creation failed: %v", err)
@@ -127,12 +138,13 @@ func (c *Config) NewClient() (*Client, error) {
 			}
 		}
 	}
-
+	client.UserAgent = "actions-runner-controller/" + build.Version
 	return &Client{
 		Client:        client,
 		regTokens:     map[string]*github.RegistrationToken{},
 		mu:            sync.Mutex{},
 		GithubBaseURL: githubBaseURL,
+		IsEnterprise:  isEnterprise,
 	}, nil
 }
 
@@ -144,8 +156,18 @@ func (c *Client) GetRegistrationToken(ctx context.Context, enterprise, org, repo
 	key := getRegistrationKey(org, repo, enterprise)
 	rt, ok := c.regTokens[key]
 
-	// we like to give runners a chance that are just starting up and may miss the expiration date by a bit
-	runnerStartupTimeout := 3 * time.Minute
+	// We'd like to allow the runner just starting up to miss the expiration date by a bit.
+	// Note that this means that we're going to cache Creation Registraion Token API response longer than the
+	// recommended cache duration.
+	//
+	// https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-a-repository
+	// https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-an-organization
+	// https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-an-enterprise
+	// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#conditional-requests
+	//
+	// This is currently set to 30 minutes as the result of the discussion took place at the following issue:
+	// https://github.com/actions-runner-controller/actions-runner-controller/issues/1295
+	runnerStartupTimeout := 30 * time.Minute
 
 	if ok && rt.GetExpiresAt().After(time.Now().Add(runnerStartupTimeout)) {
 		return rt, nil
@@ -224,79 +246,27 @@ func (c *Client) ListRunners(ctx context.Context, enterprise, org, repo string) 
 	return runners, nil
 }
 
-func (c *Client) GetRunnerGroupsFromRepository(ctx context.Context, org, repo string, potentialEnterpriseGroups []string, potentialOrgGroups []string) ([]string, []string, error) {
-
-	var enterpriseRunnerGroups []string
-	var orgRunnerGroups []string
-
-	if org != "" {
-		runnerGroups, err := c.getOrganizationRunnerGroups(ctx, org, repo)
-		if err != nil {
-			return enterpriseRunnerGroups, orgRunnerGroups, err
-		}
-		for _, runnerGroup := range runnerGroups {
-			if runnerGroup.GetInherited() { // enterprise runner groups
-				if !containsString(potentialEnterpriseGroups, runnerGroup.GetName()) {
-					continue
-				}
-				if runnerGroup.GetVisibility() == "all" {
-					enterpriseRunnerGroups = append(enterpriseRunnerGroups, runnerGroup.GetName())
-				} else {
-					hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-					if err != nil {
-						return enterpriseRunnerGroups, orgRunnerGroups, err
-					}
-					if hasAccess {
-						enterpriseRunnerGroups = append(enterpriseRunnerGroups, runnerGroup.GetName())
-					}
-				}
-			} else { // organization runner groups
-				if !containsString(potentialOrgGroups, runnerGroup.GetName()) {
-					continue
-				}
-				if runnerGroup.GetVisibility() == "all" {
-					orgRunnerGroups = append(orgRunnerGroups, runnerGroup.GetName())
-				} else {
-					hasAccess, err := c.hasRepoAccessToOrganizationRunnerGroup(ctx, org, runnerGroup.GetID(), repo)
-					if err != nil {
-						return enterpriseRunnerGroups, orgRunnerGroups, err
-					}
-					if hasAccess {
-						orgRunnerGroups = append(orgRunnerGroups, runnerGroup.GetName())
-					}
-				}
-			}
-		}
-	}
-	return enterpriseRunnerGroups, orgRunnerGroups, nil
-}
-
-func (c *Client) hasRepoAccessToOrganizationRunnerGroup(ctx context.Context, org string, runnerGroupId int64, repo string) (bool, error) {
-	opts := github.ListOptions{PerPage: 100}
-	for {
-		list, res, err := c.Client.Actions.ListRepositoryAccessRunnerGroup(ctx, org, runnerGroupId, &opts)
-		if err != nil {
-			return false, fmt.Errorf("failed to list repository access for runner group: %w", err)
-		}
-		for _, githubRepo := range list.Repositories {
-			if githubRepo.GetFullName() == repo {
-				return true, nil
-			}
-		}
-		if res.NextPage == 0 {
-			break
-		}
-		opts.Page = res.NextPage
-	}
-	return false, nil
-}
-
-func (c *Client) getOrganizationRunnerGroups(ctx context.Context, org, repo string) ([]*github.RunnerGroup, error) {
+// ListOrganizationRunnerGroupsForRepository returns all the runner groups defined in the organization and
+// inherited to the organization from an enterprise.
+// We can remove this when google/go-github library is updated to support this.
+func (c *Client) ListOrganizationRunnerGroupsForRepository(ctx context.Context, org, repo string) ([]*github.RunnerGroup, error) {
 	var runnerGroups []*github.RunnerGroup
 
-	opts := github.ListOptions{PerPage: 100}
+	var opts github.ListOrgRunnerGroupOptions
+
+	opts.PerPage = 100
+
+	repoName := repo
+	parts := strings.Split(repo, "/")
+	if len(parts) == 2 {
+		repoName = parts[1]
+	}
+	// This must be the repo name without the owner part, so in case the repo is "myorg/myrepo" the repo name
+	// passed to visible_to_repository must be "myrepo".
+	opts.VisibleToRepository = repoName
+
 	for {
-		list, res, err := c.Client.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
+		list, res, err := c.Actions.ListOrganizationRunnerGroups(ctx, org, &opts)
 		if err != nil {
 			return runnerGroups, fmt.Errorf("failed to list organization runner groups: %w", err)
 		}
@@ -309,6 +279,27 @@ func (c *Client) getOrganizationRunnerGroups(ctx context.Context, org, repo stri
 	}
 
 	return runnerGroups, nil
+}
+
+func (c *Client) ListRunnerGroupRepositoryAccesses(ctx context.Context, org string, runnerGroupId int64) ([]*github.Repository, error) {
+	var repos []*github.Repository
+
+	opts := github.ListOptions{PerPage: 100}
+	for {
+		list, res, err := c.Client.Actions.ListRepositoryAccessRunnerGroup(ctx, org, runnerGroupId, &opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list repository access for runner group: %w", err)
+		}
+
+		repos = append(repos, list.Repositories...)
+		if res.NextPage == 0 {
+			break
+		}
+
+		opts.Page = res.NextPage
+	}
+
+	return repos, nil
 }
 
 // cleanup removes expired registration tokens.
@@ -428,7 +419,6 @@ func splitOwnerAndRepo(repo string) (string, string, error) {
 	}
 	return chunk[0], chunk[1], nil
 }
-
 func getEnterpriseApiUrl(baseURL string) (string, error) {
 	baseEndpoint, err := url.Parse(baseURL)
 	if err != nil {
@@ -479,13 +469,4 @@ func (r *Client) IsRunnerBusy(ctx context.Context, enterprise, org, repo, name s
 	}
 
 	return false, &RunnerNotFound{runnerName: name}
-}
-
-func containsString(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-	return false
 }

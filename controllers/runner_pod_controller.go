@@ -20,11 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v39/github"
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 // RunnerPodReconciler reconciles a Runner object
@@ -43,21 +40,16 @@ type RunnerPodReconciler struct {
 	Log                         logr.Logger
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
-	GitHubClient                *github.Client
+	GitHubClient                *MultiGitHubClient
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
+
+	UnregistrationRetryDelay time.Duration
 }
 
-const (
-	// This names requires at least one slash to work.
-	// See https://github.com/google/knative-gcp/issues/378
-	runnerPodFinalizerName = "actions.summerwind.dev/runner-pod"
-
-	AnnotationKeyLastRegistrationCheckTime = "actions-runner-controller/last-registration-check-time"
-)
-
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -68,14 +60,28 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, isRunnerPod := runnerPod.Labels[LabelKeyRunnerSetName]
-	if !isRunnerPod {
+	_, isRunnerPod := runnerPod.Labels[LabelKeyRunner]
+	_, isRunnerSetPod := runnerPod.Labels[LabelKeyRunnerSetName]
+	_, isRunnerDeploymentPod := runnerPod.Labels[LabelKeyRunnerDeploymentName]
+
+	if !isRunnerPod && !isRunnerSetPod && !isRunnerDeploymentPod {
 		return ctrl.Result{}, nil
 	}
 
-	var enterprise, org, repo string
+	var envvars []corev1.EnvVar
+	for _, container := range runnerPod.Spec.Containers {
+		if container.Name == "runner" {
+			envvars = container.Env
+		}
+	}
 
-	envvars := runnerPod.Spec.Containers[0].Env
+	if len(envvars) == 0 {
+		return ctrl.Result{}, errors.New("Could not determine env vars for runner Pod")
+	}
+
+	var enterprise, org, repo string
+	var isContainerMode bool
+
 	for _, e := range envvars {
 		switch e.Name {
 		case EnvVarEnterprise:
@@ -84,13 +90,25 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			org = e.Value
 		case EnvVarRepo:
 			repo = e.Value
+		case "ACTIONS_RUNNER_CONTAINER_HOOKS":
+			isContainerMode = true
 		}
+	}
+
+	ghc, err := r.GitHubClient.InitForRunnerPod(ctx, &runnerPod)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	if runnerPod.ObjectMeta.DeletionTimestamp.IsZero() {
 		finalizers, added := addFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
 
-		if added {
+		var cleanupFinalizersAdded bool
+		if isContainerMode {
+			finalizers, cleanupFinalizersAdded = addFinalizer(finalizers, runnerLinkedResourcesFinalizerName)
+		}
+
+		if added || cleanupFinalizersAdded {
 			newRunner := runnerPod.DeepCopy()
 			newRunner.ObjectMeta.Finalizers = finalizers
 
@@ -99,44 +117,59 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 
+			log.V(2).Info("Added finalizer")
+
 			return ctrl.Result{}, nil
 		}
 	} else {
-		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
+		log.V(2).Info("Seen deletion-timestamp is already set")
 
-		if removed {
-			ok, err := r.unregisterRunner(ctx, enterprise, org, repo, runnerPod.Name)
-			if err != nil {
-				if errors.Is(err, &gogithub.RateLimitError{}) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
+		if finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerLinkedResourcesFinalizerName); removed {
+			if err := r.cleanupRunnerLinkedPods(ctx, &runnerPod, log); err != nil {
+				log.Info("Runner-linked pods clean up that has failed due to an error. If this persists, please manually remove the runner-linked pods to unblock ARC", "err", err.Error())
+				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+			}
+			if err := r.cleanupRunnerLinkedSecrets(ctx, &runnerPod, log); err != nil {
+				log.Info("Runner-linked secrets clean up that has failed due to an error. If this persists, please manually remove the runner-linked secrets to unblock ARC", "err", err.Error())
+				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+			}
+			patchedPod := runnerPod.DeepCopy()
+			patchedPod.ObjectMeta.Finalizers = finalizers
 
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-				}
-
+			if err := r.Patch(ctx, patchedPod, client.MergeFrom(&runnerPod)); err != nil {
+				log.Error(err, "Failed to update runner for finalizer linked resources removal")
 				return ctrl.Result{}, err
 			}
 
-			if !ok {
-				log.V(1).Info("Runner no longer exists on GitHub")
+			// Otherwise the subsequent patch request can revive the removed finalizer and it will trigger a unnecessary reconcilation
+			runnerPod = *patchedPod
+		}
+
+		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
+
+		if removed {
+			// In a standard scenario, the upstream controller, like runnerset-controller, ensures this runner to be gracefully stopped before the deletion timestamp is set.
+			// But for the case that the user manually deleted it for whatever reason,
+			// we have to ensure it to gracefully stop now.
+			updatedPod, res, err := tickRunnerGracefulStop(ctx, r.unregistrationRetryDelay(), log, ghc, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+			if res != nil {
+				return *res, err
 			}
 
-			newRunner := runnerPod.DeepCopy()
-			newRunner.ObjectMeta.Finalizers = finalizers
+			patchedPod := updatedPod.DeepCopy()
+			patchedPod.ObjectMeta.Finalizers = finalizers
 
-			if err := r.Patch(ctx, newRunner, client.MergeFrom(&runnerPod)); err != nil {
+			// We commit the removal of the finalizer so that Kuberenetes notices it and delete the pod resource from the cluster.
+			if err := r.Patch(ctx, patchedPod, client.MergeFrom(&runnerPod)); err != nil {
 				log.Error(err, "Failed to update runner for finalizer removal")
 				return ctrl.Result{}, err
 			}
 
-			log.Info("Removed runner from GitHub", "repository", repo, "organization", org)
+			log.V(2).Info("Removed finalizer")
+
+			r.GitHubClient.DeinitForRunnerPod(updatedPod)
+
+			return ctrl.Result{}, nil
 		}
 
 		deletionTimeout := 1 * time.Minute
@@ -174,246 +207,45 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	// If pod has ended up succeeded we need to restart it
-	// Happens e.g. when dind is in runner and run completes
-	stopped := runnerPod.Status.Phase == corev1.PodSucceeded
-
-	if !stopped {
-		if runnerPod.Status.Phase == corev1.PodRunning {
-			for _, status := range runnerPod.Status.ContainerStatuses {
-				if status.Name != containerName {
-					continue
-				}
-
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
-					stopped = true
-				}
-			}
-		}
+	po, res, err := ensureRunnerPodRegistered(ctx, log, ghc, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+	if res != nil {
+		return *res, err
 	}
 
-	restart := stopped
+	runnerPod = *po
 
-	var registrationRecheckDelay time.Duration
+	if _, unregistrationRequested := getAnnotation(&runnerPod, AnnotationKeyUnregistrationRequestTimestamp); unregistrationRequested {
+		log.V(2).Info("Progressing unregistration because unregistration-request timestamp is set")
 
-	// all checks done below only decide whether a restart is needed
-	// if a restart was already decided before, there is no need for the checks
-	// saving API calls and scary log messages
-	if !restart {
-		registrationCheckInterval := time.Minute
-		if r.RegistrationRecheckInterval > 0 {
-			registrationCheckInterval = r.RegistrationRecheckInterval
+		// At this point we're sure that DeletionTimestamp is not set yet, but the unregistration process is triggered by an upstream controller like runnerset-controller.
+		//
+		// In a standard scenario, ARC starts the unregistration process before marking the pod for deletion at all,
+		// so that it isn't subject to terminationGracePeriod and can safely take hours to finish it's work.
+		_, res, err := tickRunnerGracefulStop(ctx, r.unregistrationRetryDelay(), log, ghc, r.Client, enterprise, org, repo, runnerPod.Name, &runnerPod)
+		if res != nil {
+			return *res, err
 		}
 
-		lastCheckTimeStr := runnerPod.Annotations[AnnotationKeyLastRegistrationCheckTime]
-
-		var lastCheckTime *time.Time
-
-		if lastCheckTimeStr != "" {
-			t, err := time.Parse(time.RFC3339, lastCheckTimeStr)
-			if err != nil {
-				log.Error(err, "failed to parase last check time %q", lastCheckTimeStr)
-				return ctrl.Result{}, nil
-			}
-
-			lastCheckTime = &t
-		}
-
-		// We want to call ListRunners GitHub Actions API only once per runner per minute.
-		// This if block, in conjunction with:
-		//   return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
-		// achieves that.
-		if lastCheckTime != nil {
-			nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
-			now := time.Now()
-
-			// Requeue scheduled by RequeueAfter can happen a bit earlier (like dozens of milliseconds)
-			// so to avoid excessive, in-effective retry, we heuristically ignore the remaining delay in case it is
-			// shorter than 1s
-			requeueAfter := nextCheckTime.Sub(now) - time.Second
-			if requeueAfter > 0 {
-				log.Info(
-					fmt.Sprintf("Skipped registration check because it's deferred until %s. Retrying in %s at latest", nextCheckTime, requeueAfter),
-					"lastRegistrationCheckTime", lastCheckTime,
-					"registrationCheckInterval", registrationCheckInterval,
-				)
-
-				// Without RequeueAfter, the controller may not retry on scheduled. Instead, it must wait until the
-				// next sync period passes, which can be too much later than nextCheckTime.
-				//
-				// We need to requeue on this reconcilation even though we have already scheduled the initial
-				// requeue previously with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil`.
-				// Apparently, the workqueue used by controller-runtime seems to deduplicate and resets the delay on
-				// other requeues- so the initial scheduled requeue may have been reset due to requeue on
-				// spec/status change.
-				return ctrl.Result{RequeueAfter: requeueAfter}, nil
-			}
-		}
-
-		notFound := false
-		offline := false
-
-		_, err := r.GitHubClient.IsRunnerBusy(ctx, enterprise, org, repo, runnerPod.Name)
-
-		currentTime := time.Now()
-
-		if err != nil {
-			var notFoundException *github.RunnerNotFound
-			var offlineException *github.RunnerOffline
-			if errors.As(err, &notFoundException) {
-				notFound = true
-			} else if errors.As(err, &offlineException) {
-				offline = true
-			} else {
-				var e *gogithub.RateLimitError
-				if errors.As(err, &e) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
-
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-				}
-
-				return ctrl.Result{}, err
-			}
-		}
-
-		registrationTimeout := 10 * time.Minute
-		durationAfterRegistrationTimeout := currentTime.Sub(runnerPod.CreationTimestamp.Add(registrationTimeout))
-		registrationDidTimeout := durationAfterRegistrationTimeout > 0
-
-		if notFound {
-			if registrationDidTimeout {
-				log.Info(
-					"Runner failed to register itself to GitHub in timely manner. "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. "+
-						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
-					"podCreationTimestamp", runnerPod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
-
-				restart = true
-			} else {
-				log.V(1).Info(
-					"Runner pod exists but we failed to check if runner is busy. Apparently it still needs more time.",
-					"runnerName", runnerPod.Name,
-				)
-			}
-		} else if offline {
-			if registrationDidTimeout {
-				log.Info(
-					"Already existing GitHub runner still appears offline . "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. ",
-					"podCreationTimestamp", runnerPod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
-
-				restart = true
-			} else {
-				log.V(1).Info(
-					"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
-					"runnerName", runnerPod.Name,
-				)
-			}
-		}
-
-		if (notFound || offline) && !registrationDidTimeout {
-			registrationRecheckJitter := 10 * time.Second
-			if r.RegistrationRecheckJitter > 0 {
-				registrationRecheckJitter = r.RegistrationRecheckJitter
-			}
-
-			registrationRecheckDelay = registrationCheckInterval + wait.Jitter(registrationRecheckJitter, 0.1)
-		}
-	}
-
-	// Don't do anything if there's no need to restart the runner
-	if !restart {
-		// This guard enables us to update runner.Status.Phase to `Running` only after
-		// the runner is registered to GitHub.
-		if registrationRecheckDelay > 0 {
-			log.V(1).Info(fmt.Sprintf("Rechecking the runner registration in %s", registrationRecheckDelay))
-
-			updated := runnerPod.DeepCopy()
-			t := time.Now().Format(time.RFC3339)
-			updated.Annotations[AnnotationKeyLastRegistrationCheckTime] = t
-
-			if err := r.Patch(ctx, updated, client.MergeFrom(&runnerPod)); err != nil {
-				log.Error(err, "Failed to update runner pod annotation for LastRegistrationCheckTime")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
-		}
-
-		// Seeing this message, you can expect the runner to become `Running` soon.
-		log.Info(
-			"Runner appears to have registered and running.",
-			"podCreationTimestamp", runnerPod.CreationTimestamp,
-		)
+		// At this point we are sure that the runner has successfully unregistered, hence is safe to be deleted.
+		// But we don't delete the pod here. Instead, let the upstream controller/parent object to delete this pod as
+		// a part of a cascade deletion.
+		// This is to avoid a parent object, like statefulset, to recreate the deleted pod.
+		// If the pod was recreated, it will start a registration process and that may race with the statefulset deleting the pod.
+		log.V(2).Info("Unregistration seems complete")
 
 		return ctrl.Result{}, nil
 	}
 
-	// Delete current pod if recreation is needed
-	if err := r.Delete(ctx, &runnerPod); err != nil {
-		log.Error(err, "Failed to delete pod resource")
-		return ctrl.Result{}, err
-	}
-
-	r.Recorder.Event(&runnerPod, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", runnerPod.Name))
-	log.Info("Deleted runner pod", "name", runnerPod.Name)
-
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerPodReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
-	if err != nil {
-		return false, err
+func (r *RunnerPodReconciler) unregistrationRetryDelay() time.Duration {
+	retryDelay := DefaultUnregistrationRetryDelay
+
+	if r.UnregistrationRetryDelay > 0 {
+		retryDelay = r.UnregistrationRetryDelay
 	}
-
-	var busy bool
-
-	id := int64(0)
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			// Sometimes a runner can stuck "busy" even though it is already "offline".
-			// Thus removing the condition on status can block the runner pod from being terminated forever.
-			busy = runner.GetBusy()
-			if runner.GetStatus() != "offline" && busy {
-				r.Log.Info("This runner will delay the runner pod deletion and the runner deregistration until it becomes either offline or non-busy", "name", runner.GetName(), "status", runner.GetStatus(), "busy", runner.GetBusy())
-				return false, fmt.Errorf("runner is busy")
-			}
-			id = runner.GetID()
-			break
-		}
-	}
-
-	if id == int64(0) {
-		return false, nil
-	}
-
-	// Sometimes a runner can stuck "busy" even though it is already "offline".
-	// Trying to remove the offline but busy runner can result in errors like the following:
-	//    failed to remove runner: DELETE https://api.github.com/repos/actions-runner-controller/mumoshu-actions-test/actions/runners/47: 422 Bad request - Runner \"example-runnerset-0\" is still running a job\" []
-	if !busy {
-		if err := r.GitHubClient.RemoveRunner(ctx, enterprise, org, repo, id); err != nil {
-			return false, err
-		}
-	}
-
-	return true, nil
+	return retryDelay
 }
 
 func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -428,4 +260,94 @@ func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&corev1.Pod{}).
 		Named(name).
 		Complete(r)
+}
+
+func (r *RunnerPodReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
+	var runnerLinkedPodList corev1.PodList
+	if err := r.List(ctx, &runnerLinkedPodList, client.InNamespace(pod.Namespace), client.MatchingLabels(
+		map[string]string{
+			"runner-pod": pod.ObjectMeta.Name,
+		},
+	)); err != nil {
+		return fmt.Errorf("failed to list runner-linked pods: %w", err)
+	}
+
+	var (
+		wg   sync.WaitGroup
+		errs []error
+	)
+	for _, p := range runnerLinkedPodList.Items {
+		if !p.ObjectMeta.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		p := p
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.Delete(ctx, &p); err != nil {
+				if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
+					return
+				}
+				errs = append(errs, fmt.Errorf("delete pod %q error: %v", p.ObjectMeta.Name, err))
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error(err, "failed to remove runner-linked pod")
+		}
+		return errors.New("failed to remove some runner linked pods")
+	}
+
+	return nil
+}
+
+func (r *RunnerPodReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, pod *corev1.Pod, log logr.Logger) error {
+	log.V(2).Info("Listing runner-linked secrets to be deleted", "ns", pod.Namespace)
+
+	var runnerLinkedSecretList corev1.SecretList
+	if err := r.List(ctx, &runnerLinkedSecretList, client.InNamespace(pod.Namespace), client.MatchingLabels(
+		map[string]string{
+			"runner-pod": pod.ObjectMeta.Name,
+		},
+	)); err != nil {
+		return fmt.Errorf("failed to list runner-linked secrets: %w", err)
+	}
+
+	var (
+		wg   sync.WaitGroup
+		errs []error
+	)
+	for _, s := range runnerLinkedSecretList.Items {
+		if !s.ObjectMeta.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		s := s
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.Delete(ctx, &s); err != nil {
+				if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
+					return
+				}
+				errs = append(errs, fmt.Errorf("delete secret %q error: %v", s.ObjectMeta.Name, err))
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error(err, "failed to remove runner-linked secret")
+		}
+		return errors.New("failed to remove some runner linked secrets")
+	}
+
+	return nil
 }

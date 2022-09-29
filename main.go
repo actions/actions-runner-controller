@@ -24,26 +24,21 @@ import (
 	"time"
 
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/build"
 	"github.com/actions-runner-controller/actions-runner-controller/controllers"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
-	zaplib "go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
 )
 
 const (
 	defaultRunnerImage = "summerwind/actions-runner:latest"
 	defaultDockerImage = "docker:dind"
-
-	logLevelDebug = "debug"
-	logLevelInfo  = "info"
-	logLevelWarn  = "warn"
-	logLevelError = "error"
 )
 
 var (
@@ -68,18 +63,19 @@ func (i *stringSlice) Set(value string) error {
 	*i = append(*i, value)
 	return nil
 }
-
 func main() {
 	var (
 		err      error
 		ghClient *github.Client
 
-		metricsAddr          string
-		enableLeaderElection bool
-		leaderElectionId     string
-		syncPeriod           time.Duration
+		metricsAddr            string
+		enableLeaderElection   bool
+		runnerStatusUpdateHook bool
+		leaderElectionId       string
+		port                   int
+		syncPeriod             time.Duration
 
-		gitHubAPICacheDuration time.Duration
+		defaultScaleDownDelay time.Duration
 
 		runnerImage            string
 		runnerImagePullSecrets stringSlice
@@ -91,7 +87,6 @@ func main() {
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
-
 	var c github.Config
 	err = envconfig.Process("github", &c)
 	if err != nil {
@@ -103,11 +98,12 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
-	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container.")
-	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container.")
+	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
 	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
 	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
+	flag.StringVar(&c.EnterpriseURL, "github-enterprise-url", c.EnterpriseURL, "Enterprise URL to be used for your GitHub API calls")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
 	flag.Int64Var(&c.AppInstallationID, "github-app-installation-id", c.AppInstallationID, "The installation ID of GitHub App.")
 	flag.StringVar(&c.AppPrivateKey, "github-app-private-key", c.AppPrivateKey, "The path of a private key file to authenticate as a GitHub App")
@@ -116,28 +112,17 @@ func main() {
 	flag.StringVar(&c.BasicauthUsername, "github-basicauth-username", c.BasicauthUsername, "Username for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
-	flag.DurationVar(&gitHubAPICacheDuration, "github-api-cache-duration", 0, "The duration until the GitHub API cache expires. Setting this to e.g. 10m results in the controller tries its best not to make the same API call within 10m to reduce the chance of being rate-limited. Defaults to mostly the same value as sync-period. If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak sync-period, too")
-	flag.DurationVar(&syncPeriod, "sync-period", 10*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled. When you use autoscaling, set to a lower value like 10 minute, because this corresponds to the minimum time to react on demand change. . If you're tweaking this in order to make autoscaling more responsive, you'll probably want to tweak github-api-cache-duration, too")
+	flag.BoolVar(&runnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
+	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", controllers.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
+	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
+	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
-	flag.StringVar(&logLevel, "log-level", logLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
+	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.Parse()
 
-	logger := zap.New(func(o *zap.Options) {
-		switch logLevel {
-		case logLevelDebug:
-			o.Development = true
-		case logLevelInfo:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.InfoLevel)
-			o.Level = &lvl
-		case logLevelWarn:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.WarnLevel)
-			o.Level = &lvl
-		case logLevelError:
-			lvl := zaplib.NewAtomicLevelAt(zaplib.ErrorLevel)
-			o.Level = &lvl
-		}
-	})
+	logger := logging.NewLogger(logLevel)
+	c.Log = &logger
 
 	ghClient, err = c.NewClient()
 	if err != nil {
@@ -152,7 +137,7 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
-		Port:               9443,
+		Port:               port,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
 	})
@@ -161,13 +146,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	multiClient := controllers.NewMultiGitHubClient(
+		mgr.GetClient(),
+		ghClient,
+	)
+
 	runnerReconciler := &controllers.RunnerReconciler{
-		Client:               mgr.GetClient(),
-		Log:                  log.WithName("runner"),
-		Scheme:               mgr.GetScheme(),
-		GitHubClient:         ghClient,
-		DockerImage:          dockerImage,
-		DockerRegistryMirror: dockerRegistryMirror,
+		Client:                    mgr.GetClient(),
+		Log:                       log.WithName("runner"),
+		Scheme:                    mgr.GetScheme(),
+		GitHubClient:              multiClient,
+		DockerImage:               dockerImage,
+		DockerRegistryMirror:      dockerRegistryMirror,
+		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
 		// Defaults for self-hosted runner containers
 		RunnerImage:            runnerImage,
 		RunnerImagePullSecrets: runnerImagePullSecrets,
@@ -179,10 +170,9 @@ func main() {
 	}
 
 	runnerReplicaSetReconciler := &controllers.RunnerReplicaSetReconciler{
-		Client:       mgr.GetClient(),
-		Log:          log.WithName("runnerreplicaset"),
-		Scheme:       mgr.GetScheme(),
-		GitHubClient: ghClient,
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerreplicaset"),
+		Scheme: mgr.GetScheme(),
 	}
 
 	if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
@@ -209,47 +199,56 @@ func main() {
 		CommonRunnerLabels:   commonRunnerLabels,
 		DockerImage:          dockerImage,
 		DockerRegistryMirror: dockerRegistryMirror,
-		GitHubBaseURL:        ghClient.GithubBaseURL,
+		GitHubClient:         multiClient,
 		// Defaults for self-hosted runner containers
-		RunnerImage:            runnerImage,
-		RunnerImagePullSecrets: runnerImagePullSecrets,
+		RunnerImage:               runnerImage,
+		RunnerImagePullSecrets:    runnerImagePullSecrets,
+		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
 	}
 
 	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "RunnerSet")
 		os.Exit(1)
 	}
-	if gitHubAPICacheDuration == 0 {
-		gitHubAPICacheDuration = syncPeriod - 10*time.Second
-	}
-
-	if gitHubAPICacheDuration < 0 {
-		gitHubAPICacheDuration = 0
-	}
 
 	log.Info(
 		"Initializing actions-runner-controller",
-		"github-api-cache-duration", gitHubAPICacheDuration,
+		"version", build.Version,
+		"default-scale-down-delay", defaultScaleDownDelay,
 		"sync-period", syncPeriod,
-		"runner-image", runnerImage,
-		"docker-image", dockerImage,
+		"default-runner-image", runnerImage,
+		"default-docker-image", dockerImage,
 		"common-runnner-labels", commonRunnerLabels,
+		"leader-election-enabled", enableLeaderElection,
+		"leader-election-id", leaderElectionId,
 		"watch-namespace", namespace,
 	)
 
 	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
-		Client:        mgr.GetClient(),
-		Log:           log.WithName("horizontalrunnerautoscaler"),
-		Scheme:        mgr.GetScheme(),
-		GitHubClient:  ghClient,
-		CacheDuration: gitHubAPICacheDuration,
+		Client:                mgr.GetClient(),
+		Log:                   log.WithName("horizontalrunnerautoscaler"),
+		Scheme:                mgr.GetScheme(),
+		GitHubClient:          multiClient,
+		DefaultScaleDownDelay: defaultScaleDownDelay,
 	}
 
 	runnerPodReconciler := &controllers.RunnerPodReconciler{
 		Client:       mgr.GetClient(),
 		Log:          log.WithName("runnerpod"),
 		Scheme:       mgr.GetScheme(),
-		GitHubClient: ghClient,
+		GitHubClient: multiClient,
+	}
+
+	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolume"),
+		Scheme: mgr.GetScheme(),
+	}
+
+	runnerPersistentVolumeClaimReconciler := &controllers.RunnerPersistentVolumeClaimReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("runnerpersistentvolumeclaim"),
+		Scheme: mgr.GetScheme(),
 	}
 
 	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
@@ -259,6 +258,16 @@ func main() {
 
 	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
+		os.Exit(1)
+	}
+
+	if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
 		os.Exit(1)
 	}
 
@@ -278,7 +287,7 @@ func main() {
 
 	injector := &controllers.PodRunnerTokenInjector{
 		Client:       mgr.GetClient(),
-		GitHubClient: ghClient,
+		GitHubClient: multiClient,
 		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
 	}
 	if err = injector.SetupWithManager(mgr); err != nil {

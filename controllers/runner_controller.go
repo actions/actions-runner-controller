@@ -20,13 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/actions-runner-controller/actions-runner-controller/hash"
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v39/github"
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,10 +36,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
 const (
@@ -50,12 +50,13 @@ const (
 
 	retryDelayOnGitHubAPIRateLimitError = 30 * time.Second
 
-	// This is an annotation internal to actions-runner-controller and can change in backward-incompatible ways
-	annotationKeyRegistrationOnly = "actions-runner-controller/registration-only"
-
 	EnvVarOrg        = "RUNNER_ORG"
 	EnvVarRepo       = "RUNNER_REPO"
+	EnvVarGroup      = "RUNNER_GROUP"
+	EnvVarLabels     = "RUNNER_LABELS"
 	EnvVarEnterprise = "RUNNER_ENTERPRISE"
+	EnvVarEphemeral  = "RUNNER_EPHEMERAL"
+	EnvVarTrue       = "true"
 )
 
 // RunnerReconciler reconciles a Runner object
@@ -64,7 +65,7 @@ type RunnerReconciler struct {
 	Log                         logr.Logger
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
-	GitHubClient                *github.Client
+	GitHubClient                *MultiGitHubClient
 	RunnerImage                 string
 	RunnerImagePullSecrets      []string
 	DockerImage                 string
@@ -72,14 +73,20 @@ type RunnerReconciler struct {
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
+	UseRunnerStatusUpdateHook   bool
+	UnregistrationRetryDelay    time.Duration
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=create;delete;get
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get
 
 func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("runner", req.NamespacedName)
@@ -87,12 +94,6 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	var runner v1alpha1.Runner
 	if err := r.Get(ctx, req.NamespacedName, &runner); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	err := runner.Validate()
-	if err != nil {
-		log.Info("Failed to validate runner spec", "error", err.Error())
-		return ctrl.Result{}, nil
 	}
 
 	if runner.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -111,35 +112,19 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	} else {
 		// Request to remove a runner. DeletionTimestamp was set in the runner - we need to unregister runner
-		return r.processRunnerDeletion(runner, ctx, log)
-	}
-
-	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
-	if registrationOnly && runner.Status.Phase != "" {
-		// At this point we are sure that the registration-only runner has successfully configured and
-		// is of `offline` status, because we set runner.Status.Phase to that of the runner pod only after
-		// successful registration.
-
 		var pod corev1.Pod
 		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 			if !kerrors.IsNotFound(err) {
-				log.Info(fmt.Sprintf("Retrying soon as we failed to get registration-only runner pod: %v", err))
-
+				log.Info(fmt.Sprintf("Retrying soon as we failed to get runner pod: %v", err))
 				return ctrl.Result{Requeue: true}, nil
 			}
-		} else if err := r.Delete(ctx, &pod); err != nil {
-			if !kerrors.IsNotFound(err) {
-				log.Info(fmt.Sprintf("Retrying soon as we failed to delete registration-only runner pod: %v", err))
-
-				return ctrl.Result{Requeue: true}, nil
-			}
+			// Pod was not found
+			return r.processRunnerDeletion(runner, ctx, log, nil)
 		}
 
-		log.Info("Successfully deleted registration-only runner pod to free node and cluster resource")
+		r.GitHubClient.DeinitForRunner(&runner)
 
-		// Return here to not recreate the deleted pod, because recreating it is the waste of cluster and node resource,
-		// and also defeats the original purpose of scale-from/to-zero we're trying to implement by using the registration-only runner.
-		return ctrl.Result{}, nil
+		return r.processRunnerDeletion(runner, ctx, log, &pod)
 	}
 
 	var pod corev1.Pod
@@ -151,15 +136,67 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return r.processRunnerCreation(ctx, runner, log)
 	}
 
-	// Pod already exists
-
-	if !pod.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.processRunnerPodDeletion(ctx, runner, log, pod)
+	phase := string(pod.Status.Phase)
+	if phase == "" {
+		phase = "Created"
 	}
 
+	ready := runnerPodReady(&pod)
+
+	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.UseRunnerStatusUpdateHook {
+		if pod.Status.Phase == corev1.PodRunning {
+			// Seeing this message, you can expect the runner to become `Running` soon.
+			log.V(1).Info(
+				"Runner appears to have been registered and running.",
+				"podCreationTimestamp", pod.CreationTimestamp,
+			)
+		}
+
+		updated := runner.DeepCopy()
+		updated.Status.Phase = phase
+		updated.Status.Ready = ready
+		updated.Status.Reason = pod.Status.Reason
+		updated.Status.Message = pod.Status.Message
+
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
+			log.Error(err, "Failed to update runner status for Phase/Reason/Message")
+			return ctrl.Result{}, err
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func runnerPodReady(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type != corev1.PodReady {
+			continue
+		}
+
+		return c.Status == corev1.ConditionTrue
+	}
+
+	return false
+}
+
+func runnerContainerExitCode(pod *corev1.Pod) *int32 {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name != containerName {
+			continue
+		}
+
+		if status.State.Terminated != nil {
+			return &status.State.Terminated.ExitCode
+		}
+	}
+
+	return nil
+}
+
+func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 	// If pod has ended up succeeded we need to restart it
 	// Happens e.g. when dind is in runner and run completes
-	stopped := pod.Status.Phase == corev1.PodSucceeded
+	stopped := pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed
 
 	if !stopped {
 		if pod.Status.Phase == corev1.PodRunning {
@@ -168,338 +205,55 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					continue
 				}
 
-				if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
+				if status.State.Terminated != nil {
 					stopped = true
 				}
 			}
 		}
 	}
 
-	restart := stopped
-
-	if registrationOnly && stopped {
-		restart = false
-
-		log.Info(
-			"Observed that registration-only runner for scaling-from-zero has successfully stopped. " +
-				"Unlike other pods, this one will be recreated only when runner spec changes.",
-		)
-	}
-
-	if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
-		return ctrl.Result{}, err
-	} else if updated {
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	newPod, err := r.newPod(runner)
-	if err != nil {
-		log.Error(err, "Could not create pod")
-		return ctrl.Result{}, err
-	}
-
-	if registrationOnly {
-		newPod.Spec.Containers[0].Env = append(
-			newPod.Spec.Containers[0].Env,
-			corev1.EnvVar{
-				Name:  "RUNNER_REGISTRATION_ONLY",
-				Value: "true",
-			},
-		)
-	}
-
-	var registrationRecheckDelay time.Duration
-
-	// all checks done below only decide whether a restart is needed
-	// if a restart was already decided before, there is no need for the checks
-	// saving API calls and scary log messages
-	if !restart {
-		registrationCheckInterval := time.Minute
-		if r.RegistrationRecheckInterval > 0 {
-			registrationCheckInterval = r.RegistrationRecheckInterval
-		}
-
-		// We want to call ListRunners GitHub Actions API only once per runner per minute.
-		// This if block, in conjunction with:
-		//   return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
-		// achieves that.
-		if lastCheckTime := runner.Status.LastRegistrationCheckTime; lastCheckTime != nil {
-			nextCheckTime := lastCheckTime.Add(registrationCheckInterval)
-			now := time.Now()
-
-			// Requeue scheduled by RequeueAfter can happen a bit earlier (like dozens of milliseconds)
-			// so to avoid excessive, in-effective retry, we heuristically ignore the remaining delay in case it is
-			// shorter than 1s
-			requeueAfter := nextCheckTime.Sub(now) - time.Second
-			if requeueAfter > 0 {
-				log.Info(
-					fmt.Sprintf("Skipped registration check because it's deferred until %s. Retrying in %s at latest", nextCheckTime, requeueAfter),
-					"lastRegistrationCheckTime", lastCheckTime,
-					"registrationCheckInterval", registrationCheckInterval,
-				)
-
-				// Without RequeueAfter, the controller may not retry on scheduled. Instead, it must wait until the
-				// next sync period passes, which can be too much later than nextCheckTime.
-				//
-				// We need to requeue on this reconcilation even though we have already scheduled the initial
-				// requeue previously with `return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil`.
-				// Apparently, the workqueue used by controller-runtime seems to deduplicate and resets the delay on
-				// other requeues- so the initial scheduled requeue may have been reset due to requeue on
-				// spec/status change.
-				return ctrl.Result{RequeueAfter: requeueAfter}, nil
-			}
-		}
-
-		notFound := false
-		offline := false
-
-		runnerBusy, err := r.GitHubClient.IsRunnerBusy(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-
-		currentTime := time.Now()
-
-		if err != nil {
-			var notFoundException *github.RunnerNotFound
-			var offlineException *github.RunnerOffline
-			if errors.As(err, &notFoundException) {
-				notFound = true
-			} else if errors.As(err, &offlineException) {
-				offline = true
-			} else {
-				var e *gogithub.RateLimitError
-				if errors.As(err, &e) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to check if runner is busy due to Github API rate limit. Retrying in %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
-
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-				}
-
-				return ctrl.Result{}, err
-			}
-		}
-
-		// See the `newPod` function called above for more information
-		// about when this hash changes.
-		curHash := pod.Labels[LabelKeyPodTemplateHash]
-		newHash := newPod.Labels[LabelKeyPodTemplateHash]
-
-		if !runnerBusy && curHash != newHash {
-			restart = true
-		}
-
-		registrationTimeout := 10 * time.Minute
-		durationAfterRegistrationTimeout := currentTime.Sub(pod.CreationTimestamp.Add(registrationTimeout))
-		registrationDidTimeout := durationAfterRegistrationTimeout > 0
-
-		if notFound {
-			if registrationDidTimeout {
-				log.Info(
-					"Runner failed to register itself to GitHub in timely manner. "+
-						"Recreating the pod to see if it resolves the issue. "+
-						"CAUTION: If you see this a lot, you should investigate the root cause. "+
-						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
-					"podCreationTimestamp", pod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
-
-				restart = true
-			} else {
-				log.V(1).Info(
-					"Runner pod exists but we failed to check if runner is busy. Apparently it still needs more time.",
-					"runnerName", runner.Name,
-				)
-			}
-		} else if offline {
-			if registrationOnly {
-				log.Info(
-					"Observed that registration-only runner for scaling-from-zero has successfully been registered.",
-					"podCreationTimestamp", pod.CreationTimestamp,
-					"currentTime", currentTime,
-					"configuredRegistrationTimeout", registrationTimeout,
-				)
-			} else if registrationDidTimeout {
-				if runnerBusy {
-					log.Info(
-						"Timeout out while waiting for the runner to be online, but observed that it's busy at the same time."+
-							"This is a known (unintuitive) behaviour of a runner that is already running a job. Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/911",
-						"podCreationTimestamp", pod.CreationTimestamp,
-						"currentTime", currentTime,
-						"configuredRegistrationTimeout", registrationTimeout,
-					)
-				} else {
-					log.Info(
-						"Already existing GitHub runner still appears offline . "+
-							"Recreating the pod to see if it resolves the issue. "+
-							"CAUTION: If you see this a lot, you should investigate the root cause. ",
-						"podCreationTimestamp", pod.CreationTimestamp,
-						"currentTime", currentTime,
-						"configuredRegistrationTimeout", registrationTimeout,
-					)
-
-					restart = true
-				}
-			} else {
-				log.V(1).Info(
-					"Runner pod exists but the GitHub runner appears to be still offline. Waiting for runner to get online ...",
-					"runnerName", runner.Name,
-				)
-			}
-		}
-
-		if (notFound || (offline && !registrationOnly)) && !registrationDidTimeout {
-			registrationRecheckJitter := 10 * time.Second
-			if r.RegistrationRecheckJitter > 0 {
-				registrationRecheckJitter = r.RegistrationRecheckJitter
-			}
-
-			registrationRecheckDelay = registrationCheckInterval + wait.Jitter(registrationRecheckJitter, 0.1)
-		}
-	}
-
-	// Don't do anything if there's no need to restart the runner
-	if !restart {
-		// This guard enables us to update runner.Status.Phase to `Running` only after
-		// the runner is registered to GitHub.
-		if registrationRecheckDelay > 0 {
-			log.V(1).Info(fmt.Sprintf("Rechecking the runner registration in %s", registrationRecheckDelay))
-
-			updated := runner.DeepCopy()
-			updated.Status.LastRegistrationCheckTime = &metav1.Time{Time: time.Now()}
-
-			if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
-				log.Error(err, "Failed to update runner status for LastRegistrationCheckTime")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{RequeueAfter: registrationRecheckDelay}, nil
-		}
-
-		if runner.Status.Phase != string(pod.Status.Phase) {
-			if pod.Status.Phase == corev1.PodRunning {
-				// Seeing this message, you can expect the runner to become `Running` soon.
-				log.Info(
-					"Runner appears to have registered and running.",
-					"podCreationTimestamp", pod.CreationTimestamp,
-				)
-			}
-
-			updated := runner.DeepCopy()
-			updated.Status.Phase = string(pod.Status.Phase)
-			updated.Status.Reason = pod.Status.Reason
-			updated.Status.Message = pod.Status.Message
-
-			if err := r.Status().Patch(ctx, updated, client.MergeFrom(&runner)); err != nil {
-				log.Error(err, "Failed to update runner status for Phase/Reason/Message")
-				return ctrl.Result{}, err
-			}
-		}
-
-		return ctrl.Result{}, nil
-	}
-
-	// Delete current pod if recreation is needed
-	if err := r.Delete(ctx, &pod); err != nil {
-		log.Error(err, "Failed to delete pod resource")
-		return ctrl.Result{}, err
-	}
-
-	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Deleted pod '%s'", newPod.Name))
-	log.Info("Deleted runner pod", "repository", runner.Spec.Repository)
-
-	return ctrl.Result{}, nil
+	return stopped
 }
 
-func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger) (reconcile.Result, error) {
+func ephemeralRunnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
+	if getRunnerEnv(pod, "RUNNER_EPHEMERAL") != "true" {
+		return nil
+	}
+
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name != containerName {
+			continue
+		}
+
+		status := status
+
+		return &status
+	}
+
+	return nil
+}
+
+func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger, pod *corev1.Pod) (reconcile.Result, error) {
 	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
 
 	if removed {
-		if len(runner.Status.Registration.Token) > 0 {
-			ok, err := r.unregisterRunner(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
-			if err != nil {
-				if errors.Is(err, &gogithub.RateLimitError{}) {
-					// We log the underlying error when we failed calling GitHub API to list or unregisters,
-					// or the runner is still busy.
-					log.Error(
-						err,
-						fmt.Sprintf(
-							"Failed to unregister runner due to GitHub API rate limits. Delaying retry for %s to avoid excessive GitHub API calls",
-							retryDelayOnGitHubAPIRateLimitError,
-						),
-					)
-
-					return ctrl.Result{RequeueAfter: retryDelayOnGitHubAPIRateLimitError}, err
-				}
-
-				return ctrl.Result{}, err
-			}
-
-			if !ok {
-				log.V(1).Info("Runner no longer exists on GitHub")
-			}
-		} else {
-			log.V(1).Info("Runner was never registered on GitHub")
-		}
-
 		newRunner := runner.DeepCopy()
 		newRunner.ObjectMeta.Finalizers = finalizers
 
 		if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
-			log.Error(err, "Failed to update runner for finalizer removal")
+			log.Error(err, "Unable to remove finalizer")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Removed runner from GitHub", "repository", runner.Spec.Repository, "organization", runner.Spec.Organization)
+		log.Info("Removed finalizer")
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) processRunnerPodDeletion(ctx context.Context, runner v1alpha1.Runner, log logr.Logger, pod corev1.Pod) (reconcile.Result, error) {
-	deletionTimeout := 1 * time.Minute
-	currentTime := time.Now()
-	deletionDidTimeout := currentTime.Sub(pod.DeletionTimestamp.Add(deletionTimeout)) > 0
-
-	if deletionDidTimeout {
-		log.Info(
-			fmt.Sprintf("Failed to delete pod within %s. ", deletionTimeout)+
-				"This is typically the case when a Kubernetes node became unreachable "+
-				"and the kube controller started evicting nodes. Forcefully deleting the pod to not get stuck.",
-			"podDeletionTimestamp", pod.DeletionTimestamp,
-			"currentTime", currentTime,
-			"configuredDeletionTimeout", deletionTimeout,
-		)
-
-		var force int64 = 0
-		// forcefully delete runner as we would otherwise get stuck if the node stays unreachable
-		if err := r.Delete(ctx, &pod, &client.DeleteOptions{GracePeriodSeconds: &force}); err != nil {
-			// probably
-			if !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to forcefully delete pod resource ...")
-				return ctrl.Result{}, err
-			}
-			// forceful deletion finally succeeded
-			return ctrl.Result{Requeue: true}, nil
-		}
-
-		r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Forcefully deleted pod '%s'", pod.Name))
-		log.Info("Forcefully deleted runner pod", "repository", runner.Spec.Repository)
-		// give kube manager a little time to forcefully delete the stuck pod
-		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
-	} else {
-		return ctrl.Result{}, nil
-	}
-}
-
 func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1alpha1.Runner, log logr.Logger) (reconcile.Result, error) {
 	if updated, err := r.updateRegistrationToken(ctx, runner); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: RetryDelayOnCreateRegistrationError}, nil
 	} else if updated {
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -508,6 +262,96 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 	if err != nil {
 		log.Error(err, "Could not create pod")
 		return ctrl.Result{}, err
+	}
+
+	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
+	if needsServiceAccount {
+		serviceAccount := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      runner.ObjectMeta.Name,
+				Namespace: runner.ObjectMeta.Namespace,
+			},
+		}
+		if res := r.createObject(ctx, serviceAccount, serviceAccount.ObjectMeta, &runner, log); res != nil {
+			return *res, nil
+		}
+
+		rules := []rbacv1.PolicyRule{}
+
+		if r.UseRunnerStatusUpdateHook {
+			rules = append(rules, []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{"actions.summerwind.dev"},
+					Resources:     []string{"runners/status"},
+					Verbs:         []string{"get", "update", "patch"},
+					ResourceNames: []string{runner.ObjectMeta.Name},
+				},
+			}...)
+		}
+
+		if runner.Spec.ContainerMode == "kubernetes" {
+			// Permissions based on https://github.com/actions/runner-container-hooks/blob/main/packages/k8s/README.md
+			rules = append(rules, []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/exec"},
+					Verbs:     []string{"get", "create"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods/log"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"batch"},
+					Resources: []string{"jobs"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"get", "list", "create", "delete"},
+				},
+			}...)
+		}
+
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      runner.ObjectMeta.Name,
+				Namespace: runner.ObjectMeta.Namespace,
+			},
+			Rules: rules,
+		}
+		if res := r.createObject(ctx, role, role.ObjectMeta, &runner, log); res != nil {
+			return *res, nil
+		}
+
+		roleBinding := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      runner.ObjectMeta.Name,
+				Namespace: runner.ObjectMeta.Namespace,
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     runner.ObjectMeta.Name,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      runner.ObjectMeta.Name,
+					Namespace: runner.ObjectMeta.Namespace,
+				},
+			},
+		}
+		if res := r.createObject(ctx, roleBinding, roleBinding.ObjectMeta, &runner, log); res != nil {
+			return *res, nil
+		}
 	}
 
 	if err := r.Create(ctx, &newPod); err != nil {
@@ -528,35 +372,29 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 
 	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
 	log.Info("Created runner pod", "repository", runner.Spec.Repository)
+
 	return ctrl.Result{}, nil
 }
 
-func (r *RunnerReconciler) unregisterRunner(ctx context.Context, enterprise, org, repo, name string) (bool, error) {
-	runners, err := r.GitHubClient.ListRunners(ctx, enterprise, org, repo)
-	if err != nil {
-		return false, err
+func (r *RunnerReconciler) createObject(ctx context.Context, obj client.Object, meta metav1.ObjectMeta, runner *v1alpha1.Runner, log logr.Logger) *ctrl.Result {
+	kind := strings.Split(reflect.TypeOf(obj).String(), ".")[1]
+	if err := ctrl.SetControllerReference(runner, obj, r.Scheme); err != nil {
+		log.Error(err, fmt.Sprintf("Could not add owner reference to %s %s. %s", kind, meta.Name, err.Error()))
+		return &ctrl.Result{Requeue: true}
 	}
-
-	id := int64(0)
-	for _, runner := range runners {
-		if runner.GetName() == name {
-			if runner.GetBusy() {
-				return false, fmt.Errorf("runner is busy")
-			}
-			id = runner.GetID()
-			break
+	if err := r.Create(ctx, obj); err != nil {
+		if kerrors.IsAlreadyExists(err) {
+			log.Info(fmt.Sprintf("Failed to create %s %s as it already exists. Reusing existing %s", kind, meta.Name, kind))
+			r.Recorder.Event(runner, corev1.EventTypeNormal, fmt.Sprintf("%sReused", kind), fmt.Sprintf("Reused %s '%s'", kind, meta.Name))
+			return nil
 		}
-	}
 
-	if id == int64(0) {
-		return false, nil
+		log.Error(err, fmt.Sprintf("Retrying as failed to create %s %s resource", kind, meta.Name))
+		return &ctrl.Result{Requeue: true}
 	}
-
-	if err := r.GitHubClient.RemoveRunner(ctx, enterprise, org, repo, id); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	r.Recorder.Event(runner, corev1.EventTypeNormal, fmt.Sprintf("%sCreated", kind), fmt.Sprintf("Created %s '%s'", kind, meta.Name))
+	log.Info(fmt.Sprintf("Created %s", kind), "name", meta.Name)
+	return nil
 }
 
 func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v1alpha1.Runner) (bool, error) {
@@ -566,8 +404,17 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 
 	log := r.Log.WithValues("runner", runner.Name)
 
-	rt, err := r.GitHubClient.GetRegistrationToken(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+	ghc, err := r.GitHubClient.InitForRunner(ctx, &runner)
 	if err != nil {
+		return false, err
+	}
+
+	rt, err := ghc.GetRegistrationToken(ctx, runner.Spec.Enterprise, runner.Spec.Organization, runner.Spec.Repository, runner.Name)
+	if err != nil {
+		// An error can be a permanent, permission issue like the below:
+		//    POST https://api.github.com/enterprises/YOUR_ENTERPRISE/actions/runners/registration-token: 403 Resource not accessible by integration []
+		// In such case retrying in seconds might not make much sense.
+
 		r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
 		log.Error(err, "Failed to get new registration token")
 		return false, err
@@ -602,6 +449,11 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		labels[k] = v
 	}
 
+	ghc, err := r.GitHubClient.InitForRunner(context.Background(), &runner)
+	if err != nil {
+		return corev1.Pod{}, err
+	}
+
 	// This implies that...
 	//
 	// (1) We recreate the runner pod whenever the runner has changes in:
@@ -625,7 +477,12 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		filterLabels(runner.ObjectMeta.Labels, LabelKeyRunnerTemplateHash),
 		runner.ObjectMeta.Annotations,
 		runner.Spec,
-		r.GitHubClient.GithubBaseURL,
+		ghc.GithubBaseURL,
+		// Token change should trigger replacement.
+		// We need to include this explicitly here because
+		// runner.Spec does not contain the possibly updated token stored in the
+		// runner status yet.
+		runner.Status.Registration.Token,
 	)
 
 	objectMeta := metav1.ObjectMeta{
@@ -639,31 +496,66 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runner.Spec.Containers) == 0 {
 		template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
-			Name:            "runner",
-			ImagePullPolicy: runner.Spec.ImagePullPolicy,
-			EnvFrom:         runner.Spec.EnvFrom,
-			Env:             runner.Spec.Env,
-			Resources:       runner.Spec.Resources,
+			Name: "runner",
 		})
 
 		if (runner.Spec.DockerEnabled == nil || *runner.Spec.DockerEnabled) && (runner.Spec.DockerdWithinRunnerContainer == nil || !*runner.Spec.DockerdWithinRunnerContainer) {
 			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
-				Name:         "docker",
-				VolumeMounts: runner.Spec.DockerVolumeMounts,
-				Resources:    runner.Spec.DockerdContainerResources,
-				Env:          runner.Spec.DockerEnv,
+				Name: "docker",
 			})
 		}
 	} else {
 		template.Spec.Containers = runner.Spec.Containers
 	}
 
+	for i, c := range template.Spec.Containers {
+		switch c.Name {
+		case "runner":
+			if c.ImagePullPolicy == "" {
+				template.Spec.Containers[i].ImagePullPolicy = runner.Spec.ImagePullPolicy
+			}
+			if len(c.EnvFrom) == 0 {
+				template.Spec.Containers[i].EnvFrom = runner.Spec.EnvFrom
+			}
+			if len(c.Env) == 0 {
+				template.Spec.Containers[i].Env = runner.Spec.Env
+			}
+			if len(c.Resources.Requests) == 0 {
+				template.Spec.Containers[i].Resources.Requests = runner.Spec.Resources.Requests
+			}
+			if len(c.Resources.Limits) == 0 {
+				template.Spec.Containers[i].Resources.Limits = runner.Spec.Resources.Limits
+			}
+		case "docker":
+			if len(c.VolumeMounts) == 0 {
+				template.Spec.Containers[i].VolumeMounts = runner.Spec.DockerVolumeMounts
+			}
+			if len(c.Resources.Limits) == 0 {
+				template.Spec.Containers[i].Resources.Limits = runner.Spec.DockerdContainerResources.Limits
+			}
+			if len(c.Resources.Requests) == 0 {
+				template.Spec.Containers[i].Resources.Requests = runner.Spec.DockerdContainerResources.Requests
+			}
+			if len(c.Env) == 0 {
+				template.Spec.Containers[i].Env = runner.Spec.DockerEnv
+			}
+		}
+	}
+
 	template.Spec.SecurityContext = runner.Spec.SecurityContext
 	template.Spec.EnableServiceLinks = runner.Spec.EnableServiceLinks
 
-	registrationOnly := metav1.HasAnnotation(runner.ObjectMeta, annotationKeyRegistrationOnly)
+	if runner.Spec.ContainerMode == "kubernetes" {
+		workDir := runner.Spec.WorkDir
+		if workDir == "" {
+			workDir = "/runner/_work"
+		}
+		if err := applyWorkVolumeClaimTemplateToPod(&template, runner.Spec.WorkVolumeClaimTemplate, workDir); err != nil {
+			return corev1.Pod{}, err
+		}
+	}
 
-	pod, err := newRunnerPod(template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubClient.GithubBaseURL, registrationOnly)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, ghc.GithubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return pod, err
 	}
@@ -675,6 +567,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		// if operater provides a work volume mount, use that
 		isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
 		if isPresent {
+			if runnerSpec.ContainerMode == "kubernetes" {
+				return pod, errors.New("volume mount \"work\" should be specified by workVolumeClaimTemplate in container mode kubernetes")
+			}
 			// remove work volume since it will be provided from runnerSpec.Volumes
 			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
 			_, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
@@ -688,6 +583,9 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		// if operator provides a work volume. use that
 		isPresent, _ := workVolumePresent(runnerSpec.Volumes)
 		if isPresent {
+			if runnerSpec.ContainerMode == "kubernetes" {
+				return pod, errors.New("volume \"work\" should be specified by workVolumeClaimTemplate in container mode kubernetes")
+			}
 			_, index := workVolumePresent(pod.Spec.Volumes)
 
 			// remove work volume since it will be provided from runnerSpec.Volumes
@@ -697,6 +595,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
 	}
+
 	if len(runnerSpec.InitContainers) != 0 {
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, runnerSpec.InitContainers...)
 	}
@@ -704,9 +603,13 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	if runnerSpec.NodeSelector != nil {
 		pod.Spec.NodeSelector = runnerSpec.NodeSelector
 	}
+
 	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
+	} else if r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
+		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
 	}
+
 	if runnerSpec.AutomountServiceAccountToken != nil {
 		pod.Spec.AutomountServiceAccountToken = runnerSpec.AutomountServiceAccountToken
 	}
@@ -727,6 +630,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.Tolerations = runnerSpec.Tolerations
 	}
 
+	if runnerSpec.PriorityClassName != "" {
+		pod.Spec.PriorityClassName = runnerSpec.PriorityClassName
+	}
+
 	if len(runnerSpec.TopologySpreadConstraints) != 0 {
 		pod.Spec.TopologySpreadConstraints = runnerSpec.TopologySpreadConstraints
 	}
@@ -741,6 +648,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if len(runnerSpec.HostAliases) != 0 {
 		pod.Spec.HostAliases = runnerSpec.HostAliases
+	}
+
+	if runnerSpec.DnsConfig != nil {
+		pod.Spec.DNSConfig = runnerSpec.DnsConfig
 	}
 
 	if runnerSpec.RuntimeClassName != nil {
@@ -762,25 +673,56 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	updated := pod.DeepCopy()
 
-	for i := range pod.Spec.Containers {
-		if pod.Spec.Containers[i].Name == "runner" {
-			updated.Spec.Containers[i].Env = append(updated.Spec.Containers[i].Env,
-				corev1.EnvVar{
-					Name:  "RUNNER_NAME",
-					Value: pod.ObjectMeta.Name,
-				},
-				corev1.EnvVar{
-					Name:  "RUNNER_TOKEN",
-					Value: token,
-				},
-			)
-		}
+	if getRunnerEnv(pod, EnvVarRunnerName) == "" {
+		setRunnerEnv(updated, EnvVarRunnerName, pod.ObjectMeta.Name)
+	}
+
+	if getRunnerEnv(pod, EnvVarRunnerToken) == "" {
+		setRunnerEnv(updated, EnvVarRunnerToken, token)
 	}
 
 	return updated
 }
 
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, registrationOnly bool) (corev1.Pod, error) {
+func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
+	isRequireSameNode, err := isRequireSameNode(pod)
+	if err != nil {
+		return nil, err
+	}
+
+	return []corev1.EnvVar{
+		{
+			Name:  "ACTIONS_RUNNER_CONTAINER_HOOKS",
+			Value: defaultRunnerHookPath,
+		},
+		{
+			Name:  "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER",
+			Value: "true",
+		},
+		{
+			Name: "ACTIONS_RUNNER_POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "ACTIONS_RUNNER_JOB_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		{
+			Name:  "ACTIONS_RUNNER_REQUIRE_SAME_NODE",
+			Value: strconv.FormatBool(isRequireSameNode),
+		},
+	}, nil
+}
+
+func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHook bool) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
@@ -788,6 +730,21 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
 		dockerdInRunnerPrivileged bool = dockerdInRunner
 	)
+
+	if containerMode == "kubernetes" {
+		dockerdInRunner = false
+		dockerEnabled = false
+		dockerdInRunnerPrivileged = false
+	}
+
+	template = *template.DeepCopy()
+
+	// This label selector is used by default when rd.Spec.Selector is empty.
+	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunner, "")
+	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
+	if runnerSpec.GitHubAPICredentialsFrom != nil {
+		template.ObjectMeta.Annotations = CloneAndAddLabel(template.ObjectMeta.Annotations, annotationKeyGitHubAPICredsSecret, runnerSpec.GitHubAPICredentialsFrom.SecretRef.Name)
+	}
 
 	workDir := runnerSpec.WorkDir
 	if workDir == "" {
@@ -817,11 +774,11 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			Value: runnerSpec.Enterprise,
 		},
 		{
-			Name:  "RUNNER_LABELS",
+			Name:  EnvVarLabels,
 			Value: strings.Join(runnerSpec.Labels, ","),
 		},
 		{
-			Name:  "RUNNER_GROUP",
+			Name:  EnvVarGroup,
 			Value: runnerSpec.Group,
 		},
 		{
@@ -841,17 +798,13 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			Value: workDir,
 		},
 		{
-			Name:  "RUNNER_EPHEMERAL",
+			Name:  EnvVarEphemeral,
 			Value: fmt.Sprintf("%v", ephemeral),
 		},
-	}
-
-	if registrationOnly {
-		env = append(env, corev1.EnvVar{
-			Name:  "RUNNER_REGISTRATION_ONLY",
-			Value: "true",
+		{
+			Name:  "RUNNER_STATUS_UPDATE_HOOK",
+			Value: fmt.Sprintf("%v", useRunnerStatusUpdateHook),
 		},
-		)
 	}
 
 	var seLinuxOptions *corev1.SELinuxOptions
@@ -875,6 +828,17 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			dockerdContainerIndex = i
 			dockerdContainer = &c
 		}
+	}
+
+	if containerMode == "kubernetes" {
+		if dockerdContainer != nil {
+			template.Spec.Containers = append(template.Spec.Containers[:dockerdContainerIndex], template.Spec.Containers[dockerdContainerIndex+1:]...)
+		}
+		if dockerdContainerIndex < runnerContainerIndex {
+			runnerContainerIndex--
+		}
+		dockerdContainer = nil
+		dockerdContainerIndex = -1
 	}
 
 	if runnerContainer == nil {
@@ -907,18 +871,26 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 	}
 
 	runnerContainer.Env = append(runnerContainer.Env, env...)
+	if containerMode == "kubernetes" {
+		hookEnvs, err := runnerHookEnvs(&template)
+		if err != nil {
+			return corev1.Pod{}, err
+		}
+		runnerContainer.Env = append(runnerContainer.Env, hookEnvs...)
+	}
 
 	if runnerContainer.SecurityContext == nil {
 		runnerContainer.SecurityContext = &corev1.SecurityContext{}
 	}
-	// Runner need to run privileged if it contains DinD
-	runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+
+	if runnerContainer.SecurityContext.Privileged == nil {
+		// Runner need to run privileged if it contains DinD
+		runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
+	}
 
 	pod := template.DeepCopy()
 
-	if pod.Spec.RestartPolicy == "" {
-		pod.Spec.RestartPolicy = "OnFailure"
-	}
+	forceRunnerPodRestartPolicyNever(pod)
 
 	if mtu := runnerSpec.DockerMTU; mtu != nil && dockerdInRunner {
 		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
@@ -996,13 +968,18 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			)
 		}
 
-		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			corev1.Volume{
-				Name: "work",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+		if ok, _ := workVolumePresent(pod.Spec.Volumes); !ok {
+			pod.Spec.Volumes = append(pod.Spec.Volumes,
+				corev1.Volume{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
+			)
+		}
+
+		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
 				Name: "certs-client",
 				VolumeSource: corev1.VolumeSource{
@@ -1011,11 +988,16 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 			},
 		)
 
+		if ok, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); !ok {
+			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "work",
+					MountPath: workDir,
+				},
+			)
+		}
+
 		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "work",
-				MountPath: workDir,
-			},
 			corev1.VolumeMount{
 				Name:      "certs-client",
 				MountPath: "/certs/client",
@@ -1086,6 +1068,74 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 				},
 			}...)
 
+			// This let dockerd to create container's network interface to have the specified MTU.
+			// In other words, this is for setting com.docker.network.driver.mtu in the docker bridge options.
+			// You can see the options by running `docker network inspect bridge`, where you will see something like the below when spec.dockerMTU=1400:
+			//
+			// "Options": {
+			// 	 "com.docker.network.bridge.default_bridge": "true",
+			// 	 "com.docker.network.bridge.enable_icc": "true",
+			// 	 "com.docker.network.bridge.enable_ip_masquerade": "true",
+			// 	 "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+			// 	 "com.docker.network.bridge.name": "docker0",
+			// 	 "com.docker.network.driver.mtu": "1400"
+			// },
+			//
+			// See e.g. https://forums.docker.com/t/changing-mtu-value/74114 and https://mlohr.com/docker-mtu/ for more details.
+			//
+			// Note though, this doesn't immediately affect docker0's MTU, and the MTU of the docker network created with docker-create-network:
+			// You can verity that by running `ip link` within the containers:
+			//
+			//   # ip link
+			//   1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+			//   link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+			//   2: eth0@if1118: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue state UP
+			//   link/ether c2:dd:e6:66:8e:8b brd ff:ff:ff:ff:ff:ff
+			//   3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//   link/ether 02:42:ab:1c:83:69 brd ff:ff:ff:ff:ff:ff
+			//   4: br-c5bf6c172bd7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//   link/ether 02:42:e2:91:13:1e brd ff:ff:ff:ff:ff:ff
+			//
+			// br-c5bf6c172bd7 is the interface that corresponds to the docker network created with docker-create-network.
+			// We have another ARC feature to inherit the host's MTU to the docker networks:
+			// https://github.com/actions-runner-controller/actions-runner-controller/pull/1201
+			//
+			// docker's MTU is updated to the specified MTU once any container is created.
+			// You can verity that by running a random container from within the runner or dockerd containers:
+			//
+			// / # docker run -d busybox sh -c 'sleep 10'
+			// e848e6acd6404ca0199e4d9c5ef485d88c974ddfb7aaf2359c66811f68cf5e42
+			//
+			// You'll now see the veth767f1a5@if7 got created with the MTU inherited by dockerd:
+			//
+			// / # ip link
+			// 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+			//     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+			// 2: eth0@if1118: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue state UP
+			//     link/ether c2:dd:e6:66:8e:8b brd ff:ff:ff:ff:ff:ff
+			// 3: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1400 qdisc noqueue state UP
+			//     link/ether 02:42:ab:1c:83:69 brd ff:ff:ff:ff:ff:ff
+			// 4: br-c5bf6c172bd7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//     link/ether 02:42:e2:91:13:1e brd ff:ff:ff:ff:ff:ff
+			// 8: veth767f1a5@if7: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1400 qdisc noqueue master docker0 state UP
+			//     link/ether 82:d5:08:28:d8:98 brd ff:ff:ff:ff:ff:ff
+			//
+			// # After 10 seconds sleep, you can see the container stops and the veth767f1a5@if7 interface got deleted:
+			//
+			// / # ip link
+			// 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+			//     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+			// 2: eth0@if1118: <BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN> mtu 1500 qdisc noqueue state UP
+			//     link/ether c2:dd:e6:66:8e:8b brd ff:ff:ff:ff:ff:ff
+			// 3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//     link/ether 02:42:ab:1c:83:69 brd ff:ff:ff:ff:ff:ff
+			// 4: br-c5bf6c172bd7: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN
+			//     link/ether 02:42:e2:91:13:1e brd ff:ff:ff:ff:ff:ff
+			//
+			// See https://github.com/moby/moby/issues/26382#issuecomment-246906331 for reference.
+			//
+			// Probably we'd better infer DockerMTU from the host's primary interface's MTU and docker0's MTU?
+			// That's another story- if you want it, please start a thread in GitHub Discussions!
 			dockerdContainer.Args = append(dockerdContainer.Args,
 				"--mtu",
 				fmt.Sprintf("%d", *runnerSpec.DockerMTU),
@@ -1118,6 +1168,10 @@ func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, default
 	}
 
 	return *pod, nil
+}
+
+func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHookEphemeralRole bool) (corev1.Pod, error) {
+	return newRunnerPodWithContainerMode("", template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, useRunnerStatusUpdateHookEphemeralRole)
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -1181,4 +1235,62 @@ func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 		}
 	}
 	return false, 0
+}
+
+func applyWorkVolumeClaimTemplateToPod(pod *corev1.Pod, workVolumeClaimTemplate *v1alpha1.WorkVolumeClaimTemplate, workDir string) error {
+	if workVolumeClaimTemplate == nil {
+		return errors.New("work volume claim template must be specified in container mode kubernetes")
+	}
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Name == "work" {
+			return fmt.Errorf("Work volume should not be specified in container mode kubernetes. workVolumeClaimTemplate field should be used instead.")
+		}
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, workVolumeClaimTemplate.V1Volume())
+
+	var runnerContainer *corev1.Container
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "runner" {
+			runnerContainer = &pod.Spec.Containers[i]
+			break
+		}
+	}
+
+	if runnerContainer == nil {
+		return fmt.Errorf("runner container is not present when applying work volume claim template")
+	}
+
+	if isPresent, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); isPresent {
+		return fmt.Errorf("volume mount \"work\" should not be present on the runner container in container mode kubernetes")
+	}
+
+	runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts, workVolumeClaimTemplate.V1VolumeMount(workDir))
+
+	return nil
+}
+
+// isRequireSameNode specifies for the runner in kubernetes mode wether it should
+// schedule jobs to the same node where the runner is
+//
+// This function should only be called in containerMode: kubernetes
+func isRequireSameNode(pod *corev1.Pod) (bool, error) {
+	isPresent, index := workVolumePresent(pod.Spec.Volumes)
+	if !isPresent {
+		return true, errors.New("internal error: work volume mount must exist in containerMode: kubernetes")
+	}
+
+	if pod.Spec.Volumes[index].Ephemeral == nil || pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate == nil {
+		return true, errors.New("containerMode: kubernetes should have pod.Spec.Volumes[].Ephemeral.VolumeClaimTemplate set")
+	}
+
+	for _, accessMode := range pod.Spec.Volumes[index].Ephemeral.VolumeClaimTemplate.Spec.AccessModes {
+		switch accessMode {
+		case corev1.ReadWriteOnce:
+			return true, nil
+		case corev1.ReadWriteMany:
+		default:
+			return true, errors.New("actions-runner-controller supports ReadWriteOnce and ReadWriteMany modes only")
+		}
+	}
+	return false, nil
 }

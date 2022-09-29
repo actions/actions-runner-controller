@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,7 +14,7 @@ import (
 
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v39/github"
+	"github.com/google/go-github/v47/github"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -138,6 +137,13 @@ func TestWebhookWorkflowJob(t *testing.T) {
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
 				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
+				},
 			},
 		}
 
@@ -176,6 +182,13 @@ func TestWebhookWorkflowJob(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -216,6 +229,13 @@ func TestWebhookWorkflowJob(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -277,6 +297,13 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
 				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
+				},
 			},
 		}
 
@@ -315,6 +342,13 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -355,6 +389,13 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
 					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
 				},
 			},
 		}
@@ -462,7 +503,7 @@ func testServerWithInitObjs(t *testing.T, eventType string, event interface{}, w
 
 	hraWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{}
 
-	client := fake.NewFakeClientWithScheme(sc, initObjs...)
+	client := fake.NewClientBuilder().WithScheme(sc).WithRuntimeObjects(initObjs...).Build()
 
 	logs := installTestLogger(hraWebhook)
 
@@ -495,7 +536,7 @@ func testServerWithInitObjs(t *testing.T, eventType string, event interface{}, w
 		t.Error("status:", resp.StatusCode)
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +574,7 @@ func sendWebhook(server *httptest.Server, eventType string, event interface{}) (
 			"X-GitHub-Event": {eventType},
 			"Content-Type":   {"application/json"},
 		},
-		Body: ioutil.NopCloser(bytes.NewBuffer(reqBody)),
+		Body: io.NopCloser(bytes.NewBuffer(reqBody)),
 	}
 
 	return http.DefaultClient.Do(req)
@@ -565,7 +606,7 @@ func (l *testLogSink) Info(_ int, msg string, kvs ...interface{}) {
 	fmt.Fprintf(l.writer, "\n")
 }
 
-func (_ *testLogSink) Enabled(level int) bool {
+func (*testLogSink) Enabled(level int) bool {
 	return true
 }
 

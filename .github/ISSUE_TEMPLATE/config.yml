@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+- name: Sponsor ARC Maintainers
+  about: If your business relies on the continued maintainance of actions-runner-controller, please consider sponsoring the project and the maintainers.
+  url: https://github.com/actions-runner-controller/actions-runner-controller/tree/master/CODEOWNERS
+- name: Ideas and Feature Requests
+  about: Wanna request a feature? Create a discussion and collect :+1:s first.
+  url: https://github.com/actions-runner-controller/actions-runner-controller/discussions/new?category=ideas
+- name: Questions and User Support
+  about: Need support using ARC? We use Discussions as the place to provide community support.
+  url: https://github.com/actions-runner-controller/actions-runner-controller/discussions/new?category=questions
+- name: Need Paid Support?
+  about: Consider contracting with any of the actions-runner-controller maintainers and contributors.
+  url: https://github.com/actions-runner-controller/actions-runner-controller/tree/master/CODEOWNERS

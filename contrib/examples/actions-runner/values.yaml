@@ -1,0 +1,63 @@
+image:
+  repository: summerwind/actions-runner
+  tag: v2.290.1-ubuntu-20.04
+  pullPolicy: IfNotPresent
+
+# Create runner for an organization or a repository
+# Set only one of the two either organization or repository
+# By default, it creates runner under github organization test
+organization: test
+# repository: mumoshu/actions-runner-controller-ci
+
+# Labels you want to add in your runner
+runnerLabels:
+  - test
+
+# If you enable Autoscaler, then it will not be used
+replicaCount: 1
+
+# The Runner Group that the runner(s) should be associated with.
+# See https://docs.github.com/en/github-ae@latest/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups.
+group: Default
+
+autoscaler:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  scaleDownDelaySecondsAfterScaleOut: 120
+  # metrics (pull method) / scaleUpTriggers (push method)
+  # https://github.com/actions-runner-controller/actions-runner-controller#pull-driven-scaling
+  # https://github.com/actions-runner-controller/actions-runner-controller#webhook-driven-scaling
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.25'
+    scaleUpFactor: '2'
+    scaleDownFactor: '0.5'
+  # scaleUpTriggers:
+  # - githubEvent: {}
+  #   duration: "5m"
+
+podAnnotations: {}
+
+podLabels: {}
+
+imagePullSecrets: []
+
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+# Leverage a PriorityClass to ensure your pods survive resource shortages
+# ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# PriorityClass: system-cluster-critical
+priorityClassName: ""
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+env:
+  {}

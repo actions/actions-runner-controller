@@ -1,7 +1,7 @@
 package testing
 
 const (
-	ActionsCheckoutV2 = "actions/checkout@v2"
+	ActionsCheckout = "actions/checkout@v3"
 )
 
 type Workflow struct {
@@ -30,8 +30,9 @@ type InputSpec struct {
 }
 
 type Job struct {
-	RunsOn string `json:"runs-on"`
-	Steps  []Step `json:"steps"`
+	RunsOn    string `json:"runs-on"`
+	Container string `json:"container,omitempty"`
+	Steps     []Step `json:"steps"`
 }
 
 type Step struct {
@@ -42,5 +43,16 @@ type Step struct {
 }
 
 type With struct {
-	Version string `json:"version,omitempty"`
+	Version   string `json:"version,omitempty"`
+	GoVersion string `json:"go-version,omitempty"`
+
+	// https://github.com/docker/setup-buildx-action#inputs
+	BuildkitdFlags string `json:"buildkitd-flags,omitempty"`
+	Install        bool   `json:"install,omitempty"`
+	// This can be either the address or the context name
+	// https://github.com/docker/buildx/blob/master/docs/reference/buildx_create.md#description
+	Endpoint string `json:"endpoint,omitempty"`
+	// Needs to be "docker" in rootless mode
+	// https://stackoverflow.com/questions/66142872/how-to-solve-error-with-rootless-docker-in-github-actions-self-hosted-runner-wr
+	Driver string `json:"driver,omitempty"`
 }

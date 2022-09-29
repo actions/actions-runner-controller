@@ -17,6 +17,12 @@ type T = testing.T
 
 var Short = testing.Short
 
+var images = map[string]string{
+	"1.22": "kindest/node:v1.22.9@sha256:8135260b959dfe320206eb36b3aeda9cffcb262f4b44cda6b33f7bb73f453105",
+	"1.23": "kindest/node:v1.23.6@sha256:b1fa224cc6c7ff32455e0b1fd9cbfd3d3bc87ecaa8fcb06961ed1afb3db0f9ae",
+	"1.24": "kindest/node:v1.24.0@sha256:0866296e693efe1fed79d5e6c7af8df71fc73ae45e3679af05342239cdc5bc8e",
+}
+
 func Img(repo, tag string) ContainerImage {
 	return ContainerImage{
 		Repo: repo,
@@ -28,21 +34,16 @@ func Img(repo, tag string) ContainerImage {
 // All of its methods are idempotent so that you can safely call it from within each subtest
 // and you can rerun the individual subtest until it works as you expect.
 type Env struct {
-	kind    *Kind
-	docker  *Docker
-	Kubectl *Kubectl
-	bash    *Bash
-	id      string
+	Kubeconfig string
+	docker     *Docker
+	Kubectl    *Kubectl
+	bash       *Bash
 }
 
-func Start(t *testing.T, opts ...Option) *Env {
+func Start(t *testing.T, k8sMinorVer string) *Env {
 	t.Helper()
 
-	k := StartKind(t, opts...)
-
 	var env Env
-
-	env.kind = k
 
 	d := &Docker{}
 
@@ -56,12 +57,16 @@ func Start(t *testing.T, opts ...Option) *Env {
 
 	env.bash = bash
 
-	//
+	return &env
+}
+
+func (e *Env) GetOrGenerateTestID(t *testing.T) string {
+	kctl := e.Kubectl
 
 	cmKey := "id"
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + k.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cmCfg := KubectlConfig{
@@ -82,13 +87,27 @@ func Start(t *testing.T, opts ...Option) *Env {
 		}
 	}
 
-	env.id = m[cmKey]
-
-	return &env
+	return m[cmKey]
 }
 
-func (e *Env) ID() string {
-	return e.id
+func (e *Env) DeleteTestID(t *testing.T) {
+	kctl := e.Kubectl
+
+	kubectlEnv := []string{
+		"KUBECONFIG=" + e.Kubeconfig,
+	}
+
+	cmCfg := KubectlConfig{
+		Env: kubectlEnv,
+	}
+	testInfoName := "test-info"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	if err := kctl.DeleteCM(ctx, testInfoName, cmCfg); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (e *Env) DockerBuild(t *testing.T, builds []DockerBuild) {
@@ -102,13 +121,13 @@ func (e *Env) DockerBuild(t *testing.T, builds []DockerBuild) {
 	}
 }
 
-func (e *Env) KindLoadImages(t *testing.T, prebuildImages []ContainerImage) {
+func (e *Env) DockerPush(t *testing.T, images []ContainerImage) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
-	if err := e.kind.LoadImages(ctx, prebuildImages); err != nil {
+	if err := e.docker.Push(ctx, images); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -120,7 +139,7 @@ func (e *Env) KubectlApply(t *testing.T, path string, cfg KubectlConfig) {
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -137,7 +156,7 @@ func (e *Env) KubectlWaitUntilDeployAvailable(t *testing.T, name string, cfg Kub
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -154,7 +173,7 @@ func (e *Env) KubectlEnsureNS(t *testing.T, name string, cfg KubectlConfig) {
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -171,7 +190,7 @@ func (e *Env) KubectlEnsureClusterRoleBindingServiceAccount(t *testing.T, bindin
 	defer cancel()
 
 	kubectlEnv := []string{
-		"KUBECONFIG=" + e.kind.Kubeconfig(),
+		"KUBECONFIG=" + e.Kubeconfig,
 	}
 
 	cfg.Env = append(kubectlEnv, cfg.Env...)
@@ -181,10 +200,6 @@ func (e *Env) KubectlEnsureClusterRoleBindingServiceAccount(t *testing.T, bindin
 			t.Fatal(err)
 		}
 	}
-}
-
-func (e *Env) Kubeconfig() string {
-	return e.kind.Kubeconfig()
 }
 
 func (e *Env) RunScript(t *testing.T, path string, cfg ScriptConfig) {
@@ -234,7 +249,7 @@ type ContainerImage struct {
 	Repo, Tag string
 }
 
-func StartKind(t *testing.T, opts ...Option) *Kind {
+func StartKind(t *testing.T, k8sMinorVer string, opts ...Option) *Kind {
 	t.Helper()
 
 	invalidChars := []string{"/"}
@@ -249,7 +264,7 @@ func StartKind(t *testing.T, opts ...Option) *Kind {
 	k.Dir = t.TempDir()
 
 	kk := &k
-	if err := kk.Start(context.Background()); err != nil {
+	if err := kk.Start(context.Background(), k8sMinorVer); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -306,7 +321,7 @@ func (k *Kind) Kubeconfig() string {
 	return k.kubeconfig
 }
 
-func (k *Kind) Start(ctx context.Context) error {
+func (k *Kind) Start(ctx context.Context, k8sMinorVer string) error {
 	getNodes, err := k.CombinedOutput(k.kindGetNodesCmd(ctx, k.Name))
 	if err != nil {
 		return err
@@ -320,10 +335,19 @@ func (k *Kind) Start(ctx context.Context) error {
 			return err
 		}
 
+		image := images[k8sMinorVer]
+
 		kindConfig := []byte(fmt.Sprintf(`kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: %s
-`, k.Name))
+networking:
+  apiServerAddress: 0.0.0.0
+nodes:
+  - role: control-plane
+    image: %s
+  - role: worker
+    image: %s
+`, k.Name, image, image))
 
 		if err := os.WriteFile(f.Name(), kindConfig, 0644); err != nil {
 			return err

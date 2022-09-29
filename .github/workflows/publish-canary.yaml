@@ -1,0 +1,59 @@
+name: Publish Canary Image
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/validate-chart.yaml'
+      - '.github/workflows/publish-chart.yaml'
+      - '.github/workflows/publish-arc.yaml'
+      - '.github/workflows/runners.yaml'
+      - '.github/workflows/validate-entrypoint.yaml'
+      - '.github/renovate.*'
+      - 'runner/**'
+      - '.gitignore'
+      - 'PROJECT'
+      - 'LICENSE'
+      - 'Makefile'
+
+# https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  canary-build:
+    name: Build and Publish Canary Image
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Docker Environment
+        id: vars
+        uses: ./.github/actions/setup-docker-environment
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Considered unstable builds
+      # See Issue #285, PR #286, and PR #323 for more information
+      - name: Build and Push
+        uses: docker/build-push-action@v3
+        with:
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=canary-${{ github.sha }}
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:canary
+            ghcr.io/${{ github.repository }}:canary
+          cache-from: type=gha,scope=arc-canary
+          cache-to: type=gha,mode=max,scope=arc-canary

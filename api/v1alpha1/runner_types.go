@@ -18,8 +18,10 @@ package v1alpha1
 
 import (
 	"errors"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -71,6 +73,19 @@ type RunnerConfig struct {
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
 	// +optional
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
+
+	// +optional
+	ContainerMode string `json:"containerMode,omitempty"`
+
+	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
+}
+
+type GitHubAPICredentialsFrom struct {
+	SecretRef SecretReference `json:"secretRef,omitempty"`
+}
+
+type SecretReference struct {
+	Name string `json:"name"`
 }
 
 // RunnerPodSpec defines the desired pod spec fields of the runner pod
@@ -136,6 +151,9 @@ type RunnerPodSpec struct {
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
 	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// +optional
@@ -145,7 +163,7 @@ type RunnerPodSpec struct {
 	HostAliases []corev1.HostAlias `json:"hostAliases,omitempty"`
 
 	// +optional
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraint,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// RuntimeClassName is the container runtime configuration that containers should run under.
 	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class
@@ -153,11 +171,33 @@ type RunnerPodSpec struct {
 	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 
 	// +optional
-	DnsConfig []corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
+
+	// +optional
+	WorkVolumeClaimTemplate *WorkVolumeClaimTemplate `json:"workVolumeClaimTemplate,omitempty"`
+}
+
+func (rs *RunnerSpec) Validate(rootPath *field.Path) field.ErrorList {
+	var (
+		errList field.ErrorList
+		err     error
+	)
+
+	err = rs.validateRepository()
+	if err != nil {
+		errList = append(errList, field.Invalid(rootPath.Child("repository"), rs.Repository, err.Error()))
+	}
+
+	err = rs.validateWorkVolumeClaimTemplate()
+	if err != nil {
+		errList = append(errList, field.Invalid(rootPath.Child("workVolumeClaimTemplate"), rs.WorkVolumeClaimTemplate, err.Error()))
+	}
+
+	return errList
 }
 
 // ValidateRepository validates repository field.
-func (rs *RunnerSpec) ValidateRepository() error {
+func (rs *RunnerSpec) validateRepository() error {
 	// Enterprise, Organization and repository are both exclusive.
 	foundCount := 0
 	if len(rs.Organization) > 0 {
@@ -179,8 +219,23 @@ func (rs *RunnerSpec) ValidateRepository() error {
 	return nil
 }
 
+func (rs *RunnerSpec) validateWorkVolumeClaimTemplate() error {
+	if rs.ContainerMode != "kubernetes" {
+		return nil
+	}
+
+	if rs.WorkVolumeClaimTemplate == nil {
+		return errors.New("Spec.ContainerMode: kubernetes must have workVolumeClaimTemplate field specified")
+	}
+
+	return rs.WorkVolumeClaimTemplate.validate()
+}
+
 // RunnerStatus defines the observed state of Runner
 type RunnerStatus struct {
+	// Turns true only if the runner pod is ready.
+	// +optional
+	Ready bool `json:"ready"`
 	// +optional
 	Registration RunnerStatusRegistration `json:"registration"`
 	// +optional
@@ -204,13 +259,60 @@ type RunnerStatusRegistration struct {
 	ExpiresAt    metav1.Time `json:"expiresAt"`
 }
 
+type WorkVolumeClaimTemplate struct {
+	StorageClassName string                              `json:"storageClassName"`
+	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
+	Resources        corev1.ResourceRequirements         `json:"resources"`
+}
+
+func (w *WorkVolumeClaimTemplate) validate() error {
+	if w.AccessModes == nil || len(w.AccessModes) == 0 {
+		return errors.New("Access mode should have at least one mode specified")
+	}
+
+	for _, accessMode := range w.AccessModes {
+		switch accessMode {
+		case corev1.ReadWriteOnce, corev1.ReadWriteMany:
+		default:
+			return fmt.Errorf("Access mode %v is not supported", accessMode)
+		}
+	}
+	return nil
+}
+
+func (w *WorkVolumeClaimTemplate) V1Volume() corev1.Volume {
+	return corev1.Volume{
+		Name: "work",
+		VolumeSource: corev1.VolumeSource{
+			Ephemeral: &corev1.EphemeralVolumeSource{
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      w.AccessModes,
+						StorageClassName: &w.StorageClassName,
+						Resources:        w.Resources,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeMount {
+	return corev1.VolumeMount{
+		MountPath: mountPath,
+		Name:      "work",
+	}
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.enterprise",name=Enterprise,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.repository",name=Repository,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.group",name=Group,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Runner is the Schema for the runners API
@@ -232,11 +334,7 @@ func (r Runner) IsRegisterable() bool {
 	}
 
 	now := metav1.Now()
-	if r.Status.Registration.ExpiresAt.Before(&now) {
-		return false
-	}
-
-	return true
+	return !r.Status.Registration.ExpiresAt.Before(&now)
 }
 
 // +kubebuilder:object:root=true

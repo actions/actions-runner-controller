@@ -22,8 +22,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -38,10 +36,6 @@ import (
 	"github.com/go-logr/logr"
 )
 
-const (
-	LabelKeyRunnerSetName = "runnerset-name"
-)
-
 // RunnerSetReconciler reconciles a Runner object
 type RunnerSetReconciler struct {
 	Name string
@@ -51,12 +45,13 @@ type RunnerSetReconciler struct {
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 
-	CommonRunnerLabels     []string
-	GitHubBaseURL          string
-	RunnerImage            string
-	RunnerImagePullSecrets []string
-	DockerImage            string
-	DockerRegistryMirror   string
+	CommonRunnerLabels        []string
+	GitHubClient              *MultiGitHubClient
+	RunnerImage               string
+	RunnerImagePullSecrets    []string
+	DockerImage               string
+	DockerRegistryMirror      string
+	UseRunnerStatusUpdateHook bool
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
@@ -64,6 +59,7 @@ type RunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 
@@ -85,12 +81,26 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if !runnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+		r.GitHubClient.DeinitForRunnerSet(runnerSet)
+
 		return ctrl.Result{}, nil
 	}
 
 	metrics.SetRunnerSet(*runnerSet)
 
-	desiredStatefulSet, err := r.newStatefulSet(runnerSet)
+	var statefulsetList appsv1.StatefulSetList
+	if err := r.List(ctx, &statefulsetList, client.InNamespace(req.Namespace), client.MatchingFields{runnerSetOwnerKey: req.Name}); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	statefulsets := statefulsetList.Items
+
+	if len(statefulsets) > 1000 {
+		log.Info("Postponed reconcilation to prevent potential infinite loop. If you're really scaling more than 1000 statefulsets, do change this hard-coded threshold!")
+		return ctrl.Result{}, nil
+	}
+
+	desiredStatefulSet, err := r.newStatefulSet(ctx, runnerSet)
 	if err != nil {
 		r.Recorder.Event(runnerSet, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
 
@@ -99,77 +109,11 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	liveStatefulSet := &appsv1.StatefulSet{}
-	if err := r.Get(ctx, types.NamespacedName{Namespace: runnerSet.Namespace, Name: runnerSet.Name}, liveStatefulSet); err != nil {
-		if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to get live statefulset")
-
-			return ctrl.Result{}, err
-		}
-
-		if err := r.Client.Create(ctx, desiredStatefulSet); err != nil {
-			log.Error(err, "Failed to create statefulset resource")
-
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
-	}
-
-	liveTemplateHash, ok := getStatefulSetTemplateHash(liveStatefulSet)
-	if !ok {
-		log.Info("Failed to get template hash of newest statefulset resource. It must be in an invalid state. Please manually delete the statefulset so that it is recreated")
-
-		return ctrl.Result{}, nil
-	}
-
-	desiredTemplateHash, ok := getStatefulSetTemplateHash(desiredStatefulSet)
-	if !ok {
-		log.Info("Failed to get template hash of desired statefulset. It must be in an invalid state. Please manually delete the statefulset so that it is recreated")
-
-		return ctrl.Result{}, nil
-	}
-
-	if liveTemplateHash != desiredTemplateHash {
-		copy := liveStatefulSet.DeepCopy()
-		copy.Spec = desiredStatefulSet.Spec
-
-		if err := r.Client.Patch(ctx, copy, client.MergeFrom(liveStatefulSet)); err != nil {
-			log.Error(err, "Failed to patch statefulset", "reason", errors.ReasonForError(err))
-
-			if errors.IsInvalid(err) {
-				// NOTE: This might not be ideal but is currently required to deal with the forbidden error by recreating the statefulset
-				//
-				// 2021-06-13T07:19:52.760Z        ERROR   actions-runner-controller.runnerset     Failed to patch statefulset
-				// {"runnerset": "default/example-runnerset", "error": "StatefulSet.apps \"example-runnerset\" is invalid: s
-				// pec: Forbidden: updates to statefulset spec for fields other than 'replicas', 'template', and 'updateStrategy'
-				// are forbidden"}
-				//
-				// Even though the error message includes "Forbidden", this error's reason is "Invalid".
-				// That's why we're using errors.IsInvalid above.
-
-				if err := r.Client.Delete(ctx, liveStatefulSet); err != nil {
-					log.Error(err, "Failed to delete statefulset for force-update")
-					return ctrl.Result{}, err
-				}
-				log.Info("Deleted statefulset for force-update")
-			}
-
-			return ctrl.Result{}, err
-		}
-
-		// We requeue in order to clean up old runner replica sets later.
-		// Otherwise, they aren't cleaned up until the next re-sync interval.
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-	}
+	addedReplicas := int32(1)
+	create := desiredStatefulSet.DeepCopy()
+	create.Spec.Replicas = &addedReplicas
 
 	const defaultReplicas = 1
-
-	var replicasOfLiveStatefulSet *int
-	if liveStatefulSet.Spec.Replicas != nil {
-		v := int(*liveStatefulSet.Spec.Replicas)
-		replicasOfLiveStatefulSet = &v
-	}
 
 	var replicasOfDesiredStatefulSet *int
 	if desiredStatefulSet.Spec.Replicas != nil {
@@ -177,29 +121,37 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		replicasOfDesiredStatefulSet = &v
 	}
 
-	currentDesiredReplicas := getIntOrDefault(replicasOfLiveStatefulSet, defaultReplicas)
 	newDesiredReplicas := getIntOrDefault(replicasOfDesiredStatefulSet, defaultReplicas)
 
-	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
-	if currentDesiredReplicas != newDesiredReplicas {
-		v := int32(newDesiredReplicas)
+	effectiveTime := runnerSet.Spec.EffectiveTime
+	ephemeral := runnerSet.Spec.Ephemeral == nil || *runnerSet.Spec.Ephemeral
 
-		updated := liveStatefulSet.DeepCopy()
-		updated.Spec.Replicas = &v
+	var owners []client.Object
 
-		if err := r.Client.Patch(ctx, updated, client.MergeFrom(liveStatefulSet)); err != nil {
-			log.Error(err, "Failed to update statefulset")
-
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
+	for _, ss := range statefulsets {
+		ss := ss
+		owners = append(owners, &ss)
 	}
 
-	statusReplicas := int(liveStatefulSet.Status.Replicas)
-	statusReadyReplicas := int(liveStatefulSet.Status.ReadyReplicas)
-	totalCurrentReplicas := int(liveStatefulSet.Status.CurrentReplicas)
-	updatedReplicas := int(liveStatefulSet.Status.UpdatedReplicas)
+	if res, err := syncVolumes(ctx, r.Client, log, req.Namespace, runnerSet, statefulsets); err != nil {
+		return ctrl.Result{}, err
+	} else if res != nil {
+		return *res, nil
+	}
+
+	res, err := syncRunnerPodsOwners(ctx, r.Client, log, effectiveTime, newDesiredReplicas, func() client.Object { return create.DeepCopy() }, ephemeral, owners)
+	if err != nil || res == nil {
+		return ctrl.Result{}, err
+	}
+
+	var statusReplicas, statusReadyReplicas, totalCurrentReplicas, updatedReplicas int
+
+	for _, ss := range res.currentObjects {
+		statusReplicas += int(ss.statefulSet.Status.Replicas)
+		statusReadyReplicas += int(ss.statefulSet.Status.ReadyReplicas)
+		totalCurrentReplicas += int(ss.statefulSet.Status.CurrentReplicas)
+		updatedReplicas += int(ss.statefulSet.Status.UpdatedReplicas)
+	}
 
 	status := runnerSet.Status.DeepCopy()
 
@@ -224,12 +176,6 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
-func getStatefulSetTemplateHash(rs *appsv1.StatefulSet) (string, bool) {
-	hash, ok := rs.Labels[LabelKeyRunnerTemplateHash]
-
-	return hash, ok
-}
-
 func getRunnerSetSelector(runnerSet *v1alpha1.RunnerSet) *metav1.LabelSelector {
 	selector := runnerSet.Spec.Selector
 	if selector == nil {
@@ -242,24 +188,50 @@ func getRunnerSetSelector(runnerSet *v1alpha1.RunnerSet) *metav1.LabelSelector {
 var LabelKeyPodMutation = "actions-runner-controller/inject-registration-token"
 var LabelValuePodMutation = "true"
 
-func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
+func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
 	runnerSetWithOverrides := *runnerSet.Spec.DeepCopy()
 
-	for _, l := range r.CommonRunnerLabels {
-		runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, l)
-	}
-
-	// This label selector is used by default when rd.Spec.Selector is empty.
-	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
-
-	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
+	runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, r.CommonRunnerLabels...)
 
 	template := corev1.Pod{
 		ObjectMeta: runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta,
 		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
 	}
 
-	pod, err := newRunnerPod(template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, r.GitHubBaseURL, false)
+	if runnerSet.Spec.RunnerConfig.ContainerMode == "kubernetes" {
+		found := false
+		for i := range template.Spec.Containers {
+			if template.Spec.Containers[i].Name == containerName {
+				found = true
+			}
+		}
+		if !found {
+			template.Spec.Containers = append(template.Spec.Containers, corev1.Container{
+				Name: "runner",
+			})
+		}
+
+		workDir := runnerSet.Spec.RunnerConfig.WorkDir
+		if workDir == "" {
+			workDir = "/runner/_work"
+		}
+		if err := applyWorkVolumeClaimTemplateToPod(&template, runnerSet.Spec.WorkVolumeClaimTemplate, workDir); err != nil {
+			return nil, err
+		}
+
+		template.Spec.ServiceAccountName = runnerSet.Spec.ServiceAccountName
+	}
+
+	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
+
+	ghc, err := r.GitHubClient.InitForRunnerSet(ctx, runnerSet)
+	if err != nil {
+		return nil, err
+	}
+
+	githubBaseURL := ghc.GithubBaseURL
+
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, githubBaseURL, r.UseRunnerStatusUpdateHook)
 	if err != nil {
 		return nil, err
 	}
@@ -288,9 +260,12 @@ func (r *RunnerSetReconciler) newStatefulSet(runnerSet *v1alpha1.RunnerSet) (*ap
 	rs := appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      runnerSet.ObjectMeta.Name,
-			Namespace: runnerSet.ObjectMeta.Namespace,
-			Labels:    CloneAndAddLabel(runnerSet.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash),
+			GenerateName: runnerSet.ObjectMeta.Name + "-",
+			Namespace:    runnerSet.ObjectMeta.Namespace,
+			Labels:       CloneAndAddLabel(runnerSet.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash),
+			Annotations: map[string]string{
+				SyncTimeAnnotationKey: time.Now().Format(time.RFC3339),
+			},
 		},
 		Spec: runnerSetWithOverrides.StatefulSetSpec,
 	}
@@ -309,6 +284,22 @@ func (r *RunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	r.Recorder = mgr.GetEventRecorderFor(name)
+
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &appsv1.StatefulSet{}, runnerSetOwnerKey, func(rawObj client.Object) []string {
+		set := rawObj.(*appsv1.StatefulSet)
+		owner := metav1.GetControllerOf(set)
+		if owner == nil {
+			return nil
+		}
+
+		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != "RunnerSet" {
+			return nil
+		}
+
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerSet{}).

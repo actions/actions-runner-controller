@@ -1,0 +1,74 @@
+name: Publish ARC
+
+on:
+  release:
+    types:
+      - published
+
+# https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
+permissions:
+ contents: write 
+ packages: write
+
+jobs:
+  release-controller:
+    name: Release
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.18.2'
+
+      - name: Install tools
+        run: |
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
+          tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+          sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          sudo mv kustomize /usr/local/bin
+          curl -L -O https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
+          tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
+          sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
+
+      - name: Set version
+        run: echo "VERSION=$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')" >> $GITHUB_ENV
+
+      - name: Upload artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          make github-release
+
+      - name: Setup Docker Environment
+        id: vars
+        uses: ./.github/actions/setup-docker-environment
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push
+        uses: docker/build-push-action@v3
+        with:
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ env.VERSION }}
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
+            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
+<<<<<<< HEAD:.github/workflows/release.yml
+=======
+            ghcr.io/actions-runner-controller/actions-runner-controller:latest
+            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}
+            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+>>>>>>> upstream/master:.github/workflows/publish-arc.yaml
