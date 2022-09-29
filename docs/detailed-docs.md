@@ -2,6 +2,7 @@
 
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6061/badge)](https://bestpractices.coreinfrastructure.org/projects/6061)
 [![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/actions-runner-controller)](https://artifacthub.io/packages/search?repo=actions-runner-controller)
 
 This controller operates self-hosted runners for GitHub Actions on your Kubernetes cluster.
 
@@ -50,7 +51,7 @@ ToC:
 
 ## People
 
-`actions-runner-controller`(ARC) is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions-runner-controller/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions-runner-controller/actions-runner-controller/discussions), mostly in their spare time.
+`actions-runner-controller` is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions-runner-controller/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions-runner-controller/actions-runner-controller/discussions), mostly in their spare time.
 
 If you think the project is awesome and it's becoming a basis for your important business, consider [sponsoring us](https://github.com/sponsors/actions-runner-controller)!
 
@@ -76,14 +77,14 @@ The documentation is kept inline with master@HEAD, we do our best to highlight a
 
 **actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
 
-
-
 ## Getting Started
 To give ARC a try with just a handful of commands, Please refer to [Quick start guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/QuickStartGuide.md). 
 
 For an overview of ARC, please refer to [ARC Overview](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)
 
-For more information, please refer to detailed documentation below
+For more information, please refer to detailed documentation below!
+
+
 ## Installation
 
 By default, actions-runner-controller uses [cert-manager](https://cert-manager.io/docs/installation/kubernetes/) for certificate management of Admission Webhook. Make sure you have already installed cert-manager before you install. The installation instructions for the cert-manager can be found below.
@@ -626,7 +627,8 @@ spec:
   metrics:
   - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
     repositoryNames:
-    - example/myrepo
+    # A repository name is the REPO part of `github.com/OWNER/REPO`
+    - myrepo
 ```
 
 **PercentageRunnersBusy**
@@ -1583,6 +1585,10 @@ spec:
 
 ### Using without cert-manager
 
+There are two methods of deploying without cert-manager, you can generate your own certificates or rely on helm to generate a CA and certificate each time you update the chart.
+
+#### Using custom certificates
+
 Assuming you are installing in the default namespace, ensure your certificate has SANs:
 
 * `webhook-service.actions-runner-system.svc`
@@ -1609,6 +1615,18 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
+
+#### Using helm to generate CA and certificates
+
+Set the Helm chart values as follows:
+
+```shell
+$ CA_BUNDLE=$(cat path/to/ca.pem | base64)
+$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+  certManagerEnabled=false
+```
+
+This generates a temporary CA using the helm `genCA` function and issues a certificate for the webhook. Note that this approach rotates the CA and certificate each time `helm install` or `helm upgrade` are run. In effect, this will cause short interruptions to the mutating webhook while the ARC pods stabilize and use the new certificate each time `helm upgrade` is called for the chart. The outage can affect kube-api activity due to the way mutating webhooks are called.
 
 ### Setting up Windows Runners
 
