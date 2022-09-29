@@ -1,5 +1,8 @@
 # Build the manager binary
+FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+
 FROM --platform=$BUILDPLATFORM golang:1.19.1 as builder
+COPY --from=xx / /
 
 WORKDIR /workspace
 
@@ -24,7 +27,7 @@ RUN go mod download
 # With the above commmand,
 # TARGETOS can be "linux", TARGETARCH can be "amd64", "arm64", and "arm", TARGETVARIANT can be "v7".
 
-ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT VERSION=dev
+ARG TARGETPLATFORM VERSION=dev
 
 # We intentionally avoid `--mount=type=cache,mode=0777,target=/go/pkg/mod` in the `go mod download` and the `go build` runs
 # to avoid https://github.com/moby/buildkit/issues/2334
@@ -35,9 +38,10 @@ env GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
 # Build
 RUN --mount=target=. \
   --mount=type=cache,mode=0777,target=${GOCACHE} \
-  export GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} && \
-  go build -ldflags="-X 'github.com/actions-runner-controller/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
-  go build -o /out/github-webhook-server ./cmd/githubwebhookserver
+  xx-go build -ldflags="-X 'github.com/actions-runner-controller/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
+  xx-go build -o /out/github-webhook-server ./cmd/githubwebhookserver && \
+  xx-verify /out/manager && \
+  xx-verify /out/github-webhook-server
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
