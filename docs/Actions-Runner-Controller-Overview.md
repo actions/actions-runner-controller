@@ -53,7 +53,7 @@ Once the custom resources are installed, another command deploys ARC into your K
 
 
 The `Deployment and Configure ARC` section in the `Quick Start guide` lists the steps to deploy ARC using a `runnerdeployment.yaml` file. Here, we will explain the details
-For more details, see "[QuickStart Guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/QuickStartGuide.md)."
+For more details, see "[QuickStart Guide](QuickStartGuide.md)."
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
