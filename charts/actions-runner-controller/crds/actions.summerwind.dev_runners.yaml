@@ -1325,6 +1325,9 @@ spec:
                         type: string
                       type: array
                   type: object
+                dnsPolicy:
+                  description: DNSPolicy defines how a pod's DNS will be configured.
+                  type: string
                 dockerEnabled:
                   type: boolean
                 dockerEnv:
