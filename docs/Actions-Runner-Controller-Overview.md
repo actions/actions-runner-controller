@@ -29,7 +29,8 @@ Self-hosted runners can be physical, virtual, in a container, on-premises, or in
 ARC  is a K8s controller to create self-hosted runners on your K8s cluster. With few commands, you can set up self hosted runners that can scale up and down based on demand. And since these could be ephemeral and based on containers, new instances of the runner can be brought up rapidly and cleanly.
 
 ### Deploying ARC
-We have a quick start guide that demonstrates how to easily deploy ARC into your K8s environment. For more details, see "[QuickStart Guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/QuickStartGuide.md)."
+We have a quick start guide that demonstrates how to easily deploy ARC into your K8s environment. For more details, see "[QuickStart Guide](QuickStartGuide.md)."
+
 
 ## ARC components
 ARC basically consists of a set of custom resources. An ARC deployment is applying these custom resources onto a K8s cluster. Once applied, it creates a set of Pods, with the Github Actions runner running within them. Github is now able to treat these Pods as self hosted runners and allocate jobs to them.
@@ -52,7 +53,7 @@ Once the custom resources are installed, another command deploys ARC into your K
 
 
 The `Deployment and Configure ARC` section in the `Quick Start guide` lists the steps to deploy ARC using a `runnerdeployment.yaml` file. Here, we will explain the details
-For more details, see "[QuickStart Guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/QuickStartGuide.md)."
+For more details, see "[QuickStart Guide](QuickStartGuide.md)."
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
@@ -119,7 +120,7 @@ spec:
     scaleDownFactor: '0.5'
   ```
 
-For more details - please see "[Pull Driven Scaling](https://github.com/actions-runner-controller/actions-runner-controller#pull-driven-scaling)."
+For more details - please see "[Pull Driven Scaling](detailed-docs.md#pull-driven-scaling)."
 
 *The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.*
 

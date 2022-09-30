@@ -4,7 +4,7 @@
 
 We always appreciate your help in testing open pull requests by deploying custom builds of actions-runner-controller onto your own environment, so that we are extra sure we didn't break anything.
 
-It is especially true when the pull request is about GitHub Enterprise, both GHEC and GHES, as [maintainers don't have GitHub Enterprise environments for testing](/README.md#github-enterprise-support).
+It is especially true when the pull request is about GitHub Enterprise, both GHEC and GHES, as [maintainers don't have GitHub Enterprise environments for testing](docs/detailed-docs.md#github-enterprise-support).
 
 The process would look like the below:
 

@@ -102,7 +102,7 @@ kubectl create -f https://github.com/actions-runner-controller/actions-runner-co
 
 **Helm Deployment:**
 
-Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for the values documentation
+Configure your values.yaml, see the chart's [README](../charts/actions-runner-controller/README.md) for the values documentation
 
 ```shell
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
@@ -209,7 +209,7 @@ $ kubectl create secret generic controller-manager \
 
 **Helm Deployment:**
 
-Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for deploying the secret via Helm
+Configure your values.yaml, see the chart's [README](../charts/actions-runner-controller/README.md) for deploying the secret via Helm
 
 ### Deploying Using PAT Authentication
 
@@ -253,7 +253,7 @@ kubectl create secret generic controller-manager \
 
 **Helm Deployment:**
 
-Configure your values.yaml, see the chart's [README](./charts/actions-runner-controller/README.md) for deploying the secret via Helm
+Configure your values.yaml, see the chart's [README](../charts/actions-runner-controller/README.md) for deploying the secret via Helm
 
 ### Deploying Multiple Controllers
 
@@ -763,7 +763,7 @@ Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to ac
 ##### Install with Helm
 
 To enable this feature, you first need to install the GitHub webhook server. To install via our Helm chart,
-_[see the values documentation for all configuration options](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/charts/actions-runner-controller/README.md)_
+_[see the values documentation for all configuration options](../charts/actions-runner-controller/README.md)_
 
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
@@ -1802,8 +1802,8 @@ Please refer to [Deploying Using GitHub App Authentication](#deploying-using-git
 
 # Troubleshooting
 
-See [troubleshooting guide](TROUBLESHOOTING.md) for solutions to various problems people have run into consistently.
+See [troubleshooting guide](../TROUBLESHOOTING.md) for solutions to various problems people have run into consistently.
 
 # Contributing
 
-For more details on contributing to the project (including requirements) please check out [Getting Started with Contributing](CONTRIBUTING.md).
+For more details on contributing to the project (including requirements) please check out [Getting Started with Contributing](../CONTRIBUTING.md).

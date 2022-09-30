@@ -127,7 +127,7 @@ GitHub documentation lists the steps to target Actions against self hosted runne
 There's also has a quick start guide to get started on Actions, For more information, see "[Quick start Guide to GitHub Actions](https://docs.github.com/en/actions/quickstart)."
 
 ## Next steps
-ARC provides several interesting features and capabilities. For more information, see "[Readme](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/README.md)."
+ARC provides several interesting features and capabilities. For more information, see "[Detailed documentation](detailed-docs.md)."
 
 
 
