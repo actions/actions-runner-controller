@@ -171,6 +171,9 @@ type RunnerPodSpec struct {
 	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 
 	// +optional
+	DnsPolicy corev1.DNSPolicy `json:"dnsPolicy,omitempty"`
+
+	// +optional
 	DnsConfig *corev1.PodDNSConfig `json:"dnsConfig,omitempty"`
 
 	// +optional
