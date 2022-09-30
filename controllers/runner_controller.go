@@ -650,6 +650,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.HostAliases = runnerSpec.HostAliases
 	}
 
+	if runnerSpec.DnsPolicy != "" {
+		pod.Spec.DNSPolicy = runnerSpec.DnsPolicy
+	}
+
 	if runnerSpec.DnsConfig != nil {
 		pod.Spec.DNSConfig = runnerSpec.DnsConfig
 	}
