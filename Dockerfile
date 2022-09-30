@@ -30,14 +30,14 @@ ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT VERSION=dev
 # to avoid https://github.com/moby/buildkit/issues/2334
 # We can use docker layer cache so the build is fast enogh anyway
 # We also use per-platform GOCACHE for the same reason.
-env GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
+ENV GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
 
 # Build
 RUN --mount=target=. \
   --mount=type=cache,mode=0777,target=${GOCACHE} \
   export GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} && \
-  go build -ldflags="-X 'github.com/actions-runner-controller/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
-  go build -o /out/github-webhook-server ./cmd/githubwebhookserver
+  go build -trimpath -ldflags="-s -w -X 'github.com/actions-runner-controller/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
+  go build -trimpath -ldflags="-s -w" -o /out/github-webhook-server ./cmd/githubwebhookserver
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
