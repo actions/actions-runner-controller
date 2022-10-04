@@ -78,7 +78,7 @@ The documentation is kept inline with master@HEAD, we do our best to highlight a
 **actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
 
 ## Getting Started
-To give ARC a try with just a handful of commands, Please refer to [Quick start guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/QuickStartGuide.md). 
+To give ARC a try with just a handful of commands, Please refer to [Quick start guide](/README.md#getting-started). 
 
 For an overview of ARC, please refer to [ARC Overview](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)
 
