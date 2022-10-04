@@ -29,7 +29,7 @@ Self-hosted runners can be physical, virtual, in a container, on-premises, or in
 ARC  is a K8s controller to create self-hosted runners on your K8s cluster. With few commands, you can set up self hosted runners that can scale up and down based on demand. And since these could be ephemeral and based on containers, new instances of the runner can be brought up rapidly and cleanly.
 
 ### Deploying ARC
-We have a quick start guide that demonstrates how to easily deploy ARC into your K8s environment. For more details, see "[QuickStart Guide](QuickStartGuide.md)."
+We have a quick start guide that demonstrates how to easily deploy ARC into your K8s environment. For more details, see "[QuickStart Guide](/README.md#getting-started)."
 
 
 ## ARC components
