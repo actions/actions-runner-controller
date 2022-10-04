@@ -54,8 +54,7 @@ log.debug 'Waiting for processes to be running...'
 processes=(dockerd)
 
 for process in "${processes[@]}"; do
-    wait_for_process "$process"
-    if [ $? -ne 0 ]; then
+    if ! wait_for_process "$process"; then
         log.error "$process is not running after max time"
         dump /var/log/dockerd.err.log 'Dumping {path} to aid investigation'
         dump /var/log/supervisor/supervisord.log 'Dumping {path} to aid investigation'
@@ -66,7 +65,7 @@ for process in "${processes[@]}"; do
 done
 
 if [ -n "${MTU}" ]; then
-  sudo ifconfig docker0 mtu ${MTU} up
+  sudo ifconfig docker0 mtu "${MTU}" up
 fi
 
 # Wait processes to be running
