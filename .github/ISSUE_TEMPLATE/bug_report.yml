@@ -11,7 +11,7 @@ body:
     options:
     - label: I've already read https://github.com/actions-runner-controller/actions-runner-controller/blob/master/TROUBLESHOOTING.md and I'm sure my issue is not covered in the troubleshooting guide.
       required: true
-    - label: I'm not using a custom runner image
+    - label: I'm not using a custom entrypoint in my runner image
       required: true
 - type: input
   id: controller-version
