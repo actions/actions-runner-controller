@@ -19,7 +19,7 @@
 ## Welcome
 
 This document is the single source of truth for how to contribute to the code base.
-Feel free to browse the [open issues] and file new ones, all feedback is welcome!
+Feel free to browse the [open issues](https://github.com/actions-runner-controller/actions-runner-controller/issues) or file a new one, all feedback is welcome!
 By reading this guide, we hope to give you all of the information you need to be able to pick up issues, contribute new features, and get your work
 reviewed and merged.
 
