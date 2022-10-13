@@ -70,6 +70,8 @@ body:
       required: true
     - label: I've already upgraded ARC (including the CRDs, see charts/actions-runner-controller/docs/UPGRADING.md for details) to the latest and it didn't fix the issue
       required: true
+    - label: I've migrated to the workflow job webhook event (if you using webhook driven scaling)
+      required: true
 - type: textarea
   id: resource-definitions
   attributes:
