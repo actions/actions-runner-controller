@@ -2,7 +2,7 @@
 
 - [Contribution Guide](#contribution-guide)
   - [Welcome](#welcome)
-  - [Before contrbuting code](#before-contrbuting-code)
+  - [Before contributing code](#before-contributing-code)
   - [How to Contribute a Patch](#how-to-contribute-a-patch)
     - [Developing the Controller](#developing-the-controller)
     - [Developing the Runners](#developing-the-runners)
