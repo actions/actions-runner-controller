@@ -7,9 +7,11 @@ body:
   id: read-troubleshooting-guide
   attributes:
     label: Checks
-    description: Please check the boxes below before submitting
+    description: Please check all the boxes below before submitting
     options:
     - label: I've already read https://github.com/actions-runner-controller/actions-runner-controller/blob/master/TROUBLESHOOTING.md and I'm sure my issue is not covered in the troubleshooting guide.
+      required: true
+    - label: I'm not using a custom entrypoint in my runner image
       required: true
 - type: input
   id: controller-version
@@ -58,7 +60,7 @@ body:
   id: checks
   attributes:
     label: Checks
-    description: Please check the boxes below before submitting
+    description: Please check all the boxes below before submitting
     options:
     - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions-runner-controller/actions-runner-controller/discussions). It might also be a good idea to contract with any of contributors and maintainers if your business is so critical and therefore you need priority support
       required: true
