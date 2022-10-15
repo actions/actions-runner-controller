@@ -1,24 +1,18 @@
 FROM ubuntu:20.04
 
-# Target architecture
-ARG TARGETPLATFORM=linux/amd64
-
-# GitHub runner arguments
+ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.298.2
-
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
-ARG COMPOSE_VERSION=v2.6.0
-
-# Dumb-init version
+ARG DOCKER_COMPOSE_VERSION=v2.6.0
 ARG DUMB_INIT_VERSION=1.2.5
 
 # Other arguments
 ARG DEBUG=false
 
-# Set environment variables needed at build
-ENV DEBIAN_FRONTEND=noninteractive
+RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
     && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
@@ -74,7 +68,6 @@ RUN set -eux; \
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
 
-# Runner download supports amd64 as x64
 RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && export ARCH \
     && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
@@ -84,6 +77,9 @@ RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
     && ./bin/installdependencies.sh \
+    # libyaml-dev is required for ruby/setup-ruby action.
+    # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
+    # to avoid rerunning apt-update on its own.
     && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -102,8 +98,9 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/local/bin/dumb-init
 
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
 COPY entrypoint.sh logger.bash rootless-startup.sh update-status /usr/bin/
-
 RUN chmod +x /usr/bin/rootless-startup.sh /usr/bin/entrypoint.sh
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
@@ -137,7 +134,7 @@ ENV SKIP_IPTABLES=1
 RUN curl -fsSL https://get.docker.com/rootless | sh
 
 # Docker-compose installation
-RUN curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
+RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
     chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
