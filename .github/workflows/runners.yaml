@@ -64,9 +64,9 @@ jobs:
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Environment Debug Output
+      - name: Set-Up Build Environment
         run: |
-          echo arch : $(arch)
+          echo "TARGETPLATFORM=$(arch)" >> $GITHUB_ENV
 
       - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v3
@@ -76,6 +76,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           build-args: |
+            TARGETPLATFORM=${{ env.TARGETPLATFORM }}
             RUNNER_VERSION=${{ env.RUNNER_VERSION }}
             DOCKER_VERSION=${{ env.DOCKER_VERSION }}
             RUNNER_CONTAINER_HOOKS_VERSION=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}
