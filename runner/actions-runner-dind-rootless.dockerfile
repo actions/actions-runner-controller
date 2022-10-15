@@ -57,17 +57,22 @@ RUN apt update -y \
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid 1000 runner
 
-RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
+ENV HOME=/home/runner
 
-# Setup subuid and subgid so that "--userns-remap=default" works
+# Set-up subuid and subgid so that "--userns-remap=default" works
 RUN set -eux; \
     addgroup --system dockremap; \
     adduser --system --ingroup dockremap dockremap; \
     echo 'dockremap:165536:65536' >> /etc/subuid; \
     echo 'dockremap:165536:65536' >> /etc/subgid
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && curl -f -L -o /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
+    && chmod +x /usr/bin/dumb-init
 
+ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && export ARCH \
     && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
@@ -88,15 +93,20 @@ RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
     && chgrp runner /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
 
-# Configure hooks folder structure.
-COPY hooks /etc/arc/hooks/
+# This will install docker under $HOME/bin according to the content of the script
+ENV SKIP_IPTABLES=1
+RUN curl -fsSL https://get.docker.com/rootless | sh
 
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
+# Make the rootless runner directory executable
+RUN mkdir /run/user/1000 \
+    && chown runner:runner /run/user/1000 \
+    && chmod a+x /run/user/1000
+
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
-    && chmod +x /usr/local/bin/dumb-init
+    && curl -fLo /usr/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /usr/bin/docker-compose
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
@@ -107,10 +117,8 @@ RUN chmod +x /usr/bin/rootless-startup.sh /usr/bin/entrypoint.sh
 # to replace the docker binary in the PATH.
 COPY docker-shim.sh /usr/local/bin/docker
 
-# Make the rootless runner directory executable
-RUN mkdir /run/user/1000 \
-    && chown runner:runner /run/user/1000 \
-    && chmod a+x /run/user/1000
+# Configure hooks folder structure.
+COPY hooks /etc/arc/hooks/
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin:/home/runner/bin"
@@ -123,17 +131,8 @@ RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "DOCKER_HOST=${DOCKER_HOST}" >> /etc/environment \
     && echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >> /etc/environment
 
-ENV HOME=/home/runner
-
 # No group definition, as that makes it harder to run docker.
 USER runner
 
-# This will install docker under $HOME/bin according to the content of the script
-ENV SKIP_IPTABLES=1
-RUN curl -fsSL https://get.docker.com/rootless | sh
-
-RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-${ARCH}" -o /home/runner/bin/docker-compose ; \
-    chmod +x /home/runner/bin/docker-compose
-
-ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["rootless-startup.sh"]
