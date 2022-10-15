@@ -132,7 +132,7 @@ USER runner
 ENV SKIP_IPTABLES=1
 RUN curl -fsSL https://get.docker.com/rootless | sh
 
-RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
+RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-${ARCH}" -o /home/runner/bin/docker-compose ; \
     chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
