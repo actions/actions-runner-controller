@@ -128,12 +128,10 @@ ENV HOME=/home/runner
 # No group definition, as that makes it harder to run docker.
 USER runner
 
-# Docker installation
-ENV SKIP_IPTABLES=1
 # This will install docker under $HOME/bin according to the content of the script
+ENV SKIP_IPTABLES=1
 RUN curl -fsSL https://get.docker.com/rootless | sh
 
-# Docker-compose installation
 RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
     chmod +x /home/runner/bin/docker-compose
 
