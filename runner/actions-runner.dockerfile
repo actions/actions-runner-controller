@@ -90,7 +90,7 @@ RUN set -vx; \
     && curl -fLo docker.tgz https://download.docker.com/linux/static/${CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz \
     && tar zxvf docker.tgz \
     && install -o root -g root -m 755 docker/docker /usr/bin/docker \
-    && rm -f docker docker.tgz
+    && rm -rf docker docker.tgz
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
