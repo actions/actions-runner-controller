@@ -64,6 +64,10 @@ jobs:
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build Environment Debug Output
+        run: |
+          echo arch : $(arch)
+
       - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v3
         with:
