@@ -118,7 +118,7 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 
 USER runner
 
-RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-${ARCH}" -o /home/runner/bin/docker-compose ; \
+RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH}" -o /home/runner/bin/docker-compose ; \
     chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
