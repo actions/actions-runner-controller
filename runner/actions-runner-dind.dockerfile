@@ -58,24 +58,22 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && usermod -aG docker runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
 
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
-# Docker download supports arm64 as aarch64 & amd64 / i386 as x86_64
+ENV HOME=/home/runner
+
+RUN set -vx; \
+    export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && curl -f -L -o docker.tgz https://download.docker.com/linux/static/${CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz \
+    && tar zxvf docker.tgz \
+    && install -o root -g root -m 755 docker/docker /usr/bin/docker \
+    && rm -rf docker docker.tgz
+
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-	&& if ! curl -f -L -o docker.tgz "https://download.docker.com/linux/static/${CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; then \
-		echo >&2 "error: failed to download 'docker-${DOCKER_VERSION}' from '${CHANNEL}' for '${ARCH}'"; \
-		exit 1; \
-	fi; \
-    echo "Downloaded Docker from https://download.docker.com/linux/static/${CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; \
-	tar --extract \
-		--file docker.tgz \
-		--strip-components 1 \
-		--directory /usr/bin/ \
-	; \
-	rm docker.tgz; \
-	dockerd --version; \
-	docker --version
+    && curl -fLo /usr/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /usr/bin/docker-compose
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
@@ -119,7 +117,6 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 VOLUME /var/lib/docker
 
-ENV HOME=/home/runner
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
@@ -129,9 +126,6 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 
 # No group definition, as that makes it harder to run docker.
 USER runner
-
-RUN curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-${ARCH}" -o /home/runner/bin/docker-compose ; \
-    chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["startup.sh"]
