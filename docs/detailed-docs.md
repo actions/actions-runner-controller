@@ -1555,8 +1555,10 @@ The GitHub hosted runners include a large amount of pre-installed software packa
 This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
-- git
-- docker
+- Git
+- Git LFS
+- Docker
+- Docker Compose
 - build-essentials
 
 The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
@@ -1675,7 +1677,6 @@ spec:
       labels:
         - windows
         - X64
-        - devops-managed
 ```
 
 #### Dockerfile
@@ -1733,7 +1734,6 @@ spec:
       labels:
         - linux
         - X64
-        - devops-managed
 ```
 </p>
 </details>
