@@ -20,7 +20,7 @@ runs:
     - name: Get Short SHA
       id: vars
       run: |
-        echo "sha_short::${GITHUB_SHA::7}" >> $GITHUB_ENV
+        echo "sha_short=${GITHUB_SHA::7}" >> $GITHUB_ENV
       shell: bash
 
     - name: Set up QEMU
