@@ -22,7 +22,6 @@ jobs:
         uses: reviewdog/action-shellcheck@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          reporter: shellcheck
           path: "./runner"
           pattern: |
             *.sh
