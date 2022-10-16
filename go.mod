@@ -17,7 +17,7 @@ require (
 	github.com/stretchr/testify v1.8.0
 	github.com/teambition/rrule-go v1.8.0
 	go.uber.org/zap v1.23.0
-	golang.org/x/oauth2 v0.0.0-20221006150949-b44042a4b9c1
+	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783
 	gomodules.xyz/jsonpatch/v2 v2.2.0
 	k8s.io/api v0.25.3
 	k8s.io/apimachinery v0.25.3
