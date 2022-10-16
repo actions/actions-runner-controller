@@ -90,23 +90,13 @@ RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
-    && chgrp docker /opt/hostedtoolcache \
+    && chgrp runner /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
-
-# This will install docker under $HOME/bin according to the content of the script
-ENV SKIP_IPTABLES=1
-RUN curl -fsSL https://get.docker.com/rootless | sh
 
 # Make the rootless runner directory executable
 RUN mkdir /run/user/1000 \
     && chown runner:runner /run/user/1000 \
     && chmod a+x /run/user/1000
-
-RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /usr/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
-    && chmod +x /usr/bin/docker-compose
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
@@ -133,6 +123,16 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 
 # No group definition, as that makes it harder to run docker.
 USER runner
+
+# This will install docker under $HOME/bin according to the content of the script
+ENV SKIP_IPTABLES=1
+RUN curl -fsSL https://get.docker.com/rootless | sh
+
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["rootless-startup.sh"]
