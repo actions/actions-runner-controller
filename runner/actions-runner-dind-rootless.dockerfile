@@ -73,17 +73,17 @@ RUN set -eux; \
     echo 'dockremap:165536:65536' >> /etc/subgid
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
-
-# Runner download supports amd64 as x64
-RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && export ARCH \
-    && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
     && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
     && ./bin/installdependencies.sh \
+    # libyaml-dev is required for ruby/setup-ruby action.
+    # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
+    # to avoid rerunning apt-update on its own.
     && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
