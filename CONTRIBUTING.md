@@ -2,7 +2,7 @@
 
 - [Contribution Guide](#contribution-guide)
   - [Welcome](#welcome)
-  - [Before contrbuting code](#before-contrbuting-code)
+  - [Before contributing code](#before-contributing-code)
   - [How to Contribute a Patch](#how-to-contribute-a-patch)
     - [Developing the Controller](#developing-the-controller)
     - [Developing the Runners](#developing-the-runners)
@@ -23,7 +23,7 @@ Feel free to browse the [open issues](https://github.com/actions-runner-controll
 By reading this guide, we hope to give you all of the information you need to be able to pick up issues, contribute new features, and get your work
 reviewed and merged.
 
-## Before contrbuting code
+## Before contributing code
 
 We welcome code patches, but to make sure things are well coordinated you should  discuss any significant change before starting the work.
 The maintainers ask that you signal your intention to contribute to the project using the issue tracker. 
