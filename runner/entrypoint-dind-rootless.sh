@@ -1,6 +1,6 @@
 #!/bin/bash
-source logger.bash
-source graceful-stop.bash
+source logger.sh
+source graceful-stop.sh
 trap graceful_stop TERM
 
 log.notice "Writing out Docker config file"
@@ -31,7 +31,7 @@ dumb-init bash <<'SCRIPT' &
 # for not only dockerd but also the runner agent.
 /home/runner/bin/dockerd-rootless.sh --config-file /home/runner/.config/docker/daemon.json >> /dev/null 2>&1 &
 
-entrypoint.sh
+startup.sh
 SCRIPT
 
 RUNNER_INIT_PID=$!
