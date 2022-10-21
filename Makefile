@@ -203,8 +203,8 @@ acceptance/deploy:
 acceptance/tests:
 	acceptance/checks.sh
 
-acceptance/runner/entrypoint:
-	cd test/entrypoint/ && bash test.sh
+acceptance/runner/startup:
+	cd test/startup/ && bash test.sh
 
 # We use -count=1 instead of `go clean -testcache`
 # See https://terratest.gruntwork.io/docs/testing-best-practices/avoid-test-caching/

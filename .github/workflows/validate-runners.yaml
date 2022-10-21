@@ -6,7 +6,7 @@ on:
       - '**'
     paths:
       - 'runner/**'
-      - 'test/entrypoint/**'
+      - 'test/startup/**'
       - '!**.md'
 
 permissions:
@@ -42,4 +42,4 @@ jobs:
 
     - name: Run tests
       run: |
-        make acceptance/runner/entrypoint
+        make acceptance/runner/startup
