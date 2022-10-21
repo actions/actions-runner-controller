@@ -35,7 +35,7 @@ graceful_stop() {
   # In that case, the pod is eventually and forcefully terminated by ARC and K8s, resulting
   # in the possible running workflow job after this graceful stop process failed might get cancelled prematurely.
   log.notice "Waiting for the runner to register first."
-  while ! -f /runner/.runner; do
+  while ! [ -f /runner/.runner ]; do
     sleep 1
   done
   log.notice "Observed that the runner has been registered."

@@ -26,6 +26,6 @@ if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
         --show-error \
         --silent \
         --request PATCH \
-        "${apiserver}/apis/actions.summerwind.dev/v1alpha1/namespaces/${namespace}/runners/${HOSTNAME}/status"
-        1>&-
+        "${apiserver}/apis/actions.summerwind.dev/v1alpha1/namespaces/${namespace}/runners/${HOSTNAME}/status" \
+        1>/dev/null
 fi
