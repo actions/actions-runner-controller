@@ -131,4 +131,4 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 USER runner
 
 ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["startup.sh"]
+CMD ["entrypoint-dind.sh"]
