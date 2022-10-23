@@ -34,6 +34,8 @@ endif
 TEST_ASSETS=$(PWD)/test-assets
 TOOLS_PATH=$(PWD)/.tools
 
+OS_NAME := $(shell uname -s | tr A-Z a-z)
+
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
 	export PLATFORMS="linux/amd64,linux/arm64"
@@ -267,8 +269,8 @@ ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
 	set -e ;\
 	SHELLCHECK_TMP_DIR=$$(mktemp -d) ;\
 	cd $$SHELLCHECK_TMP_DIR ;\
-	curl -LO https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz ;\
-	tar Jxvf shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz ;\
+	curl -LO https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(OS_NAME).x86_64.tar.xz ;\
+	tar Jxvf shellcheck-v$(SHELLCHECK_VERSION).$(OS_NAME).x86_64.tar.xz ;\
 	cd $(CURDIR) ;\
 	mkdir -p $(TOOLS_PATH) ;\
 	mv $$SHELLCHECK_TMP_DIR/shellcheck-v$(SHELLCHECK_VERSION)/shellcheck $(TOOLS_PATH)/ ;\
@@ -276,8 +278,6 @@ ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
 	}
 endif
 SHELLCHECK=$(TOOLS_PATH)/shellcheck
-
-OS_NAME := $(shell uname -s | tr A-Z a-z)
 
 # find or download etcd
 etcd:
