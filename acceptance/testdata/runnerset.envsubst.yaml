@@ -125,6 +125,13 @@ spec:
       serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
       terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
       containers:
+      # # Uncomment only when non-dind-runner / you're using docker sidecar
+      # - name: docker
+      #   # Image is required for the dind sidecar definition within RunnerSet spec
+      #   image: "docker:dind"
+      #   env:
+      #   - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+      #     value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
       - name: runner
         imagePullPolicy: IfNotPresent
         env:
