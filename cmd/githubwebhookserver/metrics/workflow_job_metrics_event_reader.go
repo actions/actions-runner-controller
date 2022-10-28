@@ -108,10 +108,25 @@ func (reader *WorkflowJobMetricsEventReader) ProcessWorkflowJobEvent(ctx context
 		}
 
 		if *e.WorkflowJob.Conclusion == "failure" {
-			failedStep := "?"
+			failedStep := "null"
 			for i, step := range e.WorkflowJob.Steps {
-				if *step.Conclusion != "success" {
+
+				// *step.Conclusion ~
+				// "success",
+				// "failure",
+				// "neutral",
+				// "cancelled",
+				// "skipped",
+				// "timed_out",
+				// "action_required",
+				// null
+				if *step.Conclusion == "failure" {
 					failedStep = fmt.Sprint(i)
+					break
+				}
+				if *step.Conclusion == "timed_out" {
+					failedStep = fmt.Sprint(i)
+					parseResult.ExitCode = "timed_out"
 					break
 				}
 			}
@@ -158,7 +173,7 @@ func (reader *WorkflowJobMetricsEventReader) fetchAndParseWorkflowJobLogs(ctx co
 		return nil, err
 	}
 
-	exitCode := "0"
+	exitCode := "null"
 
 	var (
 		queuedTime    time.Time
