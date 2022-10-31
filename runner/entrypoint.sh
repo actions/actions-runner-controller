@@ -24,7 +24,7 @@ if [ -f /runner/.runner ]; then
 # We use the existence of the .runner file as the indicator that the runner agent has not stopped yet.
 # Remove it by ourselves now, so that the dockerd sidecar prestop won't hang waiting for the .runner file to appear.
   echo "Removing the .runner file"
-  rm /runner/.runner
+  rm -f /runner/.runner
 fi
 
 trap - TERM
