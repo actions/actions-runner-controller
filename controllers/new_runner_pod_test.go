@@ -196,7 +196,7 @@ func TestNewRunnerPod(t *testing.T) {
 								Command: []string{
 									"/bin/sh",
 									"-c",
-									"echo \"Waiting for actions runner agent to stop.\"; while [ -f /runner/.runner ]; do sleep 1; done; echo \"actions runner agent has stopped.\"",
+									"timeout \"${RUNNER_GRACEFUL_STOP_TIMEOUT:-15}\" /bin/sh -c \"echo 'Prestop hook started'; while [ -f /runner/.runner ]; do sleep 1; done; echo 'Waiting for dockerd to start'; while ! pgrep -x dockerd; do sleep 1; done; echo 'Prestop hook stopped'\" >/proc/1/fd/1 2>&1",
 								},
 							},
 						},
@@ -726,7 +726,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 								Command: []string{
 									"/bin/sh",
 									"-c",
-									"echo \"Waiting for actions runner agent to stop.\"; while [ -f /runner/.runner ]; do sleep 1; done; echo \"actions runner agent has stopped.\"",
+									"timeout \"${RUNNER_GRACEFUL_STOP_TIMEOUT:-15}\" /bin/sh -c \"echo 'Prestop hook started'; while [ -f /runner/.runner ]; do sleep 1; done; echo 'Waiting for dockerd to start'; while ! pgrep -x dockerd; do sleep 1; done; echo 'Prestop hook stopped'\" >/proc/1/fd/1 2>&1",
 								},
 							},
 						},
