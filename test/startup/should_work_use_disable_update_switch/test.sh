@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
-# UNITTEST: should work normally
-# Will simulate a normal execution scenario. expects:
+# UNITTEST: should work disable update
+# Will simulate a scneario where disableupdate=true. expects:
 # - the configuration step to be run exactly once
-# - the entrypoint script to exit with no error
-# - the run.sh script to run with the --once flag activated.
+# - the startup script to exit with no error
+# - the config.sh script to run with the --disableupdate flag set to 'true'.
 
 source ../assets/logging.sh
 
-entrypoint_log() {
+startup_log() {
   while read I; do
-    printf "\tentrypoint.sh: $I\n"
+    printf "\tstartup.sh: $I\n"
   done
 }
 
@@ -23,6 +23,7 @@ export UNITTEST=true
 export RUNNER_NAME="example_runner_name"
 export RUNNER_REPO="myorg/myrepo"
 export RUNNER_TOKEN="xxxxxxxxxxxxx"
+export DISABLE_RUNNER_UPDATE="true"
 
 # run.sh and config.sh get used by the runner's real entrypoint.sh and are part of actions/runner.
 # We change symlink dummy versions so the entrypoint.sh can run allowing us to test the real entrypoint.sh
@@ -42,16 +43,16 @@ cleanup() {
 # Always run cleanup when test ends regardless of how it ends
 trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
-log "Running the entrypoint"
+log "Running the startup script"
 log ""
 
-# Run the runner entrypoint script which as a final step runs this
-# unit tests run.sh as it was symlinked
-../../../runner/entrypoint.sh 2> >(entrypoint_log)
+# run.sh and config.sh get used by the runner's real startup.sh and are part of actions/runner.
+# We change symlink dummy versions so the startup.sh can run allowing us to test the real entrypoint.sh
+../../../runner/startup.sh 2> >(startup_log)
 
 if [ "$?" != "0" ]; then
   error "=========================="
-  error "Test completed with errors"
+  error "FAIL | Test completed with errors"
   exit 1
 fi
 
@@ -62,17 +63,16 @@ if [ ${count} != "1" ]; then
   error "FAIL | The configuration step was not run exactly once"
   exit 1
 fi
-
 success "PASS | The configuration ran ${count} time(s)"
 
-log "Testing if the configuration included the --ephemeral flag"
-if grep -q -- '--ephemeral' ${RUNNER_HOME}/runner_config; then
+log "Testing if the configuration included the --disableupdate flag"
+if ! grep -q -- '--disableupdate' ${RUNNER_HOME}/runner_config; then
   error "==============================================="
-  error "FAIL | The configuration should not include the --ephemeral flag"
+  error "FAIL | The configuration should not include the --disableupdate flag"
   exit 1
 fi
 
-success "PASS | The --ephemeral switch was included in the configuration"
+success "PASS | The --disableupdate switch was included in the configuration"
 
 log "Testing if run.sh ran"
 if [ ! -f "${RUNNER_HOME}/run_sh_ran" ]; then

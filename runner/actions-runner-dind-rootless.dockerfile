@@ -102,9 +102,9 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/local/bin/dumb-init
 
-COPY entrypoint.sh logger.bash rootless-startup.sh update-status /usr/bin/
+COPY entrypoint-dind-rootless.sh startup.sh logger.sh graceful-stop.sh update-status /usr/bin/
 
-RUN chmod +x /usr/bin/rootless-startup.sh /usr/bin/entrypoint.sh
+RUN chmod +x /usr/bin/entrypoint-dind-rootless.sh /usr/bin/startup.sh
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
 # to replace the docker binary in the PATH.
@@ -140,5 +140,5 @@ RUN curl -fsSL https://get.docker.com/rootless | sh
 RUN curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
     chmod +x /home/runner/bin/docker-compose
 
-ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
-CMD ["rootless-startup.sh"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["entrypoint-dind-rootless.sh"]

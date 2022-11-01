@@ -14,6 +14,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/testing"
 	"github.com/google/go-github/v47/github"
 	"github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"sigs.k8s.io/yaml"
 )
@@ -330,6 +331,10 @@ func TestE2E(t *testing.T) {
 					t.Run(fmt.Sprintf("update runners - attempt %d", i), func(t *testing.T) {
 						env.deploy(t, RunnerDeployments, testID, fmt.Sprintf("ROLLING_UPDATE_PHASE=%d", i))
 					})
+
+					t.Run(fmt.Sprintf("set deletiontimestamps on runner pods - attempt %d", i), func(t *testing.T) {
+						env.setDeletionTimestampsOnRunningPods(t, RunnerDeployments)
+					})
 				}
 			}
 		}()
@@ -370,6 +375,8 @@ type env struct {
 	doDockerBuild                               bool
 	containerMode                               string
 	runnerServiceAccuontName                    string
+	runnerGracefulStopTimeout                   string
+	runnerTerminationGracePeriodSeconds         string
 	runnerNamespace                             string
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
@@ -500,6 +507,8 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.testEnterprise = testing.Getenv(t, "TEST_ENTERPRISE", "")
 	e.testEphemeral = testing.Getenv(t, "TEST_EPHEMERAL", "")
 	e.runnerServiceAccuontName = testing.Getenv(t, "TEST_RUNNER_SERVICE_ACCOUNT_NAME", "")
+	e.runnerTerminationGracePeriodSeconds = testing.Getenv(t, "TEST_RUNNER_TERMINATION_GRACE_PERIOD_SECONDS", "30")
+	e.runnerGracefulStopTimeout = testing.Getenv(t, "TEST_RUNNER_GRACEFUL_STOP_TIMEOUT", "15")
 	e.runnerNamespace = testing.Getenv(t, "TEST_RUNNER_NAMESPACE", "default")
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
@@ -712,6 +721,48 @@ func (e *env) undeploy(t *testing.T, kind DeployKind, testID string) {
 	e.do(t, "delete", kind, testID)
 }
 
+func (e *env) setDeletionTimestampsOnRunningPods(t *testing.T, deployKind DeployKind) {
+	t.Helper()
+
+	var scope, kind, labelKind string
+	if e.testOrg != "" {
+		scope = "org"
+	} else if e.testEnterprise != "" {
+		scope = "enterprise"
+	} else {
+		scope = "repo"
+	}
+
+	if deployKind == RunnerDeployments {
+		kind = "runnerdeploy"
+		labelKind = "runner-deployment"
+	} else {
+		kind = "runnerset"
+		labelKind = "runnerset"
+	}
+
+	label := fmt.Sprintf("%s-name=%s-%s", labelKind, scope, kind)
+
+	ctx := context.Background()
+	c := e.getKubectlConfig()
+
+	t.Logf("Finding pods with label %s", label)
+
+	pods, err := e.Kubectl.FindPods(ctx, label, c)
+	require.NoError(t, err)
+
+	if len(pods) == 0 {
+		return
+	}
+
+	t.Logf("Setting deletionTimestamps on pods %s", strings.Join(pods, ", "))
+
+	err = e.Kubectl.DeletePods(ctx, pods, c)
+	require.NoError(t, err)
+
+	t.Logf("Deleted pods %s", strings.Join(pods, ", "))
+}
+
 func (e *env) do(t *testing.T, op string, kind DeployKind, testID string, env ...string) {
 	t.Helper()
 
@@ -722,6 +773,8 @@ func (e *env) do(t *testing.T, op string, kind DeployKind, testID string, env ..
 		"OP=" + op,
 		"RUNNER_NAMESPACE=" + e.runnerNamespace,
 		"RUNNER_SERVICE_ACCOUNT_NAME=" + e.runnerServiceAccuontName,
+		"RUNNER_GRACEFUL_STOP_TIMEOUT=" + e.runnerGracefulStopTimeout,
+		"RUNNER_TERMINATION_GRACE_PERIOD_SECONDS=" + e.runnerTerminationGracePeriodSeconds,
 	}
 	scriptEnv = append(scriptEnv, env...)
 
@@ -825,7 +878,7 @@ func (e *env) testJobs(testID string) []job {
 func (e *env) verifyActionsWorkflowRun(t *testing.T, testID string) {
 	t.Helper()
 
-	verifyActionsWorkflowRun(t, e.Env, e.testJobs(testID), e.verifyTimeout())
+	verifyActionsWorkflowRun(t, e.Env, e.testJobs(testID), e.verifyTimeout(), e.getKubectlConfig())
 }
 
 func (e *env) verifyTimeout() time.Duration {
@@ -834,6 +887,18 @@ func (e *env) verifyTimeout() time.Duration {
 	}
 
 	return 8 * 60 * time.Second
+}
+
+func (e *env) getKubectlConfig() testing.KubectlConfig {
+	kubectlEnv := []string{
+		"KUBECONFIG=" + e.Kubeconfig,
+	}
+
+	cmCfg := testing.KubectlConfig{
+		Env: kubectlEnv,
+	}
+
+	return cmCfg
 }
 
 type job struct {
@@ -969,10 +1034,18 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					// When rootless, we need to use the `docker` buildx driver, which doesn't support cache export
 					// so we end up with the below error on docker-build:
 					//   error: cache export feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+					// See https://docs.docker.com/engine/reference/commandline/buildx_create/#docker-container-driver
+					// for the `docker-container` driver.
 					dockerBuildCache = "--cache-from=type=local,src=/home/runner/.cache/buildx " +
 						"--cache-to=type=local,dest=/home/runner/.cache/buildx-new,mode=max "
 					dockerfile = "Dockerfile"
+					// Note though, if the cache does not exist yet, the buildx build seem to write cache data to /home/runner/.cache/buildx,
+					// not buildx-new.
+					// I think the following message emitted by buildx in the end is relevant to this behaviour, but not 100% sure:
+					//   WARNING: local cache import at /home/runner/.cache/buildx not found due to err: could not read /home/runner/.cache/buildx/index.json: open /home/runner/.cache/buildx/index.json: no such file or directory
 				} else {
+					// See https://docs.docker.com/engine/reference/commandline/buildx_create/#docker-driver
+					// for the `docker` driver.
 					setupBuildXActionWith.Driver = "docker"
 					dockerfile = "Dockerfile.nocache"
 				}
@@ -997,20 +1070,35 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 							fmt.Sprintf("-f %s .", dockerfile),
 					},
 				)
-			}
-		}
 
-		if useSudo {
-			steps = append(steps,
-				testing.Step{
-					// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
-					// See https://github.com/moby/buildkit/issues/1896 for why this is needed
-					Run: "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
-				},
-				testing.Step{
-					Run: "ls -lah /home/runner/.cache/*",
-				},
-			)
+				if useSudo {
+					steps = append(steps,
+						testing.Step{
+							// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+							// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+							Run: "if -d /home/runner/.cache/buildx-new; then " + sudo + "rm -rf /home/runner/.cache/buildx && " + sudo + `mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx; else echo "/home/runner/.cache/buildx-new is not found. Perhaps you're running this on a stateleess runner?"; fi`,
+						},
+						testing.Step{
+							Run: "ls -lah /home/runner/.cache/*",
+						},
+					)
+				}
+			}
+
+			if useSudo {
+				if kind == RunnerDeployments {
+					steps = append(steps,
+						testing.Step{
+							// https://github.com/docker/build-push-action/blob/master/docs/advanced/cache.md#local-cache
+							// See https://github.com/moby/buildkit/issues/1896 for why this is needed
+							Run: sudo + "rm -rf /home/runner/.cache/buildx && mv /home/runner/.cache/buildx-new /home/runner/.cache/buildx",
+						},
+						testing.Step{
+							Run: sudo + "ls -lah /home/runner/.cache/*",
+						},
+					)
+				}
+			}
 		}
 
 		steps = append(steps,
@@ -1062,7 +1150,7 @@ kubectl create cm %s$id --from-literal=status=ok
 	}
 }
 
-func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, timeout time.Duration) {
+func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, timeout time.Duration, cmCfg testing.KubectlConfig) {
 	t.Helper()
 
 	var expected []string
@@ -1078,14 +1166,6 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, ti
 
 		for i := range testJobs {
 			testResultCMName := testJobs[i].configMapName
-
-			kubectlEnv := []string{
-				"KUBECONFIG=" + env.Kubeconfig,
-			}
-
-			cmCfg := testing.KubectlConfig{
-				Env: kubectlEnv,
-			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

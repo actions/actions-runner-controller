@@ -36,6 +36,7 @@ ToC:
     - [Runner with rootless DinD](#runner-with-rootless-dind)
     - [Runner with k8s jobs](#runner-with-k8s-jobs)
   - [Additional Tweaks](#additional-tweaks)
+  - [Runner Graceful Termination](#runner-graceful-termination)
   - [Custom Volume mounts](#custom-volume-mounts)
   - [Runner Labels](#runner-labels)
   - [Runner Groups](#runner-groups)
@@ -1219,6 +1220,66 @@ spec:
         #
         # privileged: true
 ```
+
+### Runner Graceful Termination
+
+As of ARC 0.27.0 (unreleased as of 2022/09/30), runners can only wait for 15 seconds by default on pod termination.
+
+This can be problematic in two scenarios:
+
+- Scenario 1 - RunnerSet-only: You're triggering updates other than replica changes to `RunnerSet` very often- With current implementation, every update except `replicas` change to RunnerSet may result in terminating the in-progress workflow jobs to fail.
+- Scenario 2 - RunnerDeployment and RunnerSet: You have another Kubernetes controller that evicts runner pods directly, not consulting ARC.
+
+> RunnerDeployment is not affected by the Scenario 1 as RunnerDeployment-managed runners are already tolerable to unlimitedly long in-progress running job while being replaced, as it's graceful termination process is handled outside of the entrypoint and the Kubernetes' pod termination process.
+
+To make it more reliable, please set `spec.template.spec.terminationGracePeriodSeconds` field and the `RUNNER_GRACEFUL_STOP_TIMEOUT` environment variable appropriately.
+
+If you want the pod to terminate in approximately 110 seconds at the latest since the termination request, try `terminationGracePeriodSeconds` of `110` and `RUNNER_GRACEFUL_STOP_TIMEOUT` of like `90`.
+
+The difference between `terminationGracePeriodSeconds` and `RUNNER_GRACEFUL_STOP_TIMEOUT` can vary depending on your environment and cluster.
+
+The idea is two fold:
+
+- `RUNNER_GRACEFUL_STOP_TIMEOUT` is for giving the runner the longest possible time to wait for the in-progress job to complete. You should keep this smaller than `terminationGracePeriodSeconds` so that you don't unnecessarily cancel running jobs.
+- `terminationGracePeriodSeconds` is for giving the runner the longest possible time to stop before disappear. If the pod forcefully terminated before a graceful stop, the job running within the runner pod can hang like 10 minutes in the GitHub Actions Workflow Run/Job UI. A correct value for this avoids the hang, even though it had to cancel the running job due to the approaching deadline.
+
+> We know the default 15 seconds timeout is too short to be useful at all.
+> In near future, we might raise the default to, for example, 100 seconds, so that runners that are tend to run up to 100 seconds jobs can
+> terminate gracefully without failing running jobs. It will also allow the job which were running on the node that was requsted for termination
+> to correct report its status as "cancelled", rather than hanging approximately 10 minutes in the Actions Web UI until it finally fails(without any specific error message).
+> 100 seconds is just an example. It might be a good default in case you're using AWS EC2 Spot Instances because they tend to send
+> termination notice two minutes before the termination.
+> If you have any other suggestions for the default value, please share your thoughts in Discussions.
+
+#### Status and Future of this feature
+
+Note that this feature is currently intended for use with runner pods being terminated by other Kubernetes controller and human operators, or those being replaced by ARC RunnerSet controller due to spec change(s) except `replicas`. RunnerDeployment has no issue for the scenario. non-dind runners are affected but this feature does not support those yet.
+
+For example, a runner pod can be terminated prematurely by cluster-autoscaler when it's about to terminate the node on cluster scale down.
+All the variants of RunnerDeployment and RunnerSet managed runner pods, including runners with dockerd sidecars, rootless and rootful dind runners are affected by it. For dind runner pods only, you can use this feature to fix or alleviate the issue.
+
+To be clear, an increase/decrease in the desired replicas of RunnerDeployment and RunnerSet will never result in worklfow jobs being termianted prematurely.
+That's because it's handled BEFORE the runner pod is terminated, by ARC respective controller.
+
+For anyone interested in improving it, adding a dedicated pod finalizer for this issue will never work.
+It's due to that a pod finalizer can't prevent SIGTERM from being sent when deletionTimestamp is updated to non-zero,
+which triggers a Kubernetes pod termination process anyway.
+What we want here is to delay the SIGTERM sent to the `actions/runner` process running within the runner container of the runner pod,
+not blocking the removal of the pod resource in the Kubernetes cluster.
+
+Also, handling all the graceful termination scenarios with a single method may or may not work.
+
+The most viable option would be to do the graceful termination handling entirely in the SIGTERM handler within the runner entrypoint.
+But this may or may not work long-term, as it's subject to terminationGracePeriodSeconds anyway and the author of this note thinks there still is
+no formally defined limit for terminationGracePeriodSeconds and hence we arent' sure how long terminationGracePeriodSeconds can be set in practice.
+Also, I think the max workflow job duration is approximately 24h. So Kubernetes must formally support setting terminationGracePeriodSeconds of 24h if
+we are moving entirely to the entrypoint based solution.
+If you have any insights about the matter, chime in to the development of ARC!
+
+That's why we still rely on ARC's own graceful termination logic in Runner controller for the spec change and replica increase/decrease of RunnerDeployment and
+replica increase/decrease of RunnerSet, even though we now have the entrypoint based graceful stop handler.
+
+Our plan is to improve the RunnerSet to have the same logic as the Runner controller so that you don't need this feature based on the SIGTERM handler for the spec change of RunnerSet.
 
 ### Custom Volume mounts
 

@@ -54,6 +54,16 @@ provisioner: rancher.io/local-path
 reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
 ---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-rootless-dind-work-dir
+  labels:
+    content: ${NAME}-rootless-dind-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerSet
 metadata:
@@ -113,10 +123,20 @@ spec:
         app: ${NAME}
     spec:
       serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
+      terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
       containers:
+      # # Uncomment only when non-dind-runner / you're using docker sidecar
+      # - name: docker
+      #   # Image is required for the dind sidecar definition within RunnerSet spec
+      #   image: "docker:dind"
+      #   env:
+      #   - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+      #     value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
       - name: runner
         imagePullPolicy: IfNotPresent
         env:
+        - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+          value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
         - name: RUNNER_FEATURE_FLAG_EPHEMERAL
           value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
         - name: GOMODCACHE
@@ -168,7 +188,15 @@ spec:
       #   # For buildx cache
       #   - name: cache
       #     mountPath: "/home/runner/.cache"
-        # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
+
+        # For fixing no space left error on rootless dind runner
+        - name: rootless-dind-work-dir
+          # Omit the /share/docker part of the /home/runner/.local/share/docker as
+          # that part is created by dockerd.
+          mountPath: /home/runner/.local
+          readOnly: false
+
+      # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
       # volumes:
       # - name: work
       #   ephemeral:
@@ -180,6 +208,24 @@ spec:
       #         resources:
       #           requests:
       #             storage: 10Gi
+
+      # Fix the following no space left errors with rootless-dind runners that can happen while running buildx build:
+      #   ------
+      #   > [4/5] RUN go mod download:
+      #   ------
+      #   ERROR: failed to solve: failed to prepare yxsw8lv9hqnuafzlfta244l0z: mkdir /home/runner/.local/share/docker/vfs/dir/yxsw8lv9hqnuafzlfta244l0z/usr/local/go/src/cmd/compile/internal/types2/testdata: no space left on device
+      #   Error: Process completed with exit code 1.
+      #
+      volumes:
+      - name: rootless-dind-work-dir
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: "${NAME}-rootless-dind-work-dir"
+              resources:
+                requests:
+                  storage: 3Gi
   volumeClaimTemplates:
   - metadata:
       name: vol1

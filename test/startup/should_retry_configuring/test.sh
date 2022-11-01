@@ -3,14 +3,14 @@
 # UNITTEST: retry config
 # Will simulate a configuration failure and expects:
 # - the configuration step to be run 10 times
-# - the entrypoint script to exit with error code 2
+# - the startup script to exit with error code 2
 # - the run.sh script to never run.
 
 source ../assets/logging.sh
 
-entrypoint_log() {
+startup_log() {
   while read I; do
-    printf "\tentrypoint.sh: $I\n"
+    printf "\tstartup.sh: $I\n"
   done
 }
 
@@ -44,12 +44,12 @@ cleanup() {
 # Always run cleanup when test ends regardless of how it ends
 trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
-log "Running the entrypoint"
+log "Running the startup script"
 log ""
 
-# Run the runner entrypoint script which as a final step runs this
+# Run the runner startup script which as a final step runs this
 # unit tests run.sh as it was symlinked
-../../../runner/entrypoint.sh 2> >(entrypoint_log)
+../../../runner/startup.sh 2> >(startup_log)
 
 if [ "$?" != "2" ]; then
   error "========================================="
