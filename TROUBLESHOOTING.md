@@ -291,12 +291,12 @@ You very likely have some dangling workflow jobs stuck in `queued` or `in_progre
 
 Manually call [the "list workflow runs" API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository), and [remove the dangling workflow job(s)](https://docs.github.com/en/rest/actions/workflow-runs#delete-a-workflow-run).
 
-## Dind container takes a lot of time to start or does not start at all
+## Slow / failure to boot dind sidecar (default runner)
 
 **Problem**
 
-If you noticed that it takes several minuter for dind container to be created or it exits with with error just after being created it might indicate that you are exiriencing disk performance issue. You might see massage `failed to reserve container name` when scaling up multiple gh runners at once. When you ssh on kubernetes node that problematic pods were sheduled on you can use tools like `atop`, `htop` or `iotop` to check IO usage and cpu time procentege used on iowait. If you see that disk usage is high (80-100%) and iowaits are taking a significant chunk of you cpu time (normally it should not be higher than 10%) it means that performance is being bottlenecked by slow disk.
+If you noticed that it takes several minutes for sidecar dind container to be created or it exits with with error just after being created it might indicate that you are experiencing disk performance issue. You might see message `failed to reserve container name` when scaling up multiple gh runners at once. When you ssh on kubernetes node that problematic pods were scheduled on you can use tools like `atop`, `htop` or `iotop` to check IO usage and cpu time procentege used on iowait. If you see that disk usage is high (80-100%) and iowaits are taking a significant chunk of you cpu time (normally it should not be higher than 10%) it means that performance is being bottlenecked by slow disk.
 
 **Solution**
 
-The solution is to switch to using faster storage, if you are exeperiencing this issue you are probably using hdd, switch to ssh fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some ssds
+The solution is to switch to using faster storage, if you are experiencing this issue you are probably using hdd, switch to ssh fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some ssds
