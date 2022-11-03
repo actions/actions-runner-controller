@@ -46,6 +46,7 @@ ToC:
   - [Using without cert-manager](#using-without-cert-manager)
   - [Windows Runners](#setting-up-windows-runners)
   - [Multitenancy](#multitenancy)
+  - [Metrics](#metrics)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
@@ -1860,6 +1861,31 @@ when and which varying ARC component(`horizontalrunnerautoscaler-controller`, `r
 > Just don't be surprised you have to repeat `githubAPICredentialsFrom.secretRef.name` settings among two resources!
 
 Please refer to [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication) for how you could create the Kubernetes secret containing GitHub App credentials.
+  
+### Metrics
+
+The controller also exposes Prometheus metrics on a `/metrics` endpoint. By default this is on port `8443` behind an RBAC proxy.
+
+If needed, the proxy can be disabled in the `values.yml` file:
+
+```diff
+metrics:
+  serviceAnnotations: {}
+  serviceMonitor: false
+  serviceMonitorLabels: {}
++ port: 8080
+  proxy:
++   enabled: false
+```
+
+If Prometheus is available inside the cluster, then add some `podAnnotations` to begin scraping the metrics:
+
+```diff
+podAnnotations:
++ prometheus.io/scrape: "true"
++ prometheus.io/path: /metrics
++ prometheus.io/port: "8080"
+```
 
 # Troubleshooting
 
