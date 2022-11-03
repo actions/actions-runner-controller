@@ -98,12 +98,27 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		// If it's already unregistered in the previous reconcilation loop,
 		// you can safely assume that it won't get registered again so it's safe to delete the runner pod.
 		log.Info("Runner pod is marked as already unregistered.")
-	} else if runnerID == nil && !runnerPodOrContainerIsStopped(pod) && !podConditionTransitionTimeAfter(pod, corev1.PodReady, registrationTimeout) {
+	} else if runnerID == nil && !runnerPodOrContainerIsStopped(pod) && !podConditionTransitionTimeAfter(pod, corev1.PodReady, registrationTimeout) &&
+		!podIsPending(pod) {
+
 		log.Info(
 			"Unregistration started before runner obtains ID. Waiting for the regisration timeout to elapse, or the runner to obtain ID, or the runner pod to stop",
 			"registrationTimeout", registrationTimeout,
 		)
 		return &ctrl.Result{RequeueAfter: retryDelay}, nil
+	} else if runnerID == nil && podIsPending(pod) {
+		// Note: This logic is here to prevent a dead-lock between ARC and the PV provider.
+		//
+		// The author of this logic thinks that some (or all?) of CSI plugins and PV providers
+		// do not supported to provision dynamic PVs for a pod that is already marked for deletion.
+		// If we didn't handle this case here, ARC would end up with waiting forever until the
+		// PV provider to provision PVs for the pod, which seems to never happen.
+		log.Info(
+			"Unregistration started before runner pod gets scheduled onto a node. "+
+				"Perhaps the runner is taking a long time due to e.g. slow CSI slugin not giving us a PV in a timely manner, or your Kubernetes cluster is overloaded? "+
+				"Marking unregistration as completed anyway because there's nothing ARC can do.",
+			"registrationTimeout", registrationTimeout,
+		)
 	} else if runnerID == nil && runnerPodOrContainerIsStopped(pod) {
 		log.Info(
 			"Unregistration started before runner ID is assigned and the runner stopped before obtaining ID within registration timeout. "+
@@ -325,6 +340,10 @@ func podConditionTransitionTimeAfter(pod *corev1.Pod, tpe corev1.PodConditionTyp
 	}
 
 	return c.Add(d).Before(time.Now())
+}
+
+func podIsPending(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodPending
 }
 
 func podRunnerID(pod *corev1.Pod) string {
