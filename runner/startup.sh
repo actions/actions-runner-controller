@@ -32,10 +32,6 @@ if [ -z "${RUNNER_NAME}" ]; then
   exit 1
 fi
 
-if [ -n "${DOCKER_DEFAULT_ADDRESS_POOL_BASE}" ] && [ -n "${DOCKER_DEFAULT_ADDRESS_POOL_SIZE}" ]; then
-  jq ".\"default-address-pools\" = [{\"base\": \"${DOCKER_DEFAULT_ADDRESS_POOL_BASE}\", \"size\": ${DOCKER_DEFAULT_ADDRESS_POOL_SIZE}}]" /etc/docker/daemon.json > /tmp/.daemon.json && /tmp/.daemon.json /etc/docker/daemon.json
-fi
-
 if [ -n "${RUNNER_ORG}" ] && [ -n "${RUNNER_REPO}" ] && [ -n "${RUNNER_ENTERPRISE}" ]; then
   ATTACH="${RUNNER_ORG}/${RUNNER_REPO}"
 elif [ -n "${RUNNER_ORG}" ]; then
