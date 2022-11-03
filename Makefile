@@ -5,7 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.298.2
+RUNNER_VERSION ?= 2.299.1
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -33,6 +33,8 @@ endif
 
 TEST_ASSETS=$(PWD)/test-assets
 TOOLS_PATH=$(PWD)/.tools
+
+OS_NAME := $(shell uname -s | tr A-Z a-z)
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
@@ -117,7 +119,7 @@ generate: controller-gen
 
 # Run shellcheck on runner scripts
 shellcheck: shellcheck-install
-	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.bash runner/*.sh
+	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
@@ -203,8 +205,8 @@ acceptance/deploy:
 acceptance/tests:
 	acceptance/checks.sh
 
-acceptance/runner/entrypoint:
-	cd test/entrypoint/ && bash test.sh
+acceptance/runner/startup:
+	cd test/startup/ && bash test.sh
 
 # We use -count=1 instead of `go clean -testcache`
 # See https://terratest.gruntwork.io/docs/testing-best-practices/avoid-test-caching/
@@ -267,8 +269,8 @@ ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
 	set -e ;\
 	SHELLCHECK_TMP_DIR=$$(mktemp -d) ;\
 	cd $$SHELLCHECK_TMP_DIR ;\
-	curl -LO https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz ;\
-	tar Jxvf shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz ;\
+	curl -LO https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(OS_NAME).x86_64.tar.xz ;\
+	tar Jxvf shellcheck-v$(SHELLCHECK_VERSION).$(OS_NAME).x86_64.tar.xz ;\
 	cd $(CURDIR) ;\
 	mkdir -p $(TOOLS_PATH) ;\
 	mv $$SHELLCHECK_TMP_DIR/shellcheck-v$(SHELLCHECK_VERSION)/shellcheck $(TOOLS_PATH)/ ;\
@@ -276,8 +278,6 @@ ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
 	}
 endif
 SHELLCHECK=$(TOOLS_PATH)/shellcheck
-
-OS_NAME := $(shell uname -s | tr A-Z a-z)
 
 # find or download etcd
 etcd:

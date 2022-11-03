@@ -3,14 +3,14 @@
 # UNITTEST: should work as non ephemeral
 # Will simulate a scenario where ephemeral=false. expects:
 # - the configuration step to be run exactly once
-# - the entrypoint script to exit with no error
+# - the startup script to exit with no error
 # - the run.sh script to run without the --once flag
 
 source ../assets/logging.sh
 
-entrypoint_log() {
+startup_log() {
   while read I; do
-    printf "\tentrypoint.sh: $I\n"
+    printf "\tstartup.sh: $I\n"
   done
 }
 
@@ -44,16 +44,16 @@ cleanup() {
 # Always run cleanup when test ends regardless of how it ends
 trap cleanup SIGINT SIGTERM SIGQUIT EXIT
 
-log "Running the entrypoint"
+log "Running the startup script"
 log ""
 
-# Run the runner entrypoint script which as a final step runs this
+# Run the runner entrypstartupoint script which as a final step runs this
 # unit tests run.sh as it was symlinked
-../../../runner/entrypoint.sh 2> >(entrypoint_log)
+../../../runner/startup.sh 2> >(startup_log)
 
 if [ "$?" != "0" ]; then
   error "==========================================="
-  error "FAIL | Entrypoint script did not exit successfully"
+  error "FAIL | Startup script did not exit successfully"
   exit 1
 fi
 

@@ -237,7 +237,7 @@ webhooks:
     resources:
     - runnerreplicasets
   sideEffects: None
-{{ if not (or .Values.admissionWebHooks.caBundle .Values.certManagerEnabled) }}
+{{ if not (or (hasKey .Values.admissionWebHooks "caBundle") .Values.certManagerEnabled) }}
 ---
 apiVersion: v1
 kind: Secret

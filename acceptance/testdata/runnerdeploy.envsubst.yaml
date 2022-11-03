@@ -8,6 +8,16 @@ provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 ---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-rootless-dind-work-dir
+  labels:
+    content: ${NAME}-rootless-dind-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
@@ -49,13 +59,42 @@ spec:
       labels:
       - "${RUNNER_LABEL}"
 
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
+      terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
+
       env:
+      - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+        value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
       - name: ROLLING_UPDATE_PHASE
         value: "${ROLLING_UPDATE_PHASE}"
       - name: ARC_DOCKER_MTU_PROPAGATION
         value: "true"
 
       dockerMTU: 1400
+
+      # Fix the following no space left errors with rootless-dind runners that can happen while running buildx build:
+      #   ------
+      #   > [4/5] RUN go mod download:
+      #   ------
+      #   ERROR: failed to solve: failed to prepare yxsw8lv9hqnuafzlfta244l0z: mkdir /home/runner/.local/share/docker/vfs/dir/yxsw8lv9hqnuafzlfta244l0z/usr/local/go/src/cmd/compile/internal/types2/testdata: no space left on device
+      #   Error: Process completed with exit code 1.
+      #
+      volumeMounts:
+      - name: rootless-dind-work-dir
+        # Omit the /share/docker part of the /home/runner/.local/share/docker as
+        # that part is created by dockerd.
+        mountPath: /home/runner/.local
+        readOnly: false
+      volumes:
+      - name: rootless-dind-work-dir
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: "${NAME}-rootless-dind-work-dir"
+              resources:
+                requests:
+                  storage: 3Gi
 
       #
       # Non-standard working directory
@@ -72,7 +111,6 @@ spec:
         resources:
           requests:
             storage: 10Gi
-      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
 ---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler

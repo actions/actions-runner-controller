@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.298.2
+ARG RUNNER_VERSION=2.299.1
 ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
@@ -106,8 +106,8 @@ RUN mkdir /run/user/1000 \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint.sh logger.bash rootless-startup.sh update-status /usr/bin/
-RUN chmod +x /usr/bin/rootless-startup.sh /usr/bin/entrypoint.sh
+COPY entrypoint-dind-rootless.sh startup.sh logger.sh graceful-stop.sh update-status /usr/bin/
+RUN chmod +x /usr/bin/entrypoint-dind-rootless.sh /usr/bin/startup.sh
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
 # to replace the docker binary in the PATH.
@@ -140,5 +140,5 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
     && chmod +x /home/runner/bin/docker-compose
 
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["rootless-startup.sh"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["entrypoint-dind-rootless.sh"]
