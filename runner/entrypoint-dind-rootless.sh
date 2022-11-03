@@ -22,8 +22,8 @@ jq ".\"registry-mirrors\"[0] = \"${DOCKER_REGISTRY_MIRROR}\"" /home/runner/.conf
 fi
 SCRIPT
 
-if [ -f /home/runner/.local ]; then
-  if [ ! -f /home/runner/.local/share ]; then
+if [ -d /home/runner/.local ]; then
+  if [ ! -d /home/runner/.local/share ]; then
     log.notice "Creating /home/runner/.local/share owned by runner:runner \
 so that rootless dockerd will not fail with a permission error when creating /home/runner/.local/share/docker"
 
