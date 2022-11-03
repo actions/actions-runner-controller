@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 if [[ ${1:-} == '' ]]; then
-  # shellcheck source=runner/logger.bash
-  source logger.bash
+  # shellcheck source=runner/logger.sh
+  source logger.sh
   log.error "Missing required argument -- '<phase>'"
   exit 64
 fi
@@ -26,6 +26,6 @@ if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
         --show-error \
         --silent \
         --request PATCH \
-        "${apiserver}/apis/actions.summerwind.dev/v1alpha1/namespaces/${namespace}/runners/${HOSTNAME}/status"
-        1>&-
+        "${apiserver}/apis/actions.summerwind.dev/v1alpha1/namespaces/${namespace}/runners/${HOSTNAME}/status" \
+        1>/dev/null
 fi

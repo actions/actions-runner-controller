@@ -6,7 +6,7 @@
 # are not using any variables that need to be set, and are not using any pipes.
 
 # This logger implementation can be replaced with another logger implementation
-# by placing a script called `logger.bash` in `/usr/local/bin` of the image. The
+# by placing a script called `logger.sh` in `/usr/local/bin` of the image. The
 # only requirement for the script is that it defines the following functions:
 #
 # - `log.debug`

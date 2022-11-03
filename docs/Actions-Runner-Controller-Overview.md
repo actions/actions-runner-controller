@@ -6,7 +6,7 @@ With this overview, you can get a foundation of basic scenarios and be capable o
 ## GitHub Actions
 [GitHub Actions](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
 
-You can create workflows that build and test every pull request to your repository, or deploy merged pull requests to production. Your workflow contains one or more jobs which can run in sequential order or in parallel. Each job will run inside its own runner and has one or more steps that either run a script that you define or run an action, which is a reusable extension that can simplify your workflow. To learn more about about Actions - see "[Learn Github Actions](https://docs.github.com/en/actions/learn-github-actions)".
+You can create workflows that build and test every pull request to your repository, or deploy merged pull requests to production. Your workflow contains one or more jobs which can run in sequential order or in parallel. Each job will run inside its own runner and has one or more steps that either run a script that you define or run an action, which is a reusable extension that can simplify your workflow. To learn more about Actions - see "[Learn Github Actions](https://docs.github.com/en/actions/learn-github-actions)".
 
 ## Runners
 Runners execute the job that is assigned to them by Github Actions workflow. There are two types of Runners:
