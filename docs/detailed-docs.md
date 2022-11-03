@@ -1582,6 +1582,28 @@ spec:
           value: "true"
 ```
 
+There are a few advanced envvars also that are available only for dind runners:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      dockerdWithinRunnerContainer: true
+      image: summerwind/actions-runner-dind
+      env:
+        # Sets the default-address-pools field of dockerd daemon.json
+        # to "172.17.0.0/24".
+        # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1971 for more information.
+        - name: DOCKER_DEFAULT_ADDRESS_POOL_BASE
+          value: "172.17.0.0"
+        - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
+          value: "24"
+```
+
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
 > This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
