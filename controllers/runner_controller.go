@@ -1151,6 +1151,27 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				fmt.Sprintf("--registry-mirror=%s", dockerRegistryMirror),
 			)
 		}
+
+		dockerdContainer.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh", "-c",
+						// A prestop hook can start before the dockerd start up, for example, when the docker init is still provisioning
+						// the TLS key and  the cert to be used by dockerd.
+						//
+						// The author of this prestop script encountered issues where the prestophung for ten or more minutes on his cluster.
+						// He realized that the hang happened when a prestop hook is executed while the docker init is provioning the key and cert.
+						// Assuming it's due to that the SIGTERM sent by K8s after the prestop hook was ignored by the docker init at that time,
+						// and it needed to wait until terminationGracePeriodSeconds to elapse before finally killing the container,
+						// he wrote this script so that it tries to delay SIGTERM until dockerd starts and becomes ready for processing the signal.
+						//
+						// Also note that we don't need to run `pkill dockerd` at the end of the prehook script, as SIGTERM is sent by K8s after the prestop had completed.
+						`timeout "${RUNNER_GRACEFUL_STOP_TIMEOUT:-15}" /bin/sh -c "echo 'Prestop hook started'; while [ -f /runner/.runner ]; do sleep 1; done; echo 'Waiting for dockerd to start'; while ! pgrep -x dockerd; do sleep 1; done; echo 'Prestop hook stopped'" >/proc/1/fd/1 2>&1`,
+					},
+				},
+			},
+		}
 	}
 
 	if runnerContainerIndex == -1 {

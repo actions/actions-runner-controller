@@ -1,5 +1,7 @@
 #!/bin/bash
-source logger.bash
+source logger.sh
+source graceful-stop.sh
+trap graceful_stop TERM
 
 log.notice "Writing out Docker config file"
 /bin/bash <<SCRIPT
@@ -21,7 +23,20 @@ fi
 SCRIPT
 
 log.notice "Starting Docker (rootless)"
+
+dumb-init bash <<'SCRIPT' &
+# Note that we don't want dockerd to be terminated before the runner agent,
+# because it defeats the goal of the runner agent graceful stop logic implemenbed above.
+# We can't rely on e.g. `dumb-init --single-child` for that, because with `--single-child` we can't even trap SIGTERM
+# for not only dockerd but also the runner agent.
 /home/runner/bin/dockerd-rootless.sh --config-file /home/runner/.config/docker/daemon.json >> /dev/null 2>&1 &
 
-# Wait processes to be running
-entrypoint.sh
+startup.sh
+SCRIPT
+
+RUNNER_INIT_PID=$!
+log.notice "Runner init started with pid $RUNNER_INIT_PID"
+wait $RUNNER_INIT_PID
+log.notice "Runner init exited. Exiting this process with code 0 so that the container and the pod is GC'ed Kubernetes soon."
+
+trap - TERM

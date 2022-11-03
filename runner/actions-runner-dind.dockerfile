@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
-ARG RUNNER_VERSION=2.298.2
+ARG RUNNER_VERSION=2.299.1
 ARG DOCKER_CHANNEL=stable
 ARG DOCKER_VERSION=20.10.18
 ARG DUMB_INIT_VERSION=1.2.5
@@ -99,9 +99,9 @@ RUN mkdir /opt/hostedtoolcache \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint.sh logger.bash startup.sh update-status /usr/bin/
+COPY entrypoint-dind.sh startup.sh logger.sh wait.sh graceful-stop.sh update-status /usr/bin/
 COPY supervisor/ /etc/supervisor/conf.d/
-RUN chmod +x /usr/bin/startup.sh /usr/bin/entrypoint.sh
+RUN chmod +x /usr/bin/entrypoint-dind.sh /usr/bin/startup.sh
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
 # to replace the docker binary in the PATH.
@@ -130,5 +130,5 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 # No group definition, as that makes it harder to run docker.
 USER runner
 
-ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
-CMD ["startup.sh"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["entrypoint-dind.sh"]

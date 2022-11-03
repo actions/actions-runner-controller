@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# shellcheck source=runner/logger.bash
-source logger.bash
+# shellcheck source=runner/logger.sh
+source logger.sh
 
 log.debug "Running ARC Job Completed Hooks"
 
