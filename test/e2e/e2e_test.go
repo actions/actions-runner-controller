@@ -325,6 +325,7 @@ func TestE2E(t *testing.T) {
 					if !ok {
 						t.Logf("Stopping the continuous rolling-update of runners")
 					}
+					return
 				default:
 					time.Sleep(10 * time.Second)
 
