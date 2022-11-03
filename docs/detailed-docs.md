@@ -1683,7 +1683,6 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
 Set the Helm chart values as follows:
 
 ```shell
-$ CA_BUNDLE=$(cat path/to/ca.pem | base64)
 $ helm --upgrade install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false
 ```
