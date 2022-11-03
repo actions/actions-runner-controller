@@ -29,7 +29,7 @@ dumb-init bash <<'SCRIPT' &
 # because it defeats the goal of the runner agent graceful stop logic implemenbed above.
 # We can't rely on e.g. `dumb-init --single-child` for that, because with `--single-child` we can't even trap SIGTERM
 # for not only dockerd but also the runner agent.
-/home/runner/bin/dockerd-rootless.sh --config-file /home/runner/.config/docker/daemon.json >> /dev/null 2>&1 &
+/home/runner/bin/dockerd-rootless.sh --config-file /home/runner/.config/docker/daemon.json &
 
 startup.sh
 SCRIPT
