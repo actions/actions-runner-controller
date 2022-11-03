@@ -11,6 +11,7 @@
   * [Runner coming up before network available](#runner-coming-up-before-network-available)
   * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
   * [Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns](#unable-to-scale-to-zero-with-totalnumberofqueuedandinprogressworkflowruns)
+  * [Slow / failure to boot dind sidecar (default runner)](#slow--failure-to-boot-dind-sidecar-default-runner)
 
 ## Tools
 
