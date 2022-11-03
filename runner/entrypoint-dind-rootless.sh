@@ -22,6 +22,17 @@ jq ".\"registry-mirrors\"[0] = \"${DOCKER_REGISTRY_MIRROR}\"" /home/runner/.conf
 fi
 SCRIPT
 
+if [ -d /home/runner/.local ]; then
+  if [ ! -d /home/runner/.local/share ]; then
+    log.notice "Creating /home/runner/.local/share owned by runner:runner \
+so that rootless dockerd will not fail with a permission error when creating /home/runner/.local/share/docker"
+
+    sudo mkdir /home/runner/.local/share
+    sudo chmod 755 /home/runner/.local/share
+    sudo chown runner:runner /home/runner/.local/share
+  fi
+fi
+
 log.notice "Starting Docker (rootless)"
 
 dumb-init bash <<'SCRIPT' &
