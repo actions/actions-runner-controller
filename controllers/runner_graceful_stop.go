@@ -110,9 +110,23 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		// Note: This logic is here to prevent a dead-lock between ARC and the PV provider.
 		//
 		// The author of this logic thinks that some (or all?) of CSI plugins and PV providers
-		// do not supported to provision dynamic PVs for a pod that is already marked for deletion.
+		// do not support provisioning dynamic PVs for a pod that is already marked for deletion.
 		// If we didn't handle this case here, ARC would end up with waiting forever until the
-		// PV provider to provision PVs for the pod, which seems to never happen.
+		// PV provider(s) provision PVs for the pod, which seems to never happen.
+		//
+		// For reference, the below is an eaxmple of pod.status that you might see when it happened:
+		// status:
+		//  conditions:
+		//  - lastProbeTime: null
+		//    lastTransitionTime: "2022-11-04T00:04:05Z"
+		//    message: 'binding rejected: running Bind plugin "DefaultBinder": Operation cannot
+		//      be fulfilled on pods/binding "org-runnerdeploy-xv2lg-pm6t2": pod org-runnerdeploy-xv2lg-pm6t2
+		//      is being deleted, cannot be assigned to a host'
+		//    reason: SchedulerError
+		//    status: "False"
+		//    type: PodScheduled
+		//  phase: Pending
+		//  qosClass: BestEffort
 		log.Info(
 			"Unregistration started before runner pod gets scheduled onto a node. "+
 				"Perhaps the runner is taking a long time due to e.g. slow CSI slugin not giving us a PV in a timely manner, or your Kubernetes cluster is overloaded? "+
