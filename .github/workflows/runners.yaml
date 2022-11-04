@@ -62,11 +62,6 @@ jobs:
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
-        # See below for why we need a temporary envvar for this conditional:
-        # https://stackoverflow.com/questions/70249519/how-to-check-if-a-secret-variable-is-empty-in-if-conditional-github-actions
-        env:
-          NECESSARY_ENVVARS: ${{ secrets.DOCKERHUB_USERNAME }}${{ secrets.DOCKER_ACCESS_TOKEN }}${{ secrets.GITHUB_TOKEN }}
-        if: "${{ env.NECESSARY_ENVVARS != '' }}"
 
       - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v3
