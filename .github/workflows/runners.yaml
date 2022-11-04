@@ -62,6 +62,7 @@ jobs:
           password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
 
       - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v3
