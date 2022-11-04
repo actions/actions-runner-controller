@@ -379,6 +379,7 @@ type env struct {
 	runnerGracefulStopTimeout                   string
 	runnerTerminationGracePeriodSeconds         string
 	runnerNamespace                             string
+	logFormat                                   string
 	remoteKubeconfig                            string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
@@ -511,6 +512,7 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.runnerTerminationGracePeriodSeconds = testing.Getenv(t, "TEST_RUNNER_TERMINATION_GRACE_PERIOD_SECONDS", "30")
 	e.runnerGracefulStopTimeout = testing.Getenv(t, "TEST_RUNNER_GRACEFUL_STOP_TIMEOUT", "15")
 	e.runnerNamespace = testing.Getenv(t, "TEST_RUNNER_NAMESPACE", "default")
+	e.logFormat = testing.Getenv(t, "ARC_E2E_LOG_FORMAT", "")
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
 	e.vars = vars
@@ -703,6 +705,12 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 		varEnv = append(varEnv,
 			"ACCEPTANCE_TEST_SECRET_TYPE=token",
 			"GITHUB_TOKEN="+e.githubToken,
+		)
+	}
+
+	if e.logFormat != "" {
+		varEnv = append(varEnv,
+			"LOG_FORMAT="+e.logFormat,
 		)
 	}
 
