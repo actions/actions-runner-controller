@@ -1578,6 +1578,8 @@ spec:
         - name: DISABLE_WAIT_FOR_DOCKER
           value: "true"
         # Disables automatic runner updates
+        # WARNING : Upon a new version of the actions/runner software being released 
+        # GitHub stop allocating jobs to runners on old versions after 30 days.
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
 ```
