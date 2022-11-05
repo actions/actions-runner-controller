@@ -1595,11 +1595,11 @@ spec:
       dockerdWithinRunnerContainer: true
       image: summerwind/actions-runner-dind
       env:
-        # Sets the default-address-pools field of dockerd daemon.json
-        # to "172.17.0.0/24".
+        # Sets the respective default-address-pools fields within dockerd daemon.json
         # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1971 for more information.
+        # Also see https://github.com/docker/docs/issues/8663 for the default base/size values in dockerd.
         - name: DOCKER_DEFAULT_ADDRESS_POOL_BASE
-          value: "172.17.0.0"
+          value: "172.17.0.0/12"
         - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
           value: "24"
 ```
