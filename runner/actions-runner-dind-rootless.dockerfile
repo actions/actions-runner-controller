@@ -77,7 +77,7 @@ ENV RUNNER_ASSETS_DIR=/runnertmp
 # Runner download supports amd64 as x64
 RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && export ARCH \
-    && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
     && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
