@@ -46,10 +46,9 @@ RUN apt update -y \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
 
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && if [ "$ARCH" = "amd64" ]; then export ARCH=x86_64 ; fi \
     && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/local/bin/dumb-init
 
@@ -57,7 +56,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 RUN set -vx; \
     export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && if [ "$ARCH" = "amd64" ]; then export ARCH=x86_64 ; fi \
     && curl -f -L -o docker.tgz https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz \
     && tar zxvf docker.tgz \
     && install -o root -g root -m 755 docker/docker /usr/bin/docker \
@@ -94,7 +93,7 @@ RUN set -vx; \
 # to avoid rerunning apt-update on its own.
 ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
+    && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
     # Comment-out the below curl invocation when you use your own build of actions/runner

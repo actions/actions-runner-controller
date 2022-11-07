@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 # Target architecture
-ARG TARGETPLATFORM=linux/amd64
+ARG TARGETPLATFORM
 
 # GitHub runner arguments
 ARG RUNNER_VERSION=2.299.1
@@ -95,10 +95,9 @@ RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
 
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && if [ "$ARCH" = "amd64" ]; then export ARCH=x86_64 ; fi \
     && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/local/bin/dumb-init
 
