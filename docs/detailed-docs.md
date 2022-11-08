@@ -797,7 +797,7 @@ $ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
 
-Now we need to expose this service so that GitHub can send these webhooks over the network with TSL protection.
+Now we need to expose this service so that GitHub can send these webhooks over the network with TLS protection.
 
 You can do it in any way you prefer, here we'll suggest doing it with a k8s Ingress.
 For the sake of this example we'll expose this service on the following URL:
