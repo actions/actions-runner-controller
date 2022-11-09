@@ -859,6 +859,8 @@ if you followed the example ingress above the URL would be something like this:
 
 > Remember to replace `your.domain.com` with your own domain.
 
+Then click on "Content type" and choose `application/json`.
+
 Then click on "let me select individual events" and choose `Workflow Jobs`.
 
 Then click on `Add Webhook`.
