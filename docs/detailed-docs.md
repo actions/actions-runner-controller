@@ -1583,6 +1583,10 @@ spec:
         # actions/runner software after 30 days.
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
+        # Disables debug logging in runner containers
+        # See also https://github.com/actions-runner-controller/actions-runner-controller/issues/1939
+        - name: LOG_DEBUG_DISABLED
+          value: "yes"
 ```
 
 There are a few advanced envvars also that are available only for dind runners:

@@ -65,7 +65,11 @@ __log() {
 #     "log.$level" message
 #
 # @formatter:off
-log.debug   () { __log 37 "$@"; } # white
+if [ "$LOG_DEBUG_DISABLED" != "" ]; then
+log.debug   () { : ; }
+else
+log.debug   () { __log 37 "$@"; } # whit
+fi
 log.notice  () { __log 34 "$@"; } # blue
 log.warning () { __log 33 "$@"; } # yellow
 log.error   () { __log 31 "$@"; } # red

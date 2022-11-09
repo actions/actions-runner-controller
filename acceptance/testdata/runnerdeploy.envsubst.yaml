@@ -69,6 +69,9 @@ spec:
         value: "${ROLLING_UPDATE_PHASE}"
       - name: ARC_DOCKER_MTU_PROPAGATION
         value: "true"
+      # https://github.com/actions-runner-controller/actions-runner-controller/issues/1939
+      # - name: LOG_DEBUG_DISABLED
+      #   value: "yes"
       # https://github.com/docker/docs/issues/8663
       - name: DOCKER_DEFAULT_ADDRESS_POOL_BASE
         value: "172.17.0.0/12"
