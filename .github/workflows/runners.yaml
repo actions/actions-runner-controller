@@ -115,9 +115,9 @@ jobs:
           cd runner
           docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -t ${{ matrix.name }} -f ${{ matrix.name }}.dockerfile .
       - name: Tag and Push
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         shell: bash
         run: |
-          set -x
           tags=( \
             "${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}" \
             "${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ env.sha_short }}" \
@@ -129,5 +129,5 @@ jobs:
 
           for tag in "${tags[@]}" ; do
             docker tag ${{ matrix.name }}:latest "$tag"
-            #docker push "$tag"
+            docker push "$tag"
           done
