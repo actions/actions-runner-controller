@@ -73,3 +73,6 @@ docker-build-windows:
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  -f actions-runner-windows.dockerfile \
 	  -t ${WIN_RUNNER_NAME}:${TAG} .
+
+docker-push-windows:
+	${DOCKER} push ${WIN_RUNNER_NAME}:${TAG}
