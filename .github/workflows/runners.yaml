@@ -85,14 +85,18 @@ jobs:
           cache-to: type=gha,mode=max,scope=build-${{ matrix.name }}
 
   build-runners-win2019:
+    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
     runs-on: windows-2019
     permissions:
       packages: write
       contents: read
-    env:
-      name: actions-runner-windows
-      os-name: win
-      os-version: 2019
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: actions-runner-windows
+            os-name: win
+            os-version: 2019
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -106,21 +110,23 @@ jobs:
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
           platform: windows
       - name: Build
+        shell: bash
         run: |
           cd runner
-          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -t ${{ env.name }} -f ${{ env.name }}.dockerfile .
+          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -t ${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }} -f ${{ matrix.name }}.dockerfile .
       - name: Tag and Push
+        shell: bash
         run: |
-          tags=(
-            "${{ env.DOCKERHUB_USERNAME }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}"
-            "${{ env.DOCKERHUB_USERNAME }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}-${{ steps.vars.outputs.sha_short }}"
-            "${{ env.DOCKERHUB_USERNAME }}/${{ env.name }}:latest"
-            "ghcr.io/${{ github.repository }}/${{ env.name }}:latest"
-            "ghcr.io/${{ github.repository }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}"
-            "ghcr.io/${{ github.repository }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}-${{ steps.vars.outputs.sha_short }}"
+          tags=( \
+            "${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}" \
+            "${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}" \
+            "${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest" \
+            "ghcr.io/${{ github.repository }}/${{ matrix.name }}:latest" \
+            "ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}" \
+            "ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ steps.vars.outputs.sha_short }}" \
           )
 
           for tag in "${tags[@]}" ; do
-            docker tag ${{ env.name }}:latest "$tag"
+            docker tag ${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}:latest "$tag"
             #docker push "$tag"
           done
