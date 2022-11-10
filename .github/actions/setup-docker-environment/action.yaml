@@ -13,6 +13,10 @@ inputs:
   ghcr_password:
     description: "GHCR password. Usually set from the secrets.GITHUB_TOKEN variable"
     required: true
+  platform:
+    description: "Platform (either linux or windows)."
+    default: linux
+    required: false
 
 runs:
   using: "composite"
@@ -24,9 +28,11 @@ runs:
       shell: bash
 
     - name: Set up QEMU
+      if: inputs.platform == 'linux'
       uses: docker/setup-qemu-action@v2
 
     - name: Set up Docker Buildx
+      if: inputs.platform == 'linux'
       uses: docker/setup-buildx-action@v2
       with:
         version: latest
