@@ -160,9 +160,6 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: func() *bool { v := false; return &v }(),
-					},
 				},
 				{
 					Name:  "docker",
@@ -366,9 +363,6 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: boolPtr(false),
-					},
 				},
 			},
 			RestartPolicy: corev1.RestartPolicyNever,
@@ -690,9 +684,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: func() *bool { v := false; return &v }(),
-					},
 				},
 				{
 					Name:  "docker",
@@ -930,9 +921,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: boolPtr(false),
-					},
 				},
 			},
 			RestartPolicy: corev1.RestartPolicyNever,

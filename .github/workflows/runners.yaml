@@ -104,4 +104,4 @@ jobs:
       - name: Docker Build
         run: |
           cd runner
-          docker build --build-arg RUNNER_VEDRSION=${{ env.RUNNER_VERSION }} -f actions-runner-windows.dockerfile .
+          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -f actions-runner-windows.dockerfile .
