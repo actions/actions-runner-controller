@@ -83,3 +83,24 @@ jobs:
             ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ env.sha_short }}
           cache-from: type=gha,scope=build-${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.name }}
+
+  build-windows-runners:
+    runs-on: windows-2019
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Docker Environment
+        id: vars
+        uses: ./.github/actions/setup-docker-environment
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+          ghcr_username: ${{ github.actor }}
+          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker Build
+        run: |
+          cd runner
+          docker build --build-arg RUNNER_VEDRSION=${{ env.RUNNER_VERSION }} -f actions-runner-windows.dockerfile .
