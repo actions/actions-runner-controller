@@ -63,6 +63,7 @@ docker-build-ubuntu: check-target-platform
 docker-push-ubuntu:
 	${DOCKER} push ${NAME}:${TAG}
 	${DOCKER} push ${DIND_RUNNER_NAME}:${TAG}
+	${DOCKER} push ${DIND_ROOTLESS_RUNNER_NAME}:${TAG}
 
 docker-buildx-ubuntu:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
