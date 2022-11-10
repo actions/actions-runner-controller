@@ -84,11 +84,15 @@ jobs:
           cache-from: type=gha,scope=build-${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.name }}
 
-  build-windows-runners:
+  build-runners-win2019:
     runs-on: windows-2019
     permissions:
       packages: write
       contents: read
+    env:
+      name: actions-runner-windows
+      os-name: win
+      os-version: 2019
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -101,7 +105,22 @@ jobs:
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
           platform: windows
-      - name: Docker Build
+      - name: Build
         run: |
           cd runner
-          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -f actions-runner-windows.dockerfile .
+          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -t ${{ env.name }} -f ${{ env.name }}.dockerfile .
+      - name: Tag and Push
+        run: |
+          tags=(
+            "${{ env.DOCKERHUB_USERNAME }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}"
+            "${{ env.DOCKERHUB_USERNAME }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}-${{ steps.vars.outputs.sha_short }}"
+            "${{ env.DOCKERHUB_USERNAME }}/${{ env.name }}:latest"
+            "ghcr.io/${{ github.repository }}/${{ env.name }}:latest"
+            "ghcr.io/${{ github.repository }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}"
+            "ghcr.io/${{ github.repository }}/${{ env.name }}:v${{ env.RUNNER_VERSION }}-${{ env.os-name }}-${{ env.os-version }}-${{ steps.vars.outputs.sha_short }}"
+          )
+
+          for tag in "${tags[@]}" ; do
+            docker tag ${{ env.name }}:latest "$tag"
+            #docker push "$tag"
+          done
