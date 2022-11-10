@@ -886,7 +886,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	// Runner need to run privileged if it contains DinD.
 	// Do not explicitly set SecurityContext.Privileged to false which is default,
 	// otherwise Windows pods don't get admitted on GKE.
-	if dockerdInRunnerPrivileged == true {
+	if dockerdInRunnerPrivileged {
 		runnerContainer.SecurityContext.Privileged = &dockerdInRunnerPrivileged
 	}
 
