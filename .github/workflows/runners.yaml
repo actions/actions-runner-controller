@@ -113,7 +113,7 @@ jobs:
         shell: bash
         run: |
           cd runner
-          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -t ${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }} -f ${{ matrix.name }}.dockerfile .
+          docker build --build-arg RUNNER_VERSION=${{ env.RUNNER_VERSION }} -t ${{ matrix.name }} -f ${{ matrix.name }}.dockerfile .
       - name: Tag and Push
         shell: bash
         run: |
@@ -127,6 +127,6 @@ jobs:
           )
 
           for tag in "${tags[@]}" ; do
-            docker tag ${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}:latest "$tag"
+            docker tag ${{ matrix.name }}:latest "$tag"
             #docker push "$tag"
           done
