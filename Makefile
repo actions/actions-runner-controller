@@ -36,6 +36,17 @@ TOOLS_PATH=$(PWD)/.tools
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 
+# The etcd packages that coreos maintain use different extensions for each *nix OS on their github release page.
+# ETCD_EXTENSION: the storage format file extension listed on the release page.
+# EXTRACT_COMMAND: the  appropriate CLI command for extracting this file format.
+ifeq ($(OS_NAME), darwin)
+ETCD_EXTENSION:=zip
+EXTRACT_COMMAND:=unzip
+else
+ETCD_EXTENSION:=tar.gz
+EXTRACT_COMMAND:=tar -xzf
+endif
+
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
 	export PLATFORMS="linux/amd64,linux/arm64"
@@ -287,9 +298,9 @@ ifeq (, $(wildcard $(TEST_ASSETS)/etcd))
 	set -xe ;\
 	INSTALL_TMP_DIR=$$(mktemp -d) ;\
 	cd $$INSTALL_TMP_DIR ;\
-	wget https://github.com/coreos/etcd/releases/download/v3.4.22/etcd-v3.4.22-$(OS_NAME)-amd64.zip;\
+	wget https://github.com/coreos/etcd/releases/download/v3.4.22/etcd-v3.4.22-$(OS_NAME)-amd64.$(ETCD_EXTENSION);\
 	mkdir -p $(TEST_ASSETS) ;\
-	unzip etcd-v3.4.22-$(OS_NAME)-amd64.zip ;\
+	$(EXTRACT_COMMAND) etcd-v3.4.22-$(OS_NAME)-amd64.$(ETCD_EXTENSION) ;\
 	mv etcd-v3.4.22-$(OS_NAME)-amd64/etcd $(TEST_ASSETS)/etcd ;\
 	rm -rf $$INSTALL_TMP_DIR ;\
 	}
