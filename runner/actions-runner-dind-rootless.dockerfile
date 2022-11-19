@@ -131,12 +131,12 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 USER runner
 
 # This will install docker under $HOME/bin according to the content of the script
-RUN export SKIP_IPTABLES=1 curl -fsSL https://get.docker.com/rootless | sh
+RUN export SKIP_IPTABLES=1 \
+    && curl -fsSL https://get.docker.com/rootless | sh
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && mkdir -p /home/runner/bin \
     && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
     && chmod +x /home/runner/bin/docker-compose
 
