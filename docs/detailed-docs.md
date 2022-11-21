@@ -1576,7 +1576,7 @@ spec:
           value: "2"
         # Specify the duration to wait for the docker daemon to be available
         # The default duration of 120 seconds is sometimes too short
-        # to reliably qwait for the docker daemon.
+        # to reliably wait for the docker daemon to start
         # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1804
         - name: WAIT_FOR_DOCKER_SECONDS
           value: 120
