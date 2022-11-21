@@ -74,7 +74,6 @@ spec:
         value: "172.17.0.0/12"
       - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
         value: "24"
-      # https://github.com/actions-runner-controller/actions-runner-controller/issues/1830
       - name: WAIT_FOR_DOCKER_SECONDS
         value: "3"
 
