@@ -1,6 +1,7 @@
 DOCKER_USER ?= summerwind
 DOCKER ?= docker
 NAME ?= ${DOCKER_USER}/actions-runner
+WIN_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-windows
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
 TAG ?= latest
@@ -74,3 +75,13 @@ docker-buildx-ubuntu:
 	  -f actions-runner-dind.dockerfile \
 	  -t "${DIND_RUNNER_NAME}:${TAG}" \
 	  . ${PUSH_ARG}
+
+
+docker-build-windows:
+	${DOCKER} build \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  -f actions-runner-windows.dockerfile \
+	  -t ${WIN_RUNNER_NAME}:${TAG} .
+
+docker-push-windows:
+	${DOCKER} push ${WIN_RUNNER_NAME}:${TAG}
