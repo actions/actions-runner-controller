@@ -74,6 +74,8 @@ spec:
         value: "172.17.0.0/12"
       - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
         value: "24"
+      - name: WAIT_FOR_DOCKER_SECONDS
+        value: "3"
 
       dockerMTU: 1400
 
