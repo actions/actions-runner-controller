@@ -27,7 +27,6 @@ RUN apt-get update -y \
     sudo \
     unzip \
     zip \
-    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 # Runner user
