@@ -53,6 +53,10 @@ if [ "${tool}" == "helm" ]; then
   if [ "${CHART_VERSION}" != "" ]; then
     flags+=( --version ${CHART_VERSION})
   fi
+  if [ "${LOG_FORMAT}" != "" ]; then
+    flags+=( --set logFormat=${LOG_FORMAT})
+    flags+=( --set githubWebhookServer.logFormat=${LOG_FORMAT})
+  fi
 
   set -vx
 

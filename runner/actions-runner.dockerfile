@@ -52,7 +52,8 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && groupadd docker \
     && usermod -aG sudo runner \
     && usermod -aG docker runner \
-    && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers
+    && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers \
+    && echo "Defaults env_keep += \"DEBIAN_FRONTEND\"" >> /etc/sudoers
 
 ENV HOME=/home/runner
 

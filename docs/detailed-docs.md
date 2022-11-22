@@ -797,7 +797,7 @@ $ helm upgrade --install --namespace actions-runner-system --create-namespace \
 
 The command above will create a new deployment and a service for receiving Github Webhooks on the `actions-runner-system` namespace.
 
-Now we need to expose this service so that GitHub can send these webhooks over the network with TSL protection.
+Now we need to expose this service so that GitHub can send these webhooks over the network with TLS protection.
 
 You can do it in any way you prefer, here we'll suggest doing it with a k8s Ingress.
 For the sake of this example we'll expose this service on the following URL:
@@ -858,6 +858,8 @@ if you followed the example ingress above the URL would be something like this:
 - https://your.domain.com/actions-runner-controller-github-webhook-server
 
 > Remember to replace `your.domain.com` with your own domain.
+
+Then click on "Content type" and choose `application/json`.
 
 Then click on "let me select individual events" and choose `Workflow Jobs`.
 
@@ -1574,12 +1576,43 @@ spec:
         # Issues a sleep command at the start of the entrypoint
         - name: STARTUP_DELAY_IN_SECONDS
           value: "2"
+        # Specify the duration to wait for the docker daemon to be available
+        # The default duration of 120 seconds is sometimes too short
+        # to reliably wait for the docker daemon to start
+        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1804
+        - name: WAIT_FOR_DOCKER_SECONDS
+          value: 120
         # Disables the wait for the docker daemon to be available check
         - name: DISABLE_WAIT_FOR_DOCKER
           value: "true"
         # Disables automatic runner updates
+        # WARNING : Upon a new version of the actions/runner software being released 
+        # GitHub stops allocating jobs to runners on the previous version of the
+        # actions/runner software after 30 days.
         - name: DISABLE_RUNNER_UPDATE
           value: "true"
+```
+
+There are a few advanced envvars also that are available only for dind runners:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      dockerdWithinRunnerContainer: true
+      image: summerwind/actions-runner-dind
+      env:
+        # Sets the respective default-address-pools fields within dockerd daemon.json
+        # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1971 for more information.
+        # Also see https://github.com/docker/docs/issues/8663 for the default base/size values in dockerd.
+        - name: DOCKER_DEFAULT_ADDRESS_POOL_BASE
+          value: "172.17.0.0/12"
+        - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
+          value: "24"
 ```
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
@@ -1675,7 +1708,7 @@ Set the Helm chart values as follows:
 
 ```shell
 $ CA_BUNDLE=$(cat path/to/ca.pem | base64)
-$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+$ helm upgrade --install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
@@ -1685,7 +1718,7 @@ $ helm --upgrade install actions-runner-controller/actions-runner-controller \
 Set the Helm chart values as follows:
 
 ```shell
-$ helm --upgrade install actions-runner-controller/actions-runner-controller \
+$ helm upgrade --install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false
 ```
 

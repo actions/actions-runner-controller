@@ -31,6 +31,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/exec"
@@ -41,8 +42,7 @@ import (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme = runtime.NewScheme()
 )
 
 const (
@@ -71,6 +71,7 @@ func main() {
 
 		logLevel   string
 		queueLimit int
+		logFormat  string
 
 		ghClient *github.Client
 	)
@@ -99,25 +100,31 @@ func main() {
 	flag.StringVar(&c.BasicauthUsername, "github-basicauth-username", c.BasicauthUsername, "Username for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
+	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
 
 	flag.Parse()
 
+	logger, err := logging.NewLogger(logLevel, logFormat)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: creating logger: %v\n", err)
+		os.Exit(1)
+	}
+	logger.WithName("setup")
+
 	if webhookSecretToken == "" && webhookSecretTokenEnv != "" {
-		setupLog.Info(fmt.Sprintf("Using the value from %s for -github-webhook-secret-token", webhookSecretTokenEnvName))
+		logger.Info(fmt.Sprintf("Using the value from %s for -github-webhook-secret-token", webhookSecretTokenEnvName))
 		webhookSecretToken = webhookSecretTokenEnv
 	}
 
 	if webhookSecretToken == "" {
-		setupLog.Info(fmt.Sprintf("-github-webhook-secret-token and %s are missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks and specify it via the flag or the envvar", webhookSecretTokenEnvName))
+		logger.Info(fmt.Sprintf("-github-webhook-secret-token and %s are missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks and specify it via the flag or the envvar", webhookSecretTokenEnvName))
 	}
 
 	if watchNamespace == "" {
-		setupLog.Info("-watch-namespace is empty. HorizontalRunnerAutoscalers in all the namespaces are watched, cached, and considered as scale targets.")
+		logger.Info("-watch-namespace is empty. HorizontalRunnerAutoscalers in all the namespaces are watched, cached, and considered as scale targets.")
 	} else {
-		setupLog.Info("-watch-namespace is %q. Only HorizontalRunnerAutoscalers in %q are watched, cached, and considered as scale targets.")
+		logger.Info("-watch-namespace is %q. Only HorizontalRunnerAutoscalers in %q are watched, cached, and considered as scale targets.")
 	}
-
-	logger := logging.NewLogger(logLevel)
 
 	ctrl.SetLogger(logger)
 
@@ -132,11 +139,11 @@ func main() {
 		ghClient, err = c.NewClient()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)
-			setupLog.Error(err, "unable to create controller", "controller", "Runner")
+			logger.Error(err, "unable to create controller", "controller", "Runner")
 			os.Exit(1)
 		}
 	} else {
-		setupLog.Info("GitHub client is not initialized. Runner groups with custom visibility are not supported. If needed, please provide GitHub authentication. This will incur in extra GitHub API calls")
+		logger.Info("GitHub client is not initialized. Runner groups with custom visibility are not supported. If needed, please provide GitHub authentication. This will incur in extra GitHub API calls")
 	}
 
 	syncPeriod := 10 * time.Minute
@@ -148,7 +155,7 @@ func main() {
 		Port:               9443,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		logger.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
@@ -165,7 +172,7 @@ func main() {
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "webhookbasedautoscaler")
+		logger.Error(err, "unable to create controller", "controller", "webhookbasedautoscaler")
 		os.Exit(1)
 	}
 
@@ -178,9 +185,9 @@ func main() {
 		defer cancel()
 		defer wg.Done()
 
-		setupLog.Info("starting webhook server")
+		logger.Info("starting webhook server")
 		if err := mgr.Start(ctx); err != nil {
-			setupLog.Error(err, "problem running manager")
+			logger.Error(err, "problem running manager")
 			os.Exit(1)
 		}
 	}()
@@ -206,7 +213,7 @@ func main() {
 
 		if err := srv.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
-				setupLog.Error(err, "problem running http server")
+				logger.Error(err, "problem running http server")
 			}
 		}
 	}()
