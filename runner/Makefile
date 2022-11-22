@@ -2,6 +2,7 @@ DOCKER_USER ?= summerwind
 DOCKER ?= docker
 NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
+DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
 TAG ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
@@ -40,10 +41,18 @@ docker-build-ubuntu:
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.dockerfile \
 	  -t ${DIND_RUNNER_NAME}:${TAG} .
+	${DOCKER} build \
+	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
+	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+	  -f actions-runner-dind-rootless.dockerfile \
+	  -t ${DIND_ROOTLESS_RUNNER_NAME}:${TAG} .
 
 docker-push-ubuntu:
 	${DOCKER} push ${NAME}:${TAG}
 	${DOCKER} push ${DIND_RUNNER_NAME}:${TAG}
+	${DOCKER} push ${DIND_ROOTLESS_RUNNER_NAME}:${TAG}
 
 docker-buildx-ubuntu:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\

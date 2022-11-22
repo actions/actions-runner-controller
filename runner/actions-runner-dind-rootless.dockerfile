@@ -1,24 +1,19 @@
 FROM ubuntu:20.04
 
-# Target architecture
-ARG TARGETPLATFORM=linux/amd64
-
-# GitHub runner arguments
+ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.299.1
-
+ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
-ARG COMPOSE_VERSION=v2.6.0
-
-# Dumb-init version
+ARG DOCKER_COMPOSE_VERSION=v2.6.0
 ARG DUMB_INIT_VERSION=1.2.5
 
 # Other arguments
 ARG DEBUG=false
 
-# Set environment variables needed at build
-ENV DEBIAN_FRONTEND=noninteractive
+RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y \
     && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
@@ -63,57 +58,63 @@ RUN apt update -y \
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid 1000 runner
 
-RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
+ENV HOME=/home/runner
 
-# Setup subuid and subgid so that "--userns-remap=default" works
+# Set-up subuid and subgid so that "--userns-remap=default" works
 RUN set -eux; \
     addgroup --system dockremap; \
     adduser --system --ingroup dockremap dockremap; \
     echo 'dockremap:165536:65536' >> /etc/subuid; \
     echo 'dockremap:165536:65536' >> /etc/subgid
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
-
-# Runner download supports amd64 as x64
-RUN ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && export ARCH \
-    && if [ "$ARCH" = "amd64" ]; then export ARCH=x64 ; fi \
-    && mkdir -p "$RUNNER_ASSETS_DIR" \
-    && cd "$RUNNER_ASSETS_DIR" \
-    && curl -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
-    && tar xzf ./runner.tar.gz \
-    && rm runner.tar.gz \
-    && ./bin/installdependencies.sh \
-    && apt-get install -y libyaml-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN echo AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache > /runner.env \
-    && mkdir /opt/hostedtoolcache \
-    && chgrp runner /opt/hostedtoolcache \
-    && chmod g+rwx /opt/hostedtoolcache
-
-# Configure hooks folder structure.
-COPY hooks /etc/arc/hooks/
-
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
-    && chmod +x /usr/local/bin/dumb-init
+    && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
+    && chmod +x /usr/bin/dumb-init
 
+ENV RUNNER_ASSETS_DIR=/runnertmp
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
+    && mkdir -p "$RUNNER_ASSETS_DIR" \
+    && cd "$RUNNER_ASSETS_DIR" \
+    && curl -fLo runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
+    && tar xzf ./runner.tar.gz \
+    && rm runner.tar.gz \
+    && ./bin/installdependencies.sh \
+    && mv ./externals ./externalstmp \
+    # libyaml-dev is required for ruby/setup-ruby action.
+    # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
+    # to avoid rerunning apt-update on its own.
+    && apt-get install -y libyaml-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
+RUN mkdir /opt/hostedtoolcache \
+    && chgrp runner /opt/hostedtoolcache \
+    && chmod g+rwx /opt/hostedtoolcache
+
+RUN cd "$RUNNER_ASSETS_DIR" \
+    && curl -fLo runner-container-hooks.zip https://github.com/actions/runner-container-hooks/releases/download/v${RUNNER_CONTAINER_HOOKS_VERSION}/actions-runner-hooks-k8s-${RUNNER_CONTAINER_HOOKS_VERSION}.zip \
+    && unzip ./runner-container-hooks.zip -d ./k8s \
+    && rm -f runner-container-hooks.zip
+
+# Make the rootless runner directory executable
+RUN mkdir /run/user/1000 \
+    && chown runner:runner /run/user/1000 \
+    && chmod a+x /run/user/1000
+
+# We place the scripts in `/usr/bin` so that users who extend this image can
+# override them with scripts of the same name placed in `/usr/local/bin`.
 COPY entrypoint-dind-rootless.sh startup.sh logger.sh graceful-stop.sh update-status /usr/bin/
-
 RUN chmod +x /usr/bin/entrypoint-dind-rootless.sh /usr/bin/startup.sh
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
 # to replace the docker binary in the PATH.
 COPY docker-shim.sh /usr/local/bin/docker
 
-# Make the rootless runner directory executable
-RUN mkdir /run/user/1000 \
-    && chown runner:runner /run/user/1000 \
-    && chmod a+x /run/user/1000
+# Configure hooks folder structure.
+COPY hooks /etc/arc/hooks/
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin:/home/runner/bin"
@@ -126,19 +127,18 @@ RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "DOCKER_HOST=${DOCKER_HOST}" >> /etc/environment \
     && echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >> /etc/environment
 
-ENV HOME=/home/runner
-
 # No group definition, as that makes it harder to run docker.
 USER runner
 
-# Docker installation
-ENV SKIP_IPTABLES=1
 # This will install docker under $HOME/bin according to the content of the script
-RUN curl -fsSL https://get.docker.com/rootless | sh
+RUN export SKIP_IPTABLES=1 \
+    && curl -fsSL https://get.docker.com/rootless | sh
 
-# Docker-compose installation
-RUN curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-Linux-x86_64" -o /home/runner/bin/docker-compose ; \
-    chmod +x /home/runner/bin/docker-compose
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["entrypoint-dind-rootless.sh"]
