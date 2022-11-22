@@ -2,8 +2,11 @@ FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.299.1
-ARG DOCKER_CHANNEL=stable
+ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
+# Docker and Docker Compose arguments
+ARG CHANNEL=stable
 ARG DOCKER_VERSION=20.10.18
+ARG DOCKER_COMPOSE_VERSION=v2.6.0
 ARG DUMB_INIT_VERSION=1.2.5
 
 RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
@@ -57,39 +60,26 @@ RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && echo "%sudo   ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers \
     && echo "Defaults env_keep += \"DEBIAN_FRONTEND\"" >> /etc/sudoers
 
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
-# Docker download supports arm64 as aarch64 & amd64 / i386 as x86_64
+ENV HOME=/home/runner
+
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-	&& if ! curl -f -L -o docker.tgz "https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; then \
-		echo >&2 "error: failed to download 'docker-${DOCKER_VERSION}' from '${DOCKER_CHANNEL}' for '${ARCH}'"; \
-		exit 1; \
-	fi; \
-    echo "Downloaded Docker from https://download.docker.com/linux/static/${DOCKER_CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz"; \
-	tar --extract \
-		--file docker.tgz \
-		--strip-components 1 \
-		--directory /usr/bin/ \
-	; \
-	rm docker.tgz; \
-	dockerd --version; \
-	docker --version
+    && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
+    && chmod +x /usr/bin/dumb-init
 
-# Runner download supports amd64 as x64
-#
-# libyaml-dev is required for ruby/setup-ruby action.
-# It is installed after installdependencies.sh and before removing /var/lib/apt/lists
-# to avoid rerunning apt-update on its own.
 ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
     && cd "$RUNNER_ASSETS_DIR" \
-    && curl -f -L -o runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
+    && curl -fLo runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
-    && rm runner.tar.gz \
+    && rm -f runner.tar.gz \
     && ./bin/installdependencies.sh \
+    # libyaml-dev is required for ruby/setup-ruby action.
+    # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
+    # to avoid rerunning apt-update on its own.
     && apt-get install -y libyaml-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -97,6 +87,26 @@ ENV RUNNER_TOOL_CACHE=/opt/hostedtoolcache
 RUN mkdir /opt/hostedtoolcache \
     && chgrp docker /opt/hostedtoolcache \
     && chmod g+rwx /opt/hostedtoolcache
+
+RUN cd "$RUNNER_ASSETS_DIR" \
+    && curl -fLo runner-container-hooks.zip https://github.com/actions/runner-container-hooks/releases/download/v${RUNNER_CONTAINER_HOOKS_VERSION}/actions-runner-hooks-k8s-${RUNNER_CONTAINER_HOOKS_VERSION}.zip \
+    && unzip ./runner-container-hooks.zip -d ./k8s \
+    && rm -f runner-container-hooks.zip
+
+RUN set -vx; \
+    export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && curl -fLo docker.tgz https://download.docker.com/linux/static/${CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz \
+    && tar zxvf docker.tgz \
+    && install -o root -g root -m 755 docker/* /usr/bin/ \
+    && rm -rf docker docker.tgz
+
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && curl -fLo /usr/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /usr/bin/docker-compose
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
@@ -111,16 +121,8 @@ COPY docker-shim.sh /usr/local/bin/docker
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
 
-# arch command on OS X reports "i386" for Intel CPUs regardless of bitness
-RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -f -L -o /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
-    && chmod +x /usr/local/bin/dumb-init
-
 VOLUME /var/lib/docker
 
-ENV HOME=/home/runner
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin"
 ENV ImageOS=ubuntu20
