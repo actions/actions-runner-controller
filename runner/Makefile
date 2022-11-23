@@ -1,9 +1,10 @@
 DOCKER_USER ?= summerwind
 DOCKER ?= docker
-NAME ?= ${DOCKER_USER}/actions-runner
-DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
-DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
-TAG ?= latest
+RUNNER_ROOT_NAME ?= ${DOCKER_USER}/actions-runner
+DIND_RUNNER_ROOT_NAME ?= ${DOCKER_USER}/actions-runner-dind
+DIND_ROOTLESS_RUNNER_ROOT_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
+TAG_SUFFIX ?= latest
+OS_IMAGE ?= ubuntu-20.04
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.299.1
@@ -33,26 +34,26 @@ docker-build-ubuntu:
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner.dockerfile \
-	  -t ${NAME}:${TAG} .
+	  -f actions-runner.${OS_IMAGE}.dockerfile \
+	  -t ${RUNNER_ROOT_NAME}:${OS_IMAGE}-${TAG_SUFFIX} .
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner-dind.dockerfile \
-	  -t ${DIND_RUNNER_NAME}:${TAG} .
+	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
+	  -t ${DIND_RUNNER_ROOT_NAME}:${OS_IMAGE}-${TAG_SUFFIX} .
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner-dind-rootless.dockerfile \
-	  -t ${DIND_ROOTLESS_RUNNER_NAME}:${TAG} .
+	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
+	  -t "${DIND_ROOTLESS_RUNNER_ROOT_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" .
 
 docker-push-ubuntu:
-	${DOCKER} push ${NAME}:${TAG}
-	${DOCKER} push ${DIND_RUNNER_NAME}:${TAG}
-	${DOCKER} push ${DIND_ROOTLESS_RUNNER_NAME}:${TAG}
+	${DOCKER} push "${RUNNER_ROOT_NAME}:${OS_IMAGE}-${TAG_SUFFIX}"
+	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}"
+	${DOCKER} push "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}"
 
 docker-buildx-ubuntu:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
@@ -64,13 +65,20 @@ docker-buildx-ubuntu:
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner.dockerfile \
-	  -t "${NAME}:${TAG}" \
+	  -f actions-runner.${OS_IMAGE}.dockerfile \
+	  -t "${RUNNER_ROOT_NAME}:${TAG_SUFFIXAG}" \
 	  . ${PUSH_ARG}
 	${DOCKER} buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-	  -f actions-runner-dind.dockerfile \
-	  -t "${DIND_RUNNER_NAME}:${TAG}" \
+	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
+	  -t "${DIND_RUNNER_NAME}:${TAG_SUFFIX}" \
+	  . ${PUSH_ARG}
+	${DOCKER} buildx build --platform ${PLATFORMS} \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
+	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
+	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
 	  . ${PUSH_ARG}
