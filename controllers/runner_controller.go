@@ -207,8 +207,34 @@ func runnerPodOrContainerIsStopped(pod *corev1.Pod) bool {
 
 				if status.State.Terminated != nil {
 					stopped = true
+					break
 				}
 			}
+		}
+
+		if pod.DeletionTimestamp != nil && !pod.DeletionTimestamp.IsZero() && len(pod.Status.ContainerStatuses) == 0 {
+			// This falls into cases where the pod is stuck with pod status like the below:
+			//
+			//   status:
+			//     conditions:
+			//     - lastProbeTime: null
+			//       lastTransitionTime: "2022-11-20T07:58:05Z"
+			//       message: 'binding rejected: running Bind plugin "DefaultBinder": Operation cannot
+			//         be fulfilled on pods/binding "org-runnerdeploy-l579v-qx5p2": pod org-runnerdeploy-l579v-qx5p2
+			//         is being deleted, cannot be assigned to a host'
+			//       reason: SchedulerError
+			//       status: "False"
+			//       type: PodScheduled
+			//     phase: Pending
+			//     qosClass: BestEffort
+			//
+			// ARC usually waits for the registration timeout to elapse when the pod is terminated before getting scheduled onto a node,
+			// assuming there can be a race condition between ARC and Kubernetes where Kubernetes schedules the pod while ARC is deleting the pod,
+			// which may end up with non-gracefully terminating the runner.
+			//
+			// However, Kubernetes seems to not schedule the pod after observing status like the above.
+			// This if-block is therefore needed to prevent ARC from unnecessarily waiting for the registration timeout to happen.
+			stopped = true
 		}
 	}
 
