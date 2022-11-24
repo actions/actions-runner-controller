@@ -1573,6 +1573,17 @@ spec:
   template:
     spec:
       env:
+        # Disable various runner entrypoint log levels 
+        - name: LOG_DEBUG_DISABLED
+          value: "true"
+        - name: LOG_NOTICE_DISABLED
+          value: "true"
+        - name: LOG_WARNING_DISABLED
+          value: "true"
+        - name: LOG_ERROR_DISABLED
+          value: "true"
+        - name: LOG_SUCCESS_DISABLED
+          value: "true"
         # Issues a sleep command at the start of the entrypoint
         - name: STARTUP_DELAY_IN_SECONDS
           value: "2"
