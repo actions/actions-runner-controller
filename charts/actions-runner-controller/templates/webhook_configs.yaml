@@ -53,7 +53,7 @@ webhooks:
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
-    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
     {{- else if not .Values.certManagerEnabled }}
     caBundle: {{ $ca.Cert | b64enc | quote }}
     {{- end }}
@@ -83,7 +83,7 @@ webhooks:
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
-    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
     {{- else if not .Values.certManagerEnabled }}
     caBundle: {{ $ca.Cert | b64enc | quote }}
     {{- end }}
@@ -113,7 +113,7 @@ webhooks:
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
-    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
     {{- else if not .Values.certManagerEnabled }}
     caBundle: {{ $ca.Cert | b64enc | quote }}
     {{- end }}
@@ -156,7 +156,7 @@ webhooks:
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
-    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
     {{- else if not .Values.certManagerEnabled }}
     caBundle: {{ $ca.Cert | b64enc | quote }}
     {{- end }}
@@ -186,7 +186,7 @@ webhooks:
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
-    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
     {{- else if not .Values.certManagerEnabled }}
     caBundle: {{ $ca.Cert | b64enc | quote }}
     {{- end }}
@@ -216,7 +216,7 @@ webhooks:
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
-    caBundle: {{ .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
     {{- else if not .Values.certManagerEnabled }}
     caBundle: {{ $ca.Cert | b64enc | quote }}
     {{- end }}
