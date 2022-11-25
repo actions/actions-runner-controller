@@ -63,10 +63,6 @@ jobs:
           ghcr_username: ${{ github.actor }}
           ghcr_password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set-Up Build Environment
-        run: |
-          echo "TARGETPLATFORM=$(arch)" >> $GITHUB_ENV
-
       - name: Build and Push Versioned Tags
         uses: docker/build-push-action@v3
         with:
