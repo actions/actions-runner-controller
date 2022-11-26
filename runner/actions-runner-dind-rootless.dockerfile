@@ -1,9 +1,6 @@
 FROM ubuntu:20.04
 
-# Target architecture
 ARG TARGETPLATFORM
-
-# GitHub runner arguments
 ARG RUNNER_VERSION=2.299.1
 ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
 # Docker and Docker Compose arguments
