@@ -1573,9 +1573,26 @@ spec:
   template:
     spec:
       env:
+        # Disable various runner entrypoint log levels 
+        - name: LOG_DEBUG_DISABLED
+          value: "true"
+        - name: LOG_NOTICE_DISABLED
+          value: "true"
+        - name: LOG_WARNING_DISABLED
+          value: "true"
+        - name: LOG_ERROR_DISABLED
+          value: "true"
+        - name: LOG_SUCCESS_DISABLED
+          value: "true"
         # Issues a sleep command at the start of the entrypoint
         - name: STARTUP_DELAY_IN_SECONDS
           value: "2"
+        # Specify the duration to wait for the docker daemon to be available
+        # The default duration of 120 seconds is sometimes too short
+        # to reliably wait for the docker daemon to start
+        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1804
+        - name: WAIT_FOR_DOCKER_SECONDS
+          value: 120
         # Disables the wait for the docker daemon to be available check
         - name: DISABLE_WAIT_FOR_DOCKER
           value: "true"
@@ -1644,8 +1661,10 @@ The GitHub hosted runners include a large amount of pre-installed software packa
 This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
 
 - Basic CLI packages
-- git
-- docker
+- Git
+- Git LFS
+- Docker
+- Docker Compose
 - build-essentials
 
 The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
@@ -1763,7 +1782,6 @@ spec:
       labels:
         - windows
         - X64
-        - devops-managed
 ```
 
 #### Dockerfile
@@ -1821,7 +1839,6 @@ spec:
       labels:
         - linux
         - X64
-        - devops-managed
 ```
 </p>
 </details>

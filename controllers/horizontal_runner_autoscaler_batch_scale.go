@@ -190,7 +190,7 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 	after := len(copy.Spec.CapacityReservations)
 
 	s.Log.V(1).Info(
-		fmt.Sprintf("Updating hra %s for capacityReservations update", hra.Name),
+		fmt.Sprintf("Patching hra %s for capacityReservations update", hra.Name),
 		"before", before,
 		"expired", expired,
 		"added", added,
@@ -198,8 +198,8 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 		"after", after,
 	)
 
-	if err := s.Client.Update(ctx, copy); err != nil {
-		return fmt.Errorf("updating horizontalrunnerautoscaler to add capacity reservation: %w", err)
+	if err := s.Client.Patch(ctx, copy, client.MergeFrom(&hra)); err != nil {
+		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
 	}
 
 	return nil
