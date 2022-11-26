@@ -87,7 +87,6 @@ docker-buildx-ubuntu:
 	  . ${PUSH_ARG}
 	${DOCKER} buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.dockerfile \
 	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${TAG}" \
