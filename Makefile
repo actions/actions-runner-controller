@@ -36,6 +36,17 @@ TOOLS_PATH=$(PWD)/.tools
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 
+# The etcd packages that coreos maintain use different extensions for each *nix OS on their github release page.
+# ETCD_EXTENSION: the storage format file extension listed on the release page.
+# EXTRACT_COMMAND: the  appropriate CLI command for extracting this file format.
+ifeq ($(OS_NAME), darwin)
+ETCD_EXTENSION:=zip
+EXTRACT_COMMAND:=unzip
+else
+ETCD_EXTENSION:=tar.gz
+EXTRACT_COMMAND:=tar -xzf
+endif
+
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
 	export PLATFORMS="linux/amd64,linux/arm64"
@@ -287,12 +298,10 @@ ifeq (, $(wildcard $(TEST_ASSETS)/etcd))
 	set -xe ;\
 	INSTALL_TMP_DIR=$$(mktemp -d) ;\
 	cd $$INSTALL_TMP_DIR ;\
-	wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
+	wget https://github.com/coreos/etcd/releases/download/v3.4.22/etcd-v3.4.22-$(OS_NAME)-amd64.$(ETCD_EXTENSION);\
 	mkdir -p $(TEST_ASSETS) ;\
-	tar zxvf kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/etcd $(TEST_ASSETS)/etcd ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kube-apiserver $(TEST_ASSETS)/kube-apiserver ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kubectl $(TEST_ASSETS)/kubectl ;\
+	$(EXTRACT_COMMAND) etcd-v3.4.22-$(OS_NAME)-amd64.$(ETCD_EXTENSION) ;\
+	mv etcd-v3.4.22-$(OS_NAME)-amd64/etcd $(TEST_ASSETS)/etcd ;\
 	rm -rf $$INSTALL_TMP_DIR ;\
 	}
 ETCD_BIN=$(TEST_ASSETS)/etcd
@@ -314,9 +323,7 @@ ifeq (, $(wildcard $(TEST_ASSETS)/kube-apiserver))
 	wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
 	mkdir -p $(TEST_ASSETS) ;\
 	tar zxvf kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/etcd $(TEST_ASSETS)/etcd ;\
 	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kube-apiserver $(TEST_ASSETS)/kube-apiserver ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kubectl $(TEST_ASSETS)/kubectl ;\
 	rm -rf $$INSTALL_TMP_DIR ;\
 	}
 KUBE_APISERVER_BIN=$(TEST_ASSETS)/kube-apiserver
@@ -338,8 +345,6 @@ ifeq (, $(wildcard $(TEST_ASSETS)/kubectl))
 	wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
 	mkdir -p $(TEST_ASSETS) ;\
 	tar zxvf kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/etcd $(TEST_ASSETS)/etcd ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kube-apiserver $(TEST_ASSETS)/kube-apiserver ;\
 	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kubectl $(TEST_ASSETS)/kubectl ;\
 	rm -rf $$INSTALL_TMP_DIR ;\
 	}
