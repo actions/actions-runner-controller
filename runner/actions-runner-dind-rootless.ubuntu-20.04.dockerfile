@@ -11,8 +11,6 @@ ARG DUMB_INIT_VERSION=1.2.5
 # Other arguments
 ARG DEBUG=false
 
-RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
-
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y \
     && apt-get install -y software-properties-common \

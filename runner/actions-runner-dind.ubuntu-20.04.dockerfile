@@ -9,8 +9,6 @@ ARG DOCKER_VERSION=20.10.18
 ARG DOCKER_COMPOSE_VERSION=v2.6.0
 ARG DUMB_INIT_VERSION=1.2.5
 
-RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
-
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y \
     && apt-get install -y software-properties-common \
