@@ -14,6 +14,10 @@ ARG DEBUG=false
 RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Use 1001 for compatibility with GitHub-hosted runners
+ARG RUNNER_UID=1000
+
 RUN apt update -y \
     && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
@@ -56,7 +60,7 @@ RUN apt update -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Runner user
-RUN adduser --disabled-password --gecos "" --uid 1000 runner
+RUN adduser --disabled-password --gecos "" --uid $RUNNER_UID runner
 
 ENV HOME=/home/runner
 
@@ -100,9 +104,9 @@ RUN cd "$RUNNER_ASSETS_DIR" \
     && rm -f runner-container-hooks.zip
 
 # Make the rootless runner directory executable
-RUN mkdir /run/user/1000 \
-    && chown runner:runner /run/user/1000 \
-    && chmod a+x /run/user/1000
+RUN mkdir /run/user/$RUNNER_UID \
+    && chown runner:runner /run/user/$RUNNER_UID \
+    && chmod a+x /run/user/$RUNNER_UID
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
@@ -119,8 +123,8 @@ COPY hooks /etc/arc/hooks/
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin:/home/runner/bin"
 ENV ImageOS=ubuntu20
-ENV DOCKER_HOST=unix:///run/user/1000/docker.sock
-ENV XDG_RUNTIME_DIR=/run/user/1000
+ENV DOCKER_HOST=unix:///run/user/$RUNNER_UID/docker.sock
+ENV XDG_RUNTIME_DIR=/run/user/$RUNNER_UID
 
 RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment \
