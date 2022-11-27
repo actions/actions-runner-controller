@@ -1699,8 +1699,8 @@ There are two methods of deploying without cert-manager, you can generate your o
 
 Assuming you are installing in the default namespace, ensure your certificate has SANs:
 
-* `webhook-service.actions-runner-system.svc`
-* `webhook-service.actions-runner-system.svc.cluster.local`
+* `actions-runner-controller-webhook.actions-runner-system.svc`
+* `actions-runner-controller-webhook.actions-runner-system.svc.cluster.local`
 
 It is possible to use a self-signed certificate by following a guide like
 [this one](https://mariadb.com/docs/security/encryption/in-transit/create-self-signed-certificates-keys-openssl/)
@@ -1709,7 +1709,7 @@ using `openssl`.
 Install your certificate as a TLS secret:
 
 ```shell
-$ kubectl create secret tls webhook-server-cert \
+$ kubectl create secret tls actions-runner-controller-serving-cert \
   -n actions-runner-system \
   --cert=path/to/cert/file \
   --key=path/to/key/file
