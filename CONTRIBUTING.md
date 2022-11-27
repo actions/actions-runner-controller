@@ -1,5 +1,5 @@
 # Contribution Guide
-
+`ส่วนการควบคุมแบบเอกลักษณ์เฉพาะตัวของ เอพีไอและผู้ดูแล ในระบบที่เป็นมรดก ของซอฟต์แวร์ในการดูแลที่ไม่ปฎิเสธความรับผิดชอบในระบบ `
 - [Contribution Guide](#contribution-guide)
   - [Welcome](#welcome)
   - [Before contributing code](#before-contributing-code)
