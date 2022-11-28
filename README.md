@@ -519,7 +519,7 @@ NAME=$DOCKER_USER/actions-runner-controller \
 
 Please follow the instructions explained in [Using Personal Access Token](#using-personal-access-token) to obtain
 `GITHUB_TOKEN`, and those in [Using GitHub App](#using-github-app) to obtain `APP_ID`, `INSTALLATION_ID`, and
-`PRIAVTE_KEY_FILE_PATH`.
+`PRIVATE_KEY_FILE_PATH`.
 
 The test creates a one-off `kind` cluster, deploys `cert-manager` and `actions-runner-controller`,
 creates a `RunnerDeployment` custom resource for a public Git repository to confirm that the
@@ -527,7 +527,7 @@ controller is able to bring up a runner pod with the actions runner registration
 
 If you prefer to test in a non-kind cluster, you can instead run:
 
-```shell script
+```shell
 KUBECONFIG=path/to/kubeconfig \
 NAME=$DOCKER_USER/actions-runner-controller \
   GITHUB_TOKEN=*** \
