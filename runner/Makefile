@@ -4,7 +4,6 @@ DEFAULT_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
 OS_IMAGE ?= ubuntu-20.04
-TAG_SUFFIX ?= latest
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.299.1
@@ -47,24 +46,24 @@ docker-build-set: check-target-platform
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.${OS_IMAGE}.dockerfile \
-	  -t ${DEFAULT_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX} .
+	  -t ${DEFAULT_RUNNER_NAME}:${OS_IMAGE} .
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
-	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX} .
+	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE} .
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
-	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" .
+	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}" .
 
 docker-push-set:
-	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}"
-	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}"
-	${DOCKER} push "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}"
+	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}"
+	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}"
+	${DOCKER} push "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}"
 
 docker-buildx-set:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
@@ -77,21 +76,21 @@ docker-buildx-set:
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.${OS_IMAGE}.dockerfile \
-	  -t "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
+	  -t "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 	${DOCKER} buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
-	  -t "${DIND_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
+	  -t "${DIND_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 	${DOCKER} buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
-	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
+	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 
 docker-buildx-default:
@@ -105,7 +104,7 @@ docker-buildx-default:
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.${OS_IMAGE}.dockerfile \
-	  -t "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
+	  -t "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 
 docker-buildx-dind:
@@ -119,7 +118,7 @@ docker-buildx-dind:
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
-	  -t "${DIND_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
+	  -t "${DIND_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 
 docker-buildx-dind-rootless:
@@ -133,5 +132,5 @@ docker-buildx-dind-rootless:
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
-	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}-${TAG_SUFFIX}" \
+	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
