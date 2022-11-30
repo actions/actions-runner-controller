@@ -27,7 +27,6 @@ import (
 	"time"
 
 	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/cmd/githubwebhookserver/metrics"
 	"github.com/actions-runner-controller/actions-runner-controller/controllers"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
@@ -161,12 +160,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	workflowMetricsEventReader := &metrics.WorkflowJobMetricsEventReader{
-		Log:          ctrl.Log.WithName("webhook").WithName("workflow-metrics-event-parser"),
-		GitHubClient: ghClient,
-		Events:       make(chan interface{}, 1024*1024),
-	}
-
 	hraGitHubWebhook := &controllers.HorizontalRunnerAutoscalerGitHubWebhook{
 		Name:           "webhookbasedautoscaler",
 		Client:         mgr.GetClient(),
@@ -177,7 +170,6 @@ func main() {
 		Namespace:      watchNamespace,
 		GitHubClient:   ghClient,
 		QueueLimit:     queueLimit,
-		EventHooks:     []controllers.GitHubWebhookEventHook{workflowMetricsEventReader.HandleWorkflowJobEvent},
 	}
 
 	if err = hraGitHubWebhook.SetupWithManager(mgr); err != nil {
@@ -188,8 +180,6 @@ func main() {
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	go workflowMetricsEventReader.ProcessWorkflowJobEvents(ctx)
 
 	wg.Add(1)
 	go func() {

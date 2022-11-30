@@ -50,8 +50,6 @@ const (
 	DefaultQueueLimit = 100
 )
 
-type GitHubWebhookEventHook func(interface{})
-
 // HorizontalRunnerAutoscalerGitHubWebhook autoscales a HorizontalRunnerAutoscaler and the RunnerDeployment on each
 // GitHub Webhook received
 type HorizontalRunnerAutoscalerGitHubWebhook struct {
@@ -79,9 +77,6 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 
 	worker     *worker
 	workerInit sync.Once
-
-	// When HorizontalRunnerAutoscalerGitHubWebhook handles a request, each EventHook is sent the webhook event
-	EventHooks []GitHubWebhookEventHook
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -164,10 +159,6 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 		"hookID", r.Header.Get("X-GitHub-Hook-ID"),
 		"delivery", r.Header.Get("X-GitHub-Delivery"),
 	)
-
-	for _, eventHook := range autoscaler.EventHooks {
-		eventHook(event)
-	}
 
 	var enterpriseEvent struct {
 		Enterprise struct {

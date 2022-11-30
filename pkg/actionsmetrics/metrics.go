@@ -2,7 +2,7 @@
 //
 // This depends on the metrics exporter of kubebuilder.
 // See https://book.kubebuilder.io/reference/metrics.html for details.
-package metrics
+package actionsmetrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"

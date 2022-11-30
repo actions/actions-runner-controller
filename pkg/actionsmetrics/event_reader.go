@@ -1,4 +1,4 @@
-package metrics
+package actionsmetrics
 
 import (
 	"bufio"
@@ -16,7 +16,7 @@ import (
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 )
 
-type WorkflowJobMetricsEventReader struct {
+type EventReader struct {
 	Log logr.Logger
 
 	// GitHub Client to fetch information about job failures
@@ -30,14 +30,14 @@ type WorkflowJobMetricsEventReader struct {
 //
 // forcing the events through a channel ensures they are processed in sequentially,
 // and prevents any race conditions with githubWorkflowJobStatus
-func (reader *WorkflowJobMetricsEventReader) HandleWorkflowJobEvent(event interface{}) {
+func (reader *EventReader) HandleWorkflowJobEvent(event interface{}) {
 	reader.Events <- event
 }
 
 // ProcessWorkflowJobEvents pop events in a loop for processing
 //
 // Should be called asynchronously with `go`
-func (reader *WorkflowJobMetricsEventReader) ProcessWorkflowJobEvents(ctx context.Context) {
+func (reader *EventReader) ProcessWorkflowJobEvents(ctx context.Context) {
 	for {
 		select {
 		case event := <-reader.Events:
@@ -51,7 +51,7 @@ func (reader *WorkflowJobMetricsEventReader) ProcessWorkflowJobEvents(ctx contex
 // ProcessWorkflowJobEvent processes a single event
 //
 // Events should be processed in the same order that Github emits them
-func (reader *WorkflowJobMetricsEventReader) ProcessWorkflowJobEvent(ctx context.Context, event interface{}) {
+func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event interface{}) {
 
 	e, ok := event.(*gogithub.WorkflowJobEvent)
 	if !ok {
@@ -159,7 +159,7 @@ type ParseResult struct {
 var logLine = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{7}Z)\s(.+)$`)
 var exitCodeLine = regexp.MustCompile(`##\[error\]Process completed with exit code (\d)\.`)
 
-func (reader *WorkflowJobMetricsEventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *gogithub.WorkflowJobEvent) (*ParseResult, error) {
+func (reader *EventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *gogithub.WorkflowJobEvent) (*ParseResult, error) {
 
 	owner := *e.Repo.Owner.Login
 	repo := *e.Repo.Name
