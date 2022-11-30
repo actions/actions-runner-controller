@@ -33,3 +33,23 @@ githubWebhookServer:
         protocol: TCP
         name: http
         nodePort: 31000
+actionsMetricsServer:
+  imagePullSecrets: []
+  logLevel: "-4"
+  enabled: true
+  labels: {}
+  replicaCount: 1
+  secret:
+    enabled: true
+    # create: true
+    name: "actions-metrics-server"
+    ### GitHub Webhook Configuration
+    #github_webhook_secret_token: ""
+  service:
+    type: NodePort
+    ports:
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        nodePort: 31001
