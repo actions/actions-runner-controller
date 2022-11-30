@@ -78,6 +78,9 @@ spec:
         value: "3"
 
       dockerMTU: 1400
+      dockerEnv:
+      - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+        value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
 
       # Fix the following no space left errors with rootless-dind runners that can happen while running buildx build:
       #   ------

@@ -9,10 +9,8 @@ ARG DOCKER_VERSION=20.10.18
 ARG DOCKER_COMPOSE_VERSION=v2.6.0
 ARG DUMB_INIT_VERSION=1.2.5
 
-RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
-
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt update -y \
+RUN apt-get update -y \
     && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
     && apt-get update -y \
@@ -26,19 +24,15 @@ RUN apt update -y \
     git-lfs \
     iproute2 \
     iputils-ping \
-    iptables \
     jq \
     libunwind8 \
     locales \
     netcat \
-    net-tools \
     openssh-client \
     parallel \
     python3-pip \
     rsync \
     shellcheck \
-    supervisor \
-    software-properties-common \
     sudo \
     telnet \
     time \
@@ -52,7 +46,6 @@ RUN apt update -y \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
 
-# Runner user
 RUN adduser --disabled-password --gecos "" --uid 1000 runner \
     && groupadd docker \
     && usermod -aG sudo runner \
@@ -75,8 +68,9 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && cd "$RUNNER_ASSETS_DIR" \
     && curl -fLo runner.tar.gz https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && tar xzf ./runner.tar.gz \
-    && rm -f runner.tar.gz \
+    && rm runner.tar.gz \
     && ./bin/installdependencies.sh \
+    && mv ./externals ./externalstmp \
     # libyaml-dev is required for ruby/setup-ruby action.
     # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
     # to avoid rerunning apt-update on its own.
@@ -99,7 +93,7 @@ RUN set -vx; \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
     && curl -fLo docker.tgz https://download.docker.com/linux/static/${CHANNEL}/${ARCH}/docker-${DOCKER_VERSION}.tgz \
     && tar zxvf docker.tgz \
-    && install -o root -g root -m 755 docker/* /usr/bin/ \
+    && install -o root -g root -m 755 docker/docker /usr/bin/docker \
     && rm -rf docker docker.tgz
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
@@ -110,9 +104,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint-dind.sh startup.sh logger.sh wait.sh graceful-stop.sh update-status /usr/bin/
-COPY supervisor/ /etc/supervisor/conf.d/
-RUN chmod +x /usr/bin/entrypoint-dind.sh /usr/bin/startup.sh
+COPY entrypoint.sh startup.sh logger.sh graceful-stop.sh update-status /usr/bin/
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
 # to replace the docker binary in the PATH.
@@ -121,17 +113,14 @@ COPY docker-shim.sh /usr/local/bin/docker
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
 
-VOLUME /var/lib/docker
-
 # Add the Python "User Script Directory" to the PATH
-ENV PATH="${PATH}:${HOME}/.local/bin"
+ENV PATH="${PATH}:${HOME}/.local/bin/"
 ENV ImageOS=ubuntu20
 
 RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment
 
-# No group definition, as that makes it harder to run docker.
 USER runner
 
 ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["entrypoint-dind.sh"]
+CMD ["entrypoint.sh"]

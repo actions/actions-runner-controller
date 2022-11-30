@@ -102,7 +102,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		!podIsPending(pod) {
 
 		log.Info(
-			"Unregistration started before runner obtains ID. Waiting for the regisration timeout to elapse, or the runner to obtain ID, or the runner pod to stop",
+			"Unregistration started before runner obtains ID. Waiting for the registration timeout to elapse, or the runner to obtain ID, or the runner pod to stop",
 			"registrationTimeout", registrationTimeout,
 		)
 		return &ctrl.Result{RequeueAfter: retryDelay}, nil
