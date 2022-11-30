@@ -172,5 +172,9 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT
 if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
+
+log.notice "WARNING LATEST TAG HAS BEEN DEPRECATED. SEE GITHUB ISSUE FOR DETAILS:"
+log.notice "https://github.com/actions-runner-controller/actions-runner-controller/issues/2056"
+
 update-status "Idle"
 exec env -- "${env[@]}" ./run.sh
