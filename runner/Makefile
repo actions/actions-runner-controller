@@ -7,8 +7,8 @@ OS_IMAGE ?= ubuntu-20.04
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.299.1
-RUNNER_CONTAINER_HOOKS_VERSION ?= 0.1.2
-DOCKER_VERSION ?= 20.10.18
+RUNNER_CONTAINER_HOOKS_VERSION ?= 0.1.3
+DOCKER_VERSION ?= 20.10.21
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
