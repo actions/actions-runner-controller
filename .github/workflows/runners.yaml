@@ -95,7 +95,7 @@ jobs:
       # at which point this step needs to be deleted
       # https://github.com/actions-runner-controller/actions-runner-controller/issues/2056
       - name: Build and Push Latest Tags
-        if: ${{ matrix.latest == "true" }}
+        if: ${{ matrix.latest == 'true' }}
         uses: docker/build-push-action@v3
         with:
           context: ./runner
