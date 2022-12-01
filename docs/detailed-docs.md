@@ -1655,16 +1655,15 @@ spec:
 The project supports being deployed on the various cloud Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
 
 **Bundled Software**<br />
-The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintains a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>
+The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintains a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>.
 
-This solution maintains a few runner images with `latest` aligning with GitHub's Ubuntu version, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
+This solution maintains a few Ubuntu based runner images, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
 
-- Basic CLI packages
+- Some basic CLI packages
 - Git
 - Git LFS
 - Docker
 - Docker Compose
-- build-essentials
 
 The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
 
@@ -1673,21 +1672,21 @@ If there is a need to include packages in the runner image for which there is no
 ```shell
 FROM summerwind/actions-runner:latest
 
-RUN sudo apt update -y \
-  && sudo apt install YOUR_PACKAGE
+RUN sudo apt-get update -y \
+  && sudo apt-get install $YOUR_PACKAGES
   && sudo rm -rf /var/lib/apt/lists/*
 ```
 
-You can then configure the runner to use a custom docker image by configuring the `image` field of a `Runner` or `RunnerDeployment`:
+You can then configure the runner to use a custom docker image by configuring the `image` field of a `RunnerDeployment` or `RunnerSet`:
 
 ```yaml
 apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
+kind: RunnerDeployment
 metadata:
   name: custom-runner
 spec:
   repository: actions-runner-controller/actions-runner-controller
-  image: YOUR_CUSTOM_DOCKER_IMAGE
+  image: YOUR_CUSTOM_RUNNER_IMAGE
 ```
 
 ### Using without cert-manager

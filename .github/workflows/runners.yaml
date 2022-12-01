@@ -45,6 +45,10 @@ jobs:
             os-name: ubuntu
             os-version: 20.04
             latest: "true"
+          - name: actions-runner
+            os-name: ubuntu
+            os-version: 22.04
+            latest: "false"
           - name: actions-runner-dind
             os-name: ubuntu
             os-version: 20.04
