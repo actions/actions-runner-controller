@@ -31,6 +31,7 @@
     {
       "fileMatch": [
         "runner/actions-runner.ubuntu-20.04.dockerfile",
+        "runner/actions-runner.ubuntu-22.04.dockerfile",
         "runner/actions-runner-dind.ubuntu-20.04.dockerfile",
         "runner/actions-runner-dind-rootless.ubuntu-20.04.dockerfile"
       ],
