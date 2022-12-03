@@ -81,7 +81,7 @@ func (autoscaler *WebhookServer) Handle(w http.ResponseWriter, r *http.Request) 
 	// respond ok to GET / e.g. for health check
 	if r.Method == http.MethodGet {
 		ok = true
-		fmt.Fprintln(w, "webhook server is running")
+		fmt.Fprintln(w, "actions-metrics-server is running")
 		return
 	}
 
