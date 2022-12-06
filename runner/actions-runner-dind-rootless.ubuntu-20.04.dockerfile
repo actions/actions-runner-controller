@@ -134,7 +134,8 @@ USER runner
 
 # This will install docker under $HOME/bin according to the content of the script
 RUN export SKIP_IPTABLES=1 \
-    && curl -fsSL https://get.docker.com/rootless | sh
+    && curl -fsSL https://get.docker.com/rootless | sh \
+    && /home/runner/bin/docker -v
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
