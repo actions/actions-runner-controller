@@ -19,6 +19,7 @@ RUN apt-get update -y \
     ca-certificates \
     git \
     git-lfs \
+    iptables \
     jq \
     supervisor \
     software-properties-common \
