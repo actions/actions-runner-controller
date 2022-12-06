@@ -8,6 +8,7 @@ ARG CHANNEL=stable
 ARG DOCKER_VERSION=20.10.21
 ARG DOCKER_COMPOSE_VERSION=v2.12.2
 ARG DUMB_INIT_VERSION=1.2.5
+ARG RUNNER_USER_UID=1001
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y \
@@ -25,7 +26,7 @@ RUN apt-get update -y \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN adduser --disabled-password --gecos "" --uid 1000 runner \
+RUN adduser --disabled-password --gecos "" --uid $RUNNER_USER_UID runner \
     && groupadd docker \
     && usermod -aG sudo runner \
     && usermod -aG docker runner \
