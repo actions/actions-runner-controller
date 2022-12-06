@@ -29,7 +29,7 @@ RUN apt-get update -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Runner user
-RUN adduser --disabled-password --gecos "" --uid 1000 runner \
+RUN adduser --disabled-password --gecos "" --uid 1001 runner \
     && groupadd docker \
     && usermod -aG sudo runner \
     && usermod -aG docker runner \
