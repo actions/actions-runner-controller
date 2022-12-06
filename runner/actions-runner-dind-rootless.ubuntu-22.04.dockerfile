@@ -7,6 +7,7 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.3
 ENV CHANNEL=stable
 ARG DOCKER_COMPOSE_VERSION=v2.12.2
 ARG DUMB_INIT_VERSION=1.2.5
+ARG RUNNER_USER_UID=1001
 
 # Other arguments
 ARG DEBUG=false
@@ -34,7 +35,7 @@ RUN apt-get update -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Runner user
-RUN adduser --disabled-password --gecos "" --uid 1000 runner
+RUN adduser --disabled-password --gecos "" --uid $RUNNER_USER_UID runner
 
 ENV HOME=/home/runner
 
