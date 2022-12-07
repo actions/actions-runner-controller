@@ -1634,6 +1634,8 @@ Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https:/
 
 Once you set up the service account, all you need is to add `serviceAccountName` and `fsGroup` to any pods that use the IAM-role enabled service account.
 
+`fsGroup` needs to be set to the UID of the `runner` Linux user that runs the runner agent (and dockerd in case you use dind-runner). For anyone using an Ubuntu 20.04 runner image it's `1000` and for Ubuntu 22.04 one it's `1001`.
+
 For `RunnerDeployment`, you can set those two fields under the runner spec at `RunnerDeployment.Spec.Template`:
 
 ```yaml
@@ -1647,7 +1649,10 @@ spec:
       repository: USER/REO
       serviceAccountName: my-service-account
       securityContext:
+        # For Ubuntu 20.04 runner
         fsGroup: 1000
+        # Use 1001 for Ubuntu 22.04 runner
+        #fsGroup: 1001
 ```
 ### Software Installed in the Runner Image
 
