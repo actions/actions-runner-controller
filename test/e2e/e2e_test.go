@@ -457,7 +457,7 @@ func buildVars(repo, ubuntuVer string) vars {
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: fmt.Sprintf("../../runner/actions-runner-dind.ubuntu-%s.dockerfile", "20.04"),
+			Dockerfile: fmt.Sprintf("../../runner/actions-runner-dind.ubuntu-%s.dockerfile", ubuntuVer),
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
