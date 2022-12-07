@@ -53,10 +53,18 @@ jobs:
             os-name: ubuntu
             os-version: 20.04
             latest: "true"
+          - name: actions-runner-dind
+            os-name: ubuntu
+            os-version: 22.04
+            latest: "false"
           - name: actions-runner-dind-rootless
             os-name: ubuntu
             os-version: 20.04
             latest: "true"
+          - name: actions-runner-dind-rootless
+            os-name: ubuntu
+            os-version: 22.04
+            latest: "false"
 
     steps:
       - name: Checkout
