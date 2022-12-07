@@ -41,8 +41,8 @@ for config in /etc/docker/daemon.json /etc/supervisor/conf.d/dockerd.conf; do
   dump "$config" 'Using {path} with the following content:'
 done
 
-log.debug 'Starting supervisor daemon'
-sudo /usr/bin/supervisord -n >> /dev/null 2>&1 &
+log.debug 'Starting Docker daemon'
+sudo /usr/bin/dockerd &
 
 log.debug 'Waiting for processes to be running...'
 processes=(dockerd)
