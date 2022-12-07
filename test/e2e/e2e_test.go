@@ -92,7 +92,10 @@ func TestE2E(t *testing.T) {
 	skipTestIDCleanUp := os.Getenv("ARC_E2E_SKIP_TEST_ID_CLEANUP") != ""
 	skipArgoTunnelCleanUp := os.Getenv("ARC_E2E_SKIP_ARGO_TUNNEL_CLEAN_UP") != ""
 
-	vars := buildVars(os.Getenv("ARC_E2E_IMAGE_REPO"))
+	vars := buildVars(
+		os.Getenv("ARC_E2E_IMAGE_REPO"),
+		os.Getenv("UBUNTU_VERSION"),
+	)
 
 	var testedVersions = []struct {
 		label                     string
@@ -401,7 +404,7 @@ type vars struct {
 	commonScriptEnv []string
 }
 
-func buildVars(repo string) vars {
+func buildVars(repo, ubuntuVer string) vars {
 	if repo == "" {
 		repo = "actionsrunnercontrollere2e"
 	}
@@ -443,7 +446,7 @@ func buildVars(repo string) vars {
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/actions-runner.dockerfile",
+			Dockerfile: fmt.Sprintf("../../runner/actions-runner.ubuntu-%s.dockerfile", ubuntuVer),
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
@@ -454,7 +457,7 @@ func buildVars(repo string) vars {
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/actions-runner-dind.dockerfile",
+			Dockerfile: fmt.Sprintf("../../runner/actions-runner-dind.ubuntu-%s.dockerfile", ubuntuVer),
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",
@@ -465,7 +468,7 @@ func buildVars(repo string) vars {
 			EnableBuildX: true,
 		},
 		{
-			Dockerfile: "../../runner/actions-runner-dind-rootless.dockerfile",
+			Dockerfile: fmt.Sprintf("../../runner/actions-runner-dind-rootless.ubuntu-%s.dockerfile", ubuntuVer),
 			Args: []testing.BuildArg{
 				{
 					Name:  "RUNNER_VERSION",

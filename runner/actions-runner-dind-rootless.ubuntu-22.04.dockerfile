@@ -1,64 +1,41 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION=2.299.1
-ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.2
+ARG RUNNER_CONTAINER_HOOKS_VERSION=0.1.3
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
-ARG DOCKER_COMPOSE_VERSION=v2.6.0
+ARG DOCKER_COMPOSE_VERSION=v2.12.2
 ARG DUMB_INIT_VERSION=1.2.5
+ARG RUNNER_USER_UID=1001
 
 # Other arguments
 ARG DEBUG=false
 
+RUN test -n "$TARGETPLATFORM" || (echo "TARGETPLATFORM must be set" && false)
+
 ENV DEBIAN_FRONTEND=noninteractive
-
-# Use 1001 for compatibility with GitHub-hosted runners
-ARG RUNNER_UID=1000
-
 RUN apt-get update -y \
     && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:git-core/ppa \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
-    build-essential \
     curl \
     ca-certificates \
-    dnsutils \
-    ftp \
     git \
     git-lfs \
     iproute2 \
-    iputils-ping \
     iptables \
     jq \
-    libunwind8 \
-    locales \
-    netcat \
-    net-tools \
-    openssh-client \
-    parallel \
-    python3-pip \
-    rsync \
-    shellcheck \
     supervisor \
-    software-properties-common \
     sudo \
-    telnet \
-    time \
-    tzdata \
     uidmap \
     unzip \
-    upx \
-    wget \
     zip \
-    zstd \
-    && ln -sf /usr/bin/python3 /usr/bin/python \
-    && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Runner user
-RUN adduser --disabled-password --gecos "" --uid $RUNNER_UID runner
+RUN adduser --disabled-password --gecos "" --uid $RUNNER_USER_UID runner
 
 ENV HOME=/home/runner
 
@@ -102,9 +79,9 @@ RUN cd "$RUNNER_ASSETS_DIR" \
     && rm -f runner-container-hooks.zip
 
 # Make the rootless runner directory executable
-RUN mkdir /run/user/$RUNNER_UID \
-    && chown runner:runner /run/user/$RUNNER_UID \
-    && chmod a+x /run/user/$RUNNER_UID
+RUN mkdir /run/user/1000 \
+    && chown runner:runner /run/user/1000 \
+    && chmod a+x /run/user/1000
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
@@ -120,9 +97,9 @@ COPY hooks /etc/arc/hooks/
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin:/home/runner/bin"
-ENV ImageOS=ubuntu20
-ENV DOCKER_HOST=unix:///run/user/$RUNNER_UID/docker.sock
-ENV XDG_RUNTIME_DIR=/run/user/$RUNNER_UID
+ENV ImageOS=ubuntu22
+ENV DOCKER_HOST=unix:///run/user/1000/docker.sock
+ENV XDG_RUNTIME_DIR=/run/user/1000
 
 RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment \
@@ -140,7 +117,8 @@ RUN export SKIP_IPTABLES=1 \
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && mkdir -p /home/runner/bin \
+    && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-Linux-${ARCH} \
     && chmod +x /home/runner/bin/docker-compose
 
 ENTRYPOINT ["/bin/bash", "-c"]
