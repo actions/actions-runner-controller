@@ -35,6 +35,16 @@ else
   echo 'Skipped deploying secret "github-webhook-server". Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2
 fi
 
+if [ -n "${WEBHOOK_GITHUB_TOKEN}" ]; then
+  kubectl -n actions-runner-system delete secret \
+      actions-metrics-server || :
+  kubectl -n actions-runner-system create secret generic \
+      actions-metrics-server \
+      --from-literal=github_token=${WEBHOOK_GITHUB_TOKEN:?WEBHOOK_GITHUB_TOKEN must not be empty}
+else
+  echo 'Skipped deploying secret "actions-metrics-server". Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2
+fi
+
 tool=${ACCEPTANCE_TEST_DEPLOYMENT_TOOL}
 
 TEST_ID=${TEST_ID:-default}
@@ -49,6 +59,7 @@ if [ "${tool}" == "helm" ]; then
     flags+=( --set imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
     flags+=( --set image.actionsRunnerImagePullSecrets[0].name=${IMAGE_PULL_SECRET})
     flags+=( --set githubWebhookServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
+    flags+=( --set actionsMetricsServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
   fi
   if [ "${CHART_VERSION}" != "" ]; then
     flags+=( --version ${CHART_VERSION})
@@ -56,6 +67,7 @@ if [ "${tool}" == "helm" ]; then
   if [ "${LOG_FORMAT}" != "" ]; then
     flags+=( --set logFormat=${LOG_FORMAT})
     flags+=( --set githubWebhookServer.logFormat=${LOG_FORMAT})
+    flags+=( --set actionsMetricsServer.logFormat=${LOG_FORMAT})
   fi
 
   set -vx
@@ -70,6 +82,7 @@ if [ "${tool}" == "helm" ]; then
     --set image.tag=${VERSION} \
     --set podAnnotations.test-id=${TEST_ID} \
     --set githubWebhookServer.podAnnotations.test-id=${TEST_ID} \
+    --set actionsMetricsServer.podAnnotations.test-id=${TEST_ID} \
     ${flags[@]} --set image.imagePullPolicy=${IMAGE_PULL_POLICY} \
     -f ${VALUES_FILE}
   set +v

@@ -89,6 +89,9 @@ data:
     ingress:
     # The first rule proxies traffic to the httpbin sample Service defined in app.yaml
     - hostname: ${TUNNEL_HOSTNAME}
+      service: http://actions-runner-controller-actions-metrics-server.actions-runner-system:80
+      path: /metrics$
+    - hostname: ${TUNNEL_HOSTNAME}
       service: http://actions-runner-controller-github-webhook-server.actions-runner-system:80
     # This rule matches any traffic which didn't match a previous rule, and responds with HTTP 404.
     - service: http_status:404

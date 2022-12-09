@@ -191,7 +191,6 @@ admissionWebHooks:
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
 logFormat: text
 
-
 githubWebhookServer:
   enabled: false
   replicaCount: 1
@@ -277,3 +276,100 @@ githubWebhookServer:
     # minAvailable: 1
     # maxUnavailable: 3
   # queueLimit: 100
+
+actionsMetrics:
+  serviceAnnotations: {}
+  # Set serviceMonitor=true to create a service monitor
+  # as a part of the helm release.
+  # Do note that you also need actionsMetricsServer.enabled=true
+  # to deploy the actions-metrics-server whose k8s service is referenced by the service monitor.
+  serviceMonitor: false
+  serviceMonitorLabels: {}
+  port: 8443
+  proxy:
+    enabled: true
+    image:
+      repository: quay.io/brancz/kube-rbac-proxy
+      tag: v0.13.1
+
+actionsMetricsServer:
+  enabled: false
+  # DO NOT CHANGE THIS!
+  # See the thread below for more context.
+  # https://github.com/actions-runner-controller/actions-runner-controller/pull/1814#discussion_r974758924
+  replicaCount: 1
+  ## specify log format for github webhook controller.  Valid options are "text" and "json"
+  logFormat: text
+  secret:
+    enabled: false
+    create: false
+    name: "actions-metrics-server"
+    ### GitHub Webhook Configuration
+    github_webhook_secret_token: ""
+    ### GitHub Apps Configuration
+    ## NOTE: IDs MUST be strings, use quotes
+    #github_app_id: ""
+    #github_app_installation_id: ""
+    #github_app_private_key: |
+    ### GitHub PAT Configuration
+    #github_token: ""
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  # fsGroup: 2000
+  securityContext: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  service:
+    type: ClusterIP
+    annotations: {}
+    ports:
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+  ingress:
+    enabled: false
+    ingressClassName: ""
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: chart-example.local
+        paths: []
+        #  - path: /*
+        #    pathType: ImplementationSpecific
+        # Extra paths that are not automatically connected to the server. This is useful when working with annotation based services.
+        extraPaths: []
+        # - path: /*
+        #   backend:
+        #     serviceName: ssl-redirect
+        #     servicePort: use-annotation
+        ## for Kubernetes >=1.19 (when "networking.k8s.io/v1" is used)
+        # - path: /*
+        #   pathType: Prefix
+        #   backend:
+        #     service:
+        #       name: ssl-redirect
+        #       port:
+        #         name: use-annotation
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+
