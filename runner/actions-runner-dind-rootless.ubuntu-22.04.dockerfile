@@ -27,7 +27,6 @@ RUN apt-get update -y \
     iproute2 \
     iptables \
     jq \
-    supervisor \
     sudo \
     uidmap \
     unzip \

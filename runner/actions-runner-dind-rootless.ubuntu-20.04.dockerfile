@@ -41,7 +41,6 @@ RUN apt-get update -y \
     python3-pip \
     rsync \
     shellcheck \
-    supervisor \
     software-properties-common \
     sudo \
     telnet \
