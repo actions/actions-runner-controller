@@ -13,7 +13,7 @@ fi
 if [ -n "${MTU}" ]; then
 jq ".\"mtu\" = ${MTU}" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
 # See https://docs.docker.com/engine/security/rootless/
-echo "environment=DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=${MTU}" >> /etc/supervisor/conf.d/dockerd.conf
+export DOCKERD_ROOTLESS_ROOTLESSKIT_MTU=${MTU}
 fi
 
 if [ -n "${DOCKER_DEFAULT_ADDRESS_POOL_BASE}" ] && [ -n "${DOCKER_DEFAULT_ADDRESS_POOL_SIZE}" ]; then
@@ -37,12 +37,12 @@ dump() {
   printf -- '---\n' 1>&2
 }
 
-for config in /etc/docker/daemon.json /etc/supervisor/conf.d/dockerd.conf; do
+for config in /etc/docker/daemon.json; do
   dump "$config" 'Using {path} with the following content:'
 done
 
-log.debug 'Starting supervisor daemon'
-sudo /usr/bin/supervisord -n >> /dev/null 2>&1 &
+log.debug 'Starting Docker daemon'
+sudo /usr/bin/dockerd &
 
 log.debug 'Waiting for processes to be running...'
 processes=(dockerd)
@@ -50,8 +50,6 @@ processes=(dockerd)
 for process in "${processes[@]}"; do
     if ! wait_for_process "$process"; then
         log.error "$process is not running after max time"
-        dump /var/log/dockerd.err.log 'Dumping {path} to aid investigation'
-        dump /var/log/supervisor/supervisord.log 'Dumping {path} to aid investigation'
         exit 1
     else
         log.debug "$process is running"
