@@ -36,6 +36,15 @@ spec:
         - jsonPath: .status.message
           name: Message
           type: string
+        - jsonPath: .status.repository
+          name: Repository
+          type: string
+        - jsonPath: .status.owner
+          name: Owner
+          type: string
+        - jsonPath: .status.repo
+          name: Repo
+          type: string          
         - jsonPath: .metadata.creationTimestamp
           name: Age
           type: date
@@ -5195,6 +5204,12 @@ spec:
                   nullable: true
                   type: string
                 message:
+                  type: string
+                owner:
+                  type: string
+                repository:
+                  type: string
+                repo:
                   type: string
                 phase:
                   type: string

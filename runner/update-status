@@ -15,9 +15,19 @@ if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
     namespace=$(cat ${serviceaccount}/namespace)
     token=$(cat ${serviceaccount}/token)
     phase=$1
-    shift
+    message=${2:-}
+    repository=${3:-}
+    owner=${4:-}
+    [[ -n "$repository" ]] && repo=${repository#"$owner/"}
 
-    jq -n --arg phase "$phase" --arg message "${*:-}" '.status.phase = $phase | .status.message = $message' | curl \
+    data=$(jq -n --arg phase "$phase" \
+      --arg message "$message" \
+      --arg repository "$repository" \
+      --arg owner "$owner" \
+      --arg repo "${repo:-}" \
+      '.status.phase = $phase | .status.message = $message | .status.repository = $repository | .status.owner = $owner | .status.repo = $repo')
+      
+    echo $data | curl \
         --cacert ${serviceaccount}/ca.crt \
         --data @- \
         --noproxy '*' \
