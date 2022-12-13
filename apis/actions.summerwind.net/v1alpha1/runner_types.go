@@ -319,6 +319,7 @@ func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeM
 // +kubebuilder:printcolumn:JSONPath=".status.repository",name=Repository,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.owner",name=Owner,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.repo",name=Repo,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.workflow",name=Workflow,type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Runner is the Schema for the runners API

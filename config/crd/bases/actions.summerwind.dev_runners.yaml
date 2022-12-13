@@ -44,6 +44,9 @@ spec:
           type: string
         - jsonPath: .status.repo
           name: Repo
+          type: string
+        - jsonPath: .status.workflow
+          name: Workflow
           type: string          
         - jsonPath: .metadata.creationTimestamp
           name: Age
@@ -5211,6 +5214,8 @@ spec:
                   type: string
                 repo:
                   type: string
+                workflow:
+                  type: string  
                 phase:
                   type: string
                 ready:

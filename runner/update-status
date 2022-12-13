@@ -18,6 +18,7 @@ if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
     message=${2:-}
     repository=${3:-}
     owner=${4:-}
+    workflow=${5:-}
     [[ -n "$repository" ]] && repo=${repository#"$owner/"}
 
     data=$(jq -n --arg phase "$phase" \
@@ -25,7 +26,8 @@ if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
       --arg repository "$repository" \
       --arg owner "$owner" \
       --arg repo "${repo:-}" \
-      '.status.phase = $phase | .status.message = $message | .status.repository = $repository | .status.owner = $owner | .status.repo = $repo')
+      --arg workflow "$workflow" \
+      '.status.phase = $phase | .status.message = $message | .status.repository = $repository | .status.owner = $owner | .status.repo = $repo | .status.workflow = $workflow')
       
     echo $data | curl \
         --cacert ${serviceaccount}/ca.crt \
