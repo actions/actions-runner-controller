@@ -498,7 +498,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	//     A registered runner's session and the a registration token seem to have two different and independent
 	//     lifecycles.
 	//
-	//     See https://github.com/actions-runner-controller/actions-runner-controller/issues/143 for more context.
+	//     See https://github.com/actions/actions-runner-controller/issues/143 for more context.
 	labels[LabelKeyPodTemplateHash] = hash.FNVHashStringObjects(
 		filterLabels(runner.ObjectMeta.Labels, LabelKeyRunnerTemplateHash),
 		runner.ObjectMeta.Annotations,
@@ -1049,7 +1049,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		}...)
 
 		// Determine the volume mounts assigned to the docker sidecar. In case extra mounts are included in the RunnerSpec, append them to the standard
-		// set of mounts. See https://github.com/actions-runner-controller/actions-runner-controller/issues/435 for context.
+		// set of mounts. See https://github.com/actions/actions-runner-controller/issues/435 for context.
 		dockerVolumeMounts := []corev1.VolumeMount{
 			{
 				Name:      runnerVolumeName,
@@ -1126,7 +1126,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			//
 			// br-c5bf6c172bd7 is the interface that corresponds to the docker network created with docker-create-network.
 			// We have another ARC feature to inherit the host's MTU to the docker networks:
-			// https://github.com/actions-runner-controller/actions-runner-controller/pull/1201
+			// https://github.com/actions/actions-runner-controller/pull/1201
 			//
 			// docker's MTU is updated to the specified MTU once any container is created.
 			// You can verity that by running a random container from within the runner or dockerd containers:

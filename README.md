@@ -17,7 +17,7 @@ With ARC you can :
 
 ## Overview
 
-For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)."
+For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)."
 
 
 
@@ -81,7 +81,7 @@ helm upgrade --install --namespace actions-runner-system --create-namespace\
 
 ```shell
 kubectl apply -f \
-https://github.com/actions-runner-controller/actions-runner-controller/\
+https://github.com/actions/actions-runner-controller/\
 releases/download/v0.22.0/actions-runner-controller.yaml
 ```
 
@@ -147,12 +147,12 @@ There is also a quick start guide to get started on Actions, For more informatio
 
 ## Learn more
 
-For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/detailed-docs.md)."
+For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions/actions-runner-controller/blob/master/docs/detailed-docs.md)."
 
 ## Contributing
 
-We welcome contributions from the community. For more details on contributing to the project (including requirements), please refer to "[Getting Started with Contributing](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/CONTRIBUTING.md)."
+We welcome contributions from the community. For more details on contributing to the project (including requirements), please refer to "[Getting Started with Contributing](https://github.com/actions/actions-runner-controller/blob/master/CONTRIBUTING.md)."
 
 ## Troubleshooting
 
-We are very happy to help you with any issues you have. Please refer to the "[Troubleshooting](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/TROUBLESHOOTING.md)" section for common issues.
+We are very happy to help you with any issues you have. Please refer to the "[Troubleshooting](https://github.com/actions/actions-runner-controller/blob/master/TROUBLESHOOTING.md)" section for common issues.

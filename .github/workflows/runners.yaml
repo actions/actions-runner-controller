@@ -101,7 +101,7 @@ jobs:
 
       # NOTE : Only to be used on the 20.04 image until we remove the latest tag entirely
       # at which point this step needs to be deleted
-      # https://github.com/actions-runner-controller/actions-runner-controller/issues/2056
+      # https://github.com/actions/actions-runner-controller/issues/2056
       - name: Build and Push Latest Tags
         if: ${{ matrix.latest == 'true' }}
         uses: docker/build-push-action@v3

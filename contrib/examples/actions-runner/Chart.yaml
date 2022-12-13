@@ -5,6 +5,6 @@ type: application
 version: 0.0.1
 appVersion: 2.290.1
 
-home: https://github.com/actions-runner-controller/actions-runner-controller/tree/master/runner
+home: https://github.com/actions/actions-runner-controller/tree/master/runner
 sources:
-  - https://github.com/actions-runner-controller/actions-runner-controller/tree/master/runner
+  - https://github.com/actions/actions-runner-controller/tree/master/runner

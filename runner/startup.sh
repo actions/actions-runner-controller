@@ -54,7 +54,7 @@ if [ -z "${RUNNER_REPO}" ] && [ -n "${RUNNER_GROUP}" ];then
   RUNNER_GROUPS=${RUNNER_GROUP}
 fi
 
-# Hack due to https://github.com/actions-runner-controller/actions-runner-controller/issues/252#issuecomment-758338483
+# Hack due to https://github.com/actions/actions-runner-controller/issues/252#issuecomment-758338483
 if [ ! -d "${RUNNER_HOME}" ]; then
   log.error "$RUNNER_HOME should be an emptyDir mount. Please fix the pod spec."
   exit 1
@@ -164,7 +164,7 @@ unset RUNNER_NAME RUNNER_REPO RUNNER_TOKEN STARTUP_DELAY_IN_SECONDS DISABLE_WAIT
 # are meant to be set in every environment of every user. We emulate the PAM
 # behavior by reading the environment variables without interpreting them.
 #
-# https://github.com/actions-runner-controller/actions-runner-controller/issues/1135
+# https://github.com/actions/actions-runner-controller/issues/1135
 # https://github.com/actions/runner/issues/1703
 
 # /etc/environment may not exist when running unit tests depending on the platform being used
@@ -174,7 +174,7 @@ if [ -z "${UNITTEST:-}" ]; then
 fi
 
 log.notice "WARNING LATEST TAG HAS BEEN DEPRECATED. SEE GITHUB ISSUE FOR DETAILS:"
-log.notice "https://github.com/actions-runner-controller/actions-runner-controller/issues/2056"
+log.notice "https://github.com/actions/actions-runner-controller/issues/2056"
 
 update-status "Idle"
 exec env -- "${env[@]}" ./run.sh

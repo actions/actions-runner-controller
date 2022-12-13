@@ -5,4 +5,4 @@ To use this, you need to write some Kubernetes manifest and a container image fo
 
 For other information, please see the original pull request introduced it.
 
-https://github.com/actions-runner-controller/actions-runner-controller/pull/682
+https://github.com/actions/actions-runner-controller/pull/682

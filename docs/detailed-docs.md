@@ -53,7 +53,7 @@ ToC:
 
 ## People
 
-`actions-runner-controller` is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions-runner-controller/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions-runner-controller/actions-runner-controller/discussions), mostly in their spare time.
+`actions-runner-controller` is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions/actions-runner-controller/discussions), mostly in their spare time.
 
 If you think the project is awesome and it's becoming a basis for your important business, consider [sponsoring us](https://github.com/sponsors/actions-runner-controller)!
 
@@ -82,7 +82,7 @@ The documentation is kept inline with master@HEAD, we do our best to highlight a
 ## Getting Started
 To give ARC a try with just a handful of commands, Please refer to [Quick start guide](/README.md#getting-started). 
 
-For an overview of ARC, please refer to [ARC Overview](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)
+For an overview of ARC, please refer to [ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)
 
 For more information, please refer to detailed documentation below!
 
@@ -99,7 +99,7 @@ After installing cert-manager, install the custom resource definitions and actio
 
 ```shell
 # REPLACE "v0.25.2" with the version you wish to deploy
-kubectl create -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.25.2/actions-runner-controller.yaml
+kubectl create -f https://github.com/actions/actions-runner-controller/releases/download/v0.25.2/actions-runner-controller.yaml
 ```
 
 **Helm Deployment:**
@@ -259,7 +259,7 @@ Configure your values.yaml, see the chart's [README](../charts/actions-runner-co
 
 ### Deploying Multiple Controllers
 
-> This feature requires controller version => [v0.18.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.18.0)
+> This feature requires controller version => [v0.18.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.18.0)
 
 **_Note: Be aware when using this feature that CRDs are cluster-wide and so you should upgrade all of your controllers (and your CRDs) at the same time if you are doing an upgrade. Do not mix and match CRD versions with different controller versions. Doing so risks out of control scaling._**
 
@@ -404,7 +404,7 @@ example-runnerdeploy2475ht2qbr   mumoshu/actions-runner-controller-ci   Running
 
 ### RunnerSets
 
-> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+> This feature requires controller version => [v0.20.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.20.0)
 
 We can also deploy sets of RunnerSets the same way, a basic `RunnerSet` would look like this:
 
@@ -473,7 +473,7 @@ spec:
           # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
           # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
           # just specified `privileged: true` like this.
-          # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+          # See https://github.com/actions/actions-runner-controller/issues/1282
           # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
           # like firecracker and kata. Basically they run containers within dedicated micro vms and so
           # it's more like you can use `privileged: true` safer with those runtimes.
@@ -489,7 +489,7 @@ spec:
             memory: "4Gi"
 ```
 
-You can also read the design and usage documentation written in the original pull request that introduced `RunnerSet` for more information [#629](https://github.com/actions-runner-controller/actions-runner-controller/pull/629).
+You can also read the design and usage documentation written in the original pull request that introduced `RunnerSet` for more information [#629](https://github.com/actions/actions-runner-controller/pull/629).
 
 Under the hood, `RunnerSet` relies on Kubernetes's `StatefulSet` and Mutating Webhook. A `statefulset` is used to create a number of pods that has stable names and dynamically provisioned persistent volumes, so that each `statefulset-managed` pod gets the same persistent volume even after restarting. A mutating webhook is used to dynamically inject a runner's "registration token" which is used to call GitHub's "Create Runner" API.
 
@@ -509,11 +509,11 @@ Persistent runners are available as an option for some edge cases however they a
 
 ### Autoscaling
 
-> If you are using controller version < [v0.22.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so you can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
+> If you are using controller version < [v0.22.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so you can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
 
 A `RunnerDeployment` or `RunnerSet` can scale the number of runners between `minReplicas` and `maxReplicas` fields driven by either pull based scaling metrics or via a webhook event. Whether the autoscaling is driven from a webhook event or pull based metrics it is implemented by backing a `RunnerDeployment` or `RunnerSet` kind with a `HorizontalRunnerAutoscaler` kind.
 
-**_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions-runner-controller/actions-runner-controller/issues/206#issuecomment-748601907)_**
+**_Important!!! If you opt to configure autoscaling, ensure you remove the `replicas:` attribute in the `RunnerDeployment` / `RunnerSet` kinds that are configured for autoscaling [#206](https://github.com/actions/actions-runner-controller/issues/206#issuecomment-748601907)_**
 
 #### Anti-Flapping Configuration
 
@@ -638,10 +638,10 @@ spec:
 The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in the `busy` state which live in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
 
 **Benefits of this metric**
-1. Supports named repositories server-side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions-runner-controller/actions-runner-controller/pull/313)
-2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223)
+1. Supports named repositories server-side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions/actions-runner-controller/pull/313)
+2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions/actions-runner-controller/pull/223)
 3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels)
-4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions-runner-controller/actions-runner-controller/pull/223) [#315](https://github.com/actions-runner-controller/actions-runner-controller/pull/315)
+4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions/actions-runner-controller/pull/223) [#315](https://github.com/actions/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
 1. May not scale quickly enough for some users' needs. This metric is pull based and so the number of busy runners is polled as configured by the sync period, as a result scaling performance is bound by this sync period meaning there is a lag to scaling activity.
@@ -695,7 +695,7 @@ spec:
 
 #### Webhook Driven Scaling
 
-> This feature requires controller version => [v0.20.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.20.0)
+> This feature requires controller version => [v0.20.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.20.0)
 
 > To configure pull driven scaling see the [Pull Driven Scaling](#pull-driven-scaling) section
 
@@ -908,7 +908,7 @@ spec:
 
 #### Autoscaling to/from 0
 
-> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
+> This feature requires controller version => [v0.19.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.19.0)
 
 The regular `RunnerDeployment` / `RunnerSet` `replicas:` attribute as well as the `HorizontalRunnerAutoscaler` `minReplicas:` attribute supports being set to 0.
 
@@ -926,7 +926,7 @@ Webhook-based autoscaling is the best option as it is relatively easy to configu
 
 #### Scheduled Overrides
 
-> This feature requires controller version => [v0.19.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.19.0)
+> This feature requires controller version => [v0.19.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.19.0)
 
 `Scheduled Overrides` allows you to configure `HorizontalRunnerAutoscaler` so that its `spec:` gets updated only during a certain period of time. This feature is usually used for the following scenarios:
 
@@ -1189,7 +1189,7 @@ spec:
           name: docker-extra
       # You can mount some of the shared volumes to the runner container using volumeMounts.
       # NOTE: Do not try to mount the volume onto the runner workdir itself as it will not work. You could mount it however on a subdirectory in the runner workdir
-      # Please see https://github.com/actions-runner-controller/actions-runner-controller/issues/630#issuecomment-862087323 for more information.
+      # Please see https://github.com/actions/actions-runner-controller/issues/630#issuecomment-862087323 for more information.
       volumeMounts:
         - mountPath: /home/runner/work/repo
           name: repo
@@ -1203,7 +1203,7 @@ spec:
       # The default limit is undefined.
       # NOTE: You can make sure that nodes' resources are never exceeded by limiting used storage size per runner pod.
       # You can even disable the runner mount completely by setting limit to zero if dockerdWithinRunnerContainer = true.
-      # Please see https://github.com/actions-runner-controller/actions-runner-controller/pull/674 for more information.
+      # Please see https://github.com/actions/actions-runner-controller/pull/674 for more information.
       volumeSizeLimit: 4Gi
       # Optional name of the container runtime configuration that should be used for pods.
       # This must match the name of a RuntimeClass resource available on the cluster.
@@ -1215,7 +1215,7 @@ spec:
         # Usually, the runner container's privileged field is derived from dockerdWithinRunnerContainer.
         # But in the case where you need to run privileged job steps even if you don't use docker/don't need dockerd within the runner container,
         # just specified `privileged: true` like this.
-        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1282
+        # See https://github.com/actions/actions-runner-controller/issues/1282
         # Do note that specifying `privileged: false` while using dind is very likely to fail, even if you use some vm-based container runtimes
         # like firecracker and kata. Basically they run containers within dedicated micro vms and so
         # it's more like you can use `privileged: true` safer with those runtimes.
@@ -1375,7 +1375,7 @@ reused across runner pods to retain `/var/lib/docker`.
 
 _Be sure to add the volume mount to the container that is supposed to run the docker daemon._
 
-_Be sure to trigger several workflow runs before checking if the cache is effective. ARC requires an `Available` PV to be reused for the new runner pod, and a PV becomes `Available` only after some time after the previous runner pod that was using the PV terminated. See [the related discussion](https://github.com/actions-runner-controller/actions-runner-controller/discussions/1605)._
+_Be sure to trigger several workflow runs before checking if the cache is effective. ARC requires an `Available` PV to be reused for the new runner pod, and a PV becomes `Available` only after some time after the previous runner pod that was using the PV terminated. See [the related discussion](https://github.com/actions/actions-runner-controller/discussions/1605)._
 
 By default, ARC creates a sidecar container named `docker` within the runner pod for running the docker daemon. In that case,
 it's where you need the volume mount so that the manifest looks like:
@@ -1412,7 +1412,7 @@ With `dockerdWithinRunnerContainer: true`, you need to add the volume mount to t
 The module cache dir can be customized by setting `GOMOD_CACHE` so by setting it to somewhere under `$HOME/.cache`,
 we can have a single PV to host both build and module cache, which might improve Go module downloading and building time.
 
-_Be sure to trigger several workflow runs before checking if the cache is effective. ARC requires an `Available` PV to be reused for the new runner pod, and a PV becomes `Available` only after some time after the previous runner pod that was using the PV terminated. See [the related discussion](https://github.com/actions-runner-controller/actions-runner-controller/discussions/1605)._
+_Be sure to trigger several workflow runs before checking if the cache is effective. ARC requires an `Available` PV to be reused for the new runner pod, and a PV becomes `Available` only after some time after the previous runner pod that was using the PV terminated. See [the related discussion](https://github.com/actions/actions-runner-controller/discussions/1605)._
 
 ```yaml
 kind: RunnerSet
@@ -1589,7 +1589,7 @@ spec:
         # Specify the duration to wait for the docker daemon to be available
         # The default duration of 120 seconds is sometimes too short
         # to reliably wait for the docker daemon to start
-        # See https://github.com/actions-runner-controller/actions-runner-controller/issues/1804
+        # See https://github.com/actions/actions-runner-controller/issues/1804
         - name: WAIT_FOR_DOCKER_SECONDS
           value: 120
         # Disables the wait for the docker daemon to be available check
@@ -1617,7 +1617,7 @@ spec:
       image: summerwind/actions-runner-dind
       env:
         # Sets the respective default-address-pools fields within dockerd daemon.json
-        # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1971 for more information.
+        # See https://github.com/actions/actions-runner-controller/pull/1971 for more information.
         # Also see https://github.com/docker/docs/issues/8663 for the default base/size values in dockerd.
         - name: DOCKER_DEFAULT_ADDRESS_POOL_BASE
           value: "172.17.0.0/12"
@@ -1627,7 +1627,7 @@ spec:
 
 ### Using IRSA (IAM Roles for Service Accounts) in EKS
 
-> This feature requires controller version => [v0.15.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.15.0)
+> This feature requires controller version => [v0.15.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.15.0)
 
 Similar to regular pods and deployments, you firstly need an existing service account with the IAM role associated.
 Create one using e.g. `eksctl`. You can refer to [the EKS documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) for more details.
@@ -1790,7 +1790,7 @@ spec:
 #### Dockerfile
 
 > Note that you'd need to patch the below Dockerfile if you need a graceful termination.
-> See https://github.com/actions-runner-controller/actions-runner-controller/pull/1608/files#r917319574 for more information.
+> See https://github.com/actions/actions-runner-controller/pull/1608/files#r917319574 for more information.
 
 ```Dockerfile
 FROM mcr.microsoft.com/windows/servercore:ltsc2019
@@ -1850,7 +1850,7 @@ After both `RunnerDeployment`'s are up and running, you can now proceed to deplo
 
 ### Multitenancy
 
-> This feature requires controller version => [v0.26.0](https://github.com/actions-runner-controller/actions-runner-controller/releases/tag/v0.26.0)
+> This feature requires controller version => [v0.26.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.26.0)
 
 In a large enterprise, there might be many GitHub organizations that requires self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
 
