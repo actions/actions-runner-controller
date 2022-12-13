@@ -1,22 +1,31 @@
-# Security Policy
+Thanks for helping make GitHub safe for everyone.
 
-##  Sponsoring the project
+## Security
 
-This project is maintained by a small team of two and therefore lacks the resource to provide security fixes in a timely manner.
+GitHub takes the security of our software products and services seriously, including all of the open source code repositories managed through our GitHub organizations, such as [GitHub](https://github.com/GitHub).
 
-If you have important business(es) that relies on this project, please consider sponsoring the project so that the maintainer(s) can commit to providing such service.
+Even though [open source repositories are outside of the scope of our bug bounty program](https://bounty.github.com/index.html#scope) and therefore not eligible for bounty rewards, we will ensure that your finding gets passed along to the appropriate maintainers for remediation. 
 
-Please refer to https://github.com/sponsors/actions-runner-controller for available tiers.
+## Reporting Security Issues
 
-## Supported Versions
+If you believe you have found a security vulnerability in any GitHub-owned repository, please report it to us through coordinated disclosure.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.23.0  | :white_check_mark: |
-| < 0.23.0| :x:                |
+**Please do not report security vulnerabilities through public GitHub issues, discussions, or pull requests.**
 
-## Reporting a Vulnerability
+Instead, please send an email to opensource-security[@]github.com.
 
-To report a security issue, please email ykuoka+arcsecurity(at)gmail.com with a description of the issue, the steps you took to create the issue, affected versions, and, if known, mitigations for the issue.
+Please include as much of the information listed below as you can to help us better understand and resolve the issue:
 
-A maintainer will try to respond within 5 working days. If the issue is confirmed as a vulnerability, a Security Advisory will be opened. This project tries to follow a 90 day disclosure timeline.
+  * The type of issue (e.g., buffer overflow, SQL injection, or cross-site scripting)
+  * Full paths of source file(s) related to the manifestation of the issue
+  * The location of the affected source code (tag/branch/commit or direct URL)
+  * Any special configuration required to reproduce the issue
+  * Step-by-step instructions to reproduce the issue
+  * Proof-of-concept or exploit code (if possible)
+  * Impact of the issue, including how an attacker might exploit the issue
+
+This information will help us triage your report more quickly.
+
+## Policy
+
+See [GitHub's Safe Harbor Policy](https://docs.github.com/en/github/site-policy/github-bug-bounty-program-legal-safe-harbor#1-safe-harbor-terms)
