@@ -19,6 +19,7 @@ RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    openssh-client \
     git \
     git-lfs \
     iptables \
