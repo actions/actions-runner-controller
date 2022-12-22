@@ -3,7 +3,7 @@ package controllers
 import (
 	"testing"
 
-	arcv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	arcv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

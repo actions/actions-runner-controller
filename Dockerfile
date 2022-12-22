@@ -36,7 +36,7 @@ ENV GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
 RUN --mount=target=. \
   --mount=type=cache,mode=0777,target=${GOCACHE} \
   export GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} && \
-  go build -trimpath -ldflags="-s -w -X 'github.com/actions-runner-controller/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
+  go build -trimpath -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
   go build -trimpath -ldflags="-s -w" -o /out/github-webhook-server ./cmd/githubwebhookserver && \
   go build -trimpath -ldflags="-s -w" -o /out/actions-metrics-server ./cmd/actionsmetricsserver
 

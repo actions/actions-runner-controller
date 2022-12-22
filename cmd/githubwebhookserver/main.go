@@ -26,8 +26,8 @@ import (
 	"sync"
 	"time"
 
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers"
+	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions-runner-controller/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/actions-runner-controller/actions-runner-controller/logging"
 

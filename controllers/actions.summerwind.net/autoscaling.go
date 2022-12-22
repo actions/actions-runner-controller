@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	prometheus_metrics "github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
+	"github.com/actions-runner-controller/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	prometheus_metrics "github.com/actions-runner-controller/actions-runner-controller/controllers/actions.summerwind.net/metrics"
 	arcgithub "github.com/actions-runner-controller/actions-runner-controller/github"
 	"github.com/google/go-github/v47/github"
 	corev1 "k8s.io/api/core/v1"
