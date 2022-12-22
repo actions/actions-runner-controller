@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 DOCKER=/usr/bin/docker
 if [ ! -e $DOCKER ]; then
-  DOCKER=$HOME/bin/docker
+  DOCKER=/home/runner/bin/docker
 fi
 
 if [[ ${ARC_DOCKER_MTU_PROPAGATION:-false} == true ]] &&
