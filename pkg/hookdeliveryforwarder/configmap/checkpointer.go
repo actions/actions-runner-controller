@@ -9,7 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"github.com/actions-runner-controller/actions-runner-controller/pkg/hookdeliveryforwarder"
+	"github.com/actions/actions-runner-controller/pkg/hookdeliveryforwarder"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

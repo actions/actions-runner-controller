@@ -6,4 +6,4 @@ spec:
   replicas: 2
   template:
     spec:
-      repository: actions-runner-controller/actions-runner-controller
+      repository: actions/actions-runner-controller

@@ -30,7 +30,7 @@ enableLeaderElection: true
 #
 # Do set authSecret.enabled=false and set env if you want full control over
 # the GitHub authn related envvars of the container.
-# See https://github.com/actions-runner-controller/actions-runner-controller/pull/937 for more details.
+# See https://github.com/actions/actions-runner-controller/pull/937 for more details.
 authSecret:
   enabled: true
   create: false
@@ -70,7 +70,7 @@ rbac:
   # # This allows ARC to dynamically create a ServiceAccount and a Role for each Runner pod that uses "kubernetes" container mode,
   # # by extending ARC's manager role to have the same permissions required by the pod runs the runner agent in "kubernetes" container mode.
   # # Without this, Kubernetes blocks ARC to create the role to prevent a priviledge escalation.
-  # # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1268/files#r917327010
+  # # See https://github.com/actions/actions-runner-controller/pull/1268/files#r917327010
   # allowGrantingKubernetesContainerModePermissions: true
 
 serviceAccount:
@@ -185,7 +185,7 @@ admissionWebHooks:
   #caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle containing the CA that signed the webhook's serving certificate>...tLS0K"
 
 # There may be alternatives to setting `hostNetwork: true`, see
-# https://github.com/actions-runner-controller/actions-runner-controller/issues/1005#issuecomment-993097155
+# https://github.com/actions/actions-runner-controller/issues/1005#issuecomment-993097155
 #hostNetwork: true
 
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
@@ -296,7 +296,7 @@ actionsMetricsServer:
   enabled: false
   # DO NOT CHANGE THIS!
   # See the thread below for more context.
-  # https://github.com/actions-runner-controller/actions-runner-controller/pull/1814#discussion_r974758924
+  # https://github.com/actions/actions-runner-controller/pull/1814#discussion_r974758924
   replicaCount: 1
   ## specify log format for github webhook controller.  Valid options are "text" and "json"
   logFormat: text

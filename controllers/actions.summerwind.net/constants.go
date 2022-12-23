@@ -61,7 +61,7 @@ const (
 	// In case it actually took more than DefaultRunnerPodRecreationDelayAfterWebhookScale for the workflow_job completion event to arrive,
 	// ARC will recreate the completed runner(s), assuming something went wrong in either GitHub, your K8s cluster, or ARC, so ARC needs to resync anyway.
 	//
-	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1180
+	// See https://github.com/actions/actions-runner-controller/pull/1180
 	DefaultRunnerPodRecreationDelayAfterWebhookScale = 10 * time.Minute
 
 	EnvVarRunnerName  = "RUNNER_NAME"

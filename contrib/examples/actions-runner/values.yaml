@@ -26,8 +26,8 @@ autoscaler:
   maxReplicas: 5
   scaleDownDelaySecondsAfterScaleOut: 120
   # metrics (pull method) / scaleUpTriggers (push method)
-  # https://github.com/actions-runner-controller/actions-runner-controller#pull-driven-scaling
-  # https://github.com/actions-runner-controller/actions-runner-controller#webhook-driven-scaling
+  # https://github.com/actions/actions-runner-controller#pull-driven-scaling
+  # https://github.com/actions/actions-runner-controller#webhook-driven-scaling
   metrics:
   - type: PercentageRunnersBusy
     scaleUpThreshold: '0.75'

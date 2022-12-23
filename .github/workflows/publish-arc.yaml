@@ -63,8 +63,8 @@ jobs:
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
             ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ env.sha_short }}
-            ghcr.io/actions-runner-controller/actions-runner-controller:latest
-            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}
-            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}-${{ env.sha_short }}
+            ghcr.io/actions/actions-runner-controller:latest
+            ghcr.io/actions/actions-runner-controller:${{ env.VERSION }}
+            ghcr.io/actions/actions-runner-controller:${{ env.VERSION }}-${{ env.sha_short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

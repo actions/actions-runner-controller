@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/github"
 	gogithub "github.com/google/go-github/v47/github"
 )
 

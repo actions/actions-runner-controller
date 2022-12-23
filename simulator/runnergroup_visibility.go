@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 )
 

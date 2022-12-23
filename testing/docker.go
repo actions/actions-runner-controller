@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/actions-runner-controller/actions-runner-controller/testing/runtime"
+	"github.com/actions/actions-runner-controller/testing/runtime"
 )
 
 type Docker struct {

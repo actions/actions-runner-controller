@@ -112,7 +112,7 @@ spec:
       # workDir: "/"
 
       # # Uncomment the below to enable the kubernetes container mode
-      # # See https://github.com/actions-runner-controller/actions-runner-controller#runner-with-k8s-jobs
+      # # See https://github.com/actions/actions-runner-controller#runner-with-k8s-jobs
       containerMode: ${RUNNER_CONTAINER_MODE}
       workVolumeClaimTemplate:
         accessModes:

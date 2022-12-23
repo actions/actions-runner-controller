@@ -20,10 +20,10 @@ jobs:
 
             The maintainers will triage your issue shortly.
 
-            In the meantime, please take a look at the [troubleshooting guide](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/TROUBLESHOOTING.md) for bug reports.
+            In the meantime, please take a look at the [troubleshooting guide](https://github.com/actions/actions-runner-controller/blob/master/TROUBLESHOOTING.md) for bug reports.
             
-            If this is a feature request, please review our [contribution guidelines](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/CONTRIBUTING.md).
+            If this is a feature request, please review our [contribution guidelines](https://github.com/actions/actions-runner-controller/blob/master/CONTRIBUTING.md).
           pr-message: |
             Hello! Thank you for your contribution.
 
-            Please review our [contribution guidelines](https://github.com/actions-runner-controller/actions-runner-controller/blob/master/CONTRIBUTING.md) to understand the project's testing and code conventions.
+            Please review our [contribution guidelines](https://github.com/actions/actions-runner-controller/blob/master/CONTRIBUTING.md) to understand the project's testing and code conventions.

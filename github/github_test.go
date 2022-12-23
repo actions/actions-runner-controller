@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
+	"github.com/actions/actions-runner-controller/github/fake"
 	"github.com/google/go-github/v47/github"
 )
 

@@ -9,7 +9,7 @@ body:
     label: Checks
     description: Please check all the boxes below before submitting
     options:
-    - label: I've already read https://github.com/actions-runner-controller/actions-runner-controller/blob/master/TROUBLESHOOTING.md and I'm sure my issue is not covered in the troubleshooting guide.
+    - label: I've already read https://github.com/actions/actions-runner-controller/blob/master/TROUBLESHOOTING.md and I'm sure my issue is not covered in the troubleshooting guide.
       required: true
     - label: I'm not using a custom entrypoint in my runner image
       required: true
@@ -51,7 +51,7 @@ body:
     label: cert-manager installation
     description: Confirm that you've installed cert-manager correctly by answering a few questions
     placeholder: |
-      - Did you follow https://github.com/actions-runner-controller/actions-runner-controller#installation? If not, describe the installation process so that we can reproduce your environment.
+      - Did you follow https://github.com/actions/actions-runner-controller#installation? If not, describe the installation process so that we can reproduce your environment.
       - Are you sure you've installed cert-manager from an official source?
       (Note that we won't provide user support for cert-manager itself. Make sure cert-manager is fully working before testing ARC or reporting a bug
   validations:
@@ -62,9 +62,9 @@ body:
     label: Checks
     description: Please check all the boxes below before submitting
     options:
-    - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions-runner-controller/actions-runner-controller/discussions). It might also be a good idea to contract with any of contributors and maintainers if your business is so critical and therefore you need priority support
+    - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions/actions-runner-controller/discussions). It might also be a good idea to contract with any of contributors and maintainers if your business is so critical and therefore you need priority support
       required: true
-    - label: I've read [releasenotes](https://github.com/actions-runner-controller/actions-runner-controller/tree/master/docs/releasenotes) before submitting this issue and I'm sure it's not due to any recently-introduced backward-incompatible changes
+    - label: I've read [releasenotes](https://github.com/actions/actions-runner-controller/tree/master/docs/releasenotes) before submitting this issue and I'm sure it's not due to any recently-introduced backward-incompatible changes
       required: true
     - label: My actions-runner-controller version (v0.x.y) does support the feature
       required: true

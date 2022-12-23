@@ -20,10 +20,10 @@ version: 0.21.1
 # Used as the default manager tag value when no tag property is provided in the values.yaml
 appVersion: 0.26.0
 
-home: https://github.com/actions-runner-controller/actions-runner-controller
+home: https://github.com/actions/actions-runner-controller
 
 sources:
-  - https://github.com/actions-runner-controller/actions-runner-controller
+  - https://github.com/actions/actions-runner-controller
 
 maintainers:
   - name: actions-runner-controller

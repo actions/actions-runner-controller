@@ -25,10 +25,10 @@ import (
 	"os"
 	"sync"
 
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/logging"
-	"github.com/actions-runner-controller/actions-runner-controller/pkg/actionsmetrics"
+	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/pkg/actionsmetrics"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 

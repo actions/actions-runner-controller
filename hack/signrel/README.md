@@ -12,10 +12,10 @@ With `gpg`, you would usually do that by downloading both the asset and the sign
 
 ```console
 # Download the asset
-curl -LO https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.23.0/actions-runner-controller.yaml
+curl -LO https://github.com/actions/actions-runner-controller/releases/download/v0.23.0/actions-runner-controller.yaml
 
 # Download the signature file
-curl -LO https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.23.0/actions-runner-controller.yaml.asc
+curl -LO https://github.com/actions/actions-runner-controller/releases/download/v0.23.0/actions-runner-controller.yaml.asc
 
 # Verify
 gpg --verify actions-runner-controller.yaml{.asc,}
