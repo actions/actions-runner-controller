@@ -3,4 +3,4 @@ kind: Runner
 metadata:
   name: summerwind-actions-runner-controller
 spec:
-  repository: actions-runner-controller/actions-runner-controller
+  repository: actions/actions-runner-controller

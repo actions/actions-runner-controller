@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

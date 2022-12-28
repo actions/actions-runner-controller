@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/github/fake"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/github/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"

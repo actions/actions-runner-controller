@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/actions-runner-controller/actions-runner-controller/pkg/hookdeliveryforwarder"
-	"github.com/actions-runner-controller/actions-runner-controller/pkg/hookdeliveryforwarder/configmap"
+	"github.com/actions/actions-runner-controller/pkg/hookdeliveryforwarder"
+	"github.com/actions/actions-runner-controller/pkg/hookdeliveryforwarder/configmap"
 	"github.com/go-logr/logr"
 	zaplib "go.uber.org/zap"
 

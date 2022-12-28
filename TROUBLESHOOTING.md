@@ -63,9 +63,9 @@ To fix this, you may either:
 
    ```sh
    # With helm, you'd set `webhookPort` to the port number of your choice
-   # See https://github.com/actions-runner-controller/actions-runner-controller/pull/1410/files for more information
+   # See https://github.com/actions/actions-runner-controller/pull/1410/files for more information
    helm upgrade --install --namespace actions-runner-system --create-namespace \
-                --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
+                --wait actions-runner-controller actions/actions-runner-controller \
                 --set webhookPort=10250
    ```
 
@@ -168,7 +168,7 @@ are in a namespace not shared with anything else_
 
 **Problem**
 
-ARC isn't involved in jobs actually getting allocated to a runner. ARC is responsible for orchestrating runners and the runner lifecycle. Why some people see large delays in job allocation is not clear however it has been confirmed https://github.com/actions-runner-controller/actions-runner-controller/issues/1387#issuecomment-1122593984 that this is caused from the self-update process somehow.
+ARC isn't involved in jobs actually getting allocated to a runner. ARC is responsible for orchestrating runners and the runner lifecycle. Why some people see large delays in job allocation is not clear however it has been confirmed https://github.com/actions/actions-runner-controller/issues/1387#issuecomment-1122593984 that this is caused from the self-update process somehow.
 
 **Solution**
 
@@ -214,7 +214,7 @@ More broadly, there are many other circumstances where the runner pod coming up 
 
 > Added originally to help users with older istio instances.
 > Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
-> Please read the discussion in [#592](https://github.com/actions-runner-controller/actions-runner-controller/pull/592) for more information.
+> Please read the discussion in [#592](https://github.com/actions/actions-runner-controller/pull/592) for more information.
 
 You can add a delay to the runner's entrypoint script by setting the `STARTUP_DELAY_IN_SECONDS` environment variable for the runner pod. This will cause the script to sleep X seconds, this works with any runner kind.
 
@@ -278,7 +278,7 @@ spec:
 ```
 
 You can read the discussion regarding this issue in
-(#1406)[https://github.com/actions-runner-controller/actions-runner-controller/issues/1046].
+(#1406)[https://github.com/actions/actions-runner-controller/issues/1046].
 
 ## Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns
 
@@ -288,7 +288,7 @@ HRA doesn't scale the RunnerDeployment to zero, even though you did configure HR
 
 **Solution**
 
-You very likely have some dangling workflow jobs stuck in `queued` or `in_progress` as seen in [#1057](https://github.com/actions-runner-controller/actions-runner-controller/issues/1057#issuecomment-1133439061).
+You very likely have some dangling workflow jobs stuck in `queued` or `in_progress` as seen in [#1057](https://github.com/actions/actions-runner-controller/issues/1057#issuecomment-1133439061).
 
 Manually call [the "list workflow runs" API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository), and [remove the dangling workflow job(s)](https://docs.github.com/en/rest/actions/workflow-runs#delete-a-workflow-run).
 

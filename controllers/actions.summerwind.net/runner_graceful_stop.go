@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/github"
 	"github.com/go-logr/logr"
 	gogithub "github.com/google/go-github/v47/github"
 	corev1 "k8s.io/api/core/v1"
@@ -173,7 +173,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		}
 
 		// Prevent runner pod from stucking in Terminating.
-		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/1369
+		// See https://github.com/actions/actions-runner-controller/issues/1369
 		log.Info("Deleting runner pod anyway because it has stopped prematurely. This may leave a dangling runner resource in GitHub Actions",
 			"lastState.exitCode", lts.ExitCode,
 			"lastState.message", lts.Message,
@@ -258,7 +258,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 			log.V(2).Info("Retrying runner unregistration because the static runner is still busy")
 			// Otherwise we may end up spamming 422 errors,
 			// each call consuming GitHub API rate limit
-			// https://github.com/actions-runner-controller/actions-runner-controller/pull/1167#issuecomment-1064213271
+			// https://github.com/actions/actions-runner-controller/pull/1167#issuecomment-1064213271
 			return &ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
 
@@ -444,7 +444,7 @@ func unregisterRunner(ctx context.Context, client *github.Client, enterprise, or
 	// # NOTES
 	//
 	// - It can be "status=offline" at the same time but that's another story.
-	// - After https://github.com/actions-runner-controller/actions-runner-controller/pull/1127, ListRunners responses that are used to
+	// - After https://github.com/actions/actions-runner-controller/pull/1127, ListRunners responses that are used to
 	//   determine if the runner is busy can be more outdated than before, as those responeses are now cached for 60 seconds.
 	// - Note that 60 seconds is controlled by the Cache-Control response header provided by GitHub so we don't have a strict control on it but we assume it won't
 	//   change from 60 seconds.

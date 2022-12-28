@@ -26,10 +26,10 @@ import (
 	"sync"
 	"time"
 
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/logging"
+	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
+	"github.com/actions/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/logging"
 
 	"github.com/kelseyhightower/envconfig"
 

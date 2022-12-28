@@ -31,8 +31,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.summerwind.net/metrics"
 	"github.com/go-logr/logr"
 )
 

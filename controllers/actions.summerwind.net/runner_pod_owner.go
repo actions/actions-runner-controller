@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -179,7 +179,7 @@ func getPodsForOwner(ctx context.Context, c client.Client, log logr.Logger, o cl
 					"Runner failed to register itself to GitHub in timely manner. "+
 						"Recreating the pod to see if it resolves the issue. "+
 						"CAUTION: If you see this a lot, you should investigate the root cause. "+
-						"See https://github.com/actions-runner-controller/actions-runner-controller/issues/288",
+						"See https://github.com/actions/actions-runner-controller/issues/288",
 					"creationTimestamp", pod.CreationTimestamp,
 					"readyTransitionTime", podConditionTransitionTime(&pod, corev1.PodReady, corev1.ConditionTrue),
 					"configuredRegistrationTimeout", registrationTimeout,
@@ -488,7 +488,7 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 	// lastSyncTime becomes non-nil only when there are one or more owner(s) hence there are same number of runner pods.
 	// It's used to prevent runnerset-controller from recreating "completed ephemeral runners".
 	// This is needed to prevent runners from being terminated prematurely.
-	// See https://github.com/actions-runner-controller/actions-runner-controller/issues/911 for more context.
+	// See https://github.com/actions/actions-runner-controller/issues/911 for more context.
 	//
 	// This becomes nil when there are zero statefulset(s). That's fine because then there should be zero stateful(s) to be recreated either hence
 	// we don't need to guard with lastSyncTime.

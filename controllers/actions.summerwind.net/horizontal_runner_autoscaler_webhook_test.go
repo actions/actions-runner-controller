@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
+	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/google/go-github/v47/github"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

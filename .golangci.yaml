@@ -7,8 +7,8 @@ linters-settings:
     exclude-functions:
       - (net/http.ResponseWriter).Write
       - (*net/http.Server).Shutdown
-      - (*github.com/actions-runner-controller/actions-runner-controller/simulator.VisibleRunnerGroups).Add
-      - (*github.com/actions-runner-controller/actions-runner-controller/testing.Kind).Stop
+      - (*github.com/actions/actions-runner-controller/simulator.VisibleRunnerGroups).Add
+      - (*github.com/actions/actions-runner-controller/testing.Kind).Stop
 issues:
   exclude-rules:
     - path: controllers/suite_test.go

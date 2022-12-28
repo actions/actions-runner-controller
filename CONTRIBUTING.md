@@ -19,7 +19,7 @@
 ## Welcome
 
 This document is the single source of truth for how to contribute to the code base.
-Feel free to browse the [open issues](https://github.com/actions-runner-controller/actions-runner-controller/issues) or file a new one, all feedback is welcome!
+Feel free to browse the [open issues](https://github.com/actions/actions-runner-controller/issues) or file a new one, all feedback is welcome!
 By reading this guide, we hope to give you all of the information you need to be able to pick up issues, contribute new features, and get your work
 reviewed and merged.
 
@@ -111,7 +111,7 @@ That's the directory in which controller-runtime's `envtest` framework locates t
 sudo mkdir -p /usr/local/kubebuilder/bin
 make kube-apiserver etcd
 sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
-go test -v -run TestAPIs github.com/actions-runner-controller/actions-runner-controller/controllers
+go test -v -run TestAPIs github.com/actions/actions-runner-controller/controllers/actions.summerwind.net
 ```
 
 To run Ginkgo tests selectively, set the pattern of target test names to `GINKGO_FOCUS`.
@@ -119,7 +119,7 @@ All the Ginkgo test that matches `GINKGO_FOCUS` will be run.
 
 ```shell
 GINKGO_FOCUS='[It] should create a new Runner resource from the specified template, add a another Runner on replicas increased, and removes all the replicas when set to 0' \
-  go test -v -run TestAPIs github.com/actions-runner-controller/actions-runner-controller/controllers
+  go test -v -run TestAPIs github.com/actions/actions-runner-controller/controllers/actions.summerwind.net
 ```
 
 ### Running End to End Tests

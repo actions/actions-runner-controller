@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/github"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

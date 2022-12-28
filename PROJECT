@@ -1,5 +1,5 @@
 domain: summerwind.dev
-repo: github.com/actions-runner-controller/actions-runner-controller
+repo: github.com/actions/actions-runner-controller
 resources:
 - group: actions
   kind: Runner

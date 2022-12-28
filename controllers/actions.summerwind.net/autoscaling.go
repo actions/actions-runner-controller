@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	prometheus_metrics "github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
-	arcgithub "github.com/actions-runner-controller/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	prometheus_metrics "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net/metrics"
+	arcgithub "github.com/actions/actions-runner-controller/github"
 	"github.com/google/go-github/v47/github"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +34,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgi
 	numMetrics := len(metrics)
 	if numMetrics == 0 {
 		// We don't default to anything since ARC 0.23.0
-		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/728
+		// See https://github.com/actions/actions-runner-controller/issues/728
 		return nil, nil
 	} else if numMetrics > 2 {
 		return nil, fmt.Errorf("too many autoscaling metrics configured: It must be 0 to 2, but got %d", numMetrics)
@@ -99,7 +99,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 
 		// In case it's an organizational runners deployment without any scaling metrics defined,
 		// we assume that the desired replicas should always be `minReplicas + capacityReservedThroughWebhook`.
-		// See https://github.com/actions-runner-controller/actions-runner-controller/issues/377#issuecomment-793372693
+		// See https://github.com/actions/actions-runner-controller/issues/377#issuecomment-793372693
 		if metrics == nil {
 			return nil, nil
 		}

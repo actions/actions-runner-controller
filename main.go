@@ -23,11 +23,11 @@ import (
 	"strings"
 	"time"
 
-	actionsv1alpha1 "github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/build"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers"
-	"github.com/actions-runner-controller/actions-runner-controller/github"
-	"github.com/actions-runner-controller/actions-runner-controller/logging"
+	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/build"
+	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
+	"github.com/actions/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -114,10 +114,10 @@ func main() {
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
 	flag.BoolVar(&runnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
-	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", controllers.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
+	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", actionssummerwindnet.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
-	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions-runner-controller/actions-runner-controller/issues/321 for more information")
+	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
@@ -153,12 +153,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	multiClient := controllers.NewMultiGitHubClient(
+	multiClient := actionssummerwindnet.NewMultiGitHubClient(
 		mgr.GetClient(),
 		ghClient,
 	)
 
-	runnerReconciler := &controllers.RunnerReconciler{
+	runnerReconciler := &actionssummerwindnet.RunnerReconciler{
 		Client:                    mgr.GetClient(),
 		Log:                       log.WithName("runner"),
 		Scheme:                    mgr.GetScheme(),
@@ -176,7 +176,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerReplicaSetReconciler := &controllers.RunnerReplicaSetReconciler{
+	runnerReplicaSetReconciler := &actionssummerwindnet.RunnerReplicaSetReconciler{
 		Client: mgr.GetClient(),
 		Log:    log.WithName("runnerreplicaset"),
 		Scheme: mgr.GetScheme(),
@@ -187,7 +187,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerDeploymentReconciler := &controllers.RunnerDeploymentReconciler{
+	runnerDeploymentReconciler := &actionssummerwindnet.RunnerDeploymentReconciler{
 		Client:             mgr.GetClient(),
 		Log:                log.WithName("runnerdeployment"),
 		Scheme:             mgr.GetScheme(),
@@ -199,7 +199,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	runnerSetReconciler := &controllers.RunnerSetReconciler{
+	runnerSetReconciler := &actionssummerwindnet.RunnerSetReconciler{
 		Client:               mgr.GetClient(),
 		Log:                  log.WithName("runnerset"),
 		Scheme:               mgr.GetScheme(),
@@ -231,7 +231,7 @@ func main() {
 		"watch-namespace", namespace,
 	)
 
-	horizontalRunnerAutoscaler := &controllers.HorizontalRunnerAutoscalerReconciler{
+	horizontalRunnerAutoscaler := &actionssummerwindnet.HorizontalRunnerAutoscalerReconciler{
 		Client:                mgr.GetClient(),
 		Log:                   log.WithName("horizontalrunnerautoscaler"),
 		Scheme:                mgr.GetScheme(),
@@ -239,20 +239,20 @@ func main() {
 		DefaultScaleDownDelay: defaultScaleDownDelay,
 	}
 
-	runnerPodReconciler := &controllers.RunnerPodReconciler{
+	runnerPodReconciler := &actionssummerwindnet.RunnerPodReconciler{
 		Client:       mgr.GetClient(),
 		Log:          log.WithName("runnerpod"),
 		Scheme:       mgr.GetScheme(),
 		GitHubClient: multiClient,
 	}
 
-	runnerPersistentVolumeReconciler := &controllers.RunnerPersistentVolumeReconciler{
+	runnerPersistentVolumeReconciler := &actionssummerwindnet.RunnerPersistentVolumeReconciler{
 		Client: mgr.GetClient(),
 		Log:    log.WithName("runnerpersistentvolume"),
 		Scheme: mgr.GetScheme(),
 	}
 
-	runnerPersistentVolumeClaimReconciler := &controllers.RunnerPersistentVolumeClaimReconciler{
+	runnerPersistentVolumeClaimReconciler := &actionssummerwindnet.RunnerPersistentVolumeClaimReconciler{
 		Client: mgr.GetClient(),
 		Log:    log.WithName("runnerpersistentvolumeclaim"),
 		Scheme: mgr.GetScheme(),
@@ -292,7 +292,7 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	injector := &controllers.PodRunnerTokenInjector{
+	injector := &actionssummerwindnet.PodRunnerTokenInjector{
 		Client:       mgr.GetClient(),
 		GitHubClient: multiClient,
 		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),

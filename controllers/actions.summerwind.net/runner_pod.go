@@ -3,7 +3,7 @@ package controllers
 import corev1 "k8s.io/api/core/v1"
 
 // Force the runner pod managed by either RunnerDeployment and RunnerSet to have restartPolicy=Never.
-// See https://github.com/actions-runner-controller/actions-runner-controller/issues/1369 for more context.
+// See https://github.com/actions/actions-runner-controller/issues/1369 for more context.
 //
 // This is to prevent runner pods from stucking in Terminating when a K8s node disappeared along with the runnr pod and the runner container within it.
 //

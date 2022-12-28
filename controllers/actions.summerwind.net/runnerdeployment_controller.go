@@ -37,8 +37,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/actions-runner-controller/actions-runner-controller/api/v1alpha1"
-	"github.com/actions-runner-controller/actions-runner-controller/controllers/metrics"
+	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.summerwind.net/metrics"
 )
 
 const (
@@ -158,7 +158,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// A selector update change doesn't trigger replicaset replacement,
 		// but we still need to update the existing replicaset with it.
 		// Otherwise selector-based runner query will never work on replicasets created before the controller v0.17.0
-		// See https://github.com/actions-runner-controller/actions-runner-controller/pull/355#discussion_r585379259
+		// See https://github.com/actions/actions-runner-controller/pull/355#discussion_r585379259
 		if err := r.Client.Update(ctx, updateSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
 
@@ -183,7 +183,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Please add more conditions that we can in-place update the newest runnerreplicaset without disruption
 	//
 	// If we missed taking the EffectiveTime diff into account, you might end up experiencing scale-ups being delayed scale-down.
-	// See https://github.com/actions-runner-controller/actions-runner-controller/pull/1477#issuecomment-1164154496
+	// See https://github.com/actions/actions-runner-controller/pull/1477#issuecomment-1164154496
 	var et1, et2 time.Time
 	if newestSet.Spec.EffectiveTime != nil {
 		et1 = newestSet.Spec.EffectiveTime.Time

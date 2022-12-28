@@ -4,7 +4,7 @@ All additional docs are kept in the `docs/` folder, this README is solely for do
 
 ## Values
 
-**_The values are documented as of HEAD, to review the configuration options for your chart version ensure you view this file at the relevent [tag](https://github.com/actions-runner-controller/actions-runner-controller/tags)_**
+**_The values are documented as of HEAD, to review the configuration options for your chart version ensure you view this file at the relevent [tag](https://github.com/actions/actions-runner-controller/tags)_**
 
 > _Default values are the defaults set in the charts values.yaml, some properties have default configurations in the code for when the property is omitted or invalid_
 
@@ -31,6 +31,6 @@ All additional docs are kept in the `docs/` folder, this README is solely for do
 | `autoscaler.enabled`                                     | Enable the HorizontalRunnerAutoscaler, if its enabled then replica count will not be used                                                                    | true                                                       |
 | `autoscaler.minReplicas`                                 | Minimum no of replicas                                                                    | 1                                                      |
 | `autoscaler.maxReplicas`                                 | Maximum no of replicas                                                                    | 5                                                      |
-| `autoscaler.scaleDownDelaySecondsAfterScaleOut`          | [Anti-Flapping Configuration](https://github.com/actions-runner-controller/actions-runner-controller#anti-flapping-configuration)                                                                   | 120                                                     |
-| `autoscaler.metrics`                                 | [Pull driven scaling](https://github.com/actions-runner-controller/actions-runner-controller#pull-driven-scaling)                                                                    | default                                                      |
-| `autoscaler.scaleUpTriggers`                         | [Webhook driven scaling](https://github.com/actions-runner-controller/actions-runner-controller#webhook-driven-scaling)                                                                    |                                                     |
+| `autoscaler.scaleDownDelaySecondsAfterScaleOut`          | [Anti-Flapping Configuration](https://github.com/actions/actions-runner-controller#anti-flapping-configuration)                                                                   | 120                                                     |
+| `autoscaler.metrics`                                 | [Pull driven scaling](https://github.com/actions/actions-runner-controller#pull-driven-scaling)                                                                    | default                                                      |
+| `autoscaler.scaleUpTriggers`                         | [Webhook driven scaling](https://github.com/actions/actions-runner-controller#webhook-driven-scaling)                                                                    |                                                     |

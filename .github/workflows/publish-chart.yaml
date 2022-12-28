@@ -90,9 +90,9 @@ jobs:
       - name: Check if Chart Publish is Needed
         id: publish-chart-step
         run: |
-          CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/actions-runner-controller/actions-runner-controller/master/charts/actions-runner-controller/Chart.yaml)
+          CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/actions/actions-runner-controller/master/charts/actions-runner-controller/Chart.yaml)
           NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
-          RELEASE_LIST=$(curl -fs https://api.github.com/repos/actions-runner-controller/actions-runner-controller/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
+          RELEASE_LIST=$(curl -fs https://api.github.com/repos/actions/actions-runner-controller/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
           LATEST_RELEASED_CHART_VERSION=$(echo $RELEASE_LIST | cut -d ' ' -f 1)
           echo "Chart version in master : $NEW_CHART_VERSION"
           echo "Latest release chart version : $LATEST_RELEASED_CHART_VERSION"
