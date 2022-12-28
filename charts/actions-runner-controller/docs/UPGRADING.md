@@ -37,7 +37,7 @@ helm repo update
 
 # helm upgrade [RELEASE] [CHART] [flags]
 helm upgrade actions-runner-controller \
-  actions/actions-runner-controller \
+  actions-runner-controller/actions-runner-controller \
   --install \
   --namespace actions-runner-system \
   --version ${CHART_VERSION}
