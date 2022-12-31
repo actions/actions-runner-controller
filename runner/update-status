@@ -29,7 +29,7 @@ if [[ ${RUNNER_STATUS_UPDATE_HOOK:-false} == true ]]; then
       --arg workflow "$workflow" \
       '.status.phase = $phase | .status.message = $message | .status.repository = $repository | .status.owner = $owner | .status.repo = $repo | .status.workflow = $workflow')
       
-    echo $data | curl \
+    echo "$data" | curl \
         --cacert ${serviceaccount}/ca.crt \
         --data @- \
         --noproxy '*' \
