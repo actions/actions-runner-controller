@@ -46,7 +46,7 @@ For more information, please refer to detailed documentation below!
 - [Installing ARC](/docs/installing-arc.md)
 - [Authenticating to the GitHub API](/docs/authenticating-to-the-github-api.md)
 - [Deploying ARC runners](/docs/deploying-arc-runners.md)
-- [Adding ARC runners to a repository, organization, or enterprise](/docs/choosing-runner-destinations.md)
+- [Adding ARC runners to a repository, organization, or enterprise](/docs/choosing-runner-destination.md)
 - [Automatically scaling runners](/docs/automatically-scaling-runners.md)
 - [Using custom volumes](/docs/using-custom-volumes.md)
 - [Using ARC runners in a workflow](/docs/using-arc-runners-in-a-workflow.md)
