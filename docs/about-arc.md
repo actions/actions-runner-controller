@@ -1,3 +1,5 @@
+# About ARC
+
 ## Introduction
 This document provides a high-level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes (K8s) clusters.
 
@@ -131,3 +133,57 @@ ARC supports several different advanced configuration.
 - Webhook driven scaling.
 
 Please refer to the documentation in this repo for further details.
+
+## GitHub Enterprise Support
+
+The solution supports both GHEC (GitHub Enterprise Cloud) and GHES (GitHub Enterprise Server) editions as well as regular GitHub. Both PAT (personal access token) and GitHub App authentication works for installations that will be deploying either repository level and / or organization level runners. If you need to deploy enterprise level runners then you are restricted to PAT based authentication as GitHub doesn't support GitHub App based authentication for enterprise runners currently.
+
+If you are deploying this solution into a GHES environment then you will need to be running version >= [3.6.0](https://docs.github.com/en/enterprise-server@3.6/admin/release-notes).
+
+When deploying the solution for a GHES environment you need to provide an additional environment variable as part of the controller deployment:
+
+```shell
+kubectl set env deploy controller-manager -c manager GITHUB_ENTERPRISE_URL=<GHEC/S URL> --namespace actions-runner-system
+```
+
+**_Note: The repository maintainers do not have an enterprise environment (cloud or server). Support for the enterprise specific feature set is community driven and on a best effort basis. PRs from the community are welcome to add features and maintain support._**
+
+## Software Installed in the Runner Image
+
+**Cloud Tooling**<br />
+The project supports being deployed on the various cloud Kubernetes platforms (e.g. EKS), it does not however aim to go beyond that. No cloud specific tooling is bundled in the base runner, this is an active decision to keep the overhead of maintaining the solution manageable.
+
+**Bundled Software**<br />
+The GitHub hosted runners include a large amount of pre-installed software packages. GitHub maintains a list in README files at <https://github.com/actions/virtual-environments/tree/main/images/linux>.
+
+This solution maintains a few Ubuntu based runner images, these images do not contain all of the software installed on the GitHub runners. The images contain the following subset of packages from the GitHub runners:
+
+- Some basic CLI packages
+- Git
+- Git LFS
+- Docker
+- Docker Compose
+
+The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
+
+If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and then install the extra dependencies directly in the docker image:
+
+```shell
+FROM summerwind/actions-runner:latest
+
+RUN sudo apt-get update -y \
+  && sudo apt-get install $YOUR_PACKAGES
+  && sudo rm -rf /var/lib/apt/lists/*
+```
+
+You can then configure the runner to use a custom docker image by configuring the `image` field of a `RunnerDeployment` or `RunnerSet`:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: custom-runner
+spec:
+  repository: actions/actions-runner-controller
+  image: YOUR_CUSTOM_RUNNER_IMAGE
+```

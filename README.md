@@ -1,153 +1,61 @@
-
 # Actions Runner Controller (ARC)
 
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6061/badge)](https://bestpractices.coreinfrastructure.org/projects/6061)
 [![awesome-runners](https://img.shields.io/badge/listed%20on-awesome--runners-blue.svg)](https://github.com/jonico/awesome-runners)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/actions-runner-controller)](https://artifacthub.io/packages/search?repo=actions-runner-controller)
 
-GitHub Actions automates the deployment of code to different environments, including production. The environments contain the `GitHub Runner` software which executes the automation. `GitHub Runner` can be run in GitHub-hosted cloud or self-hosted environments. Self-hosted environments offer more control of hardware, operating system, and software tools. They can be run on physical machines, virtual machines, or in a container. Containerized environments are lightweight, loosely coupled, highly efficient and can be managed centrally. However, they are not straightforward to use.
+## People
 
-`Actions Runner Controller (ARC)` makes it simpler to run self hosted environments on Kubernetes(K8s) cluster.
+`actions-runner-controller` is an open-source project currently developed and maintained in collaboration with maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions/actions-runner-controller/discussions), mostly in their spare time.
 
-With ARC you can :
+If you think the project is awesome and it's becoming a basis for your important business, consider [sponsoring us](https://github.com/sponsors/actions-runner-controller)!
 
-- **Deploy self hosted runners on Kubernetes cluster** with a simple set of commands.
-- **Auto scale runners** based on demand.
-- **Setup across GitHub editions** including GitHub Enterprise editions and GitHub Enterprise Cloud.
+In case you are already the employer of one of contributors, sponsoring via GitHub Sponsors might not be an option. Just support them in other means!
 
-## Overview
+We don't currently have [any sponsors dedicated to this project yet](https://github.com/sponsors/actions-runner-controller).
 
-For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)."
+However, [HelloFresh](https://www.hellofreshgroup.com/en/) has recently started sponsoring @mumoshu for this project along with his other works. A part of their sponsorship will enable @mumoshu to add an E2E test to keep ARC even more reliable on AWS. Thank you for your sponsorship!
 
+[<img src="https://user-images.githubusercontent.com/22009/170898715-07f02941-35ec-418b-8cd4-251b422fa9ac.png" width="219" height="71" />](https://careers.hellofresh.com/)
 
+## Status
+
+Even though actions-runner-controller is used in production environments, it is still in its early stage of development, hence versioned 0.x.
+
+actions-runner-controller complies to Semantic Versioning 2.0.0 in which v0.x means that there could be backward-incompatible changes for every release.
+
+The documentation is kept inline with master@HEAD, we do our best to highlight any features that require a specific ARC version or higher however this is not always easily done due to there being many moving parts. Additionally, we actively do not retain compatibly with every GitHub Enterprise Server version nor every Kubernetes version so you will need to ensure you stay current within a reasonable timespan.
+
+## About
+
+[GitHub Actions](https://github.com/features/actions) is a very useful tool for automating development. GitHub Actions jobs are run in the cloud by default, but you may want to run your jobs in your environment. [Self-hosted runner](https://github.com/actions/runner) can be used for such use cases, but requires the provisioning and configuration of a virtual machine instance. Instead if you already have a Kubernetes cluster, it makes more sense to run the self-hosted runner on top of it.
+
+**actions-runner-controller** makes that possible. Just create a *Runner* resource on your Kubernetes, and it will run and operate the self-hosted runner for the specified repository. Combined with Kubernetes RBAC, you can also build simple Self-hosted runners as a Service.
 
 ## Getting Started
+To give ARC a try with just a handful of commands, Please refer to the [Quickstart guide](/docs/quickstart.md). 
 
-ARC can be setup with just a few steps.
+For an overview of ARC, please refer to [ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)
 
-In this section we will setup prerequisites, deploy ARC into a K8s cluster, and then run GitHub Action workflows on that cluster.
+For more information, please refer to detailed documentation below!
 
-### Prerequisites
+## Documentation
 
-<details><summary><sub>Create a K8s cluster, if not available.</sub></summary>
-   <sub>
-If you don't have a K8s cluster, you can install a local environment using minikube. For more information, see <a href="https://minikube.sigs.k8s.io/docs/start/">"Installing minikube."</a>
-   </sub>
-</details>
-
-:one: Install cert-manager in your cluster. For more information, see "[cert-manager](https://cert-manager.io/docs/installation/)."
-
-```shell
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-```
-
-<sub> *note:- This command uses v1.8.2. Please replace with a later version, if available.</sub>
-
->You may also install cert-manager using Helm. For instructions, see "[Installing with Helm](https://cert-manager.io/docs/installation/helm/#installing-with-helm)."
-
-:two: Next, Generate a Personal Access Token (PAT) for ARC to authenticate with GitHub.
-
-- Login to your GitHub account and Navigate to "[Create new Token](https://github.com/settings/tokens/new)."
-- Select  **repo**.
-- Click **Generate Token** and then copy the token locally ( we’ll need it later).
-
-### Deploy and Configure ARC
-
-1️⃣ Deploy  and configure ARC on your K8s cluster. You may use Helm or Kubectl.
-
-<details><summary>Helm deployment</summary>
-
-##### Add repository
-
-```shell
-helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
-```
-
-##### Install Helm chart
-
-```shell
-helm upgrade --install --namespace actions-runner-system --create-namespace\
-  --set=authSecret.create=true\
-  --set=authSecret.github_token="REPLACE_YOUR_TOKEN_HERE"\
-  --wait actions-runner-controller actions/actions-runner-controller
-```
-
-<sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated previously. </sub>
-</details>
-
-<details><summary>Kubectl deployment</summary>
-
-##### Deploy ARC
-
-```shell
-kubectl apply -f \
-https://github.com/actions/actions-runner-controller/\
-releases/download/v0.22.0/actions-runner-controller.yaml
-```
-
-<sub> *note:- Replace "v0.22.0" with the version you wish to deploy </sub>
-
-##### Configure Personal Access Token
-
-```shell
-kubectl create secret generic controller-manager \
-    -n actions-runner-system \
-    --from-literal=github_token=REPLACE_YOUR_TOKEN_HERE
-````
-
-<sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated previously.</sub>
-  
-  </details>
-
-2️⃣ Create the GitHub self hosted runners and configure to run against your repository.
-
-Create a `runnerdeployment.yaml` file and copy the following YAML contents into it:
-
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: example-runnerdeploy
-spec:
-  replicas: 1
-  template:
-    spec:
-      repository: mumoshu/actions-runner-controller-ci
-````
-<sub> *note:- Replace "mumoshu/actions-runner-controller-ci" with your repository name. </sub>
-
-Apply this file to your K8s cluster.
-```shell
-kubectl apply -f runnerdeployment.yaml
-````
-
-*🎉 We are done - now we should have self hosted runners running in K8s configured to your repository.  🎉*
-
-Next - lets verify our setup and execute some workflows.
-
-### Verify and Execute Workflows
-
-:one: Verify that your setup is successful:
-```shell
-
-$ kubectl get runners
-NAME                             REPOSITORY                             STATUS
-example-runnerdeploy2475h595fr   mumoshu/actions-runner-controller-ci   Running
-
-$ kubectl get pods
-NAME                           READY   STATUS    RESTARTS   AGE
-example-runnerdeploy2475ht2qbr 2/2     Running   0          1m
-````
-
-Also, this runner has been registered directly to the specified repository, you can see it in repository settings. For more information, see "[Checking the status of a self-hosted runner - GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/monitoring-and-troubleshooting-self-hosted-runners#checking-the-status-of-a-self-hosted-runner)."
-
-:two: You are ready to execute workflows against this self-hosted runner. For more information, see "[Using self-hosted runners in a workflow - GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#using-self-hosted-runners-in-a-workflow)."
-
-There is also a quick start guide to get started on Actions, For more information, please refer to "[Quick start Guide to GitHub Actions](https://docs.github.com/en/actions/quickstart)."
-
-## Learn more
-
-For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions/actions-runner-controller/blob/master/docs/detailed-docs.md)."
+- [Quickstart guide](/docs/quickstart.md)
+- [About ARC](/docs/about-arc.md)
+- [Installing ARC](/docs/installing-arc.md)
+- [Authenticating to the GitHub API](/docs/authenticating-to-the-github-api.md)
+- [Deploying ARC runners](/docs/deploying-arc-runners.md)
+- [Adding ARC runners to a repository, organization, or enterprise](/docs/choosing-runner-destination.md)
+- [Automatically scaling runners](/docs/automatically-scaling-runners.md)
+- [Using custom volumes](/docs/using-custom-volumes.md)
+- [Using ARC runners in a workflow](/docs/using-arc-runners-in-a-workflow.md)
+- [Managing access with runner groups](/docs/managing-access-with-runner-groups.md)
+- [Configuring Windows runners](/docs/configuring-windows-runners.md)
+- [Using ARC across organizations](/docs/using-arc-across-organizations.md)
+- [Using entrypoint features](/docs/using-entrypoint-features.md)
+- [Deploying alternative runners](/docs/deploying-alternative-runners.md)
+- [Monitoring and troubleshooting](/docs/monitoring-and-troubleshooting.md)
 
 ## Contributing
 
