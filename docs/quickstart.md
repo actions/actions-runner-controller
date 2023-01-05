@@ -12,7 +12,7 @@ With ARC you can :
 
 ## Overview
 
-For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)."
+For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/about-arc.md)."
 
 ## Getting Started
 
@@ -53,7 +53,7 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 ##### Add repository
 
 ```shell
-helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
+helm repo add actions https://actions-runner-controller.github.io/actions-runner-controller
 ```
 
 ##### Install Helm chart
@@ -107,7 +107,7 @@ spec:
     spec:
       repository: mumoshu/actions-runner-controller-ci
 ````
-<sub> *note:- Replace "mumoshu/actions-runner-controller-ci" with your repository name. </sub>
+<sub> *note:- Replace "mumoshu/actions-runner-controller-ci" with the name of the GitHub repository the runner will be associated with. </sub>
 
 Apply this file to your K8s cluster.
 ```shell
@@ -140,7 +140,7 @@ There is also a quick start guide to get started on Actions, For more informatio
 
 ## Learn more
 
-For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions/actions-runner-controller/blob/master/docs/detailed-docs.md)."
+For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions/actions-runner-controller/tree/master/docs)."
 
 ## Contributing
 
