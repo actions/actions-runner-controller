@@ -31,6 +31,7 @@ env:
   DOCKER_VERSION: 20.10.21
   RUNNER_CONTAINER_HOOKS_VERSION: 0.1.3
   TARGET_ORG: actions-runner-controller
+  PUSH_TO_REGISTRIES: false
 
 jobs:
   build-runners:
@@ -56,4 +57,4 @@ jobs:
             -f docker_version=${{ env.DOCKER_VERSION }} \
             -f runner_container_hooks_version=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }} \
             -f sha='${{ github.sha }}' \
-            -f push_to_registries=false
+            -f push_to_registries=${{ env.PUSH_TO_REGISTRIES }}
