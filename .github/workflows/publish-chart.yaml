@@ -1,5 +1,7 @@
 name: Publish Helm Chart
 
+# Revert to https://github.com/actions-runner-controller/releases#releases
+# for details on why we use this approach
 on:
   push:
     branches:

@@ -1,5 +1,7 @@
 name: Publish ARC
 
+# Revert to https://github.com/actions-runner-controller/releases#releases
+# for details on why we use this approach
 on:
   release:
     types:
@@ -70,8 +72,6 @@ jobs:
           fi
 
       - name: Trigger Build And Push Images To Registries
-        # Revert to https://github.com/actions-runner-controller/releases#releases
-        # for details on why we use this approach
         run: |
           # Authenticate
           gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
