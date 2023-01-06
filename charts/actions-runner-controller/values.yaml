@@ -190,7 +190,7 @@ admissionWebHooks:
 #hostNetwork: true
 
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
-logFormat: text
+#logFormat: text
 
 # enable setting the docker group id for the runner container
 # https://github.com/actions/actions-runner-controller/pull/2499
