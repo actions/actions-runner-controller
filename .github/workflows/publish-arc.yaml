@@ -75,5 +75,5 @@ jobs:
           gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
 
           # Trigger the workflow
-          jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${RELEASE_TAG_NAME}", "push_to_registries": ${{ inputs.push_to_registries }}}}' \
+          jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${{ env.RELEASE_TAG_NAME }}", "push_to_registries": ${{ inputs.push_to_registries }}}}' \
             | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
