@@ -70,10 +70,9 @@ jobs:
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "RELEASE_TAG_NAME=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_ENV
           fi
-          echo "release tag: $RELEASE_TAG_NAME"
 
           # Authenticate
-          gh auth login --with-token ${{ steps.get_workflow_token.outputs.token }}
+          gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
 
           # Trigger the workflow
           jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${RELEASE_TAG_NAME}", "push_to_registries": ${{ inputs.push_to_registries }}}}' \
