@@ -68,8 +68,9 @@ jobs:
           if [[ "${{ github.event_name }}" == "release" ]]; then
             echo "RELEASE_TAG_NAME=$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')" >> $GITHUB_ENV
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-              echo "RELEASE_TAG_NAME=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_ENV
+            echo "RELEASE_TAG_NAME=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_ENV
           fi
+          echo "release tag: $RELEASE_TAG_NAME"
 
           # Authenticate
           gh auth login --with-token ${{ steps.get_workflow_token.outputs.token }}
