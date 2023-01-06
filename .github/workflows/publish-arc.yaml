@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       release_tag_name:
-        description: 'The tag name of the release to publish'
+        description: 'Tag name of the release to publish'
         required: true
       push_to_registries:
-        description: 'Whether to push the image to registries'
+        description: 'Push images to registries'
         required: true
         type: boolean
         default: false
