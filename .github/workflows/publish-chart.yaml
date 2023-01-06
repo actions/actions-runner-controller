@@ -109,8 +109,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # for helm/chart-releaser-action to push chart release and create a release
+    env:
+      CHART_TARGET_ORG: actions-runner-controller
+      CHART_TARGET_REPO: charts-test-repo
+      CHART_TARGET_BRANCH: main
     
-
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -122,8 +125,54 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.4.1
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v1
+        with:
+          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
+          organization: ${{ env.CHART_TARGET_ORG }}
 
+      - name: Install chart-releaser
+        uses: helm/chart-releaser-action@v1.4.1
+        with:
+          install_only: true
+          install_dir: ${{ github.workspace }}/bin
+
+      - name: Package and upload release assets
+        run: |
+          cr package \
+            ${{ github.workspace }}/charts/actions-runner-controller/ \
+            --package-path .cr-release-packages
+
+          cr upload \
+            --package-path .cr-release-packages \
+            --token ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate updated index.yaml
+        run: |
+          cr index \
+            --index-path ${{ github.workspace }}/index.yaml \
+            --pages-branch 'gh-pages' \
+            --pages-index-path 'index.yaml'
+
+      - name: Checkout pages repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}
+          path: ${{ env.CHART_TARGET_REPO }}
+          ref: ${{ env.CHART_TARGET_BRANCH }}
+          token: ${{ steps.get_workflow_token.outputs.token }}
+
+      - name: Copy index.yaml
+        run: |
+          cp ${{ github.workspace }}/index.yaml ${{ env.CHART_TARGET_REPO }}/index.yaml
+      
+      - name: Commit and Push
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update index.yaml
+          repository: ${{ github.workspace }}/${{ env.CHART_TARGET_REPO }}
+          commit_user_name: ${{ github.actor }}
+          commit_user_email: ${{ github.actor }}@users.noreply.github.com
+          commit_author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
