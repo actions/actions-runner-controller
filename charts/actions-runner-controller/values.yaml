@@ -189,7 +189,7 @@ admissionWebHooks:
 #hostNetwork: true
 
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
-logFormat: text
+#logFormat: text
 
 githubWebhookServer:
   enabled: false
