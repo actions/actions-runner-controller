@@ -31,6 +31,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.18.2'
+
+      - name: Install tools
+        run: |
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
+          tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
+          sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          sudo mv kustomize /usr/local/bin
+          curl -L -O https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
+          tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
+          sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
+
       - name: Upload artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
