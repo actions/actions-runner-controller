@@ -92,9 +92,9 @@ jobs:
       - name: Check if Chart Publish is Needed
         id: publish-chart-step
         run: |
-          CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/actions/actions-runner-controller/master/charts/actions-runner-controller/Chart.yaml)
+          CHART_TEXT=$(curl -fs https://raw.githubusercontent.com/${{ github.repository }}/master/charts/actions-runner-controller/Chart.yaml)
           NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
-          RELEASE_LIST=$(curl -fs https://api.github.com/repos/actions/actions-runner-controller/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
+          RELEASE_LIST=$(curl -fs https://api.github.com/repos/${{ github.repository }}/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
           LATEST_RELEASED_CHART_VERSION=$(echo $RELEASE_LIST | cut -d ' ' -f 1)
           echo "CHART_VERSION_IN_MASTER=$NEW_CHART_VERSION" >> $GITHUB_ENV
           echo "LATEST_CHART_VERSION=$LATEST_RELEASED_CHART_VERSION" >> $GITHUB_ENV
@@ -157,7 +157,8 @@ jobs:
             --package-path .cr-release-packages
 
           cr upload \
-            --git-repo ${{ github.repository }} \
+            --owner "$(echo ${{ github.repository }} | cut -d '/' -f 1)" \
+            --git-repo "$(echo ${{ github.repository }} | cut -d '/' -f 2)" \
             --package-path .cr-release-packages \
             --token ${{ secrets.GITHUB_TOKEN }}
 
