@@ -186,14 +186,14 @@ jobs:
         run: |
           cp ${{ github.workspace }}/index.yaml ${{ env.CHART_TARGET_REPO }}/actions-runner-controller/index.yaml
       
-      - name: Commit and Push
-        uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a
-        with:
-          commit_message: Update index.yaml
-          repository: ${{ github.workspace }}/${{ env.CHART_TARGET_REPO }}
-          commit_user_name: ${{ github.actor }}
-          commit_user_email: ${{ github.actor }}@users.noreply.github.com
-          commit_author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+      - name: Commit and push
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git add .
+          git commit -m "Update index.yaml"
+          git push
+        working-directory: ${{ github.workspace }}/${{ env.CHART_TARGET_REPO }}
 
       - name: Job summary
         run: |
