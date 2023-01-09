@@ -107,7 +107,7 @@ jobs:
           echo "Chart linting has been completed." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
-          echo "- publish?: ${{ steps.publish-chart-step.outputs.publish }}" >> $GITHUB_STEP_SUMMARY
+          echo "- publish new chart: ${{ steps.publish-chart-step.outputs.publish }}" >> $GITHUB_STEP_SUMMARY
 
   publish-chart:
     if: needs.lint-chart.outputs.publish-chart == 'true'
@@ -153,6 +153,7 @@ jobs:
             --package-path .cr-release-packages
 
           cr upload \
+            --git-repo ${{ github.repository }} \
             --package-path .cr-release-packages \
             --token ${{ secrets.GITHUB_TOKEN }}
 
@@ -176,7 +177,7 @@ jobs:
           cp ${{ github.workspace }}/index.yaml ${{ env.CHART_TARGET_REPO }}/actions-runner-controller/index.yaml
       
       - name: Commit and Push
-        uses: stefanzweifel/git-auto-commit-action@v4
+        uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a
         with:
           commit_message: Update index.yaml
           repository: ${{ github.workspace }}/${{ env.CHART_TARGET_REPO }}
