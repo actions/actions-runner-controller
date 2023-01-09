@@ -165,12 +165,15 @@ jobs:
       - name: Generate updated index.yaml
         run: |
           cr index \
-            --owner "${{ env.CHART_TARGET_ORG }}" \
-            --git-repo "${{ env.CHART_TARGET_REPO }}" \
+            --owner "$(echo ${{ github.repository }} | cut -d '/' -f 1)" \
+            --git-repo "$(echo ${{ github.repository }} | cut -d '/' -f 2)" \
             --index-path ${{ github.workspace }}/index.yaml \
-            --pages-branch '${{ env.CHART_TARGET_BRANCH }}' \
+            --pages-branch 'gh-pages' \
             --pages-index-path 'index.yaml'
 
+      # Chart Release was never intended to publish to a different repo
+      # this workaround is intended to move the index.yaml to the target repo
+      # where the github pages are hosted
       - name: Checkout pages repository
         uses: actions/checkout@v3
         with:
