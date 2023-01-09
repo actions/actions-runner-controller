@@ -62,8 +62,8 @@ jobs:
           echo "The [publish-canary](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-canary.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- sha: `${{ github.sha }}`" >> $GITHUB_STEP_SUMMARY
-          echo "- Push to registries: `${{ inputs.push_to_registries }}`" >> $GITHUB_STEP_SUMMARY
+          echo "- sha: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
           echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml)" >> $GITHUB_STEP_SUMMARY
