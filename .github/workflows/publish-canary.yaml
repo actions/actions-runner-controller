@@ -22,6 +22,7 @@ on:
       - 'Makefile'
 
 env:
+  # Safeguard to prevent pushing images to registeries after build
   PUSH_TO_REGISTRIES: false
   TARGET_ORG: actions-runner-controller
   TARGET_REPO: actions-runner-controller
