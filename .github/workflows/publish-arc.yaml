@@ -79,3 +79,14 @@ jobs:
           # Trigger the workflow run
           jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${{ env.RELEASE_TAG_NAME }}", "push_to_registries": ${{ inputs.push_to_registries }}}}' \
             | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
+
+      - name: Job summary
+        run: |
+          echo "The publish-arc workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Release tag: ${{ env.RELEASE_TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml)" >> $GITHUB_STEP_SUMMARY
