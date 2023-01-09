@@ -56,3 +56,14 @@ jobs:
           # Trigger the workflow run
           jq -n '{"event_type": "canary", "client_payload": {"sha": "${{ github.sha }}", "push_to_registries": ${{ env.PUSH_TO_REGISTRIES }}}}' \
             | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
+
+      - name: Job summary
+        run: |
+          echo "The [publish-canary](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-canary.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- sha: `${{ github.sha }}`" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: `${{ inputs.push_to_registries }}`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml)" >> $GITHUB_STEP_SUMMARY
