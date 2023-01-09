@@ -10,6 +10,15 @@ webhookPort: 9443
 syncPeriod: 1m
 defaultScaleDownDelay: 10m
 
+#Custom resource configuration
+crds:
+  # Install and upgrade CRDs
+  install: true
+  # Keep CRDs on chart uninstall
+  keep: true
+  # Annotations to be added to all CRDs
+  annotations: {}
+
 enableLeaderElection: true
 # Specifies the controller id for leader election.
 # Must be unique if more than one controller installed onto the same namespace.
@@ -243,7 +252,8 @@ githubWebhookServer:
   ingress:
     enabled: false
     ingressClassName: ""
-    annotations: {}
+    annotations:
+      {}
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
     hosts:
@@ -346,7 +356,8 @@ actionsMetricsServer:
   ingress:
     enabled: false
     ingressClassName: ""
-    annotations: {}
+    annotations:
+      {}
       # kubernetes.io/ingress.class: nginx
       # kubernetes.io/tls-acme: "true"
     hosts:
@@ -372,4 +383,3 @@ actionsMetricsServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
-

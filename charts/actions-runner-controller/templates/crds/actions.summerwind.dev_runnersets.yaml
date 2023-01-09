@@ -1,9 +1,15 @@
+{{- if .Values.crds.install }}
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
-  creationTimestamp: null
+    {{- if .Values.crds.keep }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.crds.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
   name: runnersets.actions.summerwind.dev
 spec:
   group: actions.summerwind.dev
@@ -4680,3 +4686,4 @@ status:
     plural: ""
   conditions: []
   storedVersions: []
+{{- end }}
