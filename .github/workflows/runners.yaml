@@ -28,7 +28,7 @@ on:
 
 env:
   # Safeguard to prevent pushing images to registeries after build  
-  PUSH_TO_REGISTRIES: false
+  PUSH_TO_REGISTRIES: true
   TARGET_ORG: actions-runner-controller
   TARGET_WORKFLOW: release-runners.yaml
   RUNNER_VERSION: 2.299.1
