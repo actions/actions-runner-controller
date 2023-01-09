@@ -36,7 +36,7 @@ jobs:
     name: Build and Publish Canary Image
     runs-on: ubuntu-latest
     env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
