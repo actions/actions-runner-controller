@@ -165,8 +165,10 @@ jobs:
       - name: Generate updated index.yaml
         run: |
           cr index \
+            --owner "${{ env.CHART_TARGET_ORG }}" \
+            --git-repo "${{ env.CHART_TARGET_REPO }}" \
             --index-path ${{ github.workspace }}/index.yaml \
-            --pages-branch 'gh-pages' \
+            --pages-branch '${{ env.CHART_TARGET_BRANCH }}' \
             --pages-index-path 'index.yaml'
 
       - name: Checkout pages repository
