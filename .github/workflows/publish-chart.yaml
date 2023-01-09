@@ -99,8 +99,15 @@ jobs:
           echo "Chart version in master : $NEW_CHART_VERSION"
           echo "Latest release chart version : $LATEST_RELEASED_CHART_VERSION"
           if [[ $NEW_CHART_VERSION != $LATEST_RELEASED_CHART_VERSION ]]; then
-            echo "::set-output name=publish::true"
+            echo "publish=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Job summary
+        run: |
+          echo "Chart linting has been completed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "- publish?: ${{ steps.publish-chart-step.outputs.publish }}" >> $GITHUB_STEP_SUMMARY
 
   publish-chart:
     if: needs.lint-chart.outputs.publish-chart == 'true'
@@ -166,7 +173,7 @@ jobs:
 
       - name: Copy index.yaml
         run: |
-          cp ${{ github.workspace }}/index.yaml ${{ env.CHART_TARGET_REPO }}/index.yaml
+          cp ${{ github.workspace }}/index.yaml ${{ env.CHART_TARGET_REPO }}/actions-runner-controller/index.yaml
       
       - name: Commit and Push
         uses: stefanzweifel/git-auto-commit-action@v4
@@ -176,3 +183,10 @@ jobs:
           commit_user_name: ${{ github.actor }}
           commit_user_email: ${{ github.actor }}@users.noreply.github.com
           commit_author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+
+      - name: Job summary
+        run: |
+          echo "New helm chart has been published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "- New [index.yaml](https://github.com/${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}/tree/main/actions-runner-controller) pushed" >> $GITHUB_STEP_SUMMARY
