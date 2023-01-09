@@ -96,10 +96,12 @@ jobs:
           NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
           RELEASE_LIST=$(curl -fs https://api.github.com/repos/actions/actions-runner-controller/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
           LATEST_RELEASED_CHART_VERSION=$(echo $RELEASE_LIST | cut -d ' ' -f 1)
-          echo "Chart version in master : $NEW_CHART_VERSION"
-          echo "Latest release chart version : $LATEST_RELEASED_CHART_VERSION"
+          echo "CHART_VERSION_IN_MASTER=$NEW_CHART_VERSION" >> $GITHUB_ENV
+          echo "LATEST_CHART_VERSION=$LATEST_RELEASED_CHART_VERSION" >> $GITHUB_ENV
           if [[ $NEW_CHART_VERSION != $LATEST_RELEASED_CHART_VERSION ]]; then
             echo "publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Job summary
@@ -107,6 +109,8 @@ jobs:
           echo "Chart linting has been completed." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "- chart version in master: ${{ env.CHART_VERSION_IN_MASTER }}" >> $GITHUB_STEP_SUMMARY
+          echo "- latest chart version: ${{ env.LATEST_CHART_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- publish new chart: ${{ steps.publish-chart-step.outputs.publish }}" >> $GITHUB_STEP_SUMMARY
 
   publish-chart:
