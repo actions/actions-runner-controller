@@ -82,11 +82,11 @@ jobs:
 
       - name: Job summary
         run: |
-          echo "The publish-arc workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
+          echo "The [publish-arc](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-arc.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Release tag: ${{ env.RELEASE_TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Release tag: `${{ env.RELEASE_TAG_NAME }}`" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: `${{ inputs.push_to_registries }}`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
           echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml)" >> $GITHUB_STEP_SUMMARY
