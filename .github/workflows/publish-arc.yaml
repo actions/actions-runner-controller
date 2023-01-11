@@ -1,21 +1,34 @@
 name: Publish ARC
 
+# Revert to https://github.com/actions-runner-controller/releases#releases
+# for details on why we use this approach
 on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      release_tag_name:
+        description: 'Tag name of the release to publish'
+        required: true
+      push_to_registries:
+        description: 'Push images to registries'
+        required: true
+        type: boolean
+        default: false
 
-# https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
 permissions:
  contents: write 
  packages: write
+
+env:
+  TARGET_ORG: actions-runner-controller
+  TARGET_REPO: actions-runner-controller
 
 jobs:
   release-controller:
     name: Release
     runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USER }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -35,36 +48,45 @@ jobs:
           tar zxvf ghr_v0.13.0_linux_amd64.tar.gz
           sudo mv ghr_v0.13.0_linux_amd64/ghr /usr/local/bin
 
-      - name: Set version
-        run: echo "VERSION=$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')" >> $GITHUB_ENV
-
       - name: Upload artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           make github-release
 
-      - name: Setup Docker Environment
-        uses: ./.github/actions/setup-docker-environment
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-          ghcr_username: ${{ github.actor }}
-          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
 
-      - name: Build and Push
-        uses: docker/build-push-action@v3
-        with:
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          build-args: VERSION=${{ env.VERSION }}
-          push: true
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:latest
-            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}
-            ${{ env.DOCKERHUB_USERNAME }}/actions-runner-controller:${{ env.VERSION }}-${{ env.sha_short }}
-            ghcr.io/actions-runner-controller/actions-runner-controller:latest
-            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}
-            ghcr.io/actions-runner-controller/actions-runner-controller:${{ env.VERSION }}-${{ env.sha_short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Set release tag name
+        run: |
+          # Define the release tag name based on the event type
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "RELEASE_TAG_NAME=$(cat ${GITHUB_EVENT_PATH} | jq -r '.release.tag_name')" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "RELEASE_TAG_NAME=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Trigger Build And Push Images To Registries
+        run: |
+          # Authenticate
+          gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
+
+          # Trigger the workflow run
+          jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${{ env.RELEASE_TAG_NAME }}", "push_to_registries": ${{ inputs.push_to_registries }}}}' \
+            | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
+
+      - name: Job summary
+        run: |
+          echo "The [publish-arc](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-arc.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Release tag: ${{ env.RELEASE_TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml)" >> $GITHUB_STEP_SUMMARY

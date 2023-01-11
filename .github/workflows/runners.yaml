@@ -1,5 +1,7 @@
 name: Runners
 
+# Revert to https://github.com/actions-runner-controller/releases#releases
+# for details on why we use this approach
 on:
   pull_request:
     types:
@@ -25,97 +27,36 @@ on:
       - '!**.md'
 
 env:
+  # Safeguard to prevent pushing images to registeries after build  
+  PUSH_TO_REGISTRIES: true
+  TARGET_ORG: actions-runner-controller
+  TARGET_WORKFLOW: release-runners.yaml
   RUNNER_VERSION: 2.299.1
   DOCKER_VERSION: 20.10.21
   RUNNER_CONTAINER_HOOKS_VERSION: 0.1.3
-  DOCKERHUB_USERNAME: summerwind
 
 jobs:
   build-runners:
-    name: Build ${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
+    name: Trigger Build and Push of Runner Images
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: actions-runner
-            os-name: ubuntu
-            os-version: 20.04
-            latest: "true"
-          - name: actions-runner
-            os-name: ubuntu
-            os-version: 22.04
-            latest: "false"
-          - name: actions-runner-dind
-            os-name: ubuntu
-            os-version: 20.04
-            latest: "true"
-          - name: actions-runner-dind
-            os-name: ubuntu
-            os-version: 22.04
-            latest: "false"
-          - name: actions-runner-dind-rootless
-            os-name: ubuntu
-            os-version: 20.04
-            latest: "true"
-          - name: actions-runner-dind-rootless
-            os-name: ubuntu
-            os-version: 22.04
-            latest: "false"
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Docker Environment
-        uses: ./.github/actions/setup-docker-environment
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-          ghcr_username: ${{ github.actor }}
-          ghcr_password: ${{ secrets.GITHUB_TOKEN }}
+          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
 
-      - name: Build and Push Versioned Tags
-        uses: docker/build-push-action@v3
-        with:
-          context: ./runner
-          file: ./runner/${{ matrix.name }}.${{ matrix.os-name }}-${{ matrix.os-version }}.dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-          build-args: |
-            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
-            DOCKER_VERSION=${{ env.DOCKER_VERSION }}
-            RUNNER_CONTAINER_HOOKS_VERSION=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ env.sha_short }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:${{ matrix.os-name }}-${{ matrix.os-version }}
-            ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}
-            ghcr.io/${{ github.repository }}/${{ matrix.name }}:v${{ env.RUNNER_VERSION }}-${{ matrix.os-name }}-${{ matrix.os-version }}-${{ env.sha_short }}
-            ghcr.io/${{ github.repository }}/${{ matrix.name }}:${{ matrix.os-name }}-${{ matrix.os-version }}
-          cache-from: type=gha,scope=build-${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
+      - name: Trigger Build And Push Runner Images To Registries
+        run: |
+          # Authenticate
+          gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
 
-      # NOTE : Only to be used on the 20.04 image until we remove the latest tag entirely
-      # at which point this step needs to be deleted
-      # https://github.com/actions/actions-runner-controller/issues/2056
-      - name: Build and Push Latest Tags
-        if: ${{ matrix.latest == 'true' }}
-        uses: docker/build-push-action@v3
-        with:
-          context: ./runner
-          file: ./runner/${{ matrix.name }}.${{ matrix.os-name }}-${{ matrix.os-version }}.dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-          build-args: |
-            RUNNER_VERSION=${{ env.RUNNER_VERSION }}
-            DOCKER_VERSION=${{ env.DOCKER_VERSION }}
-            RUNNER_CONTAINER_HOOKS_VERSION=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
-            ghcr.io/${{ github.repository }}/${{ matrix.name }}:latest
-          cache-from: type=gha,scope=build-${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.name }}-${{ matrix.os-name }}-${{ matrix.os-version }}
+          # Trigger the workflow run
+          gh workflow run ${{ env.TARGET_WORKFLOW }} -R ${{ env.TARGET_ORG }}/releases \
+            -f runner_version=${{ env.RUNNER_VERSION }} \
+            -f docker_version=${{ env.DOCKER_VERSION }} \
+            -f runner_container_hooks_version=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }} \
+            -f sha='${{ github.sha }}' \
+            -f push_to_registries=${{ env.PUSH_TO_REGISTRIES }}

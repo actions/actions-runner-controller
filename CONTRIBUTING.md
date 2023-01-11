@@ -211,3 +211,9 @@ The process would look like the below:
 - Update your actions-runner-controller's controller-manager deployment to use the new image, `$DOCKER_USER/actions-runner-controller:canary`
 
 Please also note that you need to replace `$DOCKER_USER` with your own DockerHub account name.
+
+## Release process
+
+Only the maintainers can release a new version of actions-runner-controller, publish a new version of the helm charts, and runner images.
+
+All release workflows have been moved to [actions-runner-controller/releases](https://github.com/actions-runner-controller/releases) since the packages are owned by the former organization.
