@@ -31,9 +31,9 @@ env:
   PUSH_TO_REGISTRIES: true
   TARGET_ORG: actions-runner-controller
   TARGET_WORKFLOW: release-runners.yaml
-  RUNNER_VERSION: 2.299.1
+  RUNNER_VERSION: 2.300.2
   DOCKER_VERSION: 20.10.21
-  RUNNER_CONTAINER_HOOKS_VERSION: 0.1.3
+  RUNNER_CONTAINER_HOOKS_VERSION: 0.2.0
 
 jobs:
   build-runners:
