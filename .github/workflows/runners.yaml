@@ -73,4 +73,4 @@ jobs:
           echo "- push_to_registries: ${{ env.PUSH_TO_REGISTRIES }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
-          echo "- New " >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml)" >> $GITHUB_STEP_SUMMARY
