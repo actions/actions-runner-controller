@@ -89,4 +89,4 @@ jobs:
           echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
-          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml)" >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml)" >> $GITHUB_STEP_SUMMARY
