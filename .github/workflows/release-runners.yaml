@@ -3,18 +3,6 @@ name: Runners
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-    branches:
-      - 'master'
-    paths:
-      - 'runner/**'
-      - '!runner/Makefile'
-      - '.github/workflows/runners.yaml'
-      - '!**.md'
   # We must do a trigger on a push: instead of a types: closed so GitHub Secrets 
   # are available to the workflow run
   push:
@@ -28,7 +16,7 @@ on:
 
 env:
   # Safeguard to prevent pushing images to registeries after build  
-  PUSH_TO_REGISTRIES: false
+  PUSH_TO_REGISTRIES: true
   TARGET_ORG: actions-runner-controller
   TARGET_WORKFLOW: release-runners.yaml
   RUNNER_VERSION: 2.300.2
@@ -47,11 +35,6 @@ jobs:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-
-      - name: Push to registeries
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          echo "PUSH_TO_REGISTRIES=true" >> $GITHUB_ENV
 
       - name: Trigger Build And Push Runner Images To Registries
         run: |
