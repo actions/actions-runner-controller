@@ -1,4 +1,4 @@
-package controllers
+package actionssummerwindnet
 
 func filterLabels(labels map[string]string, filter string) map[string]string {
 	filtered := map[string]string{}

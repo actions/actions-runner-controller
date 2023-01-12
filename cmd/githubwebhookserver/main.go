@@ -27,7 +27,7 @@ import (
 	"time"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
-	"github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
+	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/logging"
 
@@ -90,7 +90,7 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "The namespace to watch for HorizontalRunnerAutoscaler's to scale on Webhook. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
-	flag.IntVar(&queueLimit, "queue-limit", controllers.DefaultQueueLimit, `The maximum length of the scale operation queue. The scale opration is enqueued per every matching webhook event, and the server returns a 500 HTTP status when the queue was already full on enqueue attempt.`)
+	flag.IntVar(&queueLimit, "queue-limit", actionssummerwindnet.DefaultQueueLimit, `The maximum length of the scale operation queue. The scale opration is enqueued per every matching webhook event, and the server returns a 500 HTTP status when the queue was already full on enqueue attempt.`)
 	flag.StringVar(&webhookSecretToken, "github-webhook-secret-token", "", "The personal access token of GitHub.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -160,7 +160,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	hraGitHubWebhook := &controllers.HorizontalRunnerAutoscalerGitHubWebhook{
+	hraGitHubWebhook := &actionssummerwindnet.HorizontalRunnerAutoscalerGitHubWebhook{
 		Name:           "webhookbasedautoscaler",
 		Client:         mgr.GetClient(),
 		Log:            ctrl.Log.WithName("controllers").WithName("webhookbasedautoscaler"),
