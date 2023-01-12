@@ -122,7 +122,7 @@ spec:
     scaleDownFactor: '0.5'
   ```
 
-For more details - please see "[Pull Driven Scaling](detailed-docs.md#pull-driven-scaling)."
+For more details - please see "[Pull Driven Scaling](automatically-scaling-runners.md#pull-driven-scaling)."
 
 *The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.*
 

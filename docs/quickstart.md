@@ -12,7 +12,7 @@ With ARC you can :
 
 ## Overview
 
-For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/Actions-Runner-Controller-Overview.md)."
+For an overview of ARC, please refer to "[About ARC](https://github.com/actions/actions-runner-controller/blob/master/docs/about-arc.md)."
 
 ## Getting Started
 
@@ -140,7 +140,7 @@ There is also a quick start guide to get started on Actions, For more informatio
 
 ## Learn more
 
-For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions/actions-runner-controller/blob/master/docs/detailed-docs.md)."
+For more detailed documentation, please refer to "[Actions Runner Controller Documentation](https://github.com/actions/actions-runner-controller/blob/master/README.md#documentation)."
 
 ## Contributing
 
