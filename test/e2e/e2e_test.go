@@ -106,7 +106,7 @@ func TestE2E(t *testing.T) {
 			label:         "stable",
 			controller:    "summerwind/actions-runner-controller",
 			controllerVer: "v0.25.2",
-			chart:         "actions/actions-runner-controller",
+			chart:         "actions-runner-controller/actions-runner-controller",
 			// 0.20.2 accidentally added support for runner-status-update which isn't supported by ARC 0.25.2.
 			// With some chart values, the controller end up with crashlooping with `flag provided but not defined: -runner-status-update-hook`.
 			chartVer: "0.20.1",
