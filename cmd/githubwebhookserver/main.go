@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/logging"
@@ -53,7 +53,7 @@ const (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = v1alpha1.AddToScheme(scheme)
+	_ = actionsv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
