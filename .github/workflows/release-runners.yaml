@@ -3,18 +3,6 @@ name: Runners
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-    branches:
-      - 'master'
-    paths:
-      - 'runner/**'
-      - '!runner/Makefile'
-      - '.github/workflows/runners.yaml'
-      - '!**.md'
   # We must do a trigger on a push: instead of a types: closed so GitHub Secrets 
   # are available to the workflow run
   push:
@@ -60,3 +48,17 @@ jobs:
             -f runner_container_hooks_version=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }} \
             -f sha='${{ github.sha }}' \
             -f push_to_registries=${{ env.PUSH_TO_REGISTRIES }}
+
+      - name: Job summary
+        run: |
+          echo "The [release-runners.yaml](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/release-runners.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- runner_version: ${{ env.RUNNER_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- docker_version: ${{ env.DOCKER_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- runner_container_hooks_version: ${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- sha: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- push_to_registries: ${{ env.PUSH_TO_REGISTRIES }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml)" >> $GITHUB_STEP_SUMMARY
