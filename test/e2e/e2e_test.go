@@ -222,12 +222,26 @@ func TestE2E(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
+			var cancelled bool
+			defer func() {
+				if !cancelled {
+					t.Logf("Stopping the continuous rolling-update of runners due to error(s)")
+				}
+				cancel()
+			}()
+
 			for i := 1; ; i++ {
+				if t.Failed() {
+					cancelled = true
+					return
+				}
+
 				select {
 				case _, ok := <-ctx.Done():
 					if !ok {
 						t.Logf("Stopping the continuous rolling-update of runners")
 					}
+					cancelled = true
 				default:
 					time.Sleep(60 * time.Second)
 
@@ -242,7 +256,7 @@ func TestE2E(t *testing.T) {
 		})
 
 		t.Run("Verify workflow run result", func(t *testing.T) {
-			env.verifyActionsWorkflowRun(t, testID)
+			env.verifyActionsWorkflowRun(t, ctx, testID)
 		})
 	})
 
@@ -322,12 +336,26 @@ func TestE2E(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
+			var cancelled bool
+			defer func() {
+				if !cancelled {
+					t.Logf("Stopping the continuous rolling-update of runners due to error(s)")
+				}
+				cancel()
+			}()
+
 			for i := 1; ; i++ {
+				if t.Failed() {
+					cancelled = true
+					return
+				}
+
 				select {
 				case _, ok := <-ctx.Done():
 					if !ok {
 						t.Logf("Stopping the continuous rolling-update of runners")
 					}
+					cancelled = true
 					return
 				default:
 					time.Sleep(10 * time.Second)
@@ -347,7 +375,7 @@ func TestE2E(t *testing.T) {
 		})
 
 		t.Run("Verify workflow run result", func(t *testing.T) {
-			env.verifyActionsWorkflowRun(t, testID)
+			env.verifyActionsWorkflowRun(t, ctx, testID)
 		})
 	})
 
@@ -887,10 +915,10 @@ func (e *env) testJobs(testID string) []job {
 	return createTestJobs(testID, testResultCMNamePrefix, 6)
 }
 
-func (e *env) verifyActionsWorkflowRun(t *testing.T, testID string) {
+func (e *env) verifyActionsWorkflowRun(t *testing.T, ctx context.Context, testID string) {
 	t.Helper()
 
-	verifyActionsWorkflowRun(t, e.Env, e.testJobs(testID), e.verifyTimeout(), e.getKubectlConfig())
+	verifyActionsWorkflowRun(t, ctx, e.Env, e.testJobs(testID), e.verifyTimeout(), e.getKubectlConfig())
 }
 
 func (e *env) verifyTimeout() time.Duration {
@@ -1162,7 +1190,7 @@ kubectl create cm %s$id --from-literal=status=ok
 	}
 }
 
-func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, timeout time.Duration, cmCfg testing.KubectlConfig) {
+func verifyActionsWorkflowRun(t *testing.T, ctx context.Context, env *testing.Env, testJobs []job, timeout time.Duration, cmCfg testing.KubectlConfig) {
 	t.Helper()
 
 	var expected []string
@@ -1171,7 +1199,7 @@ func verifyActionsWorkflowRun(t *testing.T, env *testing.Env, testJobs []job, ti
 		expected = append(expected, "ok")
 	}
 
-	gomega.NewGomegaWithT(t).Eventually(func() ([]string, error) {
+	gomega.NewGomegaWithT(t).Eventually(ctx, func() ([]string, error) {
 		var results []string
 
 		var errs []error
