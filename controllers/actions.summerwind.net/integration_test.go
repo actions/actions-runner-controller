@@ -40,9 +40,6 @@ var (
 	workflowRunsFor3Replicas             = `{"total_count": 5, "workflow_runs":[{"status":"queued"}, {"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`
 	workflowRunsFor3Replicas_queued      = `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"queued"}]}"`
 	workflowRunsFor3Replicas_in_progress = `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`
-	workflowRunsFor1Replicas             = `{"total_count": 6, "workflow_runs":[{"status":"queued"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}, {"status":"completed"}]}"`
-	workflowRunsFor1Replicas_queued      = `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`
-	workflowRunsFor1Replicas_in_progress = `{"total_count": 0, "workflow_runs":[]}"`
 )
 
 // SetupIntegrationTest will set up a testing environment.
