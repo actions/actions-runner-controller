@@ -132,6 +132,10 @@ func TestNewRunnerPod(t *testing.T) {
 							Value: "false",
 						},
 						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
+						},
+						{
 							Name:  "DOCKER_HOST",
 							Value: "tcp://localhost:2376",
 						},
@@ -274,6 +278,10 @@ func TestNewRunnerPod(t *testing.T) {
 							Name:  "RUNNER_STATUS_UPDATE_HOOK",
 							Value: "false",
 						},
+						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
+						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
@@ -355,6 +363,10 @@ func TestNewRunnerPod(t *testing.T) {
 						{
 							Name:  "RUNNER_STATUS_UPDATE_HOOK",
 							Value: "false",
+						},
+						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -650,6 +662,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "false",
 						},
 						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
+						},
+						{
 							Name:  "DOCKER_HOST",
 							Value: "tcp://localhost:2376",
 						},
@@ -808,6 +824,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							Value: "false",
 						},
 						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
+						},
+						{
 							Name:  "RUNNER_NAME",
 							Value: "runner",
 						},
@@ -907,6 +927,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						{
 							Name:  "RUNNER_STATUS_UPDATE_HOOK",
 							Value: "false",
+						},
+						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
 						},
 						{
 							Name:  "RUNNER_NAME",
