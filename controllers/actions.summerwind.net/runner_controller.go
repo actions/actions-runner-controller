@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/go-logr/logr"
 
@@ -834,6 +835,10 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		{
 			Name:  "RUNNER_STATUS_UPDATE_HOOK",
 			Value: fmt.Sprintf("%v", useRunnerStatusUpdateHook),
+		},
+		{
+			Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+			Value: fmt.Sprintf("actions-runner-controller/%s", build.Version),
 		},
 	}
 
