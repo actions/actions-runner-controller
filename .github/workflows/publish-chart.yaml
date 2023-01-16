@@ -123,7 +123,7 @@ jobs:
     env:
       CHART_TARGET_ORG: actions-runner-controller
       CHART_TARGET_REPO: actions-runner-controller.github.io
-      CHART_TARGET_BRANCH: main
+      CHART_TARGET_BRANCH: master
     
     steps:
       - name: Checkout
