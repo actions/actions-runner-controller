@@ -71,13 +71,22 @@ jobs:
             echo "RELEASE_TAG_NAME=${{ github.event.inputs.release_tag_name }}" >> $GITHUB_ENV
           fi
 
+      - name: Resolve push to registries
+        run: |
+          # Define the push to registries based on the event type
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "PUSH_TO_REGISTRIES=true" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "PUSH_TO_REGISTRIES=${{ inputs.push_to_registries }}" >> $GITHUB_ENV
+          fi
+
       - name: Trigger Build And Push Images To Registries
         run: |
           # Authenticate
           gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
 
           # Trigger the workflow run
-          jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${{ env.RELEASE_TAG_NAME }}", "push_to_registries": ${{ inputs.push_to_registries }}}}' \
+          jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${{ env.RELEASE_TAG_NAME }}", "push_to_registries": "${{ env.PUSH_TO_REGISTRIES }}" }}' \
             | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
 
       - name: Job summary
@@ -86,7 +95,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Release tag: ${{ env.RELEASE_TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: ${{ env.PUSH_TO_REGISTRIES }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:**" >> $GITHUB_STEP_SUMMARY
           echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-arc.yaml)" >> $GITHUB_STEP_SUMMARY
