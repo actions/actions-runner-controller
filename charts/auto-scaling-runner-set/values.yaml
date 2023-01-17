@@ -1,0 +1,117 @@
+## githubConfigUrl is the GitHub url for where you want to configure runners
+## ex: https://github.com/myorg/myrepo or https://github.com/myorg
+githubConfigUrl: ""
+
+## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
+## You can choose to use GitHub App or a PAT token
+githubConfigSecret: 
+  ### GitHub Apps Configuration
+  ## NOTE: IDs MUST be strings, use quotes
+  #github_app_id: ""
+  #github_app_installation_id: ""
+  #github_app_private_key: |
+
+  ### GitHub PAT Configuration
+  github_token: ""
+
+## maxRunners is the max number of runners the auto scaling runner set will scale up to.
+# maxRunners: 5
+
+## minRunners is the min number of runners the auto scaling runner set will scale down to.
+# minRunners: 0
+
+# runnerGroup: "default"
+
+## template is the PodSpec for each runner Pod
+template:
+  spec:
+    containers:
+    - name: runner
+      image: ghcr.io/actions/actions-runner:latest
+      command: ["/actions-runner/run.sh"]
+
+containerMode:
+  type: ""  ## type can be set to dind or kubernetes
+  ## with containerMode.type=dind, we will populate the template.spec with following pod spec
+  ## template:
+  ##   spec:
+  ##     initContainers:
+  ##     - name: initExternalsInternalVolume
+  ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["cp", "-r", "-v", "/actions-runner/externals/.", "/actions-runner/tmpDir/"]
+  ##       volumeMounts:
+  ##         - name: externalsInternal
+  ##           mountPath: /actions-runner/tmpDir
+  ##     containers:
+  ##     - name: runner
+  ##       image: ghcr.io/actions/actions-runner:latest
+  ##       env:
+  ##         - name: DOCKER_HOST
+  ##           value: tcp://localhost:2376
+  ##         - name: DOCKER_TLS_VERIFY
+  ##           value: "1"
+  ##         - name: DOCKER_CERT_PATH
+  ##           value: /certs/client
+  ##       volumeMounts:
+  ##         - name: workingDirectoryInternal
+  ##           mountPath: /actions-runner/_work
+  ##         - name: dinDInternal
+  ##           mountPath: /certs/client
+  ##           readOnly: true
+  ##     - name: dind
+  ##       image: docker:dind
+  ##       securityContext:
+  ##         privileged: true
+  ##       volumeMounts:
+  ##         - mountPath: /certs/client
+  ##           name: dinDInternal
+  ##         - mountPath: /actions-runner/_work
+  ##           name: workingDirectoryInternal
+  ##         - mountPath: /actions-runner/externals
+  ##           name: externalsInternal
+  ##     volumes:
+  ##     - name: dinDInternal
+  ##       emptyDir: {}
+  ##     - name: workingDirectoryInternal
+  ##       emptyDir: {}
+  ##     - name: externalsInternal
+  ##       emptyDir: {}
+  ######################################################################################################
+  ## with containerMode.type=kubernetes, we will populate the template.spec with following pod spec
+  ## template:
+  ##   spec:
+  ##     containers:
+  ##     - name: runner
+  ##       image: ghcr.io/actions/actions-runner:latest
+  ##       env:
+  ##         - name: ACTIONS_RUNNER_CONTAINER_HOOKS
+  ##           value: /actions-runner/k8s/index.js
+  ##         - name: ACTIONS_RUNNER_POD_NAME
+  ##           valueFrom:
+  ##             fieldRef:
+  ##               fieldPath: metadata.name
+  ##         - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
+  ##           value: "true"
+  ##       volumeMounts:
+  ##         - name: work
+  ##           mountPath: /actions-runner/_work
+  ##     volumes:
+  ##       - name: work
+  ##         ephemeral:
+  ##           volumeClaimTemplate:
+  ##             spec:
+  ##               accessModes: [ "ReadWriteOnce" ]
+  ##               storageClassName: "local-path"
+  ##               resources:
+  ##                 requests:
+  ##                   storage: 1Gi
+
+  ## the following is required when containerMode.type=kubernetes
+  kubernetesModeWorkVolumeClaim:
+    accessModes: ["ReadWriteOnce"]
+    # For testing, use https://github.com/rancher/local-path-provisioner to provide dynamic provision volume
+    # TODO: remove before release
+    storageClassName: "dynamic-blob-storage"
+    resources:
+      requests:
+        storage: 1Gi
