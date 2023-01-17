@@ -86,6 +86,7 @@ test-with-deps: kube-apiserver etcd kubectl
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager main.go
+	go build -o bin/github-runnerscaleset-listener ./cmd/githubrunnerscalesetlistener
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -115,6 +116,10 @@ manifests-gen-crds: controller-gen yq
 
 chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
+	rm charts/actions-runner-controller/crds/actions.github.com_autoscalingrunnersets.yaml
+	rm charts/actions-runner-controller/crds/actions.github.com_autoscalinglisteners.yaml
+	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunnersets.yaml
+	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunners.yaml
 
 # Run go fmt against code
 fmt:

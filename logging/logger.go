@@ -18,6 +18,8 @@ const (
 	LogLevelInfo  = "info"
 	LogLevelWarn  = "warn"
 	LogLevelError = "error"
+	LogFormatText = "text"
+	LogFormatJSON = "json"
 )
 
 var (

@@ -50,6 +50,14 @@ spec:
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           value: /etc/actions-runner-controller/github_app_private_key
+        - name: CONTROLLER_MANAGER_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CONTROLLER_MANAGER_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         volumeMounts:
         - name: controller-manager
           mountPath: "/etc/actions-runner-controller"
