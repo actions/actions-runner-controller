@@ -18,8 +18,13 @@ on:
         required: true
         type: boolean
         default: false
-      publish_helm:
-        description: 'Publish new helm chart'
+      publish_actions_runner_controller_2_chart:
+        description: 'Publish new helm chart for actions-runner-controller-2'
+        required: true
+        type: boolean
+        default: false
+      publish_auto_scaling_runner_set_chart:
+        description: 'Publish new helm chart for auto-scaling-runner-set'
         required: true
         type: boolean
         default: false
@@ -94,10 +99,10 @@ jobs:
           echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-  publish-helm-chart:
-    if: ${{ inputs.publish_helm == true }}
+  publish-helm-chart-arc-2:
+    if: ${{ inputs.publish_actions_runner_controller_2_chart == true }}
     needs: build-push-image
-    name: Publish Helm chart
+    name: Publish Helm chart for actions-runner-controller-2
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -124,21 +129,67 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Publish new helm chart
+      - name: Publish new helm chart for actions-runner-controller-2
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
-          CHART_VERSION='$(cat charts_preview/actions-runner-controller-2/Chart.yaml | grep version: | cut -d " " -f 2)'
-          echo "CHART_VERSION_TAG=${CHART_VERSION}-${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_ENV
-          helm package charts_preview/actions-runner-controller-2/ --version="${CHART_VERSION}-${{ steps.resolve_parameters.outputs.short_sha }}"
-          # Tag is inferred from SemVer of Chart and cannot be set manually.
-          # See https://helm.sh/docs/topics/registries/#the-push-subcommand
-          helm push actions-runner-controller-"${CHART_VERSION}-${{ steps.resolve_parameters.outputs.short_sha }}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-helm-chart-2
+          ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG=$(cat charts/actions-runner-controller-2/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG=${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/actions-runner-controller-2/ --version="${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}"
+          helm push actions-runner-controller-2-"${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
 
       - name: Job summary
         run: |
-          echo "New helm chart published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "New helm chart for actions-runner-controller-2 published successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Chart version: ${{ env.CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Actions-Runner-Controller-2 Chart version: ${{ env.ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
+
+  publish-helm-chart-auto-scaling-runner-set:
+    if: ${{ inputs.publish_auto_scaling_runner_set_chart == true }}
+    needs: build-push-image
+    name: Publish Helm chart for auto-scaling-runner-set
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          # If inputs.ref is empty, it'll resolve to the default branch
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve parameters 
+        id: resolve_parameters
+        run: |
+          resolvedRef="${{ inputs.ref }}"
+          if [ -z "$resolvedRef" ]
+          then
+            resolvedRef="${{ github.ref }}"
+          fi
+          echo "INFO: Resolving short SHA for $resolvedRef"
+          echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
+          echo "INFO: Normalizing repository name (lowercase)"
+          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT 
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3.3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Publish new helm chart for auto-scaling-runner-set
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+
+          AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG=$(cat charts/auto-scaling-runner-set/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG=${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/auto-scaling-runner-set/ --version="${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}"
+          helm push auto-scaling-runner-set-"${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+
+      - name: Job summary
+        run: |
+          echo "New helm chart for auto-scaling-runner-set published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Auto-Scaling-Runner-Set Chart version: ${{ env.AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
