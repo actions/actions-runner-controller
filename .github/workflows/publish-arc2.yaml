@@ -176,7 +176,7 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Publish new helm chart for actions-runner-controller-2 and auto-scaling-runner-set
+      - name: Publish new helm chart for auto-scaling-runner-set
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
 
