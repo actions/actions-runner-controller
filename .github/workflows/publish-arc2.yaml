@@ -10,7 +10,7 @@ on:
         default: ''
       release_tag_name:
         description: 'The name to tag the controller image with'
-        required: false
+        required: true
         type: string
         default: 'canary'
       push_to_registries:
@@ -28,7 +28,6 @@ env:
   HELM_VERSION: v3.8.0
 
 permissions:
- contents: read 
  packages: write
 
 jobs:
