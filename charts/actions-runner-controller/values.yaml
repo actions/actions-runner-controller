@@ -195,7 +195,7 @@ githubWebhookServer:
   enabled: false
   replicaCount: 1
   useRunnerGroupsVisibility: false
-  ## specify log format for github webhook controller.  Valid options are "text" and "json"
+  ## specify log format for github webhook server.  Valid options are "text" and "json"
   logFormat: text
   secret:
     enabled: false
@@ -298,7 +298,7 @@ actionsMetricsServer:
   # See the thread below for more context.
   # https://github.com/actions/actions-runner-controller/pull/1814#discussion_r974758924
   replicaCount: 1
-  ## specify log format for github webhook controller.  Valid options are "text" and "json"
+  ## specify log format for actions metrics server.  Valid options are "text" and "json"
   logFormat: text
   secret:
     enabled: false
