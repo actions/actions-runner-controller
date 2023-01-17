@@ -62,7 +62,7 @@ helm repo add actions-runner-controller https://actions-runner-controller.github
 helm upgrade --install --namespace actions-runner-system --create-namespace\
   --set=authSecret.create=true\
   --set=authSecret.github_token="REPLACE_YOUR_TOKEN_HERE"\
-  --wait actions-runner-controller actions/actions-runner-controller
+  --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
 <sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated previously. </sub>
