@@ -7,6 +7,110 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalinglisteners
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalinglisteners/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalinglisteners/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunnersets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunnersets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - actions.summerwind.dev
   resources:
   - horizontalrunnerautoscalers
@@ -205,6 +309,26 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces/status
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   verbs:
   - create
@@ -252,11 +376,19 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
   - secrets
   verbs:
+  - create
   - delete
   - get
   - list
+  - update
   - watch
 - apiGroups:
   - ""
@@ -266,6 +398,8 @@ rules:
   - create
   - delete
   - get
+  - list
+  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -274,6 +408,8 @@ rules:
   - create
   - delete
   - get
+  - list
+  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -282,3 +418,6 @@ rules:
   - create
   - delete
   - get
+  - list
+  - update
+  - watch

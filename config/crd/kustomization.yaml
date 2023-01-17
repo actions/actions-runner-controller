@@ -7,6 +7,10 @@ resources:
 - bases/actions.summerwind.dev_runnerdeployments.yaml
 - bases/actions.summerwind.dev_horizontalrunnerautoscalers.yaml
 - bases/actions.summerwind.dev_runnersets.yaml
+- bases/actions.github.com_autoscalingrunnersets.yaml
+- bases/actions.github.com_ephemeralrunners.yaml
+- bases/actions.github.com_ephemeralrunnersets.yaml
+- bases/actions.github.com_autoscalinglisteners.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
