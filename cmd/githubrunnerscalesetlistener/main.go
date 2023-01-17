@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
@@ -83,7 +84,7 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		}
 	}
 
-	actionsServiceClient, err := actions.NewClient(ctx, rc.ConfigureUrl, creds, "actions-runner-controller", logger)
+	actionsServiceClient, err := actions.NewClient(ctx, rc.ConfigureUrl, creds, fmt.Sprintf("actions-runner-controller/%s", build.Version), logger)
 	if err != nil {
 		return fmt.Errorf("failed to create an Actions Service client: %w", err)
 	}

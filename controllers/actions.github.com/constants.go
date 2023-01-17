@@ -6,5 +6,6 @@ const (
 )
 
 const (
-	EnvVarRunnerJITConfig = "ACTIONS_RUNNER_INPUT_JITCONFIG"
+	EnvVarRunnerJITConfig      = "ACTIONS_RUNNER_INPUT_JITCONFIG"
+	EnvVarRunnerExtraUserAgent = "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT"
 )
