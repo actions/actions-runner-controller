@@ -10,4 +10,16 @@ resources:
 - group: actions
   kind: RunnerDeployment
   version: v1alpha1
+- group: actions
+  kind: AutoscalingRunnerSet
+  version: v1alpha1
+- group: actions
+  kind: EphemeralRunnerSet
+  version: v1alpha1
+- group: actions
+  kind: EphemeralRunner
+  version: v1alpha1
+- group: actions
+  kind: AutoscalingListener
+  version: v1alpha1
 version: "2"

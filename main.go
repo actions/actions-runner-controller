@@ -17,20 +17,25 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
+	githubv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	summerwindv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
+	actionsgithubcom "github.com/actions/actions-runner-controller/controllers/actions.github.com"
 	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions/actions-runner-controller/github"
+	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,8 +53,8 @@ var (
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
-
-	_ = actionsv1alpha1.AddToScheme(scheme)
+	_ = githubv1alpha1.AddToScheme(scheme)
+	_ = summerwindv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -68,12 +73,14 @@ func main() {
 		err      error
 		ghClient *github.Client
 
-		metricsAddr            string
-		enableLeaderElection   bool
-		runnerStatusUpdateHook bool
-		leaderElectionId       string
-		port                   int
-		syncPeriod             time.Duration
+		metricsAddr              string
+		autoScalingRunnerSetOnly bool
+		enableLeaderElection     bool
+		disableAdmissionWebhook  bool
+		runnerStatusUpdateHook   bool
+		leaderElectionId         string
+		port                     int
+		syncPeriod               time.Duration
 
 		defaultScaleDownDelay time.Duration
 
@@ -85,6 +92,8 @@ func main() {
 		namespace            string
 		logLevel             string
 		logFormat            string
+
+		autoScalerImagePullSecrets stringSlice
 
 		commonRunnerLabels commaSeparatedStringSlice
 	)
@@ -121,7 +130,8 @@ func main() {
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
-
+	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
+	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.Parse()
 
 	log, err := logging.NewLogger(logLevel, logFormat)
@@ -131,13 +141,20 @@ func main() {
 	}
 	c.Log = &log
 
-	ghClient, err = c.NewClient()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error: Client creation failed.", err)
-		os.Exit(1)
+	if !autoScalingRunnerSetOnly {
+		ghClient, err = c.NewClient()
+		if err != nil {
+			log.Error(err, "unable to create client")
+			os.Exit(1)
+		}
 	}
 
 	ctrl.SetLogger(log)
+
+	if autoScalingRunnerSetOnly {
+		// We don't support metrics for AutoRunnerScaleSet for now
+		metricsAddr = "0"
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -158,148 +175,224 @@ func main() {
 		ghClient,
 	)
 
-	runnerReconciler := &actionssummerwindnet.RunnerReconciler{
-		Client:                    mgr.GetClient(),
-		Log:                       log.WithName("runner"),
-		Scheme:                    mgr.GetScheme(),
-		GitHubClient:              multiClient,
-		DockerImage:               dockerImage,
-		DockerRegistryMirror:      dockerRegistryMirror,
-		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
-		// Defaults for self-hosted runner containers
-		RunnerImage:            runnerImage,
-		RunnerImagePullSecrets: runnerImagePullSecrets,
-	}
-
-	if err = runnerReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "Runner")
-		os.Exit(1)
-	}
-
-	runnerReplicaSetReconciler := &actionssummerwindnet.RunnerReplicaSetReconciler{
-		Client: mgr.GetClient(),
-		Log:    log.WithName("runnerreplicaset"),
-		Scheme: mgr.GetScheme(),
-	}
-
-	if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
-		os.Exit(1)
-	}
-
-	runnerDeploymentReconciler := &actionssummerwindnet.RunnerDeploymentReconciler{
-		Client:             mgr.GetClient(),
-		Log:                log.WithName("runnerdeployment"),
-		Scheme:             mgr.GetScheme(),
-		CommonRunnerLabels: commonRunnerLabels,
-	}
-
-	if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "RunnerDeployment")
-		os.Exit(1)
-	}
-
-	runnerSetReconciler := &actionssummerwindnet.RunnerSetReconciler{
-		Client:               mgr.GetClient(),
-		Log:                  log.WithName("runnerset"),
-		Scheme:               mgr.GetScheme(),
-		CommonRunnerLabels:   commonRunnerLabels,
-		DockerImage:          dockerImage,
-		DockerRegistryMirror: dockerRegistryMirror,
-		GitHubClient:         multiClient,
-		// Defaults for self-hosted runner containers
-		RunnerImage:               runnerImage,
-		RunnerImagePullSecrets:    runnerImagePullSecrets,
-		UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
-	}
-
-	if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "RunnerSet")
-		os.Exit(1)
-	}
-
-	log.Info(
-		"Initializing actions-runner-controller",
-		"version", build.Version,
-		"default-scale-down-delay", defaultScaleDownDelay,
-		"sync-period", syncPeriod,
-		"default-runner-image", runnerImage,
-		"default-docker-image", dockerImage,
-		"common-runnner-labels", commonRunnerLabels,
-		"leader-election-enabled", enableLeaderElection,
-		"leader-election-id", leaderElectionId,
-		"watch-namespace", namespace,
+	actionsMultiClient := actions.NewMultiClient(
+		"actions-runner-controller/"+build.Version,
+		log.WithName("actions-clients"),
 	)
 
-	horizontalRunnerAutoscaler := &actionssummerwindnet.HorizontalRunnerAutoscalerReconciler{
-		Client:                mgr.GetClient(),
-		Log:                   log.WithName("horizontalrunnerautoscaler"),
-		Scheme:                mgr.GetScheme(),
-		GitHubClient:          multiClient,
-		DefaultScaleDownDelay: defaultScaleDownDelay,
+	if !autoScalingRunnerSetOnly {
+		runnerReconciler := &actionssummerwindnet.RunnerReconciler{
+			Client:                    mgr.GetClient(),
+			Log:                       log.WithName("runner"),
+			Scheme:                    mgr.GetScheme(),
+			GitHubClient:              multiClient,
+			DockerImage:               dockerImage,
+			DockerRegistryMirror:      dockerRegistryMirror,
+			UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
+			// Defaults for self-hosted runner containers
+			RunnerImage:            runnerImage,
+			RunnerImagePullSecrets: runnerImagePullSecrets,
+		}
+
+		if err = runnerReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "Runner")
+			os.Exit(1)
+		}
+
+		runnerReplicaSetReconciler := &actionssummerwindnet.RunnerReplicaSetReconciler{
+			Client: mgr.GetClient(),
+			Log:    log.WithName("runnerreplicaset"),
+			Scheme: mgr.GetScheme(),
+		}
+
+		if err = runnerReplicaSetReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "RunnerReplicaSet")
+			os.Exit(1)
+		}
+
+		runnerDeploymentReconciler := &actionssummerwindnet.RunnerDeploymentReconciler{
+			Client:             mgr.GetClient(),
+			Log:                log.WithName("runnerdeployment"),
+			Scheme:             mgr.GetScheme(),
+			CommonRunnerLabels: commonRunnerLabels,
+		}
+
+		if err = runnerDeploymentReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "RunnerDeployment")
+			os.Exit(1)
+		}
+
+		runnerSetReconciler := &actionssummerwindnet.RunnerSetReconciler{
+			Client:               mgr.GetClient(),
+			Log:                  log.WithName("runnerset"),
+			Scheme:               mgr.GetScheme(),
+			CommonRunnerLabels:   commonRunnerLabels,
+			DockerImage:          dockerImage,
+			DockerRegistryMirror: dockerRegistryMirror,
+			GitHubClient:         multiClient,
+			// Defaults for self-hosted runner containers
+			RunnerImage:               runnerImage,
+			RunnerImagePullSecrets:    runnerImagePullSecrets,
+			UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
+		}
+
+		if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "RunnerSet")
+			os.Exit(1)
+		}
+
+		log.Info(
+			"Initializing actions-runner-controller",
+			"version", build.Version,
+			"default-scale-down-delay", defaultScaleDownDelay,
+			"sync-period", syncPeriod,
+			"default-runner-image", runnerImage,
+			"default-docker-image", dockerImage,
+			"common-runnner-labels", commonRunnerLabels,
+			"leader-election-enabled", enableLeaderElection,
+			"leader-election-id", leaderElectionId,
+			"watch-namespace", namespace,
+		)
+
+		horizontalRunnerAutoscaler := &actionssummerwindnet.HorizontalRunnerAutoscalerReconciler{
+			Client:                mgr.GetClient(),
+			Log:                   log.WithName("horizontalrunnerautoscaler"),
+			Scheme:                mgr.GetScheme(),
+			GitHubClient:          multiClient,
+			DefaultScaleDownDelay: defaultScaleDownDelay,
+		}
+
+		runnerPodReconciler := &actionssummerwindnet.RunnerPodReconciler{
+			Client:       mgr.GetClient(),
+			Log:          log.WithName("runnerpod"),
+			Scheme:       mgr.GetScheme(),
+			GitHubClient: multiClient,
+		}
+
+		runnerPersistentVolumeReconciler := &actionssummerwindnet.RunnerPersistentVolumeReconciler{
+			Client: mgr.GetClient(),
+			Log:    log.WithName("runnerpersistentvolume"),
+			Scheme: mgr.GetScheme(),
+		}
+
+		runnerPersistentVolumeClaimReconciler := &actionssummerwindnet.RunnerPersistentVolumeClaimReconciler{
+			Client: mgr.GetClient(),
+			Log:    log.WithName("runnerpersistentvolumeclaim"),
+			Scheme: mgr.GetScheme(),
+		}
+
+		if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "RunnerPod")
+			os.Exit(1)
+		}
+
+		if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
+			os.Exit(1)
+		}
+
+		if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
+			os.Exit(1)
+		}
+
+		if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
+			os.Exit(1)
+		}
+
+		if !disableAdmissionWebhook {
+			if err = (&summerwindv1alpha1.Runner{}).SetupWebhookWithManager(mgr); err != nil {
+				log.Error(err, "unable to create webhook", "webhook", "Runner")
+				os.Exit(1)
+			}
+			if err = (&summerwindv1alpha1.RunnerDeployment{}).SetupWebhookWithManager(mgr); err != nil {
+				log.Error(err, "unable to create webhook", "webhook", "RunnerDeployment")
+				os.Exit(1)
+			}
+			if err = (&summerwindv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
+				log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+				os.Exit(1)
+			}
+		}
 	}
 
-	runnerPodReconciler := &actionssummerwindnet.RunnerPodReconciler{
-		Client:       mgr.GetClient(),
-		Log:          log.WithName("runnerpod"),
-		Scheme:       mgr.GetScheme(),
-		GitHubClient: multiClient,
+	mgrPodName := os.Getenv("CONTROLLER_MANAGER_POD_NAME")
+	mgrPodNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
+	var mgrPod corev1.Pod
+	err = mgr.GetAPIReader().Get(context.Background(), types.NamespacedName{Namespace: mgrPodNamespace, Name: mgrPodName}, &mgrPod)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("unable to obtain manager pod: %s (%s)", mgrPodName, mgrPodNamespace))
+		os.Exit(1)
 	}
 
-	runnerPersistentVolumeReconciler := &actionssummerwindnet.RunnerPersistentVolumeReconciler{
+	var mgrContainer *corev1.Container
+	for _, container := range mgrPod.Spec.Containers {
+		if container.Name == "manager" {
+			mgrContainer = &container
+			break
+		}
+	}
+
+	if mgrContainer != nil {
+		log.Info("Detected manager container", "image", mgrContainer.Image)
+	} else {
+		log.Error(err, "unable to obtain manager container image")
+		os.Exit(1)
+	}
+
+	if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
+		Client:                             mgr.GetClient(),
+		Log:                                log.WithName("AutoscalingRunnerSet"),
+		Scheme:                             mgr.GetScheme(),
+		ControllerNamespace:                mgrPodNamespace,
+		DefaultRunnerScaleSetListenerImage: mgrContainer.Image,
+		ActionsClient:                      actionsMultiClient,
+		DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+		os.Exit(1)
+	}
+
+	if err = (&actionsgithubcom.EphemeralRunnerReconciler{
+		Client:        mgr.GetClient(),
+		Log:           log.WithName("EphemeralRunner"),
+		Scheme:        mgr.GetScheme(),
+		ActionsClient: actionsMultiClient,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
+		os.Exit(1)
+	}
+
+	if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
+		Client:        mgr.GetClient(),
+		Log:           log.WithName("EphemeralRunnerSet"),
+		Scheme:        mgr.GetScheme(),
+		ActionsClient: actionsMultiClient,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
+		os.Exit(1)
+	}
+	if err = (&actionsgithubcom.AutoscalingListenerReconciler{
 		Client: mgr.GetClient(),
-		Log:    log.WithName("runnerpersistentvolume"),
+		Log:    log.WithName("AutoscalingListener"),
 		Scheme: mgr.GetScheme(),
-	}
-
-	runnerPersistentVolumeClaimReconciler := &actionssummerwindnet.RunnerPersistentVolumeClaimReconciler{
-		Client: mgr.GetClient(),
-		Log:    log.WithName("runnerpersistentvolumeclaim"),
-		Scheme: mgr.GetScheme(),
-	}
-
-	if err = runnerPodReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "RunnerPod")
-		os.Exit(1)
-	}
-
-	if err = horizontalRunnerAutoscaler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "HorizontalRunnerAutoscaler")
-		os.Exit(1)
-	}
-
-	if err = runnerPersistentVolumeReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolume")
-		os.Exit(1)
-	}
-
-	if err = runnerPersistentVolumeClaimReconciler.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "RunnerPersistentVolumeClaim")
-		os.Exit(1)
-	}
-
-	if err = (&actionsv1alpha1.Runner{}).SetupWebhookWithManager(mgr); err != nil {
-		log.Error(err, "unable to create webhook", "webhook", "Runner")
-		os.Exit(1)
-	}
-	if err = (&actionsv1alpha1.RunnerDeployment{}).SetupWebhookWithManager(mgr); err != nil {
-		log.Error(err, "unable to create webhook", "webhook", "RunnerDeployment")
-		os.Exit(1)
-	}
-	if err = (&actionsv1alpha1.RunnerReplicaSet{}).SetupWebhookWithManager(mgr); err != nil {
-		log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
-	injector := &actionssummerwindnet.PodRunnerTokenInjector{
-		Client:       mgr.GetClient(),
-		GitHubClient: multiClient,
-		Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
-	}
-	if err = injector.SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
-		os.Exit(1)
+	if !disableAdmissionWebhook && !autoScalingRunnerSetOnly {
+		injector := &actionssummerwindnet.PodRunnerTokenInjector{
+			Client:       mgr.GetClient(),
+			GitHubClient: multiClient,
+			Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
+		}
+		if err = injector.SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
+			os.Exit(1)
+		}
 	}
 
 	log.Info("starting manager")
