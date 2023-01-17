@@ -4,7 +4,8 @@ The following table summarizes the version mapping between controller and chart 
 
 |Controller (App) Version|Chart Version|
 |---|---|
-|0.26.0|0.21.0|
+|0.27.0|0.22.0|
+|0.26.0|0.21.1/0.21.0|
 |0.25.2|0.20.2|
 |0.25.1|0.20.1|
 |0.25.0|0.20.0|
