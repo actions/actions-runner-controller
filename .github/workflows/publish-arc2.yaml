@@ -49,9 +49,9 @@ jobs:
           then
             resolvedRef="${{ github.ref }}"
           fi
-          echo "resolved_ref=$resolveRef" >> $GITHUB_OUTPUT
-          echo "INFO: Resolving short SHA for $resolveRef"
-          echo "short_sha=$(git rev-parse --short $resolveRef)" >> $GITHUB_OUTPUT
+          echo "resolved_ref=$resolvedRef" >> $GITHUB_OUTPUT
+          echo "INFO: Resolving short SHA for $resolvedRef"
+          echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
