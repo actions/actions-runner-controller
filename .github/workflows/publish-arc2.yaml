@@ -124,15 +124,19 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Publish new helm chart
+      - name: Publish new helm chart for actions-runner-controller-2 and auto-scaling-runner-set
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
-          CHART_VERSION='$(cat charts_preview/actions-runner-controller-2/Chart.yaml | grep version: | cut -d " " -f 2)'
-          echo "CHART_VERSION_TAG=${CHART_VERSION}-${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_ENV
-          helm package charts_preview/actions-runner-controller-2/ --version="${CHART_VERSION}-${{ steps.resolve_parameters.outputs.short_sha }}"
-          # Tag is inferred from SemVer of Chart and cannot be set manually.
-          # See https://helm.sh/docs/topics/registries/#the-push-subcommand
-          helm push actions-runner-controller-"${CHART_VERSION}-${{ steps.resolve_parameters.outputs.short_sha }}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-helm-chart-2
+
+          ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG=$(cat charts/actions-runner-controller-2/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG=${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/actions-runner-controller-2/ --version="${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}"
+          helm push actions-runner-controller-2-"${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+
+          AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG=$(cat charts/auto-scaling-runner-set/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG=${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/auto-scaling-runner-set/ --version="${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}"
+          helm push auto-scaling-runner-set-"${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
 
       - name: Job summary
         run: |
@@ -141,4 +145,5 @@ jobs:
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Chart version: ${{ env.CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Actions-Runner-Controller-2 Chart version: ${{ env.ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Auto-Scaling-Runner-Set Chart version: ${{ env.AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
