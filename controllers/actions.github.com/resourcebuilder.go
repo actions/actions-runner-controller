@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -357,17 +358,23 @@ func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 
 	for _, c := range runner.Spec.PodTemplateSpec.Spec.Containers {
 		if c.Name == EphemeralRunnerContainerName {
-			c.Env = append(c.Env, corev1.EnvVar{
-				Name: EnvVarRunnerJITConfig,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
+			c.Env = append(
+				c.Env,
+				corev1.EnvVar{
+					Name: EnvVarRunnerJITConfig,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: secret.Name,
+							},
+							Key: jitTokenKey,
 						},
-						Key: jitTokenKey,
 					},
 				},
-			})
+				corev1.EnvVar{
+					Name:  EnvVarRunnerExtraUserAgent,
+					Value: fmt.Sprintf("actions-runner-controller/%s", build.Version),
+				})
 		}
 
 		newPod.Spec.Containers = append(newPod.Spec.Containers, c)
