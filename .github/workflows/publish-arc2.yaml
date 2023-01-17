@@ -44,8 +44,14 @@ jobs:
       - name: Resolve parameters 
         id: resolve_parameters
         run: |
-          echo "INFO: Resolving short SHA for ${{ inputs.ref }}"
-          echo "short_sha=$(git rev-parse --short ${{ inputs.ref }})" >> $GITHUB_OUTPUT
+          resolvedRef="${{ inputs.ref }}"
+          if [ -z "$resolvedRef" ]
+          then
+            resolvedRef="${{ github.ref }}"
+          fi
+          echo "resolved_ref=$resolveRef" >> $GITHUB_OUTPUT
+          echo "INFO: Resolving short SHA for $resolveRef"
+          echo "short_sha=$(git rev-parse --short $resolveRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
@@ -82,7 +88,7 @@ jobs:
           echo "The [publish-arc2](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/publish-arc2.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Ref: ${{ inputs.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- Release tag: ${{ inputs.release_tag_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
@@ -103,8 +109,13 @@ jobs:
       - name: Resolve parameters 
         id: resolve_parameters
         run: |
-          echo "INFO: Resolving short SHA for ${{ inputs.ref }}"
-          echo "short_sha=$(git rev-parse --short ${{ inputs.ref }})" >> $GITHUB_OUTPUT
+          resolvedRef="${{ inputs.ref }}"
+          if [ -z "$resolvedRef" ]
+          then
+            resolvedRef="${{ github.ref }}"
+          fi
+          echo "INFO: Resolving short SHA for $resolvedRef"
+          echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT 
 
@@ -128,6 +139,6 @@ jobs:
           echo "New helm chart published successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Ref: ${{ inputs.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- Chart version: ${{ env.CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
