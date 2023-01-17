@@ -116,6 +116,10 @@ manifests-gen-crds: controller-gen yq
 
 chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
+	cp config/crd/bases/actions.github.com_autoscalingrunnersets.yaml charts/actions-runner-controller-2/crds/
+	cp config/crd/bases/actions.github.com_autoscalinglisteners.yaml charts/actions-runner-controller-2/crds/
+	cp config/crd/bases/actions.github.com_ephemeralrunnersets.yaml charts/actions-runner-controller-2/crds/
+	cp config/crd/bases/actions.github.com_ephemeralrunners.yaml charts/actions-runner-controller-2/crds/
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalingrunnersets.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalinglisteners.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunnersets.yaml
