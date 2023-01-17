@@ -10,6 +10,8 @@ on:
       - 'charts/**'
       - '.github/workflows/publish-chart.yaml'
       - '!charts/actions-runner-controller/docs/**'
+      - '!charts/actions-runner-controller-2/**'
+      - '!charts/auto-scaling-runner-set/**'
       - '!**.md'
   workflow_dispatch:
 
