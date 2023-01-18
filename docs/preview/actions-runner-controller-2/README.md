@@ -46,7 +46,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 
 1. You're ready to install the autoscaling runner set. For additional configuration options, see [values.yaml](https://github.com/actions/actions-runner-controller/blob/master/charts/auto-scaling-runner-set/values.yaml)
     - ℹ **Choose your installation name carefully**, you will use it as the value of `runs-on` in your workflow.
-    - ℹ **We recommend you choose a unique namespaces in the following steps**. As a good security measure, it's best to have your runner pods created in a different namespace than one containing the manager and listener pods.
+    - ℹ **We recommend you choose a unique namespace in the following steps**. As a good security measure, it's best to have your runner pods created in a different namespace than the one containing the manager and listener pods.
 
     ```bash
     # Using a Personal Access Token (PAT)
