@@ -25,7 +25,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 ### Prerequisites
 
 1. Create a K8s cluster, if not available.
-    - If you don't have a K8s cluster, you can install a local environment using minikube. See [installing Minikube](https://minikube.sigs.k8s.io/docs/start/).
+    - If you don't have a K8s cluster, you can install a local environment using minikube. See [installing minikube](https://minikube.sigs.k8s.io/docs/start/).
 1. Install helm 3, if not available. See [installing Helm](https://helm.sh/docs/intro/install/).
 
 ### Install actions-runner-controller
@@ -42,27 +42,40 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     ```
 
 1. Generate a Personal Access Token (PAT) or create and install a GitHub App. See [Creating a personal access token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) and [Creating a GitHub App](https://docs.github.com/en/developers/apps/creating-a-github-app).
+    - For the list of required permissions, see [Authenticating to the GitHub API](https://github.com/actions/actions-runner-controller/blob/master/docs/authenticating-to-the-github-api.md#authenticating-to-the-github-api).
 
 1. You're ready to install the autoscaling runner set. For additional configuration options, see [values.yaml](https://github.com/actions/actions-runner-controller/blob/master/charts/auto-scaling-runner-set/values.yaml)
+    - **Choose your installation name carefully**, you will use it as the value of `runs-on` in your workflow.
 
     ```bash
     # Using a Personal Access Token (PAT)
-    $ helm install arc-runner-set \
+    INSTALLATION_NAME="arc-runner-set" 
+    NAMESPACE="arc-systems"
+    GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>"
+    GITHUB_PAT="<PAT>"
+    helm install "${INSTALLATION_NAME}" \
         --namespace "${NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/<your_enterprise/org/repo>" \
-        --set githubConfigSecret.github_token="<PAT>" \
-        --set 
+        --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
+        --set githubConfigSecret.github_token="${GITHUB_PAT}" \
         oci://ghcr.io/actions/actions-runner-controller-charts/auto-scaling-runner-set --version 0.1.0
-    
+    ```
+
+    ```bash
     # Using a GitHub App
-    $ helm install arc-runner-set \
+    INSTALLATION_NAME="arc-runner-set" 
+    NAMESPACE="arc-systems"
+    GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>" 
+    GITHUB_APP_ID="<GITHUB_APP_ID>"
+    GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
+    GITHUB_APP_PRIVATE_KEY="<GITHUB_APP_PRIVATE_KEY>"
+    helm install arc-runner-set \
         --namespace "${NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/<your_enterprise/org/repo>" \
-        --set githubConfigSecret.github_app_id="<GITHUB_APP_ID>" \
-        --set githubConfigSecret.github_app_installation_id="<GITHUB_APP_INSTALLATION_ID>" \
-        --set githubConfigSecret.github_app_private_key="<GITHUB_APP_PRIVATE_KEY>" \
+        --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
+        --set githubConfigSecret.github_app_id="${GITHUB_APP_ID}" \
+        --set githubConfigSecret.github_app_installation_id="${GITHUB_APP_INSTALLATION_ID}" \
+        --set githubConfigSecret.github_app_private_key="${GITHUB_APP_PRIVATE_KEY}" \
         oci://ghcr.io/actions/actions-runner-controller-charts/auto-scaling-runner-set --version 0.1.0
     ```
 
@@ -84,7 +97,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     arc-runner-set-6cd58d58-listener                  1/1     Running   0          21s
     ```
 
-1. In your repository, create a simple test workflow as follows. The `runs-on` value should match the helm installation name you used in the previous step.
+1. In a repository, create a simple test workflow as follows. The `runs-on` value should match the helm installation name you used in the previous step.
 
     ```yaml
     name: Test workflow
