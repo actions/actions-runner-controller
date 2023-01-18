@@ -42,15 +42,16 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     ```
 
 1. Generate a Personal Access Token (PAT) or create and install a GitHub App. See [Creating a personal access token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) and [Creating a GitHub App](https://docs.github.com/en/developers/apps/creating-a-github-app).
-    - For the list of required permissions, see [Authenticating to the GitHub API](https://github.com/actions/actions-runner-controller/blob/master/docs/authenticating-to-the-github-api.md#authenticating-to-the-github-api).
+    - ℹ For the list of required permissions, see [Authenticating to the GitHub API](https://github.com/actions/actions-runner-controller/blob/master/docs/authenticating-to-the-github-api.md#authenticating-to-the-github-api).
 
 1. You're ready to install the autoscaling runner set. For additional configuration options, see [values.yaml](https://github.com/actions/actions-runner-controller/blob/master/charts/auto-scaling-runner-set/values.yaml)
-    - **Choose your installation name carefully**, you will use it as the value of `runs-on` in your workflow.
+    - ℹ **Choose your installation name carefully**, you will use it as the value of `runs-on` in your workflow.
+    - ℹ **We recommend you choose a unique namespace in the following steps**. As a good security measure, it's best to have your runner pods created in a different namespace than the one containing the manager and listener pods.
 
     ```bash
     # Using a Personal Access Token (PAT)
     INSTALLATION_NAME="arc-runner-set" 
-    NAMESPACE="arc-systems"
+    NAMESPACE="arc-runners"
     GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>"
     GITHUB_PAT="<PAT>"
     helm install "${INSTALLATION_NAME}" \
@@ -64,7 +65,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     ```bash
     # Using a GitHub App
     INSTALLATION_NAME="arc-runner-set" 
-    NAMESPACE="arc-systems"
+    NAMESPACE="arc-runners"
     GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>" 
     GITHUB_APP_ID="<GITHUB_APP_ID>"
     GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
@@ -115,12 +116,12 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 1. Run the workflow. You should see the runner pod being created and the workflow being executed.
 
     ```bash
-    $ kubectl get pods -n "${NAMESPACE}"
+    $ kubectl get pods -A
 
     NAMESPACE     NAME                                              READY   STATUS    RESTARTS      AGE
     arc-systems   arc-actions-runner-controller-2-8c74b6f95-gr7zr   1/1     Running   0             27m
     arc-systems   arc-runner-set-6cd58d58-listener                  1/1     Running   0             7m52s
-    arc-systems   arc-runner-set-rmrgw-runner-p9p5n                 1/1     Running   0             21s
+    arc-runners   arc-runner-set-rmrgw-runner-p9p5n                 1/1     Running   0             21s
     ```
 
 ## Troubleshooting
