@@ -46,7 +46,7 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 
 ### Deploy and Configure ARC
 
-1️⃣ Deploy  and configure ARC on your K8s cluster. You may use Helm or Kubectl.
+1️⃣ Deploy and configure ARC on your K8s cluster. You may use Helm or Kubectl.
 
 <details><summary>Helm deployment</summary>
 
