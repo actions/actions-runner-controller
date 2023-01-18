@@ -36,6 +36,12 @@ spec:
         - jsonPath: .status.message
           name: Message
           type: string
+        - jsonPath: .status.workflow.repository
+          name: WF Repo
+          type: string
+        - jsonPath: .status.workflow.runID
+          name: WF Run
+          type: string
         - jsonPath: .metadata.creationTimestamp
           name: Age
           type: date
@@ -5224,6 +5230,31 @@ spec:
                   required:
                     - expiresAt
                     - token
+                  type: object
+                workflow:
+                  description: WorkflowStatus contains various information that is propagated from GitHub Actions workflow run environment variables to ease monitoring workflow run/job/steps that are triggerred on the runner.
+                  properties:
+                    action:
+                      description: Action is the name of the current action or the step ID of the current step that is triggerred within the runner. It corresponds to GITHUB_ACTION defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
+                    job:
+                      description: Job is the name of the current job that is triggerred within the runner. It corresponds to GITHUB_JOB defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
+                    name:
+                      description: Name is the name of the workflow that is triggerred within the runner. It corresponds to GITHUB_WORKFLOW defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
+                    repository:
+                      description: Repository is the owner and repository name of the workflow that is triggerred within the runner. It corresponds to GITHUB_REPOSITORY defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
+                    repositoryOwner:
+                      description: ReositoryOwner is the repository owner's name for the workflow that is triggerred within the runner. It corresponds to GITHUB_REPOSITORY_OWNER defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
+                    runID:
+                      description: RunID is the unique number for the current workflow run that is triggerred within the runner. It corresponds to GITHUB_RUN_ID defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
+                    runNumber:
+                      description: GITHUB_RUN_NUMBER is the unique number for the current workflow run that is triggerred within the runner. It corresponds to GITHUB_RUN_ID defined in https://docs.github.com/en/actions/learn-github-actions/environment-variables
+                      type: string
                   type: object
               type: object
           type: object
