@@ -310,6 +310,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 	}
 
 	if len(runnerLinkedPodList.Items) == 0 {
+		log.Info("Runner-linked pods are deleted")
 		return true, nil
 	}
 
@@ -344,6 +345,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	}
 
 	if len(runnerLinkedSecretList.Items) == 0 {
+		log.Info("Runner-linked secrets are deleted")
 		return true, nil
 	}
 
