@@ -80,6 +80,9 @@ type ProxyConfig struct {
 
 	// +optional
 	HTTPS *ProxyServerConfig `json:"https,omitempty"`
+
+	// +optional
+	NoProxy []string `json:"noProxy,omitempty"`
 }
 
 type ProxyServerConfig struct {

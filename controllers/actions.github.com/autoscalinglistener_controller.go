@@ -19,6 +19,7 @@ package actionsgithubcom
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -345,7 +346,37 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 }
 
 func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {
-	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret)
+	var proxyEnvs []corev1.EnvVar
+	if autoscalingListener.Spec.Proxy != nil {
+		var httpUserInfo userInfoFunc
+		if autoscalingListener.Spec.Proxy.HTTP != nil {
+			httpUserInfo = func() (*url.Userinfo, error) {
+				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+					Name:      autoscalingListener.Spec.Proxy.HTTP.CredentialSecretRef,
+					Namespace: autoscalingRunnerSet.Namespace,
+				})
+			}
+		}
+
+		var httpsUserInfo userInfoFunc
+		if autoscalingListener.Spec.Proxy.HTTPS != nil {
+			httpsUserInfo = func() (*url.Userinfo, error) {
+				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+					Name:      autoscalingListener.Spec.Proxy.HTTPS.CredentialSecretRef,
+					Namespace: autoscalingRunnerSet.Namespace,
+				})
+			}
+		}
+
+		var err error
+		proxyEnvs, err = proxyEnvVars(autoscalingListener.Spec.Proxy, httpUserInfo, httpsUserInfo)
+		if err != nil {
+			logger.Error(err, "Unable to create proxy environment variables")
+			return ctrl.Result{}, nil
+		}
+	}
+
+	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, proxyEnvs...)
 
 	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
 		return ctrl.Result{}, err

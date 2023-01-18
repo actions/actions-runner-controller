@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
@@ -18,10 +20,9 @@ const (
 	jitTokenKey = "jitToken"
 )
 
-type resourceBuilder struct {
-}
+type resourceBuilder struct{}
 
-func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret) *corev1.Pod {
+func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
 	newLabels := map[string]string{}
 	newLabels[scaleSetListenerLabel] = fmt.Sprintf("%v-%v", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, autoscalingListener.Spec.AutoscalingRunnerSetName)
 
@@ -51,6 +52,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Value: strconv.Itoa(autoscalingListener.Spec.RunnerScaleSetId),
 		},
 	}
+	listenerEnv = append(listenerEnv, envs...)
 
 	if _, ok := secret.Data["github_token"]; ok {
 		listenerEnv = append(listenerEnv, corev1.EnvVar{
@@ -299,6 +301,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			MaxRunners:                    effectiveMaxRunners,
 			Image:                         image,
 			ImagePullSecrets:              imagePullSecrets,
+			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 		},
 	}
 
@@ -316,7 +319,7 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	}
 }
 
-func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret) *corev1.Pod {
+func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
 	var newPod corev1.Pod
 
 	labels := map[string]string{}
@@ -374,7 +377,9 @@ func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 				corev1.EnvVar{
 					Name:  EnvVarRunnerExtraUserAgent,
 					Value: fmt.Sprintf("actions-runner-controller/%s", build.Version),
-				})
+				},
+			)
+			c.Env = append(c.Env, envs...)
 		}
 
 		newPod.Spec.Containers = append(newPod.Spec.Containers, c)
@@ -441,4 +446,56 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 			Verbs:     []string{"patch"},
 		},
 	}
+}
+
+type userInfoFunc func() (userInfo *url.Userinfo, err error)
+
+func proxyEnvVars(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userInfoFunc) ([]corev1.EnvVar, error) {
+	var envVars []corev1.EnvVar
+
+	// setup HTTP env vars
+	if proxy.HTTP.Url != "" {
+		parsed, err := url.Parse(proxy.HTTP.Url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse http proxy url: %v", err)
+		}
+
+		if httpUserInfo != nil {
+			userInfo, err := httpUserInfo()
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve http user info: %v", err)
+			}
+			parsed.User = userInfo
+		}
+
+		envVars = append(envVars, corev1.EnvVar{Name: EnvVarHTTPProxy, Value: parsed.String()})
+	}
+
+	// setup HTTPS env vars
+	if proxy.HTTPS.Url != "" {
+		parsed, err := url.Parse(proxy.HTTPS.Url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse https proxy url: %v", err)
+		}
+
+		if httpsUserInfo != nil {
+			userInfo, err := httpsUserInfo()
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve https user info: %v", err)
+			}
+			parsed.User = userInfo
+		}
+
+		envVars = append(envVars, corev1.EnvVar{Name: EnvVarHTTPSProxy, Value: parsed.String()})
+	}
+
+	// setup noproxy
+	if len(proxy.NoProxy) > 0 {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  EnvVarNoProxy,
+			Value: strings.Join(proxy.NoProxy, ","),
+		})
+	}
+
+	return envVars, nil
 }

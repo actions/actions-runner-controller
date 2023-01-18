@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -557,8 +558,37 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 }
 
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
+	var proxyEnvs []corev1.EnvVar
+	if runner.Spec.Proxy != nil {
+		var httpUserInfo userInfoFunc
+		if runner.Spec.Proxy.HTTP != nil {
+			httpUserInfo = func() (*url.Userinfo, error) {
+				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+					Name:      runner.Spec.Proxy.HTTP.CredentialSecretRef,
+					Namespace: runner.Namespace,
+				})
+			}
+		}
+
+		var httpsUserInfo userInfoFunc
+		if runner.Spec.Proxy.HTTPS != nil {
+			httpsUserInfo = func() (*url.Userinfo, error) {
+				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+					Name:      runner.Spec.Proxy.HTTPS.CredentialSecretRef,
+					Namespace: runner.Namespace,
+				})
+			}
+		}
+
+		var err error
+		proxyEnvs, err = proxyEnvVars(runner.Spec.Proxy, httpUserInfo, httpsUserInfo)
+		if err != nil {
+			log.Error(err, "Unable to create proxy environment variables")
+			return ctrl.Result{}, nil
+		}
+	}
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret)
+	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, proxyEnvs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")

@@ -54,11 +54,13 @@ type AutoscalingListenerSpec struct {
 
 	// Required
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// +optional
+	Proxy *ProxyConfig `json:"proxy,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
-type AutoscalingListenerStatus struct {
-}
+type AutoscalingListenerStatus struct{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
