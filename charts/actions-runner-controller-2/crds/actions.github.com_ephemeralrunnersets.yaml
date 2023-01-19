@@ -96,6 +96,10 @@ spec:
                               description: Required
                               type: string
                           type: object
+                        noProxy:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     runnerScaleSetId:
                       type: integer

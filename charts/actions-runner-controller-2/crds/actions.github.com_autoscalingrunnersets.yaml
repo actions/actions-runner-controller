@@ -87,6 +87,10 @@ spec:
                           description: Required
                           type: string
                       type: object
+                    noProxy:
+                      items:
+                        type: string
+                      type: array
                   type: object
                 runnerGroup:
                   type: string
