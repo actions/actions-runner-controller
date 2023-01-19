@@ -41,6 +41,7 @@ import (
 )
 
 const (
+	autoscalingListenerContainerName = "autoscaler"
 	autoscalingListenerOwnerKey      = ".metadata.controller"
 	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
 )
@@ -350,6 +351,7 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 	if autoscalingListener.Spec.Proxy != nil {
 		var httpUserInfo userInfoFunc
 		if autoscalingListener.Spec.Proxy.HTTP != nil && len(autoscalingListener.Spec.Proxy.HTTP.CredentialSecretRef) != 0 {
+			logger.Info("setting http user info", "http", autoscalingListener.Spec.Proxy.HTTP, "credref", autoscalingListener.Spec.Proxy.HTTP.CredentialSecretRef)
 			httpUserInfo = func() (*url.Userinfo, error) {
 				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
 					Name:      autoscalingListener.Spec.Proxy.HTTP.CredentialSecretRef,

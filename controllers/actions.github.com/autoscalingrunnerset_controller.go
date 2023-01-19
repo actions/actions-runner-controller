@@ -42,7 +42,6 @@ import (
 
 const (
 	// TODO: Replace with shared image.
-	name                              = "autoscaler"
 	autoscalingRunnerSetOwnerKey      = ".metadata.controller"
 	LabelKeyRunnerSpecHash            = "runner-spec-hash"
 	LabelKeyAutoScaleRunnerSetName    = "auto-scale-runner-set-name"

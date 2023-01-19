@@ -114,7 +114,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ServiceAccountName: serviceAccount.Name,
 		Containers: []corev1.Container{
 			{
-				Name:            name,
+				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
 				ImagePullPolicy: corev1.PullIfNotPresent,
