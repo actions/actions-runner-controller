@@ -454,7 +454,7 @@ func proxyEnvVars(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userI
 	var envVars []corev1.EnvVar
 
 	// setup HTTP env vars
-	if proxy.HTTP.Url != "" {
+	if proxy.HTTP != nil && proxy.HTTP.Url != "" {
 		parsed, err := url.Parse(proxy.HTTP.Url)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse http proxy url: %v", err)
@@ -472,7 +472,7 @@ func proxyEnvVars(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userI
 	}
 
 	// setup HTTPS env vars
-	if proxy.HTTPS.Url != "" {
+	if proxy.HTTPS != nil && proxy.HTTPS.Url != "" {
 		parsed, err := url.Parse(proxy.HTTPS.Url)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse https proxy url: %v", err)

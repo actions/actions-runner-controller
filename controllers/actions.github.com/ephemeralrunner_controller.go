@@ -561,7 +561,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	var proxyEnvs []corev1.EnvVar
 	if runner.Spec.Proxy != nil {
 		var httpUserInfo userInfoFunc
-		if runner.Spec.Proxy.HTTP != nil {
+		if runner.Spec.Proxy.HTTP != nil && len(runner.Spec.Proxy.HTTP.CredentialSecretRef) != 0 {
 			httpUserInfo = func() (*url.Userinfo, error) {
 				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
 					Name:      runner.Spec.Proxy.HTTP.CredentialSecretRef,
@@ -571,7 +571,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 		}
 
 		var httpsUserInfo userInfoFunc
-		if runner.Spec.Proxy.HTTPS != nil {
+		if runner.Spec.Proxy.HTTPS != nil && len(runner.Spec.Proxy.HTTPS.CredentialSecretRef) != 0 {
 			httpsUserInfo = func() (*url.Userinfo, error) {
 				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
 					Name:      runner.Spec.Proxy.HTTPS.CredentialSecretRef,

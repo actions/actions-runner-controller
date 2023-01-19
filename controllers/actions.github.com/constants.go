@@ -13,6 +13,6 @@ const (
 // Environment variable names used to set proxy variables for containers
 const (
 	EnvVarHTTPProxy  = "http_proxy"
-	EnvVarHTTPSProxy = "http_proxy"
+	EnvVarHTTPSProxy = "https_proxy"
 	EnvVarNoProxy    = "no_proxy"
 )
