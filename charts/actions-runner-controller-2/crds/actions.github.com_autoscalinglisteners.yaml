@@ -82,10 +82,6 @@ spec:
                       properties:
                         credentialSecretRef:
                           type: string
-                        noProxy:
-                          items:
-                            type: string
-                          type: array
                         url:
                           description: Required
                           type: string
@@ -94,10 +90,6 @@ spec:
                       properties:
                         credentialSecretRef:
                           type: string
-                        noProxy:
-                          items:
-                            type: string
-                          type: array
                         url:
                           description: Required
                           type: string

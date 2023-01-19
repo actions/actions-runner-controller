@@ -91,9 +91,6 @@ type ProxyServerConfig struct {
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
-
-	// +optional
-	NoProxy []string `json:"noProxy,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
