@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var tokenExpireAt = time.Now().Add(10 * time.Minute)
-
 func TestGetRunner(t *testing.T) {
 	ctx := context.Background()
 	auth := &actions.ActionsAuth{

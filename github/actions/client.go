@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -118,7 +117,7 @@ func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, 
 
 	// TODO: this silences retryclient default logger, do we want to provide one
 	// instead? by default retryablehttp logs all requests to stderr
-	retryClient.Logger = log.New(ioutil.Discard, "", log.LstdFlags)
+	retryClient.Logger = log.New(io.Discard, "", log.LstdFlags)
 
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax

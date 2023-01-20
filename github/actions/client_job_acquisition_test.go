@@ -87,6 +87,7 @@ func TestGetAcquirableJobs(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
 
 		got, err := client.GetAcquirableJobs(context.Background(), runnerScaleSet.Id)
 		require.NoError(t, err)

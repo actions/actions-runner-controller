@@ -64,14 +64,6 @@ func (s *actionsServer) configURLForOrg(org string) string {
 	return s.URL + "/" + org
 }
 
-func (s *actionsServer) configURLForRepo(org, repo string) string {
-	return s.URL + "/" + org + "/" + repo
-}
-
-func (s *actionsServer) configURLForEnterprise(enterprise string) string {
-	return s.URL + "/enterprises/" + enterprise
-}
-
 const samplePrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIICWgIBAAKBgHXfRT9cv9UY9fAAD4+1RshpfSSZe277urfEmPfX3/Og9zJYRk//
 CZrJVD1CaBZDiIyQsNEzjta7r4UsqWdFOggiNN2E7ZTFQjMSaFkVgrzHqWuiaCBf

@@ -100,6 +100,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			actions.WithRetryMax(retryMax),
 			actions.WithRetryWaitMax(retryWaitMax),
 		)
+		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
 		assert.NotNil(t, err)
