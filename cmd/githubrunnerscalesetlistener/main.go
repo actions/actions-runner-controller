@@ -84,7 +84,13 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		}
 	}
 
-	actionsServiceClient, err := actions.NewClient(ctx, rc.ConfigureUrl, creds, fmt.Sprintf("actions-runner-controller/%s", build.Version), logger)
+	actionsServiceClient, err := actions.NewClient(
+		ctx,
+		rc.ConfigureUrl,
+		creds,
+		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
+		actions.WithLogger(logger),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create an Actions Service client: %w", err)
 	}

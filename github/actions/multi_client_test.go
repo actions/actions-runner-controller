@@ -6,20 +6,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/actions/actions-runner-controller/logging"
+	"github.com/go-logr/logr"
 )
 
 func TestAddClient(t *testing.T) {
-	logger, err := logging.NewLogger(logging.LogLevelDebug, logging.LogFormatText)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: creating logger: %v\n", err)
-		os.Exit(1)
-	}
+	logger := logr.Discard()
 	multiClient := NewMultiClient("test-user-agent", logger).(*multiClient)
 
 	ctx := context.Background()
