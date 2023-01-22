@@ -681,71 +681,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 
 	autoscaler.Recorder = mgr.GetEventRecorderFor(name)
 
-	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, func(rawObj client.Object) []string {
-		hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
-
-		if hra.Spec.ScaleTargetRef.Name == "" {
-			autoscaler.Log.V(1).Info(fmt.Sprintf("scale target ref name not set for hra %s", hra.Name))
-			return nil
-		}
-
-		switch hra.Spec.ScaleTargetRef.Kind {
-		case "", "RunnerDeployment":
-			var rd v1alpha1.RunnerDeployment
-			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
-				autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerDeployment not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
-				return nil
-			}
-
-			keys := []string{}
-			if rd.Spec.Template.Spec.Repository != "" {
-				keys = append(keys, rd.Spec.Template.Spec.Repository) // Repository runners
-			}
-			if rd.Spec.Template.Spec.Organization != "" {
-				if group := rd.Spec.Template.Spec.Group; group != "" {
-					keys = append(keys, organizationalRunnerGroupKey(rd.Spec.Template.Spec.Organization, rd.Spec.Template.Spec.Group)) // Organization runner groups
-				} else {
-					keys = append(keys, rd.Spec.Template.Spec.Organization) // Organization runners
-				}
-			}
-			if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
-				if group := rd.Spec.Template.Spec.Group; group != "" {
-					keys = append(keys, enterpriseRunnerGroupKey(enterprise, rd.Spec.Template.Spec.Group)) // Enterprise runner groups
-				} else {
-					keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
-				}
-			}
-			autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
-			return keys
-		case "RunnerSet":
-			var rs v1alpha1.RunnerSet
-			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
-				autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerSet not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
-				return nil
-			}
-
-			keys := []string{}
-			if rs.Spec.Repository != "" {
-				keys = append(keys, rs.Spec.Repository) // Repository runners
-			}
-			if rs.Spec.Organization != "" {
-				keys = append(keys, rs.Spec.Organization) // Organization runners
-				if group := rs.Spec.Group; group != "" {
-					keys = append(keys, organizationalRunnerGroupKey(rs.Spec.Organization, rs.Spec.Group)) // Organization runner groups
-				}
-			}
-			if enterprise := rs.Spec.Enterprise; enterprise != "" {
-				keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
-				if group := rs.Spec.Group; group != "" {
-					keys = append(keys, enterpriseRunnerGroupKey(enterprise, rs.Spec.Group)) // Enterprise runner groups
-				}
-			}
-			autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
-			return keys
-		}
-
-		return nil
-	}); err != nil {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, autoscaler.indexer); err != nil {
 		return err
 	}
 
@@ -753,6 +689,72 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
 		Named(name).
 		Complete(autoscaler)
+}
+
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) indexer(rawObj client.Object) []string {
+	hra := rawObj.(*v1alpha1.HorizontalRunnerAutoscaler)
+
+	if hra.Spec.ScaleTargetRef.Name == "" {
+		autoscaler.Log.V(1).Info(fmt.Sprintf("scale target ref name not set for hra %s", hra.Name))
+		return nil
+	}
+
+	switch hra.Spec.ScaleTargetRef.Kind {
+	case "", "RunnerDeployment":
+		var rd v1alpha1.RunnerDeployment
+		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+			autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerDeployment not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
+			return nil
+		}
+
+		keys := []string{}
+		if rd.Spec.Template.Spec.Repository != "" {
+			keys = append(keys, rd.Spec.Template.Spec.Repository) // Repository runners
+		}
+		if rd.Spec.Template.Spec.Organization != "" {
+			if group := rd.Spec.Template.Spec.Group; group != "" {
+				keys = append(keys, organizationalRunnerGroupKey(rd.Spec.Template.Spec.Organization, rd.Spec.Template.Spec.Group)) // Organization runner groups
+			} else {
+				keys = append(keys, rd.Spec.Template.Spec.Organization) // Organization runners
+			}
+		}
+		if enterprise := rd.Spec.Template.Spec.Enterprise; enterprise != "" {
+			if group := rd.Spec.Template.Spec.Group; group != "" {
+				keys = append(keys, enterpriseRunnerGroupKey(enterprise, rd.Spec.Template.Spec.Group)) // Enterprise runner groups
+			} else {
+				keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
+			}
+		}
+		autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
+		return keys
+	case "RunnerSet":
+		var rs v1alpha1.RunnerSet
+		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+			autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerSet not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
+			return nil
+		}
+
+		keys := []string{}
+		if rs.Spec.Repository != "" {
+			keys = append(keys, rs.Spec.Repository) // Repository runners
+		}
+		if rs.Spec.Organization != "" {
+			keys = append(keys, rs.Spec.Organization) // Organization runners
+			if group := rs.Spec.Group; group != "" {
+				keys = append(keys, organizationalRunnerGroupKey(rs.Spec.Organization, rs.Spec.Group)) // Organization runner groups
+			}
+		}
+		if enterprise := rs.Spec.Enterprise; enterprise != "" {
+			keys = append(keys, enterpriseKey(enterprise)) // Enterprise runners
+			if group := rs.Spec.Group; group != "" {
+				keys = append(keys, enterpriseRunnerGroupKey(enterprise, rs.Spec.Group)) // Enterprise runner groups
+			}
+		}
+		autoscaler.Log.V(2).Info(fmt.Sprintf("HRA keys indexed for HRA %s: %v", hra.Name, keys))
+		return keys
+	}
+
+	return nil
 }
 
 func enterpriseKey(name string) string {
