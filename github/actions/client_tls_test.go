@@ -5,9 +5,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -84,7 +84,7 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 			Token: "token",
 		}
 
-		cert, err := ioutil.ReadFile(filepath.Join("testdata", "rootCA.crt"))
+		cert, err := os.ReadFile(filepath.Join("testdata", "rootCA.crt"))
 		require.NoError(t, err)
 
 		pool, err := actions.RootCAsFromConfigMap(map[string][]byte{"cert": cert})
