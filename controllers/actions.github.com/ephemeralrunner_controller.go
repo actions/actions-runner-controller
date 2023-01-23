@@ -587,6 +587,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 			return ctrl.Result{}, nil
 		}
 	}
+
 	log.Info("Creating new pod for ephemeral runner")
 	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, proxyEnvs...)
 
