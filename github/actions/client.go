@@ -139,36 +139,25 @@ func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, 
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax
 
-	if ac.rootCAs != nil {
-		transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
-		if !ok {
-			// this should always be true, because retryablehttp.NewClient() uses
-			// cleanhttp.DefaultPooledTransport()
-			return nil, fmt.Errorf("failed to get http transport from retryablehttp client")
-		}
+	transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		// this should always be true, because retryablehttp.NewClient() uses
+		// cleanhttp.DefaultPooledTransport()
+		return nil, fmt.Errorf("failed to get http transport from retryablehttp client")
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	}
 
-		if transport.TLSClientConfig == nil {
-			transport.TLSClientConfig = &tls.Config{}
-		}
+	if ac.rootCAs != nil {
 		transport.TLSClientConfig.RootCAs = ac.rootCAs
-		retryClient.HTTPClient.Transport = transport
 	}
 
 	if ac.tlsInsecureSkipVerify {
-		transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
-		if !ok {
-			// this should always be true, because retryablehttp.NewClient() uses
-			// cleanhttp.DefaultPooledTransport()
-			return nil, fmt.Errorf("failed to get http transport from retryablehttp client")
-		}
-
-		if transport.TLSClientConfig == nil {
-			transport.TLSClientConfig = &tls.Config{}
-		}
 		transport.TLSClientConfig.InsecureSkipVerify = true
-		retryClient.HTTPClient.Transport = transport
 	}
 
+	retryClient.HTTPClient.Transport = transport
 	ac.Client = retryClient.StandardClient()
 
 	rt, err := ac.getRunnerRegistrationToken(ctx, githubConfigURL, *creds)
