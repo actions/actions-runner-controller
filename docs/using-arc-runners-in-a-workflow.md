@@ -1,8 +1,6 @@
-# Using ARC runners in a workflow
+# Using Actions Runner Controller runners in a workflow
 
-## Runner Labels
-
-To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:
+To run a workflow job on any self-hosted runner, you can use the following syntax in your GitHub Actions workflow:
 
 ```yaml
 jobs:
@@ -10,31 +8,37 @@ jobs:
     runs-on: self-hosted
 ```
 
-When you have multiple kinds of self-hosted runners, you can distinguish between them using labels. In order to do so, you can specify one or more labels in your `Runner` or `RunnerDeployment` spec.
+If you have multiple kinds of self-hosted runners, you can choose specific types of runners using labels. For more information, see "[Choosing the runner for a job](https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job)."
 
-```yaml
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: RunnerDeployment
-metadata:
-  name: custom-runner
-spec:
-  replicas: 1
-  template:
-    spec:
-      repository: actions/actions-runner-controller
-      labels:
-        - custom-runner
-```
+To assign workflow jobs to runners created by Actions Runner Controller (ARC), you must set specific labels for the runners, and then use those labels to route jobs to the runners.
 
-Once this spec is applied, you can observe the labels for your runner from the repository or organization in the GitHub settings page for the repository or organization. You can now select a specific runner from your workflow by using the label in `runs-on`:
+1. When creating your ARC `Runner` or `RunnerDeployment` spec, you can specify one or more labels to assign to your runners when they are created. For example, the following `RunnerDeployment` spec assigns the `custom-runner` label to new runners:
 
-```yaml
-jobs:
-  release:
-    runs-on: custom-runner
-```
+   ```yaml
+   apiVersion: actions.summerwind.dev/v1alpha1
+   kind: RunnerDeployment
+   metadata:
+     name: custom-runner
+   spec:
+     replicas: 1
+     template:
+       spec:
+         repository: actions/actions-runner-controller
+         labels:
+           - custom-runner
+   ```
 
-When using labels there are a few things to be aware of:
+   When this spec is applied, you can see the labels assigned your runners in the settings for the repository or organization where the runners were created. For more information, see "[Monitoring and troubleshooting self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/monitoring-and-troubleshooting-self-hosted-runners#checking-the-status-of-a-self-hosted-runner)."
 
-1. `self-hosted` is implict with every runner as this is an automatic label GitHub apply to any self-hosted runner. As a result ARC can treat all runners as having this label without having it explicitly defined in a runner's manifest. You do not need to explicitly define this label in your runner manifests (you can if you want though).
-2. In addition to the `self-hosted` label, GitHub also applies a few other [default](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#using-default-labels-to-route-jobs) labels to any self-hosted runner. The other default labels relate to the architecture of the runner and so can't be implicitly applied by ARC as ARC doesn't know if the runner is `linux` or `windows`, `x64` or `ARM64` etc. If you wish to use these labels in your workflows and have ARC scale runners accurately you must also add them to your runner manifests.
+   > **Note:** GitHub automatically applies some default labels to every self-hosted runner. These include the `self-hosted` label, as well as labels for each runner's operating system and architecture. For more information, see "[Using self-hosted runners in a workflow](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#using-default-labels-to-route-jobs)."
+   >
+   > If you are going to use the default operating system or architecture labels in your workflows and want ARC to accurately scale runners based on them, you must also add those labels to your runner manifests.
+1. You can now select a specific type of runner in your workflow job by using the label in `runs-on`, in combination with the `self-hosted` label. For example, to use the label assigned in the previous step:
+
+   ```yaml
+   jobs:
+     release:
+       runs-on: [self-hosted, custom-runner]
+   ```
+
+   Although the `self-hosted` label is not required, we strongly recommend specifying it when using self-hosted runners to ensure that your job does not unintentionally specify any current or future GitHub-hosted runners.<!-- Make this a reusable with the existing instances of this para -->
