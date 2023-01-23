@@ -400,6 +400,59 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 	configSecret := new(corev1.Secret)
 	autoscalingListener := new(v1alpha1.AutoscalingListener)
 
+	createRunnerSetAndListener := func(proxy *v1alpha1.ProxyConfig) {
+		min := 1
+		max := 10
+		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				Proxy:              proxy,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := k8sClient.Create(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+		autoscalingListener = &v1alpha1.AutoscalingListener{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asl",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: v1alpha1.AutoscalingListenerSpec{
+				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigSecret:            configSecret.Name,
+				RunnerScaleSetId:              1,
+				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
+				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
+				EphemeralRunnerSetName:        "test-ers",
+				MaxRunners:                    10,
+				MinRunners:                    1,
+				Image:                         "ghcr.io/owner/repo",
+				Proxy:                         proxy,
+			},
+		}
+
+		err = k8sClient.Create(ctx, autoscalingListener)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingListener")
+	}
+
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.TODO())
 		autoscalingNS = &corev1.Namespace{
@@ -436,70 +489,6 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
-		proxy := &v1alpha1.ProxyConfig{
-			HTTP: &v1alpha1.ProxyServerConfig{
-				Url: "http://localhost:8080",
-			},
-			HTTPS: &v1alpha1.ProxyServerConfig{
-				Url: "https://localhost:8443",
-			},
-			NoProxy: []string{
-				"http://localhost:8088",
-				"https://localhost:8088",
-			},
-		}
-
-		min := 1
-		max := 10
-		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-asrs",
-				Namespace: autoscalingNS.Name,
-			},
-			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
-				GitHubConfigSecret: configSecret.Name,
-				MaxRunners:         &max,
-				MinRunners:         &min,
-				Proxy:              proxy,
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "runner",
-								Image: "ghcr.io/actions/runner",
-							},
-						},
-					},
-				},
-			},
-		}
-
-		err = k8sClient.Create(ctx, autoscalingRunnerSet)
-		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
-
-		autoscalingListener = &v1alpha1.AutoscalingListener{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-asl",
-				Namespace: autoscalingNS.Name,
-			},
-			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
-				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
-				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
-				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
-				EphemeralRunnerSetName:        "test-ers",
-				MaxRunners:                    10,
-				MinRunners:                    1,
-				Image:                         "ghcr.io/owner/repo",
-				Proxy:                         proxy,
-			},
-		}
-
-		err = k8sClient.Create(ctx, autoscalingListener)
-		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingListener")
-
 		go func() {
 			defer GinkgoRecover()
 
@@ -515,7 +504,22 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
 	})
 
-	It("should create pod with proxy environment variables set", func() {
+	It("It should create pod with proxy environment variables set", func() {
+		proxy := &v1alpha1.ProxyConfig{
+			HTTP: &v1alpha1.ProxyServerConfig{
+				Url: "http://localhost:8080",
+			},
+			HTTPS: &v1alpha1.ProxyServerConfig{
+				Url: "https://localhost:8443",
+			},
+			NoProxy: []string{
+				"http://localhost:8088",
+				"https://localhost:8088",
+			},
+		}
+
+		createRunnerSetAndListener(proxy)
+
 		// Waiting for the pod is created
 		pod := new(corev1.Pod)
 		Eventually(
@@ -539,6 +543,100 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 
 		envFrequency := map[string]int{}
 
+		for i := range pod.Spec.Containers {
+			c := &pod.Spec.Containers[i]
+			if c.Name == autoscalingListenerContainerName {
+				for _, env := range c.Env {
+					switch env.Name {
+					case EnvVarHTTPProxy:
+						envFrequency[EnvVarHTTPProxy]++
+						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPProxy]))
+					case EnvVarHTTPSProxy:
+						envFrequency[EnvVarHTTPSProxy]++
+						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPSProxy]))
+					case EnvVarNoProxy:
+						envFrequency[EnvVarNoProxy]++
+						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarNoProxy]))
+					}
+				}
+				break
+			}
+		}
+
+		for _, name := range []string{EnvVarHTTPProxy, EnvVarHTTPSProxy, EnvVarNoProxy} {
+			frequency := envFrequency[name]
+			Expect(frequency).To(BeEquivalentTo(1), fmt.Sprintf("expected %s env variable frequency to be 1, got %d", name, frequency))
+		}
+	})
+
+	It("It should create proxy environment variables with username:password set", func() {
+		httpSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "httpsecret",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"username": []byte("testuser"),
+				"password": []byte("testpassword"),
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		err := k8sClient.Create(ctx, httpSecret)
+		Expect(err).To(BeNil(), "failed to create http secret")
+
+		httpsSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "httpssecret",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"username": []byte("testuser"),
+				"password": []byte("testpassword"),
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+
+		err = k8sClient.Create(ctx, httpsSecret)
+		Expect(err).To(BeNil(), "failed to create https secret")
+
+		proxy := &v1alpha1.ProxyConfig{
+			HTTP: &v1alpha1.ProxyServerConfig{
+				Url:                 "http://localhost:8080",
+				CredentialSecretRef: httpSecret.Name,
+			},
+			HTTPS: &v1alpha1.ProxyServerConfig{
+				Url:                 "https://localhost:8443",
+				CredentialSecretRef: httpsSecret.Name,
+			},
+			NoProxy: []string{
+				"http://localhost:8088",
+				"https://localhost:8088",
+			},
+		}
+		createRunnerSetAndListener(proxy)
+
+		// Waiting for the pod is created
+		pod := new(corev1.Pod)
+		Eventually(
+			func() (string, error) {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+				if err != nil {
+					return "", err
+				}
+
+				return pod.Name, nil
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+		expectedValues := map[string]string{
+			EnvVarHTTPProxy:  fmt.Sprintf("http://%s:%s@localhost:8080", httpSecret.Data["username"], httpSecret.Data["password"]),
+			EnvVarHTTPSProxy: fmt.Sprintf("https://%s:%s@localhost:8443", httpsSecret.Data["username"], httpsSecret.Data["password"]),
+			EnvVarNoProxy:    "http://localhost:8088,https://localhost:8088",
+		}
+
+		envFrequency := map[string]int{}
 		for i := range pod.Spec.Containers {
 			c := &pod.Spec.Containers[i]
 			if c.Name == autoscalingListenerContainerName {
