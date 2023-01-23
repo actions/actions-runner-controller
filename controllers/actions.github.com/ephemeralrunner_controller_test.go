@@ -78,16 +78,14 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 			},
 		},
 	}
-
 }
 
 var _ = Describe("EphemeralRunner", func() {
-
 	Describe("Resource manipulation", func() {
 		var ctx context.Context
 		var cancel context.CancelFunc
 
-		autoScalingNS := new(corev1.Namespace)
+		autoscalingNS := new(corev1.Namespace)
 		configSecret := new(corev1.Secret)
 
 		controller := new(EphemeralRunnerReconciler)
@@ -95,18 +93,18 @@ var _ = Describe("EphemeralRunner", func() {
 
 		BeforeEach(func() {
 			ctx, cancel = context.WithCancel(context.Background())
-			autoScalingNS = &corev1.Namespace{
+			autoscalingNS = &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "testns-autoscaling-runner" + RandStringRunes(5),
 				},
 			}
-			err := k8sClient.Create(ctx, autoScalingNS)
+			err := k8sClient.Create(ctx, autoscalingNS)
 			Expect(err).To(BeNil(), "failed to create test namespace for EphemeralRunner")
 
 			configSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "github-config-secret",
-					Namespace: autoScalingNS.Name,
+					Namespace: autoscalingNS.Name,
 				},
 				Data: map[string][]byte{
 					"github_token": []byte(gh_token),
@@ -117,7 +115,7 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil(), "failed to create config secret")
 
 			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-				Namespace:          autoScalingNS.Name,
+				Namespace:          autoscalingNS.Name,
 				MetricsBindAddress: "0",
 			})
 			Expect(err).To(BeNil(), "failed to create manager")
@@ -132,7 +130,7 @@ var _ = Describe("EphemeralRunner", func() {
 			err = controller.SetupWithManager(mgr)
 			Expect(err).To(BeNil(), "failed to setup controller")
 
-			ephemeralRunner = newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner = newExampleRunner("test-runner", autoscalingNS.Name, configSecret.Name)
 			err = k8sClient.Create(ctx, ephemeralRunner)
 			Expect(err).To(BeNil(), "failed to create ephemeral runner")
 
@@ -147,7 +145,7 @@ var _ = Describe("EphemeralRunner", func() {
 		AfterEach(func() {
 			defer cancel()
 
-			err := k8sClient.Delete(ctx, autoScalingNS)
+			err := k8sClient.Delete(ctx, autoscalingNS)
 			Expect(err).To(BeNil(), "failed to delete test namespace for EphemeralRunner")
 		})
 
@@ -357,7 +355,6 @@ var _ = Describe("EphemeralRunner", func() {
 				timeout,
 				interval,
 			).Should(BeEquivalentTo(true))
-
 		})
 
 		It("It should eventually have runner id set", func() {
@@ -558,7 +555,6 @@ var _ = Describe("EphemeralRunner", func() {
 				timeout,
 				interval,
 			).Should(BeEquivalentTo(true))
-
 		})
 
 		It("It should re-create pod on exit status 0, but runner exists within the service", func() {
@@ -668,25 +664,25 @@ var _ = Describe("EphemeralRunner", func() {
 		var ctx context.Context
 		var cancel context.CancelFunc
 
-		autoScalingNS := new(corev1.Namespace)
+		autoscalingNS := new(corev1.Namespace)
 		configSecret := new(corev1.Secret)
 
 		var mgr manager.Manager
 
 		BeforeEach(func() {
 			ctx, cancel = context.WithCancel(context.Background())
-			autoScalingNS = &corev1.Namespace{
+			autoscalingNS = &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "testns-autoscaling-runner" + RandStringRunes(5),
 				},
 			}
-			err := k8sClient.Create(ctx, autoScalingNS)
+			err := k8sClient.Create(ctx, autoscalingNS)
 			Expect(err).To(BeNil(), "failed to create test namespace for EphemeralRunner")
 
 			configSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "github-config-secret",
-					Namespace: autoScalingNS.Name,
+					Namespace: autoscalingNS.Name,
 				},
 				Data: map[string][]byte{
 					"github_token": []byte(gh_token),
@@ -697,17 +693,16 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil(), "failed to create config secret")
 
 			mgr, err = ctrl.NewManager(cfg, ctrl.Options{
-				Namespace:          autoScalingNS.Name,
+				Namespace:          autoscalingNS.Name,
 				MetricsBindAddress: "0",
 			})
 			Expect(err).To(BeNil(), "failed to create manager")
-
 		})
 
 		AfterEach(func() {
 			defer cancel()
 
-			err := k8sClient.Delete(ctx, autoScalingNS)
+			err := k8sClient.Delete(ctx, autoscalingNS)
 			Expect(err).To(BeNil(), "failed to delete test namespace for EphemeralRunner")
 		})
 
@@ -742,7 +737,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Expect(err).To(BeNil(), "failed to start manager")
 			}()
 
-			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner := newExampleRunner("test-runner", autoscalingNS.Name, configSecret.Name)
 
 			err = k8sClient.Create(ctx, ephemeralRunner)
 			Expect(err).To(BeNil())

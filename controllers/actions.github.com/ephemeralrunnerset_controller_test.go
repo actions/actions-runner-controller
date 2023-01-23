@@ -28,23 +28,23 @@ const (
 var _ = Describe("Test EphemeralRunnerSet controller", func() {
 	var ctx context.Context
 	var cancel context.CancelFunc
-	autoScalingNS := new(corev1.Namespace)
+	autoscalingNS := new(corev1.Namespace)
 	ephemeralRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
 	configSecret := new(corev1.Secret)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.TODO())
-		autoScalingNS = &corev1.Namespace{
+		autoscalingNS = &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-runnerset" + RandStringRunes(5)},
 		}
 
-		err := k8sClient.Create(ctx, autoScalingNS)
+		err := k8sClient.Create(ctx, autoscalingNS)
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for EphemeralRunnerSet")
 
 		configSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "github-config-secret",
-				Namespace: autoScalingNS.Name,
+				Namespace: autoscalingNS.Name,
 			},
 			Data: map[string][]byte{
 				"github_token": []byte(ephemeralRunnerSetTestGitHubToken),
@@ -55,7 +55,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
 
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoScalingNS.Name,
+			Namespace:          autoscalingNS.Name,
 			MetricsBindAddress: "0",
 		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
@@ -72,7 +72,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 		ephemeralRunnerSet = &actionsv1alpha1.EphemeralRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
-				Namespace: autoScalingNS.Name,
+				Namespace: autoscalingNS.Name,
 			},
 			Spec: actionsv1alpha1.EphemeralRunnerSetSpec{
 				EphemeralRunnerSpec: actionsv1alpha1.EphemeralRunnerSpec{
@@ -107,7 +107,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 	AfterEach(func() {
 		defer cancel()
 
-		err := k8sClient.Delete(ctx, autoScalingNS)
+		err := k8sClient.Delete(ctx, autoscalingNS)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
 	})
 
