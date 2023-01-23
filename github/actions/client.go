@@ -857,7 +857,7 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 
 	c.logger.Info("getting access token for GitHub App auth", "accessTokenURL", accessTokenURL.String())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
