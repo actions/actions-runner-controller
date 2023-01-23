@@ -95,6 +95,30 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		assert.NotNil(t, client)
 	})
 
+	t.Run("client with ca chain certs", func(t *testing.T) {
+		server := startNewTLSTestServer(
+			t,
+			filepath.Join("testdata", "leaf.pem"),
+			filepath.Join("testdata", "leaf.key"),
+			http.HandlerFunc(h),
+		)
+		configURL := server.URL + "/my-org"
+
+		auth := &actions.ActionsAuth{
+			Token: "token",
+		}
+
+		cert, err := os.ReadFile(filepath.Join("testdata", "intermediate.pem"))
+		require.NoError(t, err)
+
+		pool, err := actions.RootCAsFromConfigMap(map[string][]byte{"cert": cert})
+		require.NoError(t, err)
+
+		client, err := actions.NewClient(ctx, configURL, auth, actions.WithRootCAs(pool), actions.WithRetryMax(0))
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
 	t.Run("client skipping tls verification", func(t *testing.T) {
 		server := startNewTLSTestServer(t, certPath, keyPath, http.HandlerFunc(h))
 		configURL := server.URL + "/my-org"
