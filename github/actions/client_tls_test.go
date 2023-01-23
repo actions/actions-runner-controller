@@ -94,6 +94,19 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, client)
 	})
+
+	t.Run("client skipping tls verification", func(t *testing.T) {
+		server := startNewTLSTestServer(t, certPath, keyPath, http.HandlerFunc(h))
+		configURL := server.URL + "/my-org"
+
+		auth := &actions.ActionsAuth{
+			Token: "token",
+		}
+
+		client, err := actions.NewClient(ctx, configURL, auth, actions.WithoutTLSVerify())
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
 }
 
 func startNewTLSTestServer(t *testing.T, certPath, keyPath string, handler http.Handler) *httptest.Server {

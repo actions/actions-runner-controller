@@ -69,10 +69,12 @@ type Client struct {
 	retryWaitMax time.Duration
 
 	creds           *ActionsAuth
-	rootCAs         *x509.CertPool
 	githubConfigURL string
 	logger          logr.Logger
 	userAgent       string
+
+	rootCAs               *x509.CertPool
+	tlsInsecureSkipVerify bool
 }
 
 type ClientOption func(*Client)
@@ -104,6 +106,12 @@ func WithRetryWaitMax(retryWaitMax time.Duration) ClientOption {
 func WithRootCAs(rootCAs *x509.CertPool) ClientOption {
 	return func(c *Client) {
 		c.rootCAs = rootCAs
+	}
+}
+
+func WithoutTLSVerify() ClientOption {
+	return func(c *Client) {
+		c.tlsInsecureSkipVerify = true
 	}
 }
 
@@ -143,6 +151,21 @@ func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, 
 			transport.TLSClientConfig = &tls.Config{}
 		}
 		transport.TLSClientConfig.RootCAs = ac.rootCAs
+		retryClient.HTTPClient.Transport = transport
+	}
+
+	if ac.tlsInsecureSkipVerify {
+		transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
+		if !ok {
+			// this should always be true, because retryablehttp.NewClient() uses
+			// cleanhttp.DefaultPooledTransport()
+			return nil, fmt.Errorf("failed to get http transport from retryablehttp client")
+		}
+
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		}
+		transport.TLSClientConfig.InsecureSkipVerify = true
 		retryClient.HTTPClient.Transport = transport
 	}
 
