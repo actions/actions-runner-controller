@@ -104,7 +104,13 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 
 	m.logger.Info("creating new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
-	client, err := NewClient(ctx, githubConfigURL, &creds, m.userAgent, m.logger)
+	client, err := NewClient(
+		ctx,
+		githubConfigURL,
+		&creds,
+		WithUserAgent(m.userAgent),
+		WithLogger(m.logger),
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -62,8 +63,8 @@ type Client struct {
 	ActionsServiceAdminTokenExpiresAt *time.Time
 	ActionsServiceURL                 *string
 
-	RetryMax     *int
-	RetryWaitMax *time.Duration
+	retryMax     int
+	retryWaitMax time.Duration
 
 	creds           *ActionsAuth
 	githubConfigURL string
@@ -71,13 +72,56 @@ type Client struct {
 	userAgent       string
 }
 
-func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, userAgent string, logger logr.Logger) (ActionsService, error) {
+type ClientOption func(*Client)
+
+func WithUserAgent(userAgent string) ClientOption {
+	return func(c *Client) {
+		c.userAgent = userAgent
+	}
+}
+
+func WithLogger(logger logr.Logger) ClientOption {
+	return func(c *Client) {
+		c.logger = logger
+	}
+}
+
+func WithRetryMax(retryMax int) ClientOption {
+	return func(c *Client) {
+		c.retryMax = retryMax
+	}
+}
+
+func WithRetryWaitMax(retryWaitMax time.Duration) ClientOption {
+	return func(c *Client) {
+		c.retryWaitMax = retryWaitMax
+	}
+}
+
+func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, options ...ClientOption) (ActionsService, error) {
 	ac := &Client{
 		creds:           creds,
 		githubConfigURL: githubConfigURL,
-		logger:          logger,
-		userAgent:       userAgent,
+		logger:          logr.Discard(),
+
+		// retryablehttp defaults
+		retryMax:     4,
+		retryWaitMax: 30 * time.Second,
 	}
+
+	for _, option := range options {
+		option(ac)
+	}
+
+	retryClient := retryablehttp.NewClient()
+
+	// TODO: this silences retryclient default logger, do we want to provide one
+	// instead? by default retryablehttp logs all requests to stderr
+	retryClient.Logger = log.New(io.Discard, "", log.LstdFlags)
+
+	retryClient.RetryMax = ac.retryMax
+	retryClient.RetryWaitMax = ac.retryWaitMax
+	ac.Client = retryClient.StandardClient()
 
 	rt, err := ac.getRunnerRegistrationToken(ctx, githubConfigURL, *creds)
 	if err != nil {
@@ -121,9 +165,7 @@ func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName strin
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -165,9 +207,7 @@ func (c *Client) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +222,6 @@ func (c *Client) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int
 		return nil, err
 	}
 	return runnerScaleSet, nil
-
 }
 
 func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (*RunnerGroup, error) {
@@ -204,9 +243,7 @@ func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -260,9 +297,7 @@ func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *Runne
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -270,49 +305,6 @@ func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *Runne
 	if resp.StatusCode != http.StatusOK {
 		return nil, ParseActionsErrorFromResponse(resp)
 	}
-	var createdRunnerScaleSet *RunnerScaleSet
-	err = unmarshalBody(resp, &createdRunnerScaleSet)
-	if err != nil {
-		return nil, err
-	}
-	return createdRunnerScaleSet, nil
-}
-
-func (c *Client) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error) {
-	u := fmt.Sprintf("%s/%s/%d?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	body, err := json.Marshal(runnerScaleSet)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
-
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, ParseActionsErrorFromResponse(resp)
-	}
-
 	var createdRunnerScaleSet *RunnerScaleSet
 	err = unmarshalBody(resp, &createdRunnerScaleSet)
 	if err != nil {
@@ -340,9 +332,7 @@ func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int)
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return err
 	}
@@ -372,9 +362,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -425,9 +413,7 @@ func (c *Client) DeleteMessage(ctx context.Context, messageQueueUrl, messageQueu
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return err
 	}
@@ -497,9 +483,7 @@ func (c *Client) doSessionRequest(ctx context.Context, method, url string, reque
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return err
 	}
@@ -542,9 +526,7 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -581,9 +563,7 @@ func (c *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -629,9 +609,7 @@ func (c *Client) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -667,9 +645,7 @@ func (c *Client) GetRunner(ctx context.Context, runnerId int64) (*RunnerReferenc
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -705,9 +681,7 @@ func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*Runne
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -752,9 +726,7 @@ func (c *Client) RemoveRunner(ctx context.Context, runnerId int64) error {
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	httpClient := c.getHTTPClient()
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return err
 	}
@@ -1010,24 +982,6 @@ func createJWTForGitHubApp(appAuth *GitHubAppAuth) (string, error) {
 	}
 
 	return token.SignedString(privateKey)
-}
-
-func (c *Client) getHTTPClient() *http.Client {
-	if c.Client != nil {
-		return c.Client
-	}
-
-	retryClient := retryablehttp.NewClient()
-
-	if c.RetryMax != nil {
-		retryClient.RetryMax = *c.RetryMax
-	}
-
-	if c.RetryWaitMax != nil {
-		retryClient.RetryWaitMax = *c.RetryWaitMax
-	}
-
-	return retryClient.StandardClient()
 }
 
 func unmarshalBody(response *http.Response, v interface{}) (err error) {
