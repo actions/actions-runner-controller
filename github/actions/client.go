@@ -3,6 +3,8 @@ package actions
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -70,6 +72,9 @@ type Client struct {
 	githubConfigURL string
 	logger          logr.Logger
 	userAgent       string
+
+	rootCAs               *x509.CertPool
+	tlsInsecureSkipVerify bool
 }
 
 type ClientOption func(*Client)
@@ -98,6 +103,18 @@ func WithRetryWaitMax(retryWaitMax time.Duration) ClientOption {
 	}
 }
 
+func WithRootCAs(rootCAs *x509.CertPool) ClientOption {
+	return func(c *Client) {
+		c.rootCAs = rootCAs
+	}
+}
+
+func WithoutTLSVerify() ClientOption {
+	return func(c *Client) {
+		c.tlsInsecureSkipVerify = true
+	}
+}
+
 func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, options ...ClientOption) (ActionsService, error) {
 	ac := &Client{
 		creds:           creds,
@@ -121,6 +138,26 @@ func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, 
 
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax
+
+	transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		// this should always be true, because retryablehttp.NewClient() uses
+		// cleanhttp.DefaultPooledTransport()
+		return nil, fmt.Errorf("failed to get http transport from retryablehttp client")
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	}
+
+	if ac.rootCAs != nil {
+		transport.TLSClientConfig.RootCAs = ac.rootCAs
+	}
+
+	if ac.tlsInsecureSkipVerify {
+		transport.TLSClientConfig.InsecureSkipVerify = true
+	}
+
+	retryClient.HTTPClient.Transport = transport
 	ac.Client = retryClient.StandardClient()
 
 	rt, err := ac.getRunnerRegistrationToken(ctx, githubConfigURL, *creds)
@@ -776,7 +813,7 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context, githubConfigUrl
 
 	c.logger.Info("getting runner registration token", "registrationTokenURL", registrationTokenURL)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -832,7 +869,7 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 
 	c.logger.Info("getting access token for GitHub App auth", "accessTokenURL", accessTokenURL.String())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -892,7 +929,7 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 
 	c.logger.Info("getting Actions tenant URL and JWT", "registrationURL", registrationURL.String())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}

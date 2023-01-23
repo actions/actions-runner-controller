@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -167,4 +168,20 @@ func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, 
 
 	auth.AppCreds = &GitHubAppAuth{AppID: parsedAppID, AppInstallationID: parsedAppInstallationID, AppPrivateKey: appPrivateKey}
 	return m.GetClientFor(ctx, githubConfigURL, auth, namespace)
+}
+
+func RootCAsFromConfigMap(configMapData map[string][]byte) (*x509.CertPool, error) {
+	caCertPool, err := x509.SystemCertPool()
+	if err != nil {
+		caCertPool = x509.NewCertPool()
+	}
+
+	for key, certData := range configMapData {
+		ok := caCertPool.AppendCertsFromPEM(certData)
+		if !ok {
+			return nil, fmt.Errorf("no certificates successfully parsed from key %s", key)
+		}
+	}
+
+	return caCertPool, nil
 }
