@@ -842,23 +842,17 @@ type accessToken struct {
 }
 
 func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, creds *GitHubAppAuth) (*accessToken, error) {
-	parsedGitHubConfigURL, err := url.Parse(gitHubConfigURL)
-	if err != nil {
-		return nil, err
-	}
-
 	accessTokenJWT, err := createJWTForGitHubApp(creds)
 	if err != nil {
 		return nil, err
 	}
 
-	ru := fmt.Sprintf("%v://%v/app/installations/%v/access_tokens", parsedGitHubConfigURL.Scheme, parsedGitHubConfigURL.Host, creds.AppInstallationID)
-	accessTokenURL, err := url.Parse(ru)
+	u, err := githubAPIURL(gitHubConfigURL, fmt.Sprintf("/app/installations/%v/access_tokens", creds.AppInstallationID))
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, accessTokenURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -867,7 +861,7 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessTokenJWT))
 	req.Header.Add("User-Agent", c.userAgent)
 
-	c.logger.Info("getting access token for GitHub App auth", "accessTokenURL", accessTokenURL.String())
+	c.logger.Info("getting access token for GitHub App auth", "accessTokenURL", u)
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -1089,4 +1083,33 @@ func (c *Client) refreshTokenIfNeeded(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func githubAPIURL(configURL, path string) (string, error) {
+	u, err := url.Parse(configURL)
+	if err != nil {
+		return "", err
+	}
+
+	result := &url.URL{
+		Scheme: u.Scheme,
+	}
+
+	switch u.Host {
+	// Hosted
+	case "github.com", "github.localhost":
+		result.Host = fmt.Sprintf("api.%s", u.Host)
+	// re-routing www.github.com to api.github.com
+	case "www.github.com":
+		result.Host = "api.github.com"
+
+	// Enterprise
+	default:
+		result.Host = u.Host
+		result.Path = "/api/v3"
+	}
+
+	result.Path += path
+
+	return result.String(), nil
 }
