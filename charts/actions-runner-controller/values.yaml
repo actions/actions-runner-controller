@@ -300,19 +300,6 @@ actionsMetricsServer:
   replicaCount: 1
   ## specify log format for actions metrics server.  Valid options are "text" and "json"
   logFormat: text
-  secret:
-    enabled: false
-    create: false
-    name: "actions-metrics-server"
-    ### GitHub Webhook Configuration
-    github_webhook_secret_token: ""
-    ### GitHub Apps Configuration
-    ## NOTE: IDs MUST be strings, use quotes
-    #github_app_id: ""
-    #github_app_installation_id: ""
-    #github_app_private_key: |
-    ### GitHub PAT Configuration
-    #github_token: ""
   imagePullSecrets: []
   nameOverride: ""
   fullnameOverride: ""
