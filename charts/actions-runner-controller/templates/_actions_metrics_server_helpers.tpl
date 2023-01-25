@@ -47,10 +47,6 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
-{{- define "actions-runner-controller-actions-metrics-server.secretName" -}}
-{{- default (include "actions-runner-controller-actions-metrics-server.fullname" .) .Values.actionsMetricsServer.secret.name }}
-{{- end }}
-
 {{- define "actions-runner-controller-actions-metrics-server.roleName" -}}
 {{- include "actions-runner-controller-actions-metrics-server.fullname" . }}
 {{- end }}
