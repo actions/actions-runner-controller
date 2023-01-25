@@ -15,7 +15,7 @@ spec:
     metadata:
       {{- with .Values.actionsMetricsServer.podAnnotations }}
       annotations:
-        kubectl.kubernetes.io/default-logs-container: "github-webhook-server"
+        kubectl.kubernetes.io/default-logs-container: "actions-metrics-server"
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -74,25 +74,25 @@ spec:
           valueFrom:
             secretKeyRef:
               key: github_token
-              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              name: {{ include "actions-runner-controller.actions-metrics-server.secretName" . }}
               optional: true
         - name: GITHUB_APP_ID
           valueFrom:
             secretKeyRef:
               key: github_app_id
-              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              name: {{ include "actions-runner-controller.actions-metrics-server.secretName" . }}
               optional: true
         - name: GITHUB_APP_INSTALLATION_ID
           valueFrom:
             secretKeyRef:
               key: github_app_installation_id
-              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              name: {{ include "actions-runner-controller.actions-metrics-server.secretName" . }}
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               key: github_app_private_key
-              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              name: {{ include "actions-runner-controller.actions-metrics-server.secretName" . }}
               optional: true
         {{- if .Values.authSecret.github_basicauth_username }}
         - name: GITHUB_BASICAUTH_USERNAME
