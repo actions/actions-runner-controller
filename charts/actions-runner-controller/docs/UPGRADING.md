@@ -29,6 +29,15 @@ curl -L https://github.com/actions/actions-runner-controller/releases/download/a
 kubectl replace -f crds/
 ```
 
+For CHART_VERSION=0.22.0+, deploy Prometheus CRDs
+```
+$ helm repo add appscode https://charts.appscode.com/stable/
+$ helm repo update
+$ helm search repo appscode/prometheus-operator-crds --version=v0.60.1
+$ helm upgrade -i prometheus-operator-crds appscode/prometheus-operator-crds -n kube-system --create-namespace --version=v0.60.1
+```
+
+
 2. Upgrade the Helm release
 
 ```shell
