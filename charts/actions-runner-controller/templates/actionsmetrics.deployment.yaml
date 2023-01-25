@@ -55,7 +55,7 @@ spec:
           valueFrom:
             secretKeyRef:
               key: github_webhook_secret_token
-              name: {{ include "actions-runner-controller-actions-metrics-server.secretName" . }}
+              name: {{ include "actions-runner-controller-github-webhook-server.secretName" . }}
               optional: true
         {{- if .Values.githubEnterpriseServerURL  }}
         - name: GITHUB_ENTERPRISE_URL
@@ -69,7 +69,7 @@ spec:
         - name: GITHUB_UPLOAD_URL
           value: {{ .Values.githubUploadURL }}
         {{- end }}
-        {{- if .Values.actionsMetricsServer.secret.enabled }}
+        {{- if .Values.githubWebhookServer.secret.enabled }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
