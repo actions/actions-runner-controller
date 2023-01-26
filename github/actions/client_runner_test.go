@@ -173,3 +173,47 @@ func TestDeleteRunner(t *testing.T) {
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
 	})
 }
+
+func TestGetRunnerGroupByName(t *testing.T) {
+	ctx := context.Background()
+	auth := &actions.ActionsAuth{
+		Token: "token",
+	}
+
+	t.Run("Get RunnerGroup by Name", func(t *testing.T) {
+		var runnerGroupID int64 = 1
+		var runnerGroupName string = "test-runner-group"
+		want := &actions.RunnerGroup{
+			ID:   runnerGroupID,
+			Name: runnerGroupName,
+		}
+		response := []byte(`{"count": 1, "value": [{"id": 1, "name": "test-runner-group"}]}`)
+
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write(response)
+		}))
+
+		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		got, err := client.GetRunnerGroupByName(ctx, runnerGroupName)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("Get RunnerGroup by name with not exist runner group", func(t *testing.T) {
+		var runnerGroupName string = "test-runner-group"
+		response := []byte(`{"count": 0, "value": []}`)
+
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write(response)
+		}))
+
+		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		got, err := client.GetRunnerGroupByName(ctx, runnerGroupName)
+		assert.ErrorContains(t, err, "no runner group found with name")
+		assert.Nil(t, got)
+	})
+}
