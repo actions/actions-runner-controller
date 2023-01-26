@@ -300,7 +300,7 @@ func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (
 	}
 
 	if runnerGroupList.Count == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("no runner group found with name '%s'", runnerGroup)
 	}
 
 	if runnerGroupList.Count > 1 {
