@@ -31,7 +31,7 @@ func TestAcquireJobs(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.AcquireJobs(ctx, session.RunnerScaleSet.Id, session.MessageQueueAccessToken, requestIDs)
@@ -56,7 +56,6 @@ func TestAcquireJobs(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -71,7 +70,6 @@ func TestAcquireJobs(t *testing.T) {
 }
 
 func TestGetAcquirableJobs(t *testing.T) {
-	ctx := context.Background()
 	auth := &actions.ActionsAuth{
 		Token: "token",
 	}
@@ -86,7 +84,7 @@ func TestGetAcquirableJobs(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetAcquirableJobs(context.Background(), runnerScaleSet.Id)
@@ -108,7 +106,6 @@ func TestGetAcquirableJobs(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(
-			context.Background(),
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),

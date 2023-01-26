@@ -26,7 +26,7 @@ func TestGenerateJitRunnerConfig(t *testing.T) {
 		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Write(response)
 		}))
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GenerateJitRunnerConfig(ctx, runnerSettings, 1)
@@ -47,7 +47,6 @@ func TestGenerateJitRunnerConfig(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(1),

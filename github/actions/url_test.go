@@ -43,6 +43,6 @@ func TestGithubAPIURL(t *testing.T) {
 	for _, test := range tests {
 		actual, err := githubAPIURL(test.configURL, test.path)
 		require.NoError(t, err)
-		assert.Equal(t, test.expected, actual)
+		assert.Equal(t, test.expected, actual.String())
 	}
 }

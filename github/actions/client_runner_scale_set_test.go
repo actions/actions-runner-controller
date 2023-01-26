@@ -31,7 +31,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			w.Write(runnerScaleSetsResp)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerScaleSet(ctx, scaleSetName)
@@ -47,15 +47,16 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			url = *r.URL
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
 		require.NoError(t, err)
 
-		u := url.String()
-		expectedUrl := fmt.Sprintf("/_apis/runtime/runnerscalesets?name=%s&api-version=6.0-preview", scaleSetName)
-		assert.Equal(t, expectedUrl, u)
+		expectedPath := "/tenant/123/_apis/runtime/runnerscalesets"
+		assert.Equal(t, expectedPath, url.Path)
+		assert.Equal(t, scaleSetName, url.Query().Get("name"))
+		assert.Equal(t, "6.0-preview", url.Query().Get("api-version"))
 	})
 
 	t.Run("Status code not found", func(t *testing.T) {
@@ -63,7 +64,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
@@ -76,7 +77,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			w.Header().Set("Content-Type", "text/plain")
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
@@ -94,7 +95,6 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		retryWaitMax := 1 * time.Microsecond
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -115,7 +115,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			w.Write(runnerScaleSetsResp)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerScaleSet(ctx, scaleSetName)
@@ -130,7 +130,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 			w.Write(runnerScaleSetsResp)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
@@ -156,7 +156,7 @@ func TestGetRunnerScaleSetById(t *testing.T) {
 			w.Write(rsl)
 		}))
 
-		client, err := actions.NewClient(ctx, sservere.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(sservere.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerScaleSetById(ctx, runnerScaleSet.Id)
@@ -174,15 +174,15 @@ func TestGetRunnerScaleSetById(t *testing.T) {
 			url = *r.URL
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSetById(ctx, runnerScaleSet.Id)
 		require.NoError(t, err)
 
-		u := url.String()
-		expectedUrl := fmt.Sprintf("/_apis/runtime/runnerscalesets/%d?api-version=6.0-preview", runnerScaleSet.Id)
-		assert.Equal(t, expectedUrl, u)
+		expectedPath := fmt.Sprintf("/tenant/123/_apis/runtime/runnerscalesets/%d", runnerScaleSet.Id)
+		assert.Equal(t, expectedPath, url.Path)
+		assert.Equal(t, "6.0-preview", url.Query().Get("api-version"))
 	})
 
 	t.Run("Status code not found", func(t *testing.T) {
@@ -190,7 +190,7 @@ func TestGetRunnerScaleSetById(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSetById(ctx, runnerScaleSet.Id)
@@ -203,7 +203,7 @@ func TestGetRunnerScaleSetById(t *testing.T) {
 			w.Header().Set("Content-Type", "text/plain")
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerScaleSetById(ctx, runnerScaleSet.Id)
@@ -220,7 +220,6 @@ func TestGetRunnerScaleSetById(t *testing.T) {
 		retryMax := 1
 		retryWaitMax := 1 * time.Microsecond
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -242,7 +241,7 @@ func TestGetRunnerScaleSetById(t *testing.T) {
 			w.Write(rsl)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerScaleSetById(ctx, runnerScaleSet.Id)
@@ -268,7 +267,7 @@ func TestCreateRunnerScaleSet(t *testing.T) {
 			w.Write(rsl)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.CreateRunnerScaleSet(ctx, &runnerScaleSet)
@@ -285,15 +284,15 @@ func TestCreateRunnerScaleSet(t *testing.T) {
 			url = *r.URL
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.CreateRunnerScaleSet(ctx, &runnerScaleSet)
 		require.NoError(t, err)
 
-		u := url.String()
-		expectedUrl := "/_apis/runtime/runnerscalesets?api-version=6.0-preview"
-		assert.Equal(t, expectedUrl, u)
+		expectedPath := "/tenant/123/_apis/runtime/runnerscalesets"
+		assert.Equal(t, expectedPath, url.Path)
+		assert.Equal(t, "6.0-preview", url.Query().Get("api-version"))
 	})
 
 	t.Run("Error when Content-Type is text/plain", func(t *testing.T) {
@@ -302,7 +301,7 @@ func TestCreateRunnerScaleSet(t *testing.T) {
 			w.Header().Set("Content-Type", "text/plain")
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.CreateRunnerScaleSet(ctx, &runnerScaleSet)
@@ -322,7 +321,6 @@ func TestCreateRunnerScaleSet(t *testing.T) {
 		retryWaitMax := 1 * time.Microsecond
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),

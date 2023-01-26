@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,11 +23,33 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 )
 
+var ErrInvalidGitHubConfigURL = fmt.Errorf("invalid config URL, should point to an enterprise, org, or repository")
+
 const (
 	runnerEndpoint       = "_apis/distributedtask/pools/0/agents"
 	scaleSetEndpoint     = "_apis/runtime/runnerscalesets"
 	apiVersionQueryParam = "api-version=6.0-preview"
 )
+
+type GitHubScope int
+
+const (
+	GitHubScopeUnknown GitHubScope = iota
+	GitHubScopeEnterprise
+	GitHubScopeOrganization
+	GitHubScopeRepository
+)
+
+type GitHubConfig struct {
+	ConfigURL *url.URL
+	Scope     GitHubScope
+
+	Enterprise   string
+	Organization string
+	Repository   string
+
+	IsHosted bool
+}
 
 //go:generate mockery --inpackage --name=ActionsService
 type ActionsService interface {
@@ -62,17 +83,17 @@ type Client struct {
 	mu sync.Mutex
 
 	// TODO: Convert to unexported fields once refactor of Listener is complete
-	ActionsServiceAdminToken          *string
-	ActionsServiceAdminTokenExpiresAt *time.Time
-	ActionsServiceURL                 *string
+	ActionsServiceAdminToken          string
+	ActionsServiceAdminTokenExpiresAt time.Time
+	ActionsServiceURL                 string
 
 	retryMax     int
 	retryWaitMax time.Duration
 
-	creds           *ActionsAuth
-	githubConfigURL string
-	logger          logr.Logger
-	userAgent       string
+	creds     *ActionsAuth
+	config    *GitHubConfig
+	logger    logr.Logger
+	userAgent string
 
 	rootCAs               *x509.CertPool
 	tlsInsecureSkipVerify bool
@@ -116,11 +137,24 @@ func WithoutTLSVerify() ClientOption {
 	}
 }
 
-func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, options ...ClientOption) (ActionsService, error) {
+func ReusingClientCredentials(oldClient *Client) ClientOption {
+	return func(c *Client) {
+		// if c.creds == oldClient.creds
+		//   re use oldClient token
+		// otherwise
+	}
+}
+
+func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOption) (*Client, error) {
+	config, err := ParseGitHubConfigFromURL(githubConfigURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse githubConfigURL: %w", err)
+	}
+
 	ac := &Client{
-		creds:           creds,
-		githubConfigURL: githubConfigURL,
-		logger:          logr.Discard(),
+		creds:  creds,
+		config: config,
+		logger: logr.Discard(),
 
 		// retryablehttp defaults
 		retryMax:     4,
@@ -132,9 +166,6 @@ func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, 
 	}
 
 	retryClient := retryablehttp.NewClient()
-
-	// TODO: this silences retryclient default logger, do we want to provide one
-	// instead? by default retryablehttp logs all requests to stderr
 	retryClient.Logger = log.New(io.Discard, "", log.LstdFlags)
 
 	retryClient.RetryMax = ac.retryMax
@@ -161,46 +192,79 @@ func NewClient(ctx context.Context, githubConfigURL string, creds *ActionsAuth, 
 	retryClient.HTTPClient.Transport = transport
 	ac.Client = retryClient.StandardClient()
 
-	rt, err := ac.getRunnerRegistrationToken(ctx, githubConfigURL, *creds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get runner registration token: %w", err)
-	}
-
-	adminConnInfo, err := ac.getActionsServiceAdminConnection(ctx, rt, githubConfigURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get actions service admin connection: %w", err)
-	}
-
-	ac.ActionsServiceURL = adminConnInfo.ActionsServiceUrl
-
-	ac.mu.Lock()
-	defer ac.mu.Unlock()
-	ac.ActionsServiceAdminToken = adminConnInfo.AdminToken
-	ac.ActionsServiceAdminTokenExpiresAt, err = actionsServiceAdminTokenExpiresAt(*adminConnInfo.AdminToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get admin token expire at: %w", err)
-	}
-
 	return ac, nil
 }
 
-func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*RunnerScaleSet, error) {
-	u := fmt.Sprintf("%s/%s?name=%s&api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetName)
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	// TODO: this is a good place to log the request, add metrics, etc
+	return c.Client.Do(req)
+}
 
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
+func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	u, err := githubAPIURL(c.config.ConfigURL.String(), path)
+	if err != nil {
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
+
+	return req, nil
+}
+
+func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	err := c.updateTokenIfNeeded(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedPath, err := url.Parse(path)
+	if err != nil {
+		return nil, err
+	}
+	urlString, err := url.JoinPath(c.ActionsServiceURL, parsedPath.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	for k, v := range parsedPath.Query() {
+		q[k] = v
+	}
+	if q.Get("api-version") == "" {
+		q.Set("api-version", "6.0-preview")
+	}
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
+	}
+
+	return req, nil
+}
+
+func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*RunnerScaleSet, error) {
+	path := fmt.Sprintf("/%s?name=%s", scaleSetEndpoint, runnerScaleSetName)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.Do(req)
@@ -227,22 +291,10 @@ func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName strin
 }
 
 func (c *Client) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int) (*RunnerScaleSet, error) {
-	u := fmt.Sprintf("%s/%s/%d?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	path := fmt.Sprintf("/%s/%d", scaleSetEndpoint, runnerScaleSetId)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -263,22 +315,10 @@ func (c *Client) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int
 }
 
 func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (*RunnerGroup, error) {
-	u := fmt.Sprintf("%s/_apis/runtime/runnergroups/?groupName=%s&api-version=6.0-preview", *c.ActionsServiceURL, runnerGroup)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	path := fmt.Sprintf("/_apis/runtime/runnergroups/?groupName=%s", runnerGroup)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -312,27 +352,14 @@ func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (
 }
 
 func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error) {
-	u := fmt.Sprintf("%s/%s?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
 	body, err := json.Marshal(runnerScaleSet)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewBuffer(body))
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodPost, scaleSetEndpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -393,22 +420,10 @@ func (c *Client) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int,
 }
 
 func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int) error {
-	u := fmt.Sprintf("%s/%s/%d?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
+	path := fmt.Sprintf("/%s/%d", scaleSetEndpoint, runnerScaleSetId)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -425,12 +440,18 @@ func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int)
 }
 
 func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*RunnerScaleSetMessage, error) {
-	u := messageQueueUrl
-	if lastMessageId > 0 {
-		u = fmt.Sprintf("%s&lassMessageId=%d", messageQueueUrl, lastMessageId)
+	u, err := url.Parse(messageQueueUrl)
+	if err != nil {
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if lastMessageId > 0 {
+		q := u.Query()
+		q.Set("lastMessageId", strconv.FormatInt(lastMessageId, 10))
+		u.RawQuery = q.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +535,7 @@ func (c *Client) DeleteMessage(ctx context.Context, messageQueueUrl, messageQueu
 }
 
 func (c *Client) CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*RunnerScaleSetSession, error) {
-	u := fmt.Sprintf("%v/%v/%v/sessions?%v", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId, apiVersionQueryParam)
+	path := fmt.Sprintf("/%s/%d/sessions", scaleSetEndpoint, runnerScaleSetId)
 
 	newSession := &RunnerScaleSetSession{
 		OwnerName: owner,
@@ -527,39 +548,27 @@ func (c *Client) CreateMessageSession(ctx context.Context, runnerScaleSetId int,
 
 	createdSession := &RunnerScaleSetSession{}
 
-	err = c.doSessionRequest(ctx, http.MethodPost, u, bytes.NewBuffer(requestData), http.StatusOK, createdSession)
+	err = c.doSessionRequest(ctx, http.MethodPost, path, bytes.NewBuffer(requestData), http.StatusOK, createdSession)
 
 	return createdSession, err
 }
 
 func (c *Client) DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error {
-	u := fmt.Sprintf("%v/%v/%v/sessions/%v?%v", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId, sessionId.String(), apiVersionQueryParam)
-
-	return c.doSessionRequest(ctx, http.MethodDelete, u, nil, http.StatusNoContent, nil)
+	path := fmt.Sprintf("/%s/%d/sessions/%s", scaleSetEndpoint, runnerScaleSetId, sessionId.String())
+	return c.doSessionRequest(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
 
 func (c *Client) RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*RunnerScaleSetSession, error) {
-	u := fmt.Sprintf("%v/%v/%v/sessions/%v?%v", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId, sessionId.String(), apiVersionQueryParam)
+	path := fmt.Sprintf("/%s/%d/sessions/%s", scaleSetEndpoint, runnerScaleSetId, sessionId.String())
 	refreshedSession := &RunnerScaleSetSession{}
-	err := c.doSessionRequest(ctx, http.MethodPatch, u, nil, http.StatusOK, refreshedSession)
+	err := c.doSessionRequest(ctx, http.MethodPatch, path, nil, http.StatusOK, refreshedSession)
 	return refreshedSession, err
 }
 
-func (c *Client) doSessionRequest(ctx context.Context, method, url string, requestData io.Reader, expectedResponseStatusCode int, responseUnmarshalTarget any) error {
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, requestData)
+func (c *Client) doSessionRequest(ctx context.Context, method, path string, requestData io.Reader, expectedResponseStatusCode int, responseUnmarshalTarget any) error {
+	req, err := c.NewActionsServiceRequest(ctx, method, path, requestData)
 	if err != nil {
 		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -587,22 +596,16 @@ func (c *Client) doSessionRequest(ctx context.Context, method, url string, reque
 }
 
 func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error) {
-	u := fmt.Sprintf("%s/%s/%d/acquirejobs?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
+	path := fmt.Sprintf("/%s/%d/acquirejobs", scaleSetEndpoint, runnerScaleSetId)
 
 	body, err := json.Marshal(requestIds)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewBuffer(body))
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodPost, path, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -624,22 +627,11 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 }
 
 func (c *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*AcquirableJobList, error) {
-	u := fmt.Sprintf("%s/%s/%d/acquirablejobs?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
+	path := fmt.Sprintf("/%s/%d/acquirablejobs", scaleSetEndpoint, runnerScaleSetId)
 
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -666,26 +658,16 @@ func (c *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*
 }
 
 func (c *Client) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *RunnerScaleSetJitRunnerSetting, scaleSetId int) (*RunnerScaleSetJitRunnerConfig, error) {
-	runnerJitConfigUrl := fmt.Sprintf("%s/%s/%d/generatejitconfig?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, scaleSetId)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
+	path := fmt.Sprintf("/%s/%d/generatejitconfig", scaleSetEndpoint, scaleSetId)
 
 	body, err := json.Marshal(jitRunnerSetting)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, runnerJitConfigUrl, bytes.NewBuffer(body))
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodPost, path, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -706,22 +688,11 @@ func (c *Client) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *
 }
 
 func (c *Client) GetRunner(ctx context.Context, runnerId int64) (*RunnerReference, error) {
-	url := fmt.Sprintf("%v/%v/%v?%v", *c.ActionsServiceURL, runnerEndpoint, runnerId, apiVersionQueryParam)
+	path := fmt.Sprintf("/%s/%d", runnerEndpoint, runnerId)
 
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -742,22 +713,11 @@ func (c *Client) GetRunner(ctx context.Context, runnerId int64) (*RunnerReferenc
 }
 
 func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*RunnerReference, error) {
-	url := fmt.Sprintf("%v/%v?agentName=%v&%v", *c.ActionsServiceURL, runnerEndpoint, runnerName, apiVersionQueryParam)
+	path := fmt.Sprintf("/%s?agentName=%s", runnerEndpoint, runnerName)
 
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -787,22 +747,11 @@ func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*Runne
 }
 
 func (c *Client) RemoveRunner(ctx context.Context, runnerId int64) error {
-	url := fmt.Sprintf("%v/%v/%v?%v", *c.ActionsServiceURL, runnerEndpoint, runnerId, apiVersionQueryParam)
+	path := fmt.Sprintf("/%s/%d", runnerEndpoint, runnerId)
 
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
@@ -823,25 +772,25 @@ type registrationToken struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-func (c *Client) getRunnerRegistrationToken(ctx context.Context, githubConfigUrl string, creds ActionsAuth) (*registrationToken, error) {
-	registrationTokenURL, err := createRegistrationTokenURL(githubConfigUrl)
+func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationToken, error) {
+	path, err := createRegistrationTokenPath(c.config)
 	if err != nil {
 		return nil, err
 	}
 
 	var buf bytes.Buffer
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registrationTokenURL, &buf)
+	req, err := c.NewGitHubAPIRequest(ctx, http.MethodPost, path, &buf)
 	if err != nil {
 		return nil, err
 	}
 
 	bearerToken := ""
 
-	if creds.Token != "" {
-		encodedToken := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("github:%v", creds.Token)))
+	if c.creds.Token != "" {
+		encodedToken := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("github:%v", c.creds.Token)))
 		bearerToken = fmt.Sprintf("Basic %v", encodedToken)
 	} else {
-		accessToken, err := c.fetchAccessToken(ctx, githubConfigUrl, creds.AppCreds)
+		accessToken, err := c.fetchAccessToken(ctx, c.config.ConfigURL.String(), c.creds.AppCreds)
 		if err != nil {
 			return nil, err
 		}
@@ -851,9 +800,8 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context, githubConfigUrl
 
 	req.Header.Set("Content-Type", "application/vnd.github.v3+json")
 	req.Header.Set("Authorization", bearerToken)
-	req.Header.Set("User-Agent", c.userAgent)
 
-	c.logger.Info("getting runner registration token", "registrationTokenURL", registrationTokenURL)
+	c.logger.Info("getting runner registration token", "registrationTokenURL", req.URL.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -889,21 +837,16 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 		return nil, err
 	}
 
-	u, err := githubAPIURL(gitHubConfigURL, fmt.Sprintf("/app/installations/%v/access_tokens", creds.AppInstallationID))
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	path := fmt.Sprintf("/app/installations/%v/access_tokens", creds.AppInstallationID)
+	req, err := c.NewGitHubAPIRequest(ctx, http.MethodPost, path, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/vnd.github+json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessTokenJWT))
-	req.Header.Add("User-Agent", c.userAgent)
 
-	c.logger.Info("getting access token for GitHub App auth", "accessTokenURL", u)
+	c.logger.Info("getting access token for GitHub App auth", "accessTokenURL", req.URL.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -922,27 +865,14 @@ type ActionsServiceAdminConnection struct {
 	AdminToken        *string `json:"token,omitempty"`
 }
 
-func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *registrationToken, githubConfigUrl string) (*ActionsServiceAdminConnection, error) {
-	parsedGitHubConfigURL, err := url.Parse(githubConfigUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	if isHostedServer(*parsedGitHubConfigURL) {
-		parsedGitHubConfigURL.Host = fmt.Sprintf("api.%v", parsedGitHubConfigURL.Host)
-	}
-
-	ru := fmt.Sprintf("%v://%v/actions/runner-registration", parsedGitHubConfigURL.Scheme, parsedGitHubConfigURL.Host)
-	registrationURL, err := url.Parse(ru)
-	if err != nil {
-		return nil, err
-	}
+func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *registrationToken) (*ActionsServiceAdminConnection, error) {
+	path := "/actions/runner-registration"
 
 	body := struct {
 		Url         string `json:"url"`
 		RunnerEvent string `json:"runner_event"`
 	}{
-		Url:         githubConfigUrl,
+		Url:         c.config.ConfigURL.String(),
 		RunnerEvent: "register",
 	}
 
@@ -954,16 +884,15 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registrationURL.String(), buf)
+	req, err := c.NewGitHubAPIRequest(ctx, http.MethodPost, path, buf)
 	if err != nil {
 		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("RemoteAuth %s", *rt.Token))
-	req.Header.Set("User-Agent", c.userAgent)
 
-	c.logger.Info("getting Actions tenant URL and JWT", "registrationURL", registrationURL.String())
+	c.logger.Info("getting Actions tenant URL and JWT", "registrationURL", req.URL.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -979,57 +908,22 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 	return actionsServiceAdminConnection, nil
 }
 
-func isHostedServer(gitHubURL url.URL) bool {
-	return gitHubURL.Host == "github.com" ||
-		gitHubURL.Host == "www.github.com" ||
-		gitHubURL.Host == "github.localhost"
-}
+func createRegistrationTokenPath(config *GitHubConfig) (string, error) {
+	switch config.Scope {
+	case GitHubScopeOrganization:
+		path := fmt.Sprintf("/orgs/%s/actions/runners/registration-token", config.Organization)
+		return path, nil
 
-func createRegistrationTokenURL(githubConfigUrl string) (string, error) {
-	parsedGitHubConfigURL, err := url.Parse(githubConfigUrl)
-	if err != nil {
-		return "", err
-	}
+	case GitHubScopeEnterprise:
+		path := fmt.Sprintf("/enterprises/%s/actions/runners/registration-token", config.Enterprise)
+		return path, nil
 
-	// Check for empty path before split, because strings.Split will return a slice of length 1
-	// when the split delimiter is not present.
-	trimmedPath := strings.TrimLeft(parsedGitHubConfigURL.Path, "/")
-	if len(trimmedPath) == 0 {
-		return "", fmt.Errorf("%q should point to an enterprise, org, or repository", parsedGitHubConfigURL.String())
-	}
+	case GitHubScopeRepository:
+		path := fmt.Sprintf("/repos/%s/%s/actions/runners/registration-token", config.Organization, config.Repository)
+		return path, nil
 
-	pathParts := strings.Split(path.Clean(strings.TrimLeft(parsedGitHubConfigURL.Path, "/")), "/")
-
-	switch len(pathParts) {
-	case 1: // Organization
-		registrationTokenURL := fmt.Sprintf(
-			"%v://%v/api/v3/orgs/%v/actions/runners/registration-token",
-			parsedGitHubConfigURL.Scheme, parsedGitHubConfigURL.Host, pathParts[0])
-
-		if isHostedServer(*parsedGitHubConfigURL) {
-			registrationTokenURL = fmt.Sprintf(
-				"%v://api.%v/orgs/%v/actions/runners/registration-token",
-				parsedGitHubConfigURL.Scheme, parsedGitHubConfigURL.Host, pathParts[0])
-		}
-
-		return registrationTokenURL, nil
-	case 2: // Repository or enterprise
-		repoScope := "repos/"
-		if strings.ToLower(pathParts[0]) == "enterprises" {
-			repoScope = ""
-		}
-
-		registrationTokenURL := fmt.Sprintf("%v://%v/api/v3/%v%v/%v/actions/runners/registration-token",
-			parsedGitHubConfigURL.Scheme, parsedGitHubConfigURL.Host, repoScope, pathParts[0], pathParts[1])
-
-		if isHostedServer(*parsedGitHubConfigURL) {
-			registrationTokenURL = fmt.Sprintf("%v://api.%v/%v%v/%v/actions/runners/registration-token",
-				parsedGitHubConfigURL.Scheme, parsedGitHubConfigURL.Host, repoScope, pathParts[0], pathParts[1])
-		}
-
-		return registrationTokenURL, nil
 	default:
-		return "", fmt.Errorf("%q should point to an enterprise, org, or repository", parsedGitHubConfigURL.String())
+		return "", fmt.Errorf("unknown scope for config url: %s", config.ConfigURL)
 	}
 }
 
@@ -1081,44 +975,44 @@ func trimByteOrderMark(body []byte) []byte {
 	return bytes.TrimPrefix(body, []byte("\xef\xbb\xbf"))
 }
 
-func actionsServiceAdminTokenExpiresAt(jwtToken string) (*time.Time, error) {
+func actionsServiceAdminTokenExpiresAt(jwtToken string) (time.Time, error) {
 	type JwtClaims struct {
 		jwt.RegisteredClaims
 	}
 	token, _, err := jwt.NewParser().ParseUnverified(jwtToken, &JwtClaims{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse jwt token: %w", err)
+		return time.Time{}, fmt.Errorf("failed to parse jwt token: %w", err)
 	}
 
 	if claims, ok := token.Claims.(*JwtClaims); ok {
-		return &claims.ExpiresAt.Time, nil
+		return claims.ExpiresAt.Time, nil
 	}
 
-	return nil, fmt.Errorf("failed to parse token claims to get expire at")
+	return time.Time{}, fmt.Errorf("failed to parse token claims to get expire at")
 }
 
-func (c *Client) refreshTokenIfNeeded(ctx context.Context) error {
+func (c *Client) updateTokenIfNeeded(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	aboutToExpire := time.Now().Add(60 * time.Second).After(*c.ActionsServiceAdminTokenExpiresAt)
-	if !aboutToExpire {
+	aboutToExpire := time.Now().Add(60 * time.Second).After(c.ActionsServiceAdminTokenExpiresAt)
+	if !aboutToExpire && !c.ActionsServiceAdminTokenExpiresAt.IsZero() {
 		return nil
 	}
 
-	c.logger.Info("Admin token is about to expire, refreshing it", "githubConfigUrl", c.githubConfigURL)
-	rt, err := c.getRunnerRegistrationToken(ctx, c.githubConfigURL, *c.creds)
+	c.logger.Info("refreshing token", "githubConfigUrl", c.config.ConfigURL.String())
+	rt, err := c.getRunnerRegistrationToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get runner registration token on fresh: %w", err)
 	}
 
-	adminConnInfo, err := c.getActionsServiceAdminConnection(ctx, rt, c.githubConfigURL)
+	adminConnInfo, err := c.getActionsServiceAdminConnection(ctx, rt)
 	if err != nil {
 		return fmt.Errorf("failed to get actions service admin connection on fresh: %w", err)
 	}
 
-	c.ActionsServiceURL = adminConnInfo.ActionsServiceUrl
-	c.ActionsServiceAdminToken = adminConnInfo.AdminToken
+	c.ActionsServiceURL = *adminConnInfo.ActionsServiceUrl
+	c.ActionsServiceAdminToken = *adminConnInfo.AdminToken
 	c.ActionsServiceAdminTokenExpiresAt, err = actionsServiceAdminTokenExpiresAt(*adminConnInfo.AdminToken)
 	if err != nil {
 		return fmt.Errorf("failed to get admin token expire at on refresh: %w", err)
@@ -1127,10 +1021,10 @@ func (c *Client) refreshTokenIfNeeded(ctx context.Context) error {
 	return nil
 }
 
-func githubAPIURL(configURL, path string) (string, error) {
+func githubAPIURL(configURL, path string) (*url.URL, error) {
 	u, err := url.Parse(configURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	result := &url.URL{
@@ -1153,5 +1047,50 @@ func githubAPIURL(configURL, path string) (string, error) {
 
 	result.Path += path
 
-	return result.String(), nil
+	return result, nil
+}
+
+func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
+	u, err := url.Parse(in)
+	if err != nil {
+		return nil, err
+	}
+
+	isHosted := u.Host == "github.com" ||
+		u.Host == "www.github.com" ||
+		u.Host == "github.localhost"
+
+	configURL := &GitHubConfig{
+		ConfigURL: u,
+		IsHosted:  isHosted,
+	}
+
+	invalidURLError := fmt.Errorf("%q: %w", u.String(), ErrInvalidGitHubConfigURL)
+
+	pathParts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+
+	switch len(pathParts) {
+	case 1: // Organization
+		if pathParts[0] == "" {
+			return nil, invalidURLError
+		}
+
+		configURL.Scope = GitHubScopeOrganization
+		configURL.Organization = pathParts[0]
+
+	case 2: // Repository or enterprise
+		if strings.ToLower(pathParts[0]) == "enterprises" {
+			configURL.Scope = GitHubScopeEnterprise
+			configURL.Enterprise = pathParts[1]
+			break
+		}
+
+		configURL.Scope = GitHubScopeRepository
+		configURL.Organization = pathParts[0]
+		configURL.Repository = pathParts[1]
+	default:
+		return nil, invalidURLError
+	}
+
+	return configURL, nil
 }

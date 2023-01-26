@@ -22,9 +22,9 @@ import (
 
 func TestServerWithSelfSignedCertificates(t *testing.T) {
 	ctx := context.Background()
-
 	// this handler is a very very barebones replica of actions api
 	// used during the creation of a a new client
+	var u string
 	h := func(w http.ResponseWriter, r *http.Request) {
 		// handle get registration token
 		if strings.HasSuffix(r.URL.Path, "/runners/registration-token") {
@@ -46,9 +46,12 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 			require.NoError(t, err)
 			tokenString, err := token.SignedString(privateKey)
 			require.NoError(t, err)
-			w.Write([]byte(`{"url":"TODO","token":"` + tokenString + `"}`))
+			w.Write([]byte(`{"url":"` + u + `","token":"` + tokenString + `"}`))
 			return
 		}
+
+		// default happy response for RemoveRunner
+		w.WriteHeader(http.StatusNoContent)
 	}
 
 	certPath := filepath.Join("testdata", "server.crt")
@@ -56,13 +59,17 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 
 	t.Run("client without ca certs", func(t *testing.T) {
 		server := startNewTLSTestServer(t, certPath, keyPath, http.HandlerFunc(h))
+		u = server.URL
 		configURL := server.URL + "/my-org"
 
 		auth := &actions.ActionsAuth{
 			Token: "token",
 		}
-		client, err := actions.NewClient(ctx, configURL, auth)
-		assert.Nil(t, client)
+		client, err := actions.NewClient(configURL, auth)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+
+		err = client.RemoveRunner(ctx, 1)
 		require.NotNil(t, err)
 
 		if runtime.GOOS == "linux" {
@@ -78,6 +85,7 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 
 	t.Run("client with ca certs", func(t *testing.T) {
 		server := startNewTLSTestServer(t, certPath, keyPath, http.HandlerFunc(h))
+		u = server.URL
 		configURL := server.URL + "/my-org"
 
 		auth := &actions.ActionsAuth{
@@ -90,9 +98,12 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		pool, err := actions.RootCAsFromConfigMap(map[string][]byte{"cert": cert})
 		require.NoError(t, err)
 
-		client, err := actions.NewClient(ctx, configURL, auth, actions.WithRootCAs(pool))
+		client, err := actions.NewClient(configURL, auth, actions.WithRootCAs(pool))
 		require.NoError(t, err)
 		assert.NotNil(t, client)
+
+		err = client.RemoveRunner(ctx, 1)
+		assert.NoError(t, err)
 	})
 
 	t.Run("client with ca chain certs", func(t *testing.T) {
@@ -102,6 +113,7 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 			filepath.Join("testdata", "leaf.key"),
 			http.HandlerFunc(h),
 		)
+		u = server.URL
 		configURL := server.URL + "/my-org"
 
 		auth := &actions.ActionsAuth{
@@ -114,9 +126,12 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		pool, err := actions.RootCAsFromConfigMap(map[string][]byte{"cert": cert})
 		require.NoError(t, err)
 
-		client, err := actions.NewClient(ctx, configURL, auth, actions.WithRootCAs(pool), actions.WithRetryMax(0))
+		client, err := actions.NewClient(configURL, auth, actions.WithRootCAs(pool), actions.WithRetryMax(0))
 		require.NoError(t, err)
-		assert.NotNil(t, client)
+		require.NotNil(t, client)
+
+		err = client.RemoveRunner(ctx, 1)
+		assert.NoError(t, err)
 	})
 
 	t.Run("client skipping tls verification", func(t *testing.T) {
@@ -127,7 +142,7 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 			Token: "token",
 		}
 
-		client, err := actions.NewClient(ctx, configURL, auth, actions.WithoutTLSVerify())
+		client, err := actions.NewClient(configURL, auth, actions.WithoutTLSVerify())
 		require.NoError(t, err)
 		assert.NotNil(t, client)
 	})

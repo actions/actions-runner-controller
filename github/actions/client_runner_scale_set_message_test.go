@@ -32,10 +32,27 @@ func TestGetMessage(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, s.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(s.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetMessage(ctx, s.URL, token, 0)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("GetMessage sets the last message id if not 0", func(t *testing.T) {
+		want := runnerScaleSetMessage
+		response := []byte(`{"messageId":1,"messageType":"rssType"}`)
+		s := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query()
+			assert.Equal(t, "1", q.Get("lastMessageId"))
+			w.Write(response)
+		}))
+
+		client, err := actions.NewClient(s.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		got, err := client.GetMessage(ctx, s.URL, token, 1)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -52,7 +69,6 @@ func TestGetMessage(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -70,7 +86,7 @@ func TestGetMessage(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetMessage(ctx, server.URL, token, 0)
@@ -78,8 +94,7 @@ func TestGetMessage(t *testing.T) {
 
 		var expectedErr *actions.MessageQueueTokenExpiredError
 		require.True(t, errors.As(err, &expectedErr))
-	},
-	)
+	})
 
 	t.Run("Status code not found", func(t *testing.T) {
 		want := actions.ActionsError{
@@ -90,7 +105,7 @@ func TestGetMessage(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetMessage(ctx, server.URL, token, 0)
@@ -104,7 +119,7 @@ func TestGetMessage(t *testing.T) {
 			w.Header().Set("Content-Type", "text/plain")
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.GetMessage(ctx, server.URL, token, 0)
@@ -129,7 +144,7 @@ func TestDeleteMessage(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.DeleteMessage(ctx, server.URL, token, runnerScaleSetMessage.MessageId)
@@ -141,7 +156,7 @@ func TestDeleteMessage(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.DeleteMessage(ctx, server.URL, token, 0)
@@ -156,7 +171,7 @@ func TestDeleteMessage(t *testing.T) {
 			w.Header().Set("Content-Type", "text/plain")
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.DeleteMessage(ctx, server.URL, token, runnerScaleSetMessage.MessageId)
@@ -175,7 +190,6 @@ func TestDeleteMessage(t *testing.T) {
 
 		retryMax := 1
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -197,7 +211,7 @@ func TestDeleteMessage(t *testing.T) {
 			w.Write(rsl)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.DeleteMessage(ctx, server.URL, token, runnerScaleSetMessage.MessageId+1)
