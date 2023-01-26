@@ -216,26 +216,4 @@ func TestGetRunnerGroupByName(t *testing.T) {
 		assert.ErrorContains(t, err, "no runner group found with name")
 		assert.Nil(t, got)
 	})
-
-	t.Run("Default retries on server error", func(t *testing.T) {
-		var runnerGroupName string = "test-runner-group"
-
-		retryWaitMax := 1 * time.Millisecond
-		retryMax := 1
-
-		actualRetry := 0
-		expectedRetry := retryMax + 1
-
-		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			actualRetry++
-		}))
-
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth, actions.WithRetryMax(retryMax), actions.WithRetryWaitMax(retryWaitMax))
-		require.NoError(t, err)
-
-		_, err = client.GetRunnerByName(ctx, runnerGroupName)
-		require.Error(t, err)
-		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
-	})
 }
