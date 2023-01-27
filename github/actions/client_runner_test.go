@@ -192,7 +192,7 @@ func TestGetRunnerGroupByName(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerGroupByName(ctx, runnerGroupName)
@@ -208,7 +208,7 @@ func TestGetRunnerGroupByName(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerGroupByName(ctx, runnerGroupName)

@@ -346,27 +346,16 @@ func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *Runne
 }
 
 func (c *Client) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error) {
-	u := fmt.Sprintf("%s/%s/%d?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
-
-	if err := c.refreshTokenIfNeeded(ctx); err != nil {
-		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
-	}
+	path := fmt.Sprintf("%s/%d", scaleSetEndpoint, runnerScaleSetId)
 
 	body, err := json.Marshal(runnerScaleSet)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, u, bytes.NewBuffer(body))
+	req, err := c.NewActionsServiceRequest(ctx, http.MethodPatch, path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
-
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)

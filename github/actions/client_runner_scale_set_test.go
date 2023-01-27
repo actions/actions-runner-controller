@@ -352,7 +352,7 @@ func TestUpdateRunnerScaleSet(t *testing.T) {
 			w.Write(rsl)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.UpdateRunnerScaleSet(ctx, 1, &actions.RunnerScaleSet{RunnerGroupId: 1})
@@ -363,24 +363,19 @@ func TestUpdateRunnerScaleSet(t *testing.T) {
 	t.Run("UpdateRunnerScaleSet calls correct url", func(t *testing.T) {
 		rsl, err := json.Marshal(&runnerScaleSet)
 		require.NoError(t, err)
-		url := url.URL{}
-		method := ""
 		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			expectedPath := "/tenant/123/_apis/runtime/runnerscalesets/1"
+			assert.Equal(t, expectedPath, r.URL.Path)
+			assert.Equal(t, http.MethodPatch, r.Method)
+			assert.Equal(t, "6.0-preview", r.URL.Query().Get("api-version"))
+
 			w.Write(rsl)
-			url = *r.URL
-			method = r.Method
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.UpdateRunnerScaleSet(ctx, 1, &runnerScaleSet)
 		require.NoError(t, err)
-
-		u := url.String()
-		expectedUrl := "/_apis/runtime/runnerscalesets/1?api-version=6.0-preview"
-		assert.Equal(t, expectedUrl, u)
-
-		assert.Equal(t, "PATCH", method)
 	})
 }
