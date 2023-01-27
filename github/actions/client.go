@@ -189,21 +189,21 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 		return nil, err
 	}
 
-	baseURL, err := url.Parse(c.ActionsServiceURL)
-	if err != nil {
-		return nil, err
-	}
-
 	parsedPath, err := url.Parse(path)
 	if err != nil {
 		return nil, err
 	}
 
-	urlString := baseURL.JoinPath(parsedPath.Path).String()
+	urlString, err := url.JoinPath(c.ActionsServiceURL, parsedPath.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	u, err := url.Parse(urlString)
 	if err != nil {
 		return nil, err
 	}
+
 	q := u.Query()
 	for k, v := range parsedPath.Query() {
 		q[k] = v
