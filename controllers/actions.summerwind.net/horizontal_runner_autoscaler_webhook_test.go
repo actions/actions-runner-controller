@@ -431,7 +431,11 @@ func testServerWithInitObjs(t *testing.T, eventType string, event interface{}, w
 
 	hraWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{}
 
-	client := fake.NewClientBuilder().WithScheme(sc).WithRuntimeObjects(initObjs...).Build()
+	client := fake.NewClientBuilder().
+		WithScheme(sc).
+		WithRuntimeObjects(initObjs...).
+		WithIndex(&actionsv1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, hraWebhook.indexer).
+		Build()
 
 	logs := installTestLogger(hraWebhook)
 

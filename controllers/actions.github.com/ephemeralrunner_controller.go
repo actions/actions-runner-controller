@@ -369,7 +369,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 
 func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Failed")
-	if err := patch(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodFailed
 		obj.Status.Reason = "TooManyPodFailures"
 		obj.Status.Message = "Pod has failed to start more than 5 times"
@@ -388,7 +388,7 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 
 func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Finished")
-	if err := patch(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodSucceeded
 	}); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner with status finished: %v", err)
@@ -409,7 +409,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	}
 
 	log.Info("Updating ephemeral runner status to track the failure count")
-	if err := patch(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		if obj.Status.Failures == nil {
 			obj.Status.Failures = make(map[string]bool)
 		}
@@ -487,7 +487,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	log.Info("Created ephemeral runner JIT config", "runnerId", jitConfig.Runner.Id)
 
 	log.Info("Updating ephemeral runner status with runnerId and runnerJITConfig")
-	err = patch(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	err = patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.RunnerId = jitConfig.Runner.Id
 		obj.Status.RunnerName = jitConfig.Runner.Name
 		obj.Status.RunnerJITConfig = jitConfig.EncodedJITConfig
@@ -556,7 +556,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	}
 
 	log.Info("Updating ephemeral runner status with pod phase", "phase", pod.Status.Phase, "reason", pod.Status.Reason, "message", pod.Status.Message)
-	err := patch(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = pod.Status.Phase
 		obj.Status.Ready = obj.Status.Ready || (pod.Status.Phase == corev1.PodRunning)
 		obj.Status.Reason = pod.Status.Reason
