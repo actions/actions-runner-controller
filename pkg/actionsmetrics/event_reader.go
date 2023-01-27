@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v47/github"
+	gogithub "github.com/google/go-github/v50/github"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/actions/actions-runner-controller/github"
@@ -64,6 +64,9 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	runsOn := strings.Join(e.WorkflowJob.Labels, `,`)
 	labels["runs_on"] = runsOn
 	labels["job_name"] = *e.WorkflowJob.Name
+	labels["repository"] = *e.Repo.Name
+	labels["repository_full_name"] = *e.Repo.FullName
+	labels["organization"] = *e.Org.Name
 
 	// switch on job status
 	switch action := e.GetAction(); action {
@@ -85,6 +88,9 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			reader.Log.Info("reading workflow_job logs",
 				"job_name", *e.WorkflowJob.Name,
 				"job_id", fmt.Sprint(*e.WorkflowJob.ID),
+				"repository", *e.Repo.Name,
+				"repository_full_name", *e.Repo.FullName,
+				"organization", *e.Org.Name,
 			)
 		}
 
@@ -104,6 +110,9 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			reader.Log.Info("reading workflow_job logs",
 				"job_name", *e.WorkflowJob.Name,
 				"job_id", fmt.Sprint(*e.WorkflowJob.ID),
+				"repository", *e.Repo.Name,
+				"repository_full_name", *e.Repo.FullName,
+				"organization", *e.Org.Name,
 			)
 		}
 
