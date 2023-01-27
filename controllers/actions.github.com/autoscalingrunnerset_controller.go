@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -47,6 +48,7 @@ const (
 	LabelKeyAutoScaleRunnerSetName    = "auto-scale-runner-set-name"
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdKey               = "runner-scale-set-id"
+	runnerScaleSetRunnerGroupNameKey  = "runner-scale-set-runner-group-name"
 
 	// scaleSetListenerLabel is the key of pod.meta.labels to label
 	// that the pod is a listener application
@@ -148,6 +150,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("Runner scale set id annotation is not an id, or is <= 0. Creating a new runner scale set.")
 		// something modified the scaleSetId. Try to create one
 		return r.createRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+	}
+
+	// Make sure the runner group of the scale set is up to date
+	currentRunnerGroupName, ok := autoscalingRunnerSet.Annotations[runnerScaleSetRunnerGroupNameKey]
+	if !ok || !strings.EqualFold(currentRunnerGroupName, autoscalingRunnerSet.Spec.RunnerGroup) {
+		log.Info("AutoScalingRunnerSet runner group changed. Updating the runner scale set.")
+		return r.updateRunnerScaleSetRunnerGroup(ctx, autoscalingRunnerSet, log)
 	}
 
 	secret := new(corev1.Secret)
@@ -299,8 +308,8 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		return ctrl.Result{}, err
 	}
 
+	runnerGroupId := 1
 	if runnerScaleSet == nil {
-		runnerGroupId := 1
 		if len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 {
 			runnerGroup, err := actionsClient.GetRunnerGroupByName(ctx, autoscalingRunnerSet.Spec.RunnerGroup)
 			if err != nil {
@@ -338,14 +347,53 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		autoscalingRunnerSet.Annotations = map[string]string{}
 	}
 
-	autoscalingRunnerSet.Annotations[runnerScaleSetIdKey] = strconv.Itoa(runnerScaleSet.Id)
-	logger.Info("Adding runner scale set ID as an annotation")
-	if err := r.Update(ctx, autoscalingRunnerSet); err != nil {
-		logger.Error(err, "Failed to add runner scale set ID")
+	logger.Info("Adding runner scale set ID and runner group name as an annotation")
+	if err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+		obj.Annotations[runnerScaleSetIdKey] = strconv.Itoa(runnerScaleSet.Id)
+		obj.Annotations[runnerScaleSetRunnerGroupNameKey] = runnerScaleSet.RunnerGroupName
+	}); err != nil {
+		logger.Error(err, "Failed to add runner scale set ID and runner group name as an annotation")
 		return ctrl.Result{}, err
 	}
 
 	logger.Info("Updated with runner scale set ID as an annotation")
+	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdKey])
+	if err != nil {
+		logger.Error(err, "Failed to parse runner scale set ID")
+		return ctrl.Result{}, err
+	}
+
+	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
+	if err != nil {
+		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
+		return ctrl.Result{}, err
+	}
+
+	runnerGroup, err := actionsClient.GetRunnerGroupByName(ctx, autoscalingRunnerSet.Spec.RunnerGroup)
+	if err != nil {
+		logger.Error(err, "Failed to get runner group by name", "runnerGroup", autoscalingRunnerSet.Spec.RunnerGroup)
+		return ctrl.Result{}, err
+	}
+
+	updatedRunnerScaleSet, err := actionsClient.UpdateRunnerScaleSet(ctx, runnerScaleSetId, &actions.RunnerScaleSet{Name: autoscalingRunnerSet.Name, RunnerGroupId: int(runnerGroup.ID)})
+	if err != nil {
+		logger.Error(err, "Failed to update runner scale set", "runnerScaleSetId", runnerScaleSetId)
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Updating runner scale set runner group name as an annotation")
+	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+		obj.Annotations[runnerScaleSetRunnerGroupNameKey] = updatedRunnerScaleSet.RunnerGroupName
+	}); err != nil {
+		logger.Error(err, "Failed to update runner group name annotation")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Updated runner scale set with match runner group", "runnerGroup", updatedRunnerScaleSet.RunnerGroupName)
 	return ctrl.Result{}, nil
 }
 
