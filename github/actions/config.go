@@ -72,3 +72,27 @@ func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
 
 	return configURL, nil
 }
+
+func (c *GitHubConfig) GitHubAPIURL(path string) *url.URL {
+	result := &url.URL{
+		Scheme: c.ConfigURL.Scheme,
+	}
+
+	switch c.ConfigURL.Host {
+	// Hosted
+	case "github.com", "github.localhost":
+		result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
+	// re-routing www.github.com to api.github.com
+	case "www.github.com":
+		result.Host = "api.github.com"
+
+	// Enterprise
+	default:
+		result.Host = c.ConfigURL.Host
+		result.Path = "/api/v3"
+	}
+
+	result.Path += path
+
+	return result
+}

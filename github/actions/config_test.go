@@ -104,3 +104,14 @@ func TestGitHubConfig(t *testing.T) {
 		assert.True(t, errors.Is(err, actions.ErrInvalidGitHubConfigURL))
 	}
 }
+
+func TestGitHubConfig_GitHubAPIURL(t *testing.T) {
+	t.Run("when hosted", func(t *testing.T) {
+		config, err := actions.ParseGitHubConfigFromURL("https://github.com/org/repo")
+		require.NoError(t, err)
+
+		result := config.GitHubAPIURL("/some/path")
+		assert.Equal(t, "https://api.github.com/some/path", result.String())
+	})
+	t.Run("when not hosted", func(t *testing.T) {})
+}

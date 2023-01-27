@@ -114,14 +114,6 @@ func WithoutTLSVerify() ClientOption {
 	}
 }
 
-func ReusingClientCredentials(oldClient *Client) ClientOption {
-	return func(c *Client) {
-		// if c.creds == oldClient.creds
-		//   re use oldClient token
-		// otherwise
-	}
-}
-
 func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOption) (*Client, error) {
 	config, err := ParseGitHubConfigFromURL(githubConfigURL)
 	if err != nil {
@@ -178,11 +170,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	u, err := githubAPIURL(c.config.ConfigURL.String(), path)
-	if err != nil {
-		return nil, err
-	}
-
+	u := c.config.GitHubAPIURL(path)
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
@@ -996,33 +984,4 @@ func (c *Client) updateTokenIfNeeded(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func githubAPIURL(configURL, path string) (*url.URL, error) {
-	u, err := url.Parse(configURL)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &url.URL{
-		Scheme: u.Scheme,
-	}
-
-	switch u.Host {
-	// Hosted
-	case "github.com", "github.localhost":
-		result.Host = fmt.Sprintf("api.%s", u.Host)
-	// re-routing www.github.com to api.github.com
-	case "www.github.com":
-		result.Host = "api.github.com"
-
-	// Enterprise
-	default:
-		result.Host = u.Host
-		result.Path = "/api/v3"
-	}
-
-	result.Path += path
-
-	return result, nil
 }
