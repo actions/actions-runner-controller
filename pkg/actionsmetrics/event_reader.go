@@ -64,6 +64,8 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	runsOn := strings.Join(e.WorkflowJob.Labels, `,`)
 	labels["runs_on"] = runsOn
 	labels["job_name"] = *e.WorkflowJob.Name
+	labels["repository_name"] = *e.Repo.Name
+	labels["repository_full_name"] = *e.Repo.FullName
 
 	// switch on job status
 	switch action := e.GetAction(); action {
