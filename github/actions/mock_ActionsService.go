@@ -332,6 +332,29 @@ func (_m *MockActionsService) RemoveRunner(ctx context.Context, runnerId int64) 
 	return r0
 }
 
+// UpdateRunnerScaleSet provides a mock function with given fields: ctx, runnerScaleSetId, runnerScaleSet
+func (_m *MockActionsService) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error) {
+	ret := _m.Called(ctx, runnerScaleSetId, runnerScaleSet)
+
+	var r0 *RunnerScaleSet
+	if rf, ok := ret.Get(0).(func(context.Context, int, *RunnerScaleSet) *RunnerScaleSet); ok {
+		r0 = rf(ctx, runnerScaleSetId, runnerScaleSet)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*RunnerScaleSet)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, int, *RunnerScaleSet) error); ok {
+		r1 = rf(ctx, runnerScaleSetId, runnerScaleSet)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 type mockConstructorTestingTNewMockActionsService interface {
 	mock.TestingT
 	Cleanup(func())

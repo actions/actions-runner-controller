@@ -36,6 +36,18 @@ var defaultRunnerScaleSet = &actions.RunnerScaleSet{
 	Statistics:         nil,
 }
 
+var defaultUpdatedRunnerScaleSet = &actions.RunnerScaleSet{
+	Id:                 1,
+	Name:               "testset",
+	RunnerGroupId:      2,
+	RunnerGroupName:    "testgroup",
+	Labels:             []actions.Label{{Type: "test", Name: "test"}},
+	RunnerSetting:      actions.RunnerSetting{},
+	CreatedOn:          time.Now(),
+	RunnerJitConfigUrl: "test.test.test",
+	Statistics:         nil,
+}
+
 var defaultRunnerGroup = &actions.RunnerGroup{
 	ID:        1,
 	Name:      "testgroup",
@@ -107,6 +119,10 @@ type FakeClient struct {
 		*actions.RunnerScaleSet
 		err error
 	}
+	updateRunnerScaleSetResult struct {
+		*actions.RunnerScaleSet
+		err error
+	}
 	createMessageSessionResult struct {
 		*actions.RunnerScaleSetSession
 		err error
@@ -164,6 +180,7 @@ func (f *FakeClient) applyDefaults() {
 	f.getRunnerScaleSetByIdResult.RunnerScaleSet = defaultRunnerScaleSet
 	f.getRunnerGroupByNameResult.RunnerGroup = defaultRunnerGroup
 	f.createRunnerScaleSetResult.RunnerScaleSet = defaultRunnerScaleSet
+	f.updateRunnerScaleSetResult.RunnerScaleSet = defaultUpdatedRunnerScaleSet
 	f.createMessageSessionResult.RunnerScaleSetSession = defaultRunnerScaleSetSession
 	f.refreshMessageSessionResult.RunnerScaleSetSession = defaultRunnerScaleSetSession
 	f.acquireJobsResult.ids = []int64{1}
@@ -188,6 +205,10 @@ func (f *FakeClient) GetRunnerGroupByName(ctx context.Context, runnerGroup strin
 
 func (f *FakeClient) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *actions.RunnerScaleSet) (*actions.RunnerScaleSet, error) {
 	return f.createRunnerScaleSetResult.RunnerScaleSet, f.createRunnerScaleSetResult.err
+}
+
+func (f *FakeClient) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *actions.RunnerScaleSet) (*actions.RunnerScaleSet, error) {
+	return f.updateRunnerScaleSetResult.RunnerScaleSet, f.updateRunnerScaleSetResult.err
 }
 
 func (f *FakeClient) CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error) {

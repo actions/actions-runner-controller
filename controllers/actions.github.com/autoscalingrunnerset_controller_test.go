@@ -83,6 +83,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
+				RunnerGroup:        "testgroup",
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
@@ -144,10 +145,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", nil
 					}
 
-					return created.Annotations[runnerScaleSetIdKey], nil
+					if _, ok := created.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+						return "", nil
+					}
+
+					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdKey], created.Annotations[runnerScaleSetRunnerGroupNameKey]), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
 
 			// Check if ephemeral runner set is created
 			Eventually(

@@ -336,3 +336,53 @@ func TestCreateRunnerScaleSet(t *testing.T) {
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
 	})
 }
+
+func TestUpdateRunnerScaleSet(t *testing.T) {
+	ctx := context.Background()
+	auth := &actions.ActionsAuth{
+		Token: "token",
+	}
+
+	scaleSetCreationDateTime := time.Date(1, time.January, 1, 0, 0, 0, 0, time.UTC)
+	runnerScaleSet := actions.RunnerScaleSet{Id: 1, Name: "ScaleSet", RunnerGroupId: 1, RunnerGroupName: "group", CreatedOn: scaleSetCreationDateTime, RunnerSetting: actions.RunnerSetting{}}
+
+	t.Run("Update runner scale set", func(t *testing.T) {
+		want := &runnerScaleSet
+		rsl, err := json.Marshal(want)
+		require.NoError(t, err)
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write(rsl)
+		}))
+
+		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		got, err := client.UpdateRunnerScaleSet(ctx, 1, &actions.RunnerScaleSet{RunnerGroupId: 1})
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("UpdateRunnerScaleSet calls correct url", func(t *testing.T) {
+		rsl, err := json.Marshal(&runnerScaleSet)
+		require.NoError(t, err)
+		url := url.URL{}
+		method := ""
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write(rsl)
+			url = *r.URL
+			method = r.Method
+		}))
+
+		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		_, err = client.UpdateRunnerScaleSet(ctx, 1, &runnerScaleSet)
+		require.NoError(t, err)
+
+		u := url.String()
+		expectedUrl := "/_apis/runtime/runnerscalesets/1?api-version=6.0-preview"
+		assert.Equal(t, expectedUrl, u)
+
+		assert.Equal(t, "PATCH", method)
+	})
+}

@@ -36,6 +36,7 @@ type ActionsService interface {
 	GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int) (*RunnerScaleSet, error)
 	GetRunnerGroupByName(ctx context.Context, runnerGroup string) (*RunnerGroup, error)
 	CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error)
+	UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error)
 
 	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*RunnerScaleSetSession, error)
 	DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error
@@ -348,6 +349,47 @@ func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *Runne
 		return nil, err
 	}
 	return createdRunnerScaleSet, nil
+}
+
+func (c *Client) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error) {
+	u := fmt.Sprintf("%s/%s/%d?api-version=6.0-preview", *c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
+
+	if err := c.refreshTokenIfNeeded(ctx); err != nil {
+		return nil, fmt.Errorf("failed to refresh admin token if needed: %w", err)
+	}
+
+	body, err := json.Marshal(runnerScaleSet)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, u, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *c.ActionsServiceAdminToken))
+
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, ParseActionsErrorFromResponse(resp)
+	}
+
+	var updatedRunnerScaleSet *RunnerScaleSet
+	err = unmarshalBody(resp, &updatedRunnerScaleSet)
+	if err != nil {
+		return nil, err
+	}
+	return updatedRunnerScaleSet, nil
 }
 
 func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int) error {
