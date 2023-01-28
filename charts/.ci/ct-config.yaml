@@ -1,4 +1,5 @@
 # This file defines the config for "ct" (chart tester) used by the helm linting GitHub workflow
+all: true
 lint-conf: charts/.ci/lint-config.yaml
 chart-repos:
   - jetstack=https://charts.jetstack.io

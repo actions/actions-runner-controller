@@ -12,20 +12,20 @@ spec:
   runnerGroup: {{ . }}
   {{- end }}
 
-  {{- if and (kindIs "int64" .Values.minRunners) (kindIs "int64" .Values.maxRunners) }}
+  {{- if and (or (kindIs "int64" .Values.minRunners) (kindIs "float" .Values.minRunners)) (or (kindIs "int64" .Values.maxRunners) (kindIs "float" .Values.maxRunners)) }}
     {{- if gt .Values.minRunners .Values.maxRunners }}
       {{- fail "maxRunners has to be greater or equal to minRunners" }}
     {{- end }}
   {{- end }}
 
-  {{- if kindIs "int64" .Values.maxRunners }}
+  {{- if or (kindIs "int64" .Values.maxRunners) (kindIs "float" .Values.maxRunners) }}
     {{- if lt .Values.maxRunners 0 }}
       {{- fail "maxRunners has to be greater or equal to 0" }}
     {{- end }}
   maxRunners: {{ .Values.maxRunners | int }}
   {{- end }}
 
-  {{- if kindIs "int64" .Values.minRunners }}
+  {{- if or (kindIs "int64" .Values.minRunners) (kindIs "float" .Values.minRunners) }}
     {{- if lt .Values.minRunners 0 }}
       {{- fail "minRunners has to be greater or equal to 0" }}
     {{- end }}
