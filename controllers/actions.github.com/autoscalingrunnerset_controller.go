@@ -112,6 +112,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 				return ctrl.Result{}, nil
 			}
 
+			err = r.deleteRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+			if err != nil {
+				log.Error(err, "Failed to delete runner scale set")
+				return ctrl.Result{}, err
+			}
+
 			log.Info("Removing finalizer")
 			err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
 				controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetFinalizerName)
@@ -154,7 +160,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Make sure the runner group of the scale set is up to date
 	currentRunnerGroupName, ok := autoscalingRunnerSet.Annotations[runnerScaleSetRunnerGroupNameKey]
-	if !ok || !strings.EqualFold(currentRunnerGroupName, autoscalingRunnerSet.Spec.RunnerGroup) {
+	if !ok || (len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 && !strings.EqualFold(currentRunnerGroupName, autoscalingRunnerSet.Spec.RunnerGroup)) {
 		log.Info("AutoScalingRunnerSet runner group changed. Updating the runner scale set.")
 		return r.updateRunnerScaleSetRunnerGroup(ctx, autoscalingRunnerSet, log)
 	}
@@ -395,6 +401,30 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx con
 
 	logger.Info("Updated runner scale set with match runner group", "runnerGroup", updatedRunnerScaleSet.RunnerGroupName)
 	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
+	logger.Info("Deleting the runner scale set from Actions service")
+	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdKey])
+	if err != nil {
+		logger.Error(err, "Failed to parse runner scale set ID")
+		return err
+	}
+
+	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
+	if err != nil {
+		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
+		return err
+	}
+
+	err = actionsClient.DeleteRunnerScaleSet(ctx, runnerScaleSetId)
+	if err != nil {
+		logger.Error(err, "Failed to delete runner scale set", "runnerScaleSetId", runnerScaleSetId)
+		return err
+	}
+
+	logger.Info("Deleted the runner scale set from Actions service")
+	return nil
 }
 
 func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
