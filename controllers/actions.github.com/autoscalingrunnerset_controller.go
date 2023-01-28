@@ -379,13 +379,18 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx con
 		return ctrl.Result{}, err
 	}
 
-	runnerGroup, err := actionsClient.GetRunnerGroupByName(ctx, autoscalingRunnerSet.Spec.RunnerGroup)
-	if err != nil {
-		logger.Error(err, "Failed to get runner group by name", "runnerGroup", autoscalingRunnerSet.Spec.RunnerGroup)
-		return ctrl.Result{}, err
+	runnerGroupId := 1
+	if len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 {
+		runnerGroup, err := actionsClient.GetRunnerGroupByName(ctx, autoscalingRunnerSet.Spec.RunnerGroup)
+		if err != nil {
+			logger.Error(err, "Failed to get runner group by name", "runnerGroup", autoscalingRunnerSet.Spec.RunnerGroup)
+			return ctrl.Result{}, err
+		}
+
+		runnerGroupId = int(runnerGroup.ID)
 	}
 
-	updatedRunnerScaleSet, err := actionsClient.UpdateRunnerScaleSet(ctx, runnerScaleSetId, &actions.RunnerScaleSet{Name: autoscalingRunnerSet.Name, RunnerGroupId: int(runnerGroup.ID)})
+	updatedRunnerScaleSet, err := actionsClient.UpdateRunnerScaleSet(ctx, runnerScaleSetId, &actions.RunnerScaleSet{Name: autoscalingRunnerSet.Name, RunnerGroupId: runnerGroupId})
 	if err != nil {
 		logger.Error(err, "Failed to update runner scale set", "runnerScaleSetId", runnerScaleSetId)
 		return ctrl.Result{}, err
