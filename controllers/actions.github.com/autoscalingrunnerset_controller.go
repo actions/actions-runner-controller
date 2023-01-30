@@ -191,7 +191,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	if desiredSpecHash != latestRunnerSet.Labels[LabelKeyRunnerSpecHash] {
-		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set ")
+		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
 	}
 
@@ -348,7 +348,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		}
 	}
 
-	logger.Info("Created/Reused a runner scale set", "id", runnerScaleSet.Id)
+	logger.Info("Created/Reused a runner scale set", "id", runnerScaleSet.Id, "runnerGroupName", runnerScaleSet.RunnerGroupName)
 	if autoscalingRunnerSet.Annotations == nil {
 		autoscalingRunnerSet.Annotations = map[string]string{}
 	}
@@ -362,7 +362,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Updated with runner scale set ID as an annotation")
+	logger.Info("Updated with runner scale set ID and runner group name as an annotation")
 	return ctrl.Result{}, nil
 }
 
@@ -444,7 +444,7 @@ func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Co
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Creating a new EphemeralRunnerSet resource", "name", desiredRunnerSet.Name)
+	log.Info("Creating a new EphemeralRunnerSet resource")
 	if err := r.Create(ctx, desiredRunnerSet); err != nil {
 		log.Error(err, "Failed to create EphemeralRunnerSet resource")
 		return ctrl.Result{}, err

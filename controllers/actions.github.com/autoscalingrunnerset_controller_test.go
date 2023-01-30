@@ -400,6 +400,29 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
+
+			// delete the annotation and it should be re-added
+			patched = autoscalingRunnerSet.DeepCopy()
+			delete(patched.Annotations, runnerScaleSetRunnerGroupNameKey)
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+
+			// Check if AutoScalingRunnerSet still has the runner group in its annotation
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+					if err != nil {
+						return "", err
+					}
+
+					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+						return "", nil
+					}
+
+					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
 		})
 	})
 })
