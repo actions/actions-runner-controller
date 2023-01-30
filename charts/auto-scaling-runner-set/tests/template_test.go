@@ -495,6 +495,33 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidation_OnlyMax(t 
 	assert.Nil(t, ars.Spec.MinRunners, "MinRunners should be nil")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunners_FromValuesFile(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, 5, *ars.Spec.MinRunners, "MinRunners should be 5")
+	assert.Equal(t, 10, *ars.Spec.MaxRunners, "MaxRunners should be 10")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	t.Parallel()
 
