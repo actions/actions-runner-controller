@@ -165,8 +165,23 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	// TODO: this is a good place to log the request, add metrics, etc
-	return c.Client.Do(req)
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	body = trimByteOrderMark(body)
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return resp, nil
 }
 
 func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -242,8 +257,9 @@ func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName strin
 	if resp.StatusCode != http.StatusOK {
 		return nil, ParseActionsErrorFromResponse(resp)
 	}
+
 	var runnerScaleSetList *runnerScaleSetsResponse
-	err = unmarshalBody(resp, &runnerScaleSetList)
+	err = json.NewDecoder(resp.Body).Decode(&runnerScaleSetList)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +290,7 @@ func (c *Client) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int
 	}
 
 	var runnerScaleSet *RunnerScaleSet
-	err = unmarshalBody(resp, &runnerScaleSet)
+	err = json.NewDecoder(resp.Body).Decode(&runnerScaleSet)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +318,7 @@ func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (
 	}
 
 	var runnerGroupList *RunnerGroupList
-	err = unmarshalBody(resp, &runnerGroupList)
+	err = json.NewDecoder(resp.Body).Decode(&runnerGroupList)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +354,7 @@ func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *Runne
 		return nil, ParseActionsErrorFromResponse(resp)
 	}
 	var createdRunnerScaleSet *RunnerScaleSet
-	err = unmarshalBody(resp, &createdRunnerScaleSet)
+	err = json.NewDecoder(resp.Body).Decode(&createdRunnerScaleSet)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +384,7 @@ func (c *Client) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int,
 	}
 
 	var updatedRunnerScaleSet *RunnerScaleSet
-	err = unmarshalBody(resp, &updatedRunnerScaleSet)
+	err = json.NewDecoder(resp.Body).Decode(&updatedRunnerScaleSet)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +459,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 	}
 
 	var message *RunnerScaleSetMessage
-	err = unmarshalBody(resp, &message)
+	err = json.NewDecoder(resp.Body).Decode(&message)
 	if err != nil {
 		return nil, err
 	}
@@ -533,8 +549,7 @@ func (c *Client) doSessionRequest(ctx context.Context, method, path string, requ
 	}
 
 	if resp.StatusCode == expectedResponseStatusCode && responseUnmarshalTarget != nil {
-		err = unmarshalBody(resp, &responseUnmarshalTarget)
-		return err
+		return json.NewDecoder(resp.Body).Decode(responseUnmarshalTarget)
 	}
 
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
@@ -573,8 +588,8 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 		return nil, ParseActionsErrorFromResponse(resp)
 	}
 
-	var acquiredJobs Int64List
-	err = unmarshalBody(resp, &acquiredJobs)
+	var acquiredJobs *Int64List
+	err = json.NewDecoder(resp.Body).Decode(&acquiredJobs)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +620,7 @@ func (c *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*
 	}
 
 	var acquirableJobList *AcquirableJobList
-	err = unmarshalBody(resp, &acquirableJobList)
+	err = json.NewDecoder(resp.Body).Decode(&acquirableJobList)
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +651,7 @@ func (c *Client) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *
 	}
 
 	var runnerJitConfig *RunnerScaleSetJitRunnerConfig
-	err = unmarshalBody(resp, &runnerJitConfig)
+	err = json.NewDecoder(resp.Body).Decode(&runnerJitConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -661,7 +676,8 @@ func (c *Client) GetRunner(ctx context.Context, runnerId int64) (*RunnerReferenc
 	}
 
 	var runnerReference *RunnerReference
-	if err := unmarshalBody(resp, &runnerReference); err != nil {
+	err = json.NewDecoder(resp.Body).Decode(&runnerReference)
+	if err != nil {
 		return nil, err
 	}
 
@@ -686,7 +702,7 @@ func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*Runne
 	}
 
 	var runnerList *RunnerReferenceList
-	err = unmarshalBody(resp, &runnerList)
+	err = json.NewDecoder(resp.Body).Decode(&runnerList)
 	if err != nil {
 		return nil, err
 	}
@@ -773,8 +789,8 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationT
 		return nil, fmt.Errorf("unexpected response from Actions service during registration token call: %v - %v", resp.StatusCode, string(body))
 	}
 
-	registrationToken := &registrationToken{}
-	if err := json.NewDecoder(resp.Body).Decode(registrationToken); err != nil {
+	var registrationToken *registrationToken
+	if err := json.NewDecoder(resp.Body).Decode(&registrationToken); err != nil {
 		return nil, err
 	}
 
@@ -811,8 +827,8 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 	defer resp.Body.Close()
 
 	// Format: https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
-	accessToken := &accessToken{}
-	err = json.NewDecoder(resp.Body).Decode(accessToken)
+	var accessToken *accessToken
+	err = json.NewDecoder(resp.Body).Decode(&accessToken)
 	return accessToken, err
 }
 
@@ -856,8 +872,8 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 	}
 	defer resp.Body.Close()
 
-	actionsServiceAdminConnection := &ActionsServiceAdminConnection{}
-	if err := json.NewDecoder(resp.Body).Decode(actionsServiceAdminConnection); err != nil {
+	var actionsServiceAdminConnection *ActionsServiceAdminConnection
+	if err := json.NewDecoder(resp.Body).Decode(&actionsServiceAdminConnection); err != nil {
 		return nil, err
 	}
 
@@ -907,24 +923,6 @@ func createJWTForGitHubApp(appAuth *GitHubAppAuth) (string, error) {
 	return token.SignedString(privateKey)
 }
 
-func unmarshalBody(response *http.Response, v interface{}) (err error) {
-	if response != nil && response.Body != nil {
-		var err error
-		defer func() {
-			if closeError := response.Body.Close(); closeError != nil {
-				err = closeError
-			}
-		}()
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return err
-		}
-		body = trimByteOrderMark(body)
-		return json.Unmarshal(body, &v)
-	}
-	return nil
-}
-
 // Returns slice of body without utf-8 byte order mark.
 // If BOM does not exist body is returned unchanged.
 func trimByteOrderMark(body []byte) []byte {
@@ -959,12 +957,12 @@ func (c *Client) updateTokenIfNeeded(ctx context.Context) error {
 	c.logger.Info("refreshing token", "githubConfigUrl", c.config.ConfigURL.String())
 	rt, err := c.getRunnerRegistrationToken(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get runner registration token on fresh: %w", err)
+		return fmt.Errorf("failed to get runner registration token on refresh: %w", err)
 	}
 
 	adminConnInfo, err := c.getActionsServiceAdminConnection(ctx, rt)
 	if err != nil {
-		return fmt.Errorf("failed to get actions service admin connection on fresh: %w", err)
+		return fmt.Errorf("failed to get actions service admin connection on refresh: %w", err)
 	}
 
 	c.ActionsServiceURL = *adminConnInfo.ActionsServiceUrl
