@@ -78,5 +78,6 @@ jobs:
           helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
 
       - name: Run chart-testing (install)
+        if: steps.list-changed.outputs.changed == 'true'
         run: |
           ct install --config charts/.ci/ct-config.yaml
