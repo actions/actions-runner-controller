@@ -17,8 +17,8 @@
 
 A list of tools which are helpful for troubleshooting
 
-* https://github.com/rewanthtammana/kubectl-fields Kubernetes resources hierarchy parsing tool
-* https://github.com/stern/stern Multi pod and container log tailing for Kubernetes
+* [Kubernetes resources hierarchy parsing tool `kubectl-fields`](https://github.com/rewanthtammana/kubectl-fields)
+* [Multi pod and container log tailing for Kubernetes `stern`](https://github.com/stern/stern)
 
 ## Installation
 
@@ -30,7 +30,7 @@ Troubeshooting runbooks that relate to ARC installation problems
 
 This issue can come up for various reasons like leftovers from previous installations or not being able to access the K8s service's clusterIP associated with the admission webhook server (of ARC).
 
-```
+```text
 Internal error occurred: failed calling webhook "mutate.runnerdeployment.actions.summerwind.dev":
 Post "https://actions-runner-controller-webhook.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment?timeout=10s": context deadline exceeded
 ```
@@ -39,22 +39,24 @@ Post "https://actions-runner-controller-webhook.actions-runner-system.svc:443/mu
 
 First we will try the common solution of checking webhook leftovers from previous installations:
 
-1.  ```bash
-    kubectl get validatingwebhookconfiguration -A
-    kubectl get mutatingwebhookconfiguration -A
-    ```
-2.  If you see any webhooks related to actions-runner-controller, delete them:
+1. ```bash
+   kubectl get validatingwebhookconfiguration -A
+   kubectl get mutatingwebhookconfiguration -A
+   ```
+
+2. If you see any webhooks related to actions-runner-controller, delete them:
+
     ```bash
     kubectl delete mutatingwebhookconfiguration actions-runner-controller-mutating-webhook-configuration
     kubectl delete validatingwebhookconfiguration actions-runner-controller-validating-webhook-configuration
     ```
 
 If that didn't work then probably your K8s control-plane is somehow unable to access the K8s service's clusterIP associated with the admission webhook server:
+
 1. You're running apiserver as a binary and you didn't make service cluster IPs available to the host network. 
 2. You're running the apiserver in the pod but your pod network (i.e. CNI plugin installation and config) is not good so your pods(like kube-apiserver) in the K8s control-plane nodes can't access ARC's admission webhook server pod(s) in probably data-plane nodes.
 
-
-Another reason could be due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster: 
+Another reason could be due to GKEs firewall settings you may run into the following errors when trying to deploy runners on a private GKE cluster:
 
 To fix this, you may either:
 
@@ -93,7 +95,7 @@ To fix this, you may either:
 **Problem**
 
 ```json
-2020-11-12T22:17:30.693Z	ERROR	controller-runtime.controller	Reconciler error	
+2020-11-12T22:17:30.693Z ERROR controller-runtime.controller Reconciler error 
 {
   "controller": "runner",
   "request": "actions-runner-system/runner-deployment-dk7q8-dk5c9",
@@ -104,6 +106,7 @@ To fix this, you may either:
 **Solution**
 
 Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
+
 * `echo -n $TOKEN | base64`
 * Create the secret as described in the docs using the shell and documented flags
 
@@ -111,7 +114,7 @@ Your base64'ed PAT token has a new line at the end, it needs to be created witho
 
 **Problem**
 
-```
+```text
 Error: UPGRADE FAILED: failed to create resource: Internal error occurred: failed calling webhook "webhook.cert-manager.io": failed to call webhook: Post "https://cert-manager-webhook.cert-manager.svc:443/mutate?timeout=10s": x509: certificate signed by unknown authority
 ```
 
@@ -119,7 +122,7 @@ Apparently, it's failing while `helm` is creating one of resources defined in th
 
 You'd try to tail logs from the `cert-manager-cainjector` and see it's failing with an error like:
 
-```
+```text
 $ kubectl -n cert-manager logs cert-manager-cainjector-7cdbb9c945-g6bt4
 I0703 03:31:55.159339       1 start.go:91] "starting" version="v1.1.1" revision="3ac7418070e22c87fae4b22603a6b952f797ae96"
 I0703 03:31:55.615061       1 leaderelection.go:243] attempting to acquire leader lease  kube-system/cert-manager-cainjector-leader-election...
@@ -137,7 +140,7 @@ Your cluster is based on a new enough Kubernetes of version 1.22 or greater whic
 
 In many cases, it's not an option to downgrade Kubernetes. So, just upgrade `cert-manager` to a more recent version that does have have the support for the specific Kubernetes version you're using.
 
-See https://cert-manager.io/docs/installation/supported-releases/ for the list of available cert-manager versions.
+See <https://cert-manager.io/docs/installation/supported-releases/> for the list of available cert-manager versions.
 
 ## Operations
 
@@ -153,7 +156,7 @@ Sometimes either the runner kind (`kubectl get runners`) or it's underlying pod 
 
 Remove the finaliser from the relevent runner kind or pod
 
-```
+```text
 # Get all kind runners and remove the finalizer
 $ kubectl get runners --no-headers | awk {'print $1'} | xargs kubectl patch runner --type merge -p '{"metadata":{"finalizers":null}}'
 
@@ -195,7 +198,7 @@ spec:
 If you're running your action runners on a service mesh like Istio, you might
 have problems with runner configuration accompanied by logs like:
 
-```
+```text
 ....
 runner Starting Runner listener with startup type: service
 runner Started listener process
@@ -210,7 +213,7 @@ configuration script tries to communicate with the network.
 
 More broadly, there are many other circumstances where the runner pod coming up first can cause issues.
 
-**Solution**<br />
+**Solution**
 
 > Added originally to help users with older istio instances.
 > Newer Istio instances can use Istio's `holdApplicationUntilProxyStarts` attribute ([istio/istio#11130](https://github.com/istio/istio/issues/11130)) to avoid having to delay starting up the runner.
@@ -232,7 +235,7 @@ spec:
           value: "5"
 ```
 
-## Outgoing network action hangs indefinitely
+### Outgoing network action hangs indefinitely
 
 **Problem**
 
@@ -278,9 +281,9 @@ spec:
 ```
 
 You can read the discussion regarding this issue in
-(#1406)[https://github.com/actions/actions-runner-controller/issues/1046].
+[#1406](https://github.com/actions/actions-runner-controller/issues/1046).
 
-## Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns
+### Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns
 
 **Problem**
 
@@ -292,7 +295,7 @@ You very likely have some dangling workflow jobs stuck in `queued` or `in_progre
 
 Manually call [the "list workflow runs" API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository), and [remove the dangling workflow job(s)](https://docs.github.com/en/rest/actions/workflow-runs#delete-a-workflow-run).
 
-## Slow / failure to boot dind sidecar (default runner)
+### Slow / failure to boot dind sidecar (default runner)
 
 **Problem**
 
