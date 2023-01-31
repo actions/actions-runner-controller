@@ -35,6 +35,7 @@ type ActionsService interface {
 	GetRunnerGroupByName(ctx context.Context, runnerGroup string) (*RunnerGroup, error)
 	CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error)
 	UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error)
+	DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int) error
 
 	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*RunnerScaleSetSession, error)
 	DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error

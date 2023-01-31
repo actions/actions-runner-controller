@@ -379,3 +379,39 @@ func TestUpdateRunnerScaleSet(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestDeleteRunnerScaleSet(t *testing.T) {
+	ctx := context.Background()
+	auth := &actions.ActionsAuth{
+		Token: "token",
+	}
+
+	t.Run("Delete runner scale set", func(t *testing.T) {
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "DELETE", r.Method)
+			assert.Contains(t, r.URL.String(), "/_apis/runtime/runnerscalesets/10?api-version=6.0-preview")
+			w.WriteHeader(http.StatusNoContent)
+		}))
+
+		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		err = client.DeleteRunnerScaleSet(ctx, 10)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Delete calls with error", func(t *testing.T) {
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "DELETE", r.Method)
+			assert.Contains(t, r.URL.String(), "/_apis/runtime/runnerscalesets/10?api-version=6.0-preview")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"message": "test error"}`))
+		}))
+
+		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		err = client.DeleteRunnerScaleSet(ctx, 10)
+		assert.ErrorContains(t, err, "test error")
+	})
+}

@@ -368,5 +368,61 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
 		})
+
+		It("It should update RunnerScaleSet's runner group on service when it changes", func() {
+			updated := new(actionsv1alpha1.AutoscalingRunnerSet)
+			// Wait till the listener is created
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(actionsv1alpha1.AutoscalingListener))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.RunnerGroup = "testgroup2"
+			err := k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+
+			// Check if AutoScalingRunnerSet has the new runner group in its annotation
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+					if err != nil {
+						return "", err
+					}
+
+					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+						return "", nil
+					}
+
+					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
+
+			// delete the annotation and it should be re-added
+			patched = autoscalingRunnerSet.DeepCopy()
+			delete(patched.Annotations, runnerScaleSetRunnerGroupNameKey)
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+
+			// Check if AutoScalingRunnerSet still has the runner group in its annotation
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+					if err != nil {
+						return "", err
+					}
+
+					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+						return "", nil
+					}
+
+					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
+		})
 	})
 })

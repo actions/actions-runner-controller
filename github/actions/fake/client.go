@@ -17,6 +17,13 @@ func WithGetRunnerScaleSetResult(scaleSet *actions.RunnerScaleSet, err error) Op
 	}
 }
 
+func WithGetRunnerGroup(runnerGroup *actions.RunnerGroup, err error) Option {
+	return func(f *FakeClient) {
+		f.getRunnerGroupByNameResult.RunnerGroup = runnerGroup
+		f.getRunnerGroupByNameResult.err = err
+	}
+}
+
 func WithGetRunner(runner *actions.RunnerReference, err error) Option {
 	return func(f *FakeClient) {
 		f.getRunnerResult.RunnerReference = runner
@@ -40,7 +47,7 @@ var defaultUpdatedRunnerScaleSet = &actions.RunnerScaleSet{
 	Id:                 1,
 	Name:               "testset",
 	RunnerGroupId:      2,
-	RunnerGroupName:    "testgroup",
+	RunnerGroupName:    "testgroup2",
 	Labels:             []actions.Label{{Type: "test", Name: "test"}},
 	RunnerSetting:      actions.RunnerSetting{},
 	CreatedOn:          time.Now(),
@@ -121,6 +128,9 @@ type FakeClient struct {
 	}
 	updateRunnerScaleSetResult struct {
 		*actions.RunnerScaleSet
+		err error
+	}
+	deleteRunnerScaleSetResult struct {
 		err error
 	}
 	createMessageSessionResult struct {
@@ -209,6 +219,10 @@ func (f *FakeClient) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *a
 
 func (f *FakeClient) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int, runnerScaleSet *actions.RunnerScaleSet) (*actions.RunnerScaleSet, error) {
 	return f.updateRunnerScaleSetResult.RunnerScaleSet, f.updateRunnerScaleSetResult.err
+}
+
+func (f *FakeClient) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int) error {
+	return f.deleteRunnerScaleSetResult.err
 }
 
 func (f *FakeClient) CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error) {

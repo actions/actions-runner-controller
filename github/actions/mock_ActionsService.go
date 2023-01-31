@@ -111,6 +111,20 @@ func (_m *MockActionsService) DeleteMessageSession(ctx context.Context, runnerSc
 	return r0
 }
 
+// DeleteRunnerScaleSet provides a mock function with given fields: ctx, runnerScaleSetId
+func (_m *MockActionsService) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int) error {
+	ret := _m.Called(ctx, runnerScaleSetId)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int) error); ok {
+		r0 = rf(ctx, runnerScaleSetId)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GenerateJitRunnerConfig provides a mock function with given fields: ctx, jitRunnerSetting, scaleSetId
 func (_m *MockActionsService) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *RunnerScaleSetJitRunnerSetting, scaleSetId int) (*RunnerScaleSetJitRunnerConfig, error) {
 	ret := _m.Called(ctx, jitRunnerSetting, scaleSetId)
