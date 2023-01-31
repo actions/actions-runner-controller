@@ -1,25 +1,24 @@
 # Troubleshooting
 
-- [Troubleshooting](#troubleshooting)
-  - [Tools](#tools)
-  - [Installation](#installation)
-    - [InternalError when calling webhook: context deadline exceeded](#internalerror-when-calling-webhook-context-deadline-exceeded)
-    - [Invalid header field value](#invalid-header-field-value)
-    - [Helm chart install failure: certificate signed by unknown authority](#helm-chart-install-failure-certificate-signed-by-unknown-authority)
-  - [Operations](#operations)
-    - [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
-    - [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
-    - [Runner coming up before network available](#runner-coming-up-before-network-available)
-    - [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
-    - [Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns](#unable-to-scale-to-zero-with-totalnumberofqueuedandinprogressworkflowruns)
-    - [Slow / failure to boot dind sidecar (default runner)](#slow--failure-to-boot-dind-sidecar-default-runner)
+* [Tools](#tools)
+* [Installation](#installation)
+  * [InternalError when calling webhook: context deadline exceeded](#internalerror-when-calling-webhook-context-deadline-exceeded)
+  * [Invalid header field value](#invalid-header-field-value)
+  * [Helm chart install failure: certificate signed by unknown authority](#helm-chart-install-failure-certificate-signed-by-unknown-authority)
+* [Operations](#operations)
+  * [Stuck runner kind or backing pod](#stuck-runner-kind-or-backing-pod)
+  * [Delay in jobs being allocated to runners](#delay-in-jobs-being-allocated-to-runners)
+  * [Runner coming up before network available](#runner-coming-up-before-network-available)
+  * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
+  * [Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns](#unable-to-scale-to-zero-with-totalnumberofqueuedandinprogressworkflowruns)
+  * [Slow / failure to boot dind sidecar (default runner)](#slow--failure-to-boot-dind-sidecar-default-runner)
 
 ## Tools
 
 A list of tools which are helpful for troubleshooting
 
-- https://github.com/rewanthtammana/kubectl-fields Kubernetes resources hierarchy parsing tool
-- https://github.com/stern/stern Multi pod and container log tailing for Kubernetes
+* [Kubernetes resources hierarchy parsing tool `kubectl-fields`](https://github.com/rewanthtammana/kubectl-fields)
+* [Multi pod and container log tailing for Kubernetes `stern`](https://github.com/stern/stern)
 
 ## Installation
 
@@ -27,7 +26,7 @@ Troubeshooting runbooks that relate to ARC installation problems
 
 ### InternalError when calling webhook: context deadline exceeded
 
-****Problem****
+**Problem**
 
 This issue can come up for various reasons like leftovers from previous installations or not being able to access the K8s service's clusterIP associated with the admission webhook server (of ARC).
 
@@ -36,7 +35,7 @@ Internal error occurred: failed calling webhook "mutate.runnerdeployment.actions
 Post "https://actions-runner-controller-webhook.actions-runner-system.svc:443/mutate-actions-summerwind-dev-v1alpha1-runnerdeployment?timeout=10s": context deadline exceeded
 ```
 
-****Solution****
+**Solution**
 
 First we will try the common solution of checking webhook leftovers from previous installations:
 
@@ -108,8 +107,8 @@ To fix this, you may either:
 
 Your base64'ed PAT token has a new line at the end, it needs to be created without a `\n` added, either:
 
-- `echo -n $TOKEN | base64`
-- Create the secret as described in the docs using the shell and documented flags
+* `echo -n $TOKEN | base64`
+* Create the secret as described in the docs using the shell and documented flags
 
 ### Helm chart install failure: certificate signed by unknown authority
 
@@ -304,4 +303,4 @@ If you noticed that it takes several minutes for sidecar dind container to be cr
 
 **Solution**
 
-The solution is to switch to using faster storage, if you are experiencing this issue you are probably using hdd, switch to ssd fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some ssds.
+The solution is to switch to using faster storage, if you are experiencing this issue you are probably using hdd, switch to ssh fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some ssds.
