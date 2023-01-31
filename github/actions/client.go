@@ -567,16 +567,22 @@ func (c *Client) doSessionRequest(ctx context.Context, method, path string, requ
 }
 
 func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error) {
-	path := fmt.Sprintf("/%s/%d/acquirejobs", scaleSetEndpoint, runnerScaleSetId)
+	u := fmt.Sprintf("%s/%s/%d/acquirejobs?api-version=6.0-preview", c.ActionsServiceURL, scaleSetEndpoint, runnerScaleSetId)
 
 	body, err := json.Marshal(requestIds)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := c.NewActionsServiceRequest(ctx, http.MethodPost, path, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	resp, err := c.Do(req)
