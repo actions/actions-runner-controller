@@ -51,7 +51,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "auto-scaling-runner-set.githubsecret" -}}
+  {{- if kindIs "string" .Values.githubConfigSecret }}
+    {{- if not (empty .Values.githubConfigSecret) }}
+{{- .Values.githubConfigSecret }}
+    {{- else}}
+{{- fail "Values.githubConfigSecret is required for setting auth with GitHub server." }}
+    {{- end }}
+  {{- else }}
 {{- include "auto-scaling-runner-set.fullname" . }}-github-secret
+  {{- end }}
 {{- end }}
 
 {{- define "auto-scaling-runner-set.noPermissionServiceAccountName" -}}
