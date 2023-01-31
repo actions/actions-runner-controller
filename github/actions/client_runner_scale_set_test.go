@@ -393,7 +393,7 @@ func TestDeleteRunnerScaleSet(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.DeleteRunnerScaleSet(ctx, 10)
@@ -408,7 +408,7 @@ func TestDeleteRunnerScaleSet(t *testing.T) {
 			w.Write([]byte(`{"message": "test error"}`))
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.DeleteRunnerScaleSet(ctx, 10)
