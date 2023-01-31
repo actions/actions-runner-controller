@@ -85,7 +85,6 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 	}
 
 	actionsServiceClient, err := actions.NewClient(
-		ctx,
 		rc.ConfigureUrl,
 		creds,
 		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),

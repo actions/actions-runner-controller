@@ -17,9 +17,20 @@ import (
 // /actions/runner-registration endpoints will be handled by the provided
 // handler. The returned server is started and will be automatically closed
 // when the test ends.
-func newActionsServer(t *testing.T, handler http.Handler) *actionsServer {
-	var u string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func newActionsServer(t *testing.T, handler http.Handler, options ...actionsServerOption) *actionsServer {
+	s := httptest.NewServer(nil)
+	server := &actionsServer{
+		Server: s,
+	}
+	t.Cleanup(func() {
+		server.Close()
+	})
+
+	for _, option := range options {
+		option(server)
+	}
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// handle getRunnerRegistrationToken
 		if strings.HasSuffix(r.URL.Path, "/runners/registration-token") {
 			w.WriteHeader(http.StatusCreated)
@@ -29,39 +40,53 @@ func newActionsServer(t *testing.T, handler http.Handler) *actionsServer {
 
 		// handle getActionsServiceAdminConnection
 		if strings.HasSuffix(r.URL.Path, "/actions/runner-registration") {
-			claims := &jwt.RegisteredClaims{
-				IssuedAt:  jwt.NewNumericDate(time.Now().Add(-1 * time.Minute)),
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Minute)),
-				Issuer:    "123",
+			if server.token == "" {
+				server.token = defaultActionsToken(t)
 			}
 
-			token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-			privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(samplePrivateKey))
-			require.NoError(t, err)
-			tokenString, err := token.SignedString(privateKey)
-			require.NoError(t, err)
-			w.Write([]byte(`{"url":"` + u + `","token":"` + tokenString + `"}`))
+			w.Write([]byte(`{"url":"` + s.URL + `/tenant/123/","token":"` + server.token + `"}`))
 			return
 		}
 
 		handler.ServeHTTP(w, r)
-	}))
-
-	u = server.URL
-
-	t.Cleanup(func() {
-		server.Close()
 	})
 
-	return &actionsServer{server}
+	server.Config.Handler = h
+
+	return server
+}
+
+type actionsServerOption func(*actionsServer)
+
+func withActionsToken(token string) actionsServerOption {
+	return func(s *actionsServer) {
+		s.token = token
+	}
 }
 
 type actionsServer struct {
 	*httptest.Server
+
+	token string
 }
 
 func (s *actionsServer) configURLForOrg(org string) string {
 	return s.URL + "/" + org
+}
+
+func defaultActionsToken(t *testing.T) string {
+	claims := &jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-10 * time.Minute)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+		Issuer:    "123",
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(samplePrivateKey))
+	require.NoError(t, err)
+	tokenString, err := token.SignedString(privateKey)
+	require.NoError(t, err)
+	return tokenString
 }
 
 const samplePrivateKey = `-----BEGIN RSA PRIVATE KEY-----

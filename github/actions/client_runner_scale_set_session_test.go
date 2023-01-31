@@ -51,7 +51,7 @@ func TestCreateMessageSession(t *testing.T) {
 			w.Write(resp)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.CreateMessageSession(ctx, runnerScaleSet.Id, owner)
@@ -81,7 +81,7 @@ func TestCreateMessageSession(t *testing.T) {
 			w.Write(resp)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		_, err = client.CreateMessageSession(ctx, runnerScaleSet.Id, owner)
@@ -120,7 +120,6 @@ func TestCreateMessageSession(t *testing.T) {
 		wantRetries := retryMax + 1
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -160,7 +159,6 @@ func TestDeleteMessageSession(t *testing.T) {
 		wantRetries := retryMax + 1
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -177,7 +175,6 @@ func TestDeleteMessageSession(t *testing.T) {
 }
 
 func TestRefreshMessageSession(t *testing.T) {
-	ctx := context.Background()
 	auth := &actions.ActionsAuth{
 		Token: "token",
 	}
@@ -202,7 +199,6 @@ func TestRefreshMessageSession(t *testing.T) {
 		wantRetries := retryMax + 1
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
