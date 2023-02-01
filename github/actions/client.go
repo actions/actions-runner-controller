@@ -185,7 +185,7 @@ func (c *Client) Identifier() string {
 		)
 	}
 
-	return uuid.NewMD5(uuid.NameSpaceOID, []byte(identifier)).String()
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(identifier)).String()
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
