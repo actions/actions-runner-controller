@@ -29,6 +29,8 @@ curl -L https://github.com/actions/actions-runner-controller/releases/download/a
 kubectl replace -f crds/
 ```
 
+Note that in case you're going to create prometheus-operator `ServiceMonitor` resources via the chart, you'd need to deploy prometheus-operator-related CRDs as well.
+
 2. Upgrade the Helm release
 
 ```shell
