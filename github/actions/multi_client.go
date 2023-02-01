@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
-	"net/url"
 	"strconv"
 	"sync"
 
@@ -40,8 +39,7 @@ type ActionsAuth struct {
 }
 
 type ActionsClientKey struct {
-	ActionsURL string
-	Auth       ActionsAuth
+	Identifier string
 	Namespace  string
 }
 
@@ -64,11 +62,6 @@ func NewMultiClient(userAgent string, logger logr.Logger) MultiClient {
 func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string) (ActionsService, error) {
 	m.logger.Info("retrieve actions client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
-	parsedGitHubURL, err := url.Parse(githubConfigURL)
-	if err != nil {
-		return nil, err
-	}
-
 	if creds.Token == "" && creds.AppCreds == nil {
 		return nil, fmt.Errorf("no credentials provided. either a PAT or GitHub App credentials should be provided")
 	}
@@ -76,34 +69,6 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 	if creds.Token != "" && creds.AppCreds != nil {
 		return nil, fmt.Errorf("both PAT and GitHub App credentials provided. should only provide one")
 	}
-
-	key := ActionsClientKey{
-		ActionsURL: parsedGitHubURL.String(),
-		Namespace:  namespace,
-	}
-
-	if creds.AppCreds != nil {
-		key.Auth = ActionsAuth{
-			AppCreds: creds.AppCreds,
-		}
-	}
-
-	if creds.Token != "" {
-		key.Auth = ActionsAuth{
-			Token: creds.Token,
-		}
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	clientWrapper, has := m.clients[key]
-	if has {
-		m.logger.Info("using cache client", "githubConfigURL", githubConfigURL, "namespace", namespace)
-		return clientWrapper.client, nil
-	}
-
-	m.logger.Info("creating new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
 	client, err := NewClient(
 		githubConfigURL,
@@ -114,6 +79,22 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 	if err != nil {
 		return nil, err
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := ActionsClientKey{
+		Identifier: client.Identifier(),
+		Namespace:  namespace,
+	}
+
+	clientWrapper, has := m.clients[key]
+	if has {
+		m.logger.Info("using cache client", "githubConfigURL", githubConfigURL, "namespace", namespace)
+		return clientWrapper.client, nil
+	}
+
+	m.logger.Info("creating new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
 	m.clients[key] = &actionsClientWrapper{
 		mu:     sync.Mutex{},
