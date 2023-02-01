@@ -170,15 +170,15 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 // change warrants creating a new client. Any changes to Client that would
 // require a new client should be reflected here.
 func (c *Client) Identifier() string {
-	identifier := fmt.Sprintf("configURL:%s,", c.config.ConfigURL.String())
+	identifier := fmt.Sprintf("configURL:%q,", c.config.ConfigURL.String())
 
 	if c.creds.Token != "" {
-		identifier += fmt.Sprintf("token:%s", c.creds.Token)
+		identifier += fmt.Sprintf("token:%q", c.creds.Token)
 	}
 
 	if c.creds.AppCreds != nil {
 		identifier += fmt.Sprintf(
-			"appID:%d,installationID:%d,key:%s",
+			"appID:%q,installationID:%q,key:%q",
 			c.creds.AppCreds.AppID,
 			c.creds.AppCreds.AppInstallationID,
 			c.creds.AppCreds.AppPrivateKey,

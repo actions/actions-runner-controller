@@ -23,9 +23,7 @@ func TestMultiClientCaching(t *testing.T) {
 	client, err := NewClient(defaultConfigURL, defaultCreds)
 	require.NoError(t, err)
 
-	multiClient.clients[ActionsClientKey{
-		client.Identifier(), defaultNamespace,
-	}] = &actionsClientWrapper{client: client}
+	multiClient.clients[ActionsClientKey{client.Identifier(), defaultNamespace}] = client
 
 	// Verify that the client is cached
 	cachedClient, err := multiClient.GetClientFor(

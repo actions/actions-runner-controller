@@ -18,7 +18,7 @@ type MultiClient interface {
 type multiClient struct {
 	// To lock adding and removing of individual clients.
 	mu      sync.Mutex
-	clients map[ActionsClientKey]*actionsClientWrapper
+	clients map[ActionsClientKey]*Client
 
 	logger    logr.Logger
 	userAgent string
@@ -43,17 +43,10 @@ type ActionsClientKey struct {
 	Namespace  string
 }
 
-type actionsClientWrapper struct {
-	// To lock client usage when tokens are being refreshed.
-	mu sync.Mutex
-
-	client ActionsService
-}
-
 func NewMultiClient(userAgent string, logger logr.Logger) MultiClient {
 	return &multiClient{
 		mu:        sync.Mutex{},
-		clients:   make(map[ActionsClientKey]*actionsClientWrapper),
+		clients:   make(map[ActionsClientKey]*Client),
 		logger:    logger,
 		userAgent: userAgent,
 	}
@@ -88,18 +81,15 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 		Namespace:  namespace,
 	}
 
-	clientWrapper, has := m.clients[key]
+	cachedClient, has := m.clients[key]
 	if has {
 		m.logger.Info("using cache client", "githubConfigURL", githubConfigURL, "namespace", namespace)
-		return clientWrapper.client, nil
+		return cachedClient, nil
 	}
 
 	m.logger.Info("creating new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
-	m.clients[key] = &actionsClientWrapper{
-		mu:     sync.Mutex{},
-		client: client,
-	}
+	m.clients[key] = client
 
 	m.logger.Info("successfully created new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
