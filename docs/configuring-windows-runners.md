@@ -53,7 +53,24 @@ spec:
 
 > Note that you'd need to patch the below Dockerfile if you need a graceful termination.
 > See https://github.com/actions/actions-runner-controller/pull/1608/files#r917319574 for more information.
-
+  
+  
+I would like to propose in Dockerfile, instead of lines 68-69 (in the original file), to copy and run following script to grab the latest runner version (after line 77):
+  
+COPY get-latestrunnerversion.ps1 
+RUN ./get-latestrunnerversion.ps1 
+  
+Where the get-latestrunnerversion.ps1 script looks like this:  
+  
+$URI="https://api.github.com/repos/actions/runner/releases/latest"
+$Version=(Invoke-Webrequest $URI)
+$latest=($Version | ConvertFrom-Json).name
+$vnum=($latest).Substring(1)
+Invoke-WebRequest -Uri "https://github.com/actions/runner/releases/download/$latest/actions-runner-win-x64-$vnum.zip" -OutFile "actions-runner-win-x64-latest.zip"
+Expand-Archive -Path $PWD\actions-runner-win-x64-latest.zip -DestinationPath "$PWD" -Force
+Remove-Item -Path $PWD\actions-runner-win-x64-latest.zip -Force
+  
+  
 ```Dockerfile
 FROM mcr.microsoft.com/windows/servercore:ltsc2019
 
