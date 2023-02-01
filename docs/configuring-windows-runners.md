@@ -55,8 +55,14 @@ spec:
 > See https://github.com/actions/actions-runner-controller/pull/1608/files#r917319574 for more information.
   
   
-I would like to propose in Dockerfile, instead of lines 68-69 (in the original file), to copy and run following script to grab the latest runner version (after line 77):
-  
+I would like to propose in Dockerfile, instead of lines:
+
+RUN Invoke-WebRequest -Uri https://github.com/actions/runner/releases/download/v2.292.0/actions-runner-win-x64-2.292.0.zip -OutFile actions-runner-win-x64-2.292.0.zip
+RUN if((Get-FileHash -Path actions-runner-win-x64-2.292.0.zip -Algorithm SHA256).Hash.ToUpper() -ne 'f27dae1413263e43f7416d719e0baf338c8d80a366fed849ecf5fffcec1e941f'.ToUpper()){ throw 'Computed checksum did not match' }
+RUN Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory('actions-runner-win-x64-2.292.0.zip', $PWD)
+
+To add the following after the powershell installation step:
+
 COPY get-latestrunnerversion.ps1 
 RUN ./get-latestrunnerversion.ps1 
   
