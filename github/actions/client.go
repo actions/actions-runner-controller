@@ -165,6 +165,29 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	return ac, nil
 }
 
+// Identifier returns a string to help identify a client uniquely.
+// This is used for caching client instances and understanding when a config
+// change warrants creating a new client. Any changes to Client that would
+// require a new client should be reflected here.
+func (c *Client) Identifier() string {
+	identifier := fmt.Sprintf("configURL:%q,", c.config.ConfigURL.String())
+
+	if c.creds.Token != "" {
+		identifier += fmt.Sprintf("token:%q", c.creds.Token)
+	}
+
+	if c.creds.AppCreds != nil {
+		identifier += fmt.Sprintf(
+			"appID:%q,installationID:%q,key:%q",
+			c.creds.AppCreds.AppID,
+			c.creds.AppCreds.AppInstallationID,
+			c.creds.AppCreds.AppPrivateKey,
+		)
+	}
+
+	return uuid.NewMD5(uuid.NameSpaceOID, []byte(identifier)).String()
+}
+
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	resp, err := c.Client.Do(req)
 	if err != nil {

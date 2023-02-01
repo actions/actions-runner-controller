@@ -91,18 +91,19 @@ func TestGitHubConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("when given an invalid URL", func(t *testing.T) {})
-	invalidURLs := []string{
-		"https://github.com/",
-		"https://github.com",
-		"https://github.com/some/random/path",
-	}
+	t.Run("when given an invalid URL", func(t *testing.T) {
+		invalidURLs := []string{
+			"https://github.com/",
+			"https://github.com",
+			"https://github.com/some/random/path",
+		}
 
-	for _, u := range invalidURLs {
-		_, err := actions.ParseGitHubConfigFromURL(u)
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, actions.ErrInvalidGitHubConfigURL))
-	}
+		for _, u := range invalidURLs {
+			_, err := actions.ParseGitHubConfigFromURL(u)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, actions.ErrInvalidGitHubConfigURL))
+		}
+	})
 }
 
 func TestGitHubConfig_GitHubAPIURL(t *testing.T) {
