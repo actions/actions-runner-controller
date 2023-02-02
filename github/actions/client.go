@@ -3,6 +3,7 @@ package actions
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -185,7 +186,7 @@ func (c *Client) Identifier() string {
 		)
 	}
 
-	return uuid.NewMD5(uuid.NameSpaceOID, []byte(identifier)).String()
+	return uuid.NewHash(sha256.New(), uuid.NameSpaceOID, []byte(identifier), 6).String()
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
