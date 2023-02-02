@@ -204,6 +204,14 @@ They are handled in a different place and should not be included here
   {{- end }}
 {{- end }}
 
+{{- define "auto-scaling-runner-set.non-init-dind-externals-containers " -}}
+  {{- range $i, $container := .Values.template.spec.initContainers -}}
+    {{- if ne $container.name "init-dind-externals" -}}
+    - {{ toYaml . | nindent 2 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
 {{- define "auto-scaling-runner-set.dind-runner-container" -}}
 {{- range $i, $container := .Values.template.spec.containers -}}
   {{- if eq $container.name "runner" -}}
