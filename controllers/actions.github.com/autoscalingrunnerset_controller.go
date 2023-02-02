@@ -418,7 +418,6 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		logger.Info("autoscaling runner set does not have annotation describing scale set id. Skip deletion", "err", err.Error())
 		return nil
 	}
-	fmt.Println("Well, that is wierd")
 
 	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
 	if err != nil {
