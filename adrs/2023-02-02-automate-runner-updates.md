@@ -15,8 +15,13 @@ version is updated (and this is currently done manually).
 ## Decision
 
 We can have another workflow running on a cadence (hourly seems sensible) and checking for new runner
-releases, creating a PR with the updated version if there is one. Once that PR
-is merged, the existing workflow will pick things up.
+releases, creating a PR updating `RUNNER_VERSION` in:
+- `.github/workflows/release-runners.yaml`
+- `Makefile`
+- `runner/Makefile`
+- `test/e2e/e2e_test.go`
+
+Once that PR is merged, the existing workflow will pick things up.
 
 ## Consequences
 
