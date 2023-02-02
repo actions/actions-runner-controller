@@ -31,6 +31,13 @@ func WithGetRunner(runner *actions.RunnerReference, err error) Option {
 	}
 }
 
+func WithCreateRunnerScaleSet(scaleSet *actions.RunnerScaleSet, err error) Option {
+	return func(f *FakeClient) {
+		f.createRunnerScaleSetResult.RunnerScaleSet = scaleSet
+		f.createRunnerScaleSetResult.err = err
+	}
+}
+
 var defaultRunnerScaleSet = &actions.RunnerScaleSet{
 	Id:                 1,
 	Name:               "testset",

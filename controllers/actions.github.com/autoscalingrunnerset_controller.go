@@ -415,9 +415,10 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		// If the annotation is not set correctly, or if it does not exist, we are going to get stuck in a loop trying to parse the scale set id.
 		// If the configuration is invalid (secret does not exist for example), we never get to the point to create runner set. But then, manual cleanup
 		// would get stuck finalizing the resource trying to parse annotation indefinitely
-		logger.Info("autoscaling runner set does not have annotation describing scale set id. Skip deletion")
+		logger.Info("autoscaling runner set does not have annotation describing scale set id. Skip deletion", "err", err.Error())
 		return nil
 	}
+	fmt.Println("Well, that is wierd")
 
 	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
 	if err != nil {
