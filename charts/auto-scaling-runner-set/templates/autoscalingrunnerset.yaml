@@ -62,10 +62,10 @@ spec:
         {{- include "auto-scaling-runner-set.dind-init-container" . | nindent 8 }}
         {{- end }}
         {{- with .Values.template.spec.initContainers }}
-      {{- toYaml . | nindent 8 }}
+      {{- toYaml . | nindent 6 }}
         {{- end }}
       {{- end }}
-      containers: 
+      containers:
       {{- if eq .Values.containerMode.type "dind" }}
       - name: runner
         {{- include "auto-scaling-runner-set.dind-runner-container" . | nindent 8 }}
@@ -80,7 +80,7 @@ spec:
       {{ .Values.template.spec.containers | toYaml | nindent 6 }}
       {{- end }}
       {{- if or .Values.template.spec.volumes (eq .Values.containerMode.type "dind") (eq .Values.containerMode.type "kubernetes") }}
-      volumes: 
+      volumes:
         {{- if eq .Values.containerMode.type "dind" }}
           {{- include "auto-scaling-runner-set.dind-volume" . | nindent 6 }}
           {{- include "auto-scaling-runner-set.dind-work-volume" . | nindent 6 }}

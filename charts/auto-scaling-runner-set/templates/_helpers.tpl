@@ -92,6 +92,25 @@ volumeMounts:
 {{- end }}
 
 {{- define "auto-scaling-runner-set.dind-container" -}}
+{{- $specified := false }}
+{{- range $container := .Values.template.spec.containers }}
+{{- /*
+If dind container is specified, use its definition instead of the default one
+*/ -}}
+  {{- if eq $container.name "dind" }}
+  {{- $specified = true }}
+    {{- range $key, $val := $container }}
+    {{- if ne $key "name" }}
+    {{- if or (kindIs "int" $val) (kindIs "float64" $val) (kindIs "string" $val) (kindIs "bool" $val) -}}
+{{ $key }}: {{ $val }}
+    {{- else }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if not $specified }}
 image: docker:dind
 securityContext:
   privileged: true
@@ -102,6 +121,7 @@ volumeMounts:
     mountPath: /certs/client
   - name: dind-externals
     mountPath: /actions-runner/externals
+{{- end }}
 {{- end }}
 
 {{- define "auto-scaling-runner-set.dind-volume" -}}
@@ -166,14 +186,14 @@ volumeMounts:
 {{- end }}
 
 {{- define "auto-scaling-runner-set.non-runner-containers" -}}
+{{- $mode := .Values.containerMode.type -}}
   {{- range $i, $container := .Values.template.spec.containers -}}
-    {{- if ne $container.name "runner" -}}
-- name: {{ $container.name }}
-      {{- range $key, $val := $container }}
-        {{- if ne $key "name" }}
-  {{ $key }}: {{ $val }}
-        {{- end }}
-      {{- end }}
+{{- /*
+Skip runner container and dind container in containerMode.type == "dind"
+They are handled in a different place and should not be included here
+*/ -}}
+    {{- if and (ne $container.name "runner") (or (ne $mode "dind") (ne $container.name "dind")) -}}
+- {{ $container | toYaml | nindent 2}}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -183,7 +203,12 @@ volumeMounts:
   {{- if eq $container.name "runner" -}}
     {{- range $key, $val := $container }}
       {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
+
+{{- if or (kindIs "int" $val) (kindIs "float64" $val) (kindIs "string" $val) (kindIs "bool" $val) }}
 {{ $key }}: {{ $val }}
+{{- else }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
+{{- end }}
       {{- end }}
     {{- end }}
     {{- $setDockerHost := 1 }}
