@@ -5,7 +5,7 @@ name: Update runners
 on:
   schedule:
     # run hourly
-    - cron: "0 * * * *"
+    - cron: "0 9 * * *"
   workflow_dispatch:
 
 jobs:
@@ -60,10 +60,10 @@ jobs:
           result=$(gh pr list --search "$PR_NAME" --json number --jq ".[].number" --limit 1)
           if [ -z "$result" ]
           then
-          echo "No existing PRs found, setting output with pr_name=$PR_NAME"
-          echo pr_name=$PR_NAME >> $GITHUB_OUTPUT
+            echo "No existing PRs found, setting output with pr_name=$PR_NAME"
+            echo pr_name=$PR_NAME >> $GITHUB_OUTPUT
           else
-          echo "Found a PR with title '$PR_NAME' already existing: ${{ github.server_url }}/${{ github.repository }}/pull/$result"
+            echo "Found a PR with title '$PR_NAME' already existing: ${{ github.server_url }}/${{ github.repository }}/pull/$result"
           fi
 
   # update_version updates runner version in the files listed below, commits
