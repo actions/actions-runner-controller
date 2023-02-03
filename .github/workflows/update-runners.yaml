@@ -4,7 +4,7 @@ name: Update runners
 
 on:
   schedule:
-    # run hourly
+    # run daily
     - cron: "0 9 * * *"
   workflow_dispatch:
 
