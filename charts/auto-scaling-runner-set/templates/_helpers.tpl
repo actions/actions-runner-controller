@@ -107,8 +107,8 @@ If dind container is specified, use its definition instead of the default one
 {{ $key }}: {{ $val | toYaml | nindent 2 }}
     {{- end }}
     {{- end }}
-    {{- end }}
   {{- end }}
+{{- end }}
 {{- end }}
 {{- if not $specified }}
 image: docker:dind
@@ -178,8 +178,14 @@ volumeMounts:
 - name: {{ $volume.name }}
       {{- range $key, $val := $volume }}
         {{- if ne $key "name" }}
+        {{- if or (kindIs "int" $volume) (kindIs "float64" $volume) (kindIs "string" $volume) (kindIs "bool" $volume) -}}
   {{ $key }}: {{ $val }}
+        {{- else if not $val }}
+  {{ $key }}: {{ $val | toYaml }}
+        {{- else }}
+  {{ $key }}: {{ $val | toYaml | nindent 2 }}
         {{- end }}
+    {{- end }}
       {{- end }}
     {{- end }}
   {{- end }}

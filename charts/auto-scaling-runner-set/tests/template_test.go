@@ -599,6 +599,96 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_UseCustomDinD(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	dindTemplatePath, err := filepath.Abs("../tests/dind_template_value.yaml")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":                 "https://github.com/actions",
+			"githubConfigSecret.github_token": "gh_token12345",
+			"containerMode.type":              "dind",
+		},
+		ValuesFiles:    []string{dindTemplatePath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, namespaceName, ars.Namespace)
+	assert.Equal(t, "test-runners", ars.Name)
+
+	assert.Equal(t, "auto-scaling-runner-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "test-runners-auto-scaling-runner-set-github-secret", ars.Spec.GitHubConfigSecret)
+
+	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
+
+	assert.Nil(t, ars.Spec.MinRunners, "MinRunners should be nil")
+	assert.Nil(t, ars.Spec.MaxRunners, "MaxRunners should be nil")
+	assert.Nil(t, ars.Spec.Proxy, "Proxy should be nil")
+	assert.Nil(t, ars.Spec.GitHubServerTLS, "GitHubServerTLS should be nil")
+
+	assert.NotNil(t, ars.Spec.Template.Spec, "Template.Spec should not be nil")
+
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 2, "Template.Spec should have 2 init containers")
+
+	// default dind init container
+	initContainer := ars.Spec.Template.Spec.InitContainers[0]
+	assert.Equal(t, "init-dind-externals", initContainer.Name)
+	assert.Equal(t, "ghcr.io/user/actions-runner-dind:latest", initContainer.Image) // taken from runner image
+	assert.Equal(t, "cp", initContainer.Command[0])
+	assert.Equal(t, "-r -v /actions-runner/externals/. /actions-runner/tmpDir/", strings.Join(initContainer.Args, " "))
+
+	// injected dind init container
+	initContainer = ars.Spec.Template.Spec.InitContainers[1]
+	assert.Equal(t, "initExternalsInternalVolume", initContainer.Name)
+	assert.Equal(t, "ghcr.io/user2/dind:latest", initContainer.Image)
+	assert.Equal(t, "cp", initContainer.Command[0])
+	assert.Equal(t, "-r -v /runnertmp/externals/. /runnertmp/tmpDir", strings.Join(initContainer.Command[1:], " "))
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 3, "Template.Spec should have 3 containers")
+
+	var (
+		foundTest   bool
+		foundRunner bool
+		foundDind   bool
+	)
+	for _, c := range ars.Spec.Template.Spec.Containers {
+		switch c.Name {
+		case "test":
+			foundTest = true
+			assert.Equal(t, "nginx:latest", c.Image)
+			assert.Equal(t, "echo 'test'", strings.Join(c.Command, " "))
+		case "runner":
+			foundRunner = true
+			assert.Equal(t, "ghcr.io/user/actions-runner-dind:latest", c.Image)
+			assert.Equal(t, "entrypoint-dind.sh", c.Command[0])
+		case "dind":
+			foundDind = true
+			assert.Equal(t, "ghcr.io/user/actions-runner-dind:latest", c.Image)
+			assert.NotEmpty(t, c.SecurityContext)
+			assert.NotEmpty(t, c.SecurityContext.Privileged)
+			assert.True(t, *c.SecurityContext.Privileged)
+		}
+	}
+	assert.True(t, foundTest)
+	assert.True(t, foundRunner)
+	assert.True(t, foundDind)
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T) {
 	t.Parallel()
 

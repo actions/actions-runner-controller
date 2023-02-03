@@ -1,0 +1,49 @@
+template:
+  spec:
+    initContainers:
+    - name: initExternalsInternalVolume
+      image: ghcr.io/user2/dind:latest
+      command: ["cp", "-r", "-v", "/runnertmp/externals/.", "/runnertmp/tmpDir"]
+      volumeMounts:
+        - name: externalsInternal
+          mountPath: "/runnertmp/tmpDir"
+    containers:
+    - name: test
+      image: nginx:latest
+      command: [ "echo", "'test'"]
+    - name: runner
+      image: ghcr.io/user/actions-runner-dind:latest
+      command: ["entrypoint-dind.sh"]
+      env:
+        - name: DOCKER_HOST
+          value: tcp://localhost:2376
+        - name: DOCKER_TLS_VERIFY
+          value: "1"
+        - name: DOCKER_CERT_PATH
+          value: /certs/client
+      volumeMounts:
+        - name: workingDirectoryInternal
+          mountPath: /runnertmp/_work
+        - name: dinDInternal
+          mountPath: /certs/client
+          readOnly: true
+    - name: dind
+      image: ghcr.io/user/actions-runner-dind:latest
+      imagePullSecrets:
+      - name: ghcr-beirutorg
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - mountPath: /certs/client
+          name: dinDInternal
+        - mountPath: /runnertmp/_work
+          name: workingDirectoryInternal
+        - mountPath: /runnertmp/externals
+          name: externalsInternal
+    volumes:
+    - name: dinDInternal
+      emptyDir: {}
+    - name: workingDirectoryInternal
+      emptyDir: {}
+    - name: externalsInternal
+      emptyDir: {}
