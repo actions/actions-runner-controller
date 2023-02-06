@@ -157,8 +157,8 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 
 		scale.log.V(2).Info("Adding capacity reservation", "amount", amount)
 
+		now := time.Now()
 		if amount > 0 {
-			now := time.Now()
 			copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
 				EffectiveTime:  metav1.Time{Time: now},
 				ExpirationTime: metav1.Time{Time: now.Add(scale.trigger.Duration.Duration)},
@@ -177,6 +177,14 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 				} else {
 					reservations = append(reservations, r)
 				}
+			}
+
+			// Update the latest CapacityReservation time to now to trigger reconcile
+			// Without this, we might not scale up after an ephemeral runner has been deleted
+			// until a new scale up, all runners finish, or after DefaultRunnerPodRecreationDelayAfterWebhookScale
+			if len(reservations) > 0 {
+				reservations[len(reservations)-1].EffectiveTime = metav1.Time{Time: now}
+				reservations[len(reservations)-1].ExpirationTime = metav1.Time{Time: now.Add(scale.trigger.Duration.Duration)}
 			}
 
 			copy.Spec.CapacityReservations = reservations
