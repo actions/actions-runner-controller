@@ -59,12 +59,8 @@ type EphemeralRunnerReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=create;delete;get
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get
+// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=create;get;list;watch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

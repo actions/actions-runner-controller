@@ -68,8 +68,6 @@ type AutoscalingRunnerSetReconciler struct {
 	resourceBuilder resourceBuilder
 }
 
-// +kubebuilder:rbac:groups=core,resources=namespaces;pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=namespaces/status;pods/status,verbs=get
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalingrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalingrunnersets/finalizers,verbs=update
