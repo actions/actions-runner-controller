@@ -243,6 +243,13 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	switch {
 	case err == nil:
 		if pod.ObjectMeta.DeletionTimestamp.IsZero() {
+			if pod.Status.Phase == corev1.PodPending && ephemeralRunner.Status.RunnerId > 0 {
+				// In case kubelet could not pull the image, it will have an exponential back-off.
+				// If someone manually tries to delete the runner, it will not get deleted from the service.
+				if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+					return false, fmt.Errorf("failed to remove the runner from service: %v", err)
+				}
+			}
 			log.Info("Deleting the runner pod")
 			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 				return false, fmt.Errorf("failed to delete pod: %v", err)
