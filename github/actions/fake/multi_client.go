@@ -34,10 +34,10 @@ func NewMultiClient(opts ...MultiClientOption) actions.MultiClient {
 	return f
 }
 
-func (f *fakeMultiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds actions.ActionsAuth, namespace string) (actions.ActionsService, error) {
+func (f *fakeMultiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds actions.ActionsAuth, namespace string, options ...actions.ClientOption) (actions.ActionsService, error) {
 	return f.defaultClient, f.defaultErr
 }
 
-func (f *fakeMultiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData actions.KubernetesSecretData) (actions.ActionsService, error) {
+func (f *fakeMultiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData actions.KubernetesSecretData, options ...actions.ClientOption) (actions.ActionsService, error) {
 	return f.defaultClient, f.defaultErr
 }

@@ -49,6 +49,32 @@ func TestMultiClientCaching(t *testing.T) {
 	assert.Len(t, multiClient.clients, 2)
 }
 
+func TestMultiClientOptions(t *testing.T) {
+	logger := logr.Discard()
+	ctx := context.Background()
+
+	defaultNamespace := "default"
+	defaultConfigURL := "https://github.com/org/repo"
+	defaultCreds := &ActionsAuth{
+		Token: "token",
+	}
+
+	multiClient := NewMultiClient("test-user-agent", logger)
+	service, err := multiClient.GetClientFor(
+		ctx,
+		defaultConfigURL,
+		*defaultCreds,
+		defaultNamespace,
+		WithUserAgent("test-option"),
+	)
+	require.NoError(t, err)
+
+	client := service.(*Client)
+	req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "test-option", req.Header.Get("User-Agent"))
+}
+
 func TestCreateJWT(t *testing.T) {
 	key := `-----BEGIN RSA PRIVATE KEY-----
 MIICWgIBAAKBgHXfRT9cv9UY9fAAD4+1RshpfSSZe277urfEmPfX3/Og9zJYRk//

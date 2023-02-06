@@ -11,8 +11,8 @@ import (
 )
 
 type MultiClient interface {
-	GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string) (ActionsService, error)
-	GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData) (ActionsService, error)
+	GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string, options ...ClientOption) (ActionsService, error)
+	GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData, options ...ClientOption) (ActionsService, error)
 }
 
 type multiClient struct {
@@ -52,7 +52,7 @@ func NewMultiClient(userAgent string, logger logr.Logger) MultiClient {
 	}
 }
 
-func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string) (ActionsService, error) {
+func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string, options ...ClientOption) (ActionsService, error) {
 	m.logger.Info("retrieve actions client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
 	if creds.Token == "" && creds.AppCreds == nil {
@@ -66,8 +66,10 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 	client, err := NewClient(
 		githubConfigURL,
 		&creds,
-		WithUserAgent(m.userAgent),
-		WithLogger(m.logger),
+		append([]ClientOption{
+			WithUserAgent(m.userAgent),
+			WithLogger(m.logger),
+		}, options...)...,
 	)
 	if err != nil {
 		return nil, err
@@ -98,7 +100,7 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 
 type KubernetesSecretData map[string][]byte
 
-func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData) (ActionsService, error) {
+func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData, options ...ClientOption) (ActionsService, error) {
 	if len(secretData) == 0 {
 		return nil, fmt.Errorf("must provide secret data with either PAT or GitHub App Auth")
 	}
