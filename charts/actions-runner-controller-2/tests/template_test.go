@@ -162,7 +162,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 
 	assert.Empty(t, managerRole.Namespace, "ClusterRole should not have a namespace")
 	assert.Equal(t, "test-arc-actions-runner-controller-2-manager-role", managerRole.Name)
-	assert.Equal(t, 25, len(managerRole.Rules))
+	assert.Equal(t, 17, len(managerRole.Rules))
 }
 
 func TestTemplate_ManagerRoleBinding(t *testing.T) {
