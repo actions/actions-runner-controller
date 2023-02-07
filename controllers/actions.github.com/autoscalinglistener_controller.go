@@ -73,30 +73,31 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	if !autoscalingListener.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
-			log.Info("Deleting resources")
-			done, err := r.cleanupResources(ctx, autoscalingListener, log)
-			if err != nil {
-				log.Error(err, "Failed to cleanup resources after deletion")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for resources to be deleted before removing finalizer")
-				return ctrl.Result{}, nil
-			}
-
-			log.Info("Removing finalizer")
-			err = patch(ctx, r.Client, autoscalingListener, func(obj *v1alpha1.AutoscalingListener) {
-				controllerutil.RemoveFinalizer(obj, autoscalingListenerFinalizerName)
-			})
-			if err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to remove finalizer")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Successfully removed finalizer after cleanup")
+		if !controllerutil.ContainsFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
+			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil
+
+		log.Info("Deleting resources")
+		done, err := r.cleanupResources(ctx, autoscalingListener, log)
+		if err != nil {
+			log.Error(err, "Failed to cleanup resources after deletion")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for resources to be deleted before removing finalizer")
+			return ctrl.Result{}, nil
+		}
+
+		log.Info("Removing finalizer")
+		err = patch(ctx, r.Client, autoscalingListener, func(obj *v1alpha1.AutoscalingListener) {
+			controllerutil.RemoveFinalizer(obj, autoscalingListenerFinalizerName)
+		})
+		if err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully removed finalizer after cleanup")
 	}
 
 	if !controllerutil.ContainsFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
