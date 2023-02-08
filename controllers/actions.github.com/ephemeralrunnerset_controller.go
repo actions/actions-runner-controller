@@ -81,29 +81,30 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(ephemeralRunnerSet, ephemeralRunnerSetFinalizerName) {
-			log.Info("Deleting resources")
-			done, err := r.cleanUpEphemeralRunners(ctx, ephemeralRunnerSet, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up EphemeralRunners")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for resources to be deleted")
-				return ctrl.Result{}, nil
-			}
-
-			log.Info("Removing finalizer")
-			if err := patch(ctx, r.Client, ephemeralRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
-				controllerutil.RemoveFinalizer(obj, ephemeralRunnerSetFinalizerName)
-			}); err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Successfully removed finalizer after cleanup")
+		if !controllerutil.ContainsFinalizer(ephemeralRunnerSet, ephemeralRunnerSetFinalizerName) {
 			return ctrl.Result{}, nil
 		}
+
+		log.Info("Deleting resources")
+		done, err := r.cleanUpEphemeralRunners(ctx, ephemeralRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunners")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for resources to be deleted")
+			return ctrl.Result{}, nil
+		}
+
+		log.Info("Removing finalizer")
+		if err := patch(ctx, r.Client, ephemeralRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
+			controllerutil.RemoveFinalizer(obj, ephemeralRunnerSetFinalizerName)
+		}); err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully removed finalizer after cleanup")
 		return ctrl.Result{}, nil
 	}
 

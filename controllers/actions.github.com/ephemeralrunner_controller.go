@@ -76,40 +76,41 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if !ephemeralRunner.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
-			log.Info("Finalizing ephemeral runner")
-			done, err := r.cleanupResources(ctx, ephemeralRunner, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up ephemeral runner owned resources")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for ephemeral runner owned resources to be deleted")
-				return ctrl.Result{}, nil
-			}
-
-			done, err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up container hooks resources")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for container hooks resources to be deleted")
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-			}
-
-			log.Info("Removing finalizer")
-			err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-				controllerutil.RemoveFinalizer(obj, ephemeralRunnerFinalizerName)
-			})
-			if err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to update ephemeral runner without the finalizer")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Successfully removed finalizer after cleanup")
+		if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
 			return ctrl.Result{}, nil
 		}
+
+		log.Info("Finalizing ephemeral runner")
+		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up ephemeral runner owned resources")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for ephemeral runner owned resources to be deleted")
+			return ctrl.Result{}, nil
+		}
+
+		done, err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up container hooks resources")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for container hooks resources to be deleted")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
+		log.Info("Removing finalizer")
+		err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+			controllerutil.RemoveFinalizer(obj, ephemeralRunnerFinalizerName)
+		})
+		if err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to update ephemeral runner without the finalizer")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully removed finalizer after cleanup")
 		return ctrl.Result{}, nil
 	}
 

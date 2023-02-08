@@ -86,48 +86,49 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	if !autoscalingRunnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
-			log.Info("Deleting resources")
-			done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up listener")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				// we are going to get notified anyway to proceed with rest of the
-				// cleanup. No need to re-queue
-				log.Info("Waiting for listener to be deleted")
-				return ctrl.Result{}, nil
-			}
-
-			done, err = r.cleanupEphemeralRunnerSets(ctx, autoscalingRunnerSet, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up ephemeral runner sets")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for ephemeral runner sets to be deleted")
-				return ctrl.Result{}, nil
-			}
-
-			err = r.deleteRunnerScaleSet(ctx, autoscalingRunnerSet, log)
-			if err != nil {
-				log.Error(err, "Failed to delete runner scale set")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Removing finalizer")
-			err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-				controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetFinalizerName)
-			})
-			if err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to update autoscaling runner set without finalizer")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Successfully removed finalizer after cleanup")
+		if !controllerutil.ContainsFinalizer(autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil
+
+		log.Info("Deleting resources")
+		done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up listener")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			// we are going to get notified anyway to proceed with rest of the
+			// cleanup. No need to re-queue
+			log.Info("Waiting for listener to be deleted")
+			return ctrl.Result{}, nil
+		}
+
+		done, err = r.cleanupEphemeralRunnerSets(ctx, autoscalingRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up ephemeral runner sets")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for ephemeral runner sets to be deleted")
+			return ctrl.Result{}, nil
+		}
+
+		err = r.deleteRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to delete runner scale set")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Removing finalizer")
+		err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetFinalizerName)
+		})
+		if err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to update autoscaling runner set without finalizer")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully removed finalizer after cleanup")
 	}
 
 	if !controllerutil.ContainsFinalizer(autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
