@@ -43,7 +43,8 @@ const (
 	// It represents the name of the container running the self-hosted runner image.
 	EphemeralRunnerContainerName = "runner"
 
-	ephemeralRunnerFinalizerName = "ephemeralrunner.actions.github.com/finalizer"
+	ephemeralRunnerFinalizerName        = "ephemeralrunner.actions.github.com/finalizer"
+	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/actions"
 )
 
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
@@ -80,6 +81,40 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, nil
 		}
 
+		if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+			if ephemeralRunner.Status.Phase == corev1.PodSucceeded {
+				// deleted by the runner set, we can just remove finalizer without API calls
+				err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+					controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+				})
+				if err != nil {
+					return ctrl.Result{}, nil
+				}
+				return ctrl.Result{}, err
+			}
+
+			err := r.deleteRunnerFromService(ctx, ephemeralRunner, log)
+			if err == nil { // if NO error
+				err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+					controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+				})
+				if err != nil {
+					return ctrl.Result{}, nil
+				}
+				return ctrl.Result{}, err
+			}
+
+			actionsError := &actions.ActionsError{}
+			if errors.As(err, &actionsError) &&
+				actionsError.StatusCode == http.StatusBadRequest &&
+				strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
+				log.Info("Runner is still running the job. Re-queue in 30 seconds")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
+			log.Error(err, "Failed finalize deleting runner from the service")
+			return ctrl.Result{}, err
+		}
+
 		log.Info("Finalizing ephemeral runner")
 		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
 		if err != nil {
@@ -112,6 +147,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		log.Info("Successfully removed finalizer after cleanup")
 		return ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+		log.Info("Adding actions finalizer")
+		err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+			controllerutil.AddFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+		})
+		if err != nil {
+			log.Error(err, "Failed to update with finalizer set")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully added actions finalizer")
 	}
 
 	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
@@ -243,13 +291,6 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	switch {
 	case err == nil:
 		if pod.ObjectMeta.DeletionTimestamp.IsZero() {
-			if pod.Status.Phase == corev1.PodPending && ephemeralRunner.Status.RunnerId > 0 {
-				// In case kubelet could not pull the image, it will have an exponential back-off.
-				// If someone manually tries to delete the runner, it will not get deleted from the service.
-				if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
-					return false, fmt.Errorf("failed to remove the runner from service: %v", err)
-				}
-			}
 			log.Info("Deleting the runner pod")
 			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 				return false, fmt.Errorf("failed to delete pod: %v", err)
@@ -621,7 +662,7 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 	log.Info("Removing runner from the service", "runnerId", ephemeralRunner.Status.RunnerId)
 	err = client.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId))
 	if err != nil {
-		return fmt.Errorf("failed to remove runner from the service: %v", err)
+		return fmt.Errorf("failed to remove runner from the service: %w", err)
 	}
 
 	log.Info("Removed runner from the service", "runnerId", ephemeralRunner.Status.RunnerId)
