@@ -1,7 +1,7 @@
 # ADR 0008: Pick the right runner to scale down
 **Date**: 2022-12-27
 
-**Status**: In Progress
+**Status**: Done
 
 ## Context
 

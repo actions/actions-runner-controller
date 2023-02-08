@@ -1,7 +1,7 @@
 # ADR 0004: Technical detail about actions-runner-controller repository transfer
 **Date**: 2022-11-04
 
-**Status**: In Progress
+**Status**: Done
 
 # Context
 

@@ -1,7 +1,7 @@
 # ADR 0001: Produce the runner image for the scaleset client
 **Date**: 2022-10-17
 
-**Status**: In Progress
+**Status**: Done
 
 # Context
 
