@@ -55,6 +55,12 @@ spec:
                 githubConfigUrl:
                   description: Required
                   type: string
+                githubServerTLS:
+                  properties:
+                    certConfigMapRef:
+                      description: Required
+                      type: string
+                  type: object
                 image:
                   description: Required
                   type: string

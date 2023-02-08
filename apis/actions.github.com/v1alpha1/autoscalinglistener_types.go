@@ -57,6 +57,9 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
+
+	// +optional
+	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener

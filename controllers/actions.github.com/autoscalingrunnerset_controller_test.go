@@ -792,6 +792,7 @@ var _ = Describe("Test Client optional configuration", func() {
 		autoscalingNS := new(corev1.Namespace)
 		configSecret := new(corev1.Secret)
 		rootCAConfigMap := new(corev1.ConfigMap)
+		var mgr ctrl.Manager
 
 		BeforeEach(func() {
 			ctx, cancel = context.WithCancel(context.TODO())
@@ -835,21 +836,10 @@ var _ = Describe("Test Client optional configuration", func() {
 			err = k8sClient.Create(ctx, rootCAConfigMap)
 			Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
-			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			mgr, err = ctrl.NewManager(cfg, ctrl.Options{
 				Namespace: autoscalingNS.Name,
 			})
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
-
-			controller := &AutoscalingRunnerSetReconciler{
-				Client:                             mgr.GetClient(),
-				Scheme:                             mgr.GetScheme(),
-				Log:                                logf.Log,
-				ControllerNamespace:                autoscalingNS.Name,
-				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-				ActionsClient:                      actions.NewMultiClient("test", logr.Discard()),
-			}
-			err = controller.SetupWithManager(mgr)
-			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 			go func() {
 				defer GinkgoRecover()
@@ -867,6 +857,17 @@ var _ = Describe("Test Client optional configuration", func() {
 		})
 
 		It("should be able to make requests to a server using root CAs", func() {
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      actions.NewMultiClient("test", logr.Discard()),
+			}
+			err := controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
 			certsFolder := filepath.Join(
 				"../../",
 				"github",
@@ -927,6 +928,76 @@ var _ = Describe("Test Client optional configuration", func() {
 				autoscalingRunnerSetTestTimeout,
 				1*time.Nanosecond,
 			).Should(BeTrue(), "server was not called")
+		})
+
+		It("it creates a listener referencing the right configmap for TLS", func() {
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      fake.NewMultiClient(),
+			}
+			err := controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+						RootCAsConfigMapRef: rootCAConfigMap.Name,
+					},
+					MaxRunners:  &max,
+					MinRunners:  &min,
+					RunnerGroup: "testgroup",
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func() (string, error) {
+					listener := new(v1alpha1.AutoscalingListener)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerName(autoscalingRunnerSet),
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						listener,
+					)
+					if err != nil {
+						return "", err
+					}
+
+					if listener.Spec.GitHubServerTLS == nil {
+						return "", nil
+					}
+
+					return listener.Spec.GitHubServerTLS.RootCAsConfigMapRef, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
 		})
 	})
 })
