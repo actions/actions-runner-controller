@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/github/actions/testserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,9 +96,9 @@ func TestNewActionsServiceRequest(t *testing.T) {
 	t.Run("manages authentication", func(t *testing.T) {
 		t.Run("client is brand new", func(t *testing.T) {
 			token := defaultActionsToken(t)
-			server := newActionsServer(t, nil, withActionsToken(token))
+			server := testserver.New(t, nil, testserver.WithActionsToken(token))
 
-			client, err := actions.NewClient(server.configURLForOrg("my-org"), defaultCreds)
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 			require.NoError(t, err)
 
 			req, err := client.NewActionsServiceRequest(ctx, http.MethodGet, "my-path", nil)
@@ -108,9 +109,9 @@ func TestNewActionsServiceRequest(t *testing.T) {
 
 		t.Run("admin token is about to expire", func(t *testing.T) {
 			newToken := defaultActionsToken(t)
-			server := newActionsServer(t, nil, withActionsToken(newToken))
+			server := testserver.New(t, nil, testserver.WithActionsToken(newToken))
 
-			client, err := actions.NewClient(server.configURLForOrg("my-org"), defaultCreds)
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 			require.NoError(t, err)
 			client.ActionsServiceAdminToken = "expiring-token"
 			client.ActionsServiceAdminTokenExpiresAt = time.Now().Add(59 * time.Second)
@@ -123,9 +124,9 @@ func TestNewActionsServiceRequest(t *testing.T) {
 
 		t.Run("token is currently valid", func(t *testing.T) {
 			tokenThatShouldNotBeFetched := defaultActionsToken(t)
-			server := newActionsServer(t, nil, withActionsToken(tokenThatShouldNotBeFetched))
+			server := testserver.New(t, nil, testserver.WithActionsToken(tokenThatShouldNotBeFetched))
 
-			client, err := actions.NewClient(server.configURLForOrg("my-org"), defaultCreds)
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 			require.NoError(t, err)
 			client.ActionsServiceAdminToken = "healthy-token"
 			client.ActionsServiceAdminTokenExpiresAt = time.Now().Add(1 * time.Hour)
@@ -138,9 +139,9 @@ func TestNewActionsServiceRequest(t *testing.T) {
 	})
 
 	t.Run("builds the right URL including api version", func(t *testing.T) {
-		server := newActionsServer(t, nil)
+		server := testserver.New(t, nil)
 
-		client, err := actions.NewClient(server.configURLForOrg("my-org"), defaultCreds)
+		client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 		require.NoError(t, err)
 
 		req, err := client.NewActionsServiceRequest(ctx, http.MethodGet, "/my/path?name=banana", nil)
@@ -157,9 +158,9 @@ func TestNewActionsServiceRequest(t *testing.T) {
 	})
 
 	t.Run("populates header", func(t *testing.T) {
-		server := newActionsServer(t, nil)
+		server := testserver.New(t, nil)
 
-		client, err := actions.NewClient(server.configURLForOrg("my-org"), defaultCreds, actions.WithUserAgent("my-agent"))
+		client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds, actions.WithUserAgent("my-agent"))
 		require.NoError(t, err)
 
 		req, err := client.NewActionsServiceRequest(ctx, http.MethodGet, "/my/path", nil)

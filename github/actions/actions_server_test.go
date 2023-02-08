@@ -58,12 +58,6 @@ func newActionsServer(t *testing.T, handler http.Handler, options ...actionsServ
 
 type actionsServerOption func(*actionsServer)
 
-func withActionsToken(token string) actionsServerOption {
-	return func(s *actionsServer) {
-		s.token = token
-	}
-}
-
 type actionsServer struct {
 	*httptest.Server
 

@@ -2,10 +2,13 @@ package actionsgithubcom
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -756,6 +759,150 @@ var _ = Describe("Test Client optional configuration", func() {
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			// wait for server to be called
+			Eventually(
+				func() (bool, error) {
+					return serverSuccessfullyCalled, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				1*time.Nanosecond,
+			).Should(BeTrue(), "server was not called")
+		})
+	})
+
+	Context("When specifying a configmap for root CAs", func() {
+		var ctx context.Context
+		var cancel context.CancelFunc
+		autoscalingNS := new(corev1.Namespace)
+		configSecret := new(corev1.Secret)
+		rootCAConfigMap := new(corev1.ConfigMap)
+
+		BeforeEach(func() {
+			ctx, cancel = context.WithCancel(context.TODO())
+			autoscalingNS = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
+			}
+
+			err := k8sClient.Create(ctx, autoscalingNS)
+			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for AutoScalingRunnerSet")
+
+			configSecret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github-config-secret",
+					Namespace: autoscalingNS.Name,
+				},
+				Data: map[string][]byte{
+					"github_token": []byte(autoscalingRunnerSetTestGitHubToken),
+				},
+			}
+
+			err = k8sClient.Create(ctx, configSecret)
+			Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
+
+			cert, err := os.ReadFile(filepath.Join(
+				"../../",
+				"github",
+				"actions",
+				"testdata",
+				"rootCA.crt",
+			))
+			Expect(err).NotTo(HaveOccurred(), "failed to read root CA cert")
+			rootCAConfigMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "root-ca-configmap",
+					Namespace: autoscalingNS.Name,
+				},
+				BinaryData: map[string][]byte{
+					"rootCA.crt": cert,
+				},
+			}
+			err = k8sClient.Create(ctx, rootCAConfigMap)
+			Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
+
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+				Namespace: autoscalingNS.Name,
+			})
+			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      actions.NewMultiClient("test", logr.Discard()),
+			}
+			err = controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			go func() {
+				defer GinkgoRecover()
+
+				err := mgr.Start(ctx)
+				Expect(err).NotTo(HaveOccurred(), "failed to start manager")
+			}()
+		})
+
+		AfterEach(func() {
+			defer cancel()
+
+			err := k8sClient.Delete(ctx, autoscalingNS)
+			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
+		})
+
+		It("should be able to make requests to a server using root CAs", func() {
+			certsFolder := filepath.Join(
+				"../../",
+				"github",
+				"actions",
+				"testdata",
+			)
+			certPath := filepath.Join(certsFolder, "server.crt")
+			keyPath := filepath.Join(certsFolder, "server.key")
+
+			serverSuccessfullyCalled := false
+			server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				serverSuccessfullyCalled = true
+				w.WriteHeader(http.StatusOK)
+			}))
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			Expect(err).NotTo(HaveOccurred(), "failed to load server cert")
+
+			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+			server.StartTLS()
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigSecret: configSecret.Name,
+					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+						RootCAsConfigMapRef: rootCAConfigMap.Name,
+					},
+					MaxRunners:  &max,
+					MinRunners:  &min,
+					RunnerGroup: "testgroup",
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{

@@ -306,6 +306,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		logger.Error(err, "Failed to initialize Actions service client for creating a new runner scale set")
 		return ctrl.Result{}, err
 	}
+
 	runnerScaleSet, err := actionsClient.GetRunnerScaleSet(ctx, autoscalingRunnerSet.Name)
 	if err != nil {
 		logger.Error(err, "Failed to get runner scale set from Actions service")
@@ -494,7 +495,11 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		return nil, fmt.Errorf("failed to find GitHub config secret: %w", err)
 	}
 
-	var opts []actions.ClientOption
+	opts, err := r.actionsClientOptionsFor(ctx, autoscalingRunnerSet)
+	if err != nil {
+		return nil, err
+	}
+
 	if autoscalingRunnerSet.Spec.Proxy != nil {
 		proxyFunc, err := autoscalingRunnerSet.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
 			var secret corev1.Secret
@@ -519,6 +524,43 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		configSecret.Data,
 		opts...,
 	)
+}
+
+func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
+	var options []actions.ClientOption
+
+	tlsConfig := autoscalingRunnerSet.Spec.GitHubServerTLS
+	if tlsConfig != nil && tlsConfig.RootCAsConfigMapRef != "" {
+		var rootCAsConfigMap corev1.ConfigMap
+		err := r.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: autoscalingRunnerSet.Namespace,
+				Name:      tlsConfig.RootCAsConfigMapRef,
+			},
+			&rootCAsConfigMap,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to get configmap %s: %w",
+				tlsConfig.RootCAsConfigMapRef,
+				err,
+			)
+		}
+
+		certs, err := actions.RootCAsFromConfigMap(rootCAsConfigMap.BinaryData)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to get certificates from configmap %s: %w",
+				tlsConfig.RootCAsConfigMapRef,
+				err,
+			)
+		}
+
+		options = append(options, actions.WithRootCAs(certs))
+	}
+
+	return options, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
