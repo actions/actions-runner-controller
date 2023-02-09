@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	"path/filepath"
 	"testing"
 
+	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/github/actions/testserver"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigValidationMinMax(t *testing.T) {
@@ -89,4 +96,43 @@ func TestConfigValidationConfigUrl(t *testing.T) {
 	err := validateConfig(config)
 
 	assert.ErrorContains(t, err, "GitHubConfigUrl is not provided", "Expected error about missing ConfigureUrl")
+}
+
+func TestCustomerServerRootCA(t *testing.T) {
+	ctx := context.Background()
+	certsFolder := filepath.Join(
+		"../../",
+		"github",
+		"actions",
+		"testdata",
+	)
+	certPath := filepath.Join(certsFolder, "server.crt")
+	keyPath := filepath.Join(certsFolder, "server.key")
+
+	serverCalledSuccessfully := false
+
+	server := testserver.NewUnstarted(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalledSuccessfully = true
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"count": 0}`))
+	}))
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	require.NoError(t, err)
+
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+	server.StartTLS()
+
+	config := RunnerScaleSetListenerConfig{
+		ConfigureUrl:     server.ConfigURLForOrg("myorg"),
+		ServerRootCAPath: filepath.Join(certsFolder, "podvolume"),
+	}
+	creds := &actions.ActionsAuth{
+		Token: "token",
+	}
+
+	client, err := actionsClientFromConfig(config, creds)
+	require.NoError(t, err)
+	_, err = client.GetRunnerScaleSet(ctx, "test")
+	require.NoError(t, err)
+	assert.True(t, serverCalledSuccessfully)
 }
