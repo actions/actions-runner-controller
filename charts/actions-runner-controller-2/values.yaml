@@ -64,7 +64,7 @@ affinity: {}
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-logging:
+flags:
   # Log level can be set here with one of the following values: "debug", "info", "warn", "error".
   # Defaults to "debug".
   logLevel: "debug"

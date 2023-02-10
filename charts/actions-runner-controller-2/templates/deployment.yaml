@@ -48,8 +48,8 @@ spec:
         {{- with .Values.imagePullSecrets }}
         - "--auto-scaler-image-pull-secrets={{ include "actions-runner-controller-2.imagePullSecretsNames" . }}"
         {{- end }}
-        {{- if .Values.logging }}
-        - "--log-level={{ .Values.logging.logLevel | default "debug" }}"
+        {{- with .Values.flags.logLevel }}
+        - "--log-level={{ . }}"
         {{- end }}
         command:
         - "/manager"
