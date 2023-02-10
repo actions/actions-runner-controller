@@ -87,7 +87,7 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		}
 	}
 
-	actionsServiceClient, err := actionsClientFromConfig(
+	actionsServiceClient, err := newActionsClientFromConfig(
 		rc,
 		creds,
 		actions.WithLogger(logger),
@@ -159,7 +159,7 @@ func validateConfig(config *RunnerScaleSetListenerConfig) error {
 	return nil
 }
 
-func actionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
+func newActionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
 	if config.ServerRootCAPath != "" {
 		pool, err := certPoolFromPath(config.ServerRootCAPath)
 		if err != nil {

@@ -130,7 +130,7 @@ func TestCustomerServerRootCA(t *testing.T) {
 		Token: "token",
 	}
 
-	client, err := actionsClientFromConfig(config, creds)
+	client, err := newActionsClientFromConfig(config, creds)
 	require.NoError(t, err)
 	_, err = client.GetRunnerScaleSet(ctx, "test")
 	require.NoError(t, err)
