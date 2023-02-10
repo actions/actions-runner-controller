@@ -1,6 +1,9 @@
 package actions_test
 
 import (
+	"crypto/x509"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -107,5 +110,49 @@ func TestClient_Identifier(t *testing.T) {
 				assert.NotEqual(t, oldClient.Identifier(), newClient.Identifier())
 			})
 		}
+	})
+
+	t.Run("changes in TLS config", func(t *testing.T) {
+		configURL := "https://github.com/org/repo"
+		defaultCreds := &actions.ActionsAuth{
+			Token: "token",
+		}
+
+		noTlS, err := actions.NewClient(configURL, defaultCreds)
+		require.NoError(t, err)
+
+		poolFromCert := func(t *testing.T, path string) *x509.CertPool {
+			t.Helper()
+			f, err := os.ReadFile(path)
+			require.NoError(t, err)
+			pool := x509.NewCertPool()
+			require.True(t, pool.AppendCertsFromPEM(f))
+			return pool
+		}
+
+		root, err := actions.NewClient(
+			configURL,
+			defaultCreds,
+			actions.WithRootCAs(poolFromCert(t, filepath.Join("testdata", "rootCA.crt"))),
+		)
+		require.NoError(t, err)
+
+		chain, err := actions.NewClient(
+			configURL,
+			defaultCreds,
+			actions.WithRootCAs(poolFromCert(t, filepath.Join("testdata", "intermediate.pem"))),
+		)
+		require.NoError(t, err)
+
+		clients := []*actions.Client{
+			noTlS,
+			root,
+			chain,
+		}
+		identifiers := map[string]struct{}{}
+		for _, client := range clients {
+			identifiers[client.Identifier()] = struct{}{}
+		}
+		assert.Len(t, identifiers, len(clients), "all clients should have a unique identifier")
 	})
 }

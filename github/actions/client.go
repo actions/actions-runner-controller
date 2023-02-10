@@ -198,6 +198,10 @@ func (c *Client) Identifier() string {
 		)
 	}
 
+	if c.rootCAs != nil {
+		identifier += fmt.Sprintf("rootCAs:%q", c.rootCAs.Subjects())
+	}
+
 	return uuid.NewHash(sha256.New(), uuid.NameSpaceOID, []byte(identifier), 6).String()
 }
 
