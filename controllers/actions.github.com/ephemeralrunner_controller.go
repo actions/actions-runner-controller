@@ -92,7 +92,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					log.Error(err, "Failed to update ephemeral runner without runner registration finalizer")
 					return ctrl.Result{}, err
 				}
-                                 log.Info("Successfully removed runner registration finalizer")
+				log.Info("Successfully removed runner registration finalizer")
 				return ctrl.Result{}, nil
 			default:
 				return r.cleanupRunnerFromService(ctx, ephemeralRunner, log)
@@ -272,25 +272,25 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 	actionsError := &actions.ActionsError{}
 	err := r.deleteRunnerFromService(ctx, ephemeralRunner, log)
 	if err != nill {
-	   if errors.As(err, &actionsError) &&
-	      actionsError.StatusCode == http.StatusBadRequest &&
-	      strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
-	        log.Info("Runner is still running the job. Re-queue in 30 seconds")
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-	   }
-	   
-	   log.Error(err, "Failed clean up runner from the service")
-           return ctrl.Result{}, err
+		if errors.As(err, &actionsError) &&
+			actionsError.StatusCode == http.StatusBadRequest &&
+			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
+			log.Info("Runner is still running the job. Re-queue in 30 seconds")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		log.Error(err, "Failed clean up runner from the service")
+		return ctrl.Result{}, err
 	}
-        
-       	log.Info("Successfully removed runner registration from service")
+
+	log.Info("Successfully removed runner registration from service")
 	err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
 	})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	
+
 	log.Info("Successfully removed runner registration finalizer")
 	return ctrl.Result{}, nil
 }
