@@ -271,7 +271,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	actionsError := &actions.ActionsError{}
 	err := r.deleteRunnerFromService(ctx, ephemeralRunner, log)
-	if err != nill {
+	if err != nil {
 		if errors.As(err, &actionsError) &&
 			actionsError.StatusCode == http.StatusBadRequest &&
 			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
@@ -284,7 +284,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 	}
 
 	log.Info("Successfully removed runner registration from service")
-	err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
 	})
 	if err != nil {
