@@ -274,9 +274,9 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 			controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
 		})
 		if err != nil {
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	actionsError := &actions.ActionsError{}
