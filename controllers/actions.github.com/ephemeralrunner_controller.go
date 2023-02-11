@@ -92,6 +92,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					log.Error(err, "Failed to update ephemeral runner without runner registration finalizer")
 					return ctrl.Result{}, err
 				}
+                                 log.Info("Successfully removed runner registration finalizer")
 				return ctrl.Result{}, nil
 			default:
 				return r.cleanupRunnerFromService(ctx, ephemeralRunner, log)
