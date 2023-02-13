@@ -240,14 +240,10 @@ env:
         {{- if eq $env.name "DOCKER_CERT_PATH" }}
           {{- $setDockerCertPath = 0 -}}
         {{- end }}
-  - name: {{ $env.name }}
-        {{- range $envKey, $envVal := $env }}
-          {{- if ne $envKey "name" }}
-    {{ $envKey }}: {{ $envVal }}
-          {{- end }}
-        {{- end }}
-      {{- end }}
+  - {{ $env | toYaml | nindent 4 }}
     {{- end }}
+    {{- end }}
+
     {{- if $setDockerHost }}
   - name: DOCKER_HOST
     value: tcp://localhost:2376
