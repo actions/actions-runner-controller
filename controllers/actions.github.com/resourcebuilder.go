@@ -125,32 +125,6 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		RestartPolicy:    corev1.RestartPolicyNever,
 	}
 
-	if autoscalingListener.Spec.GitHubServerTLS != nil {
-		// add volume for github server tls configmap
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: "github-server-root-ca",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: autoscalingListener.Spec.GitHubServerTLS.RootCAsConfigMapRef,
-					},
-				},
-			},
-		})
-
-		// mount volume to /etc/github-server-root-ca
-		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "github-server-root-ca",
-			MountPath: "/etc/github-server-root-ca",
-		})
-
-		// set env var for github server tls configmap folder
-		podSpec.Containers[0].Env = append(podSpec.Containers[0].Env, corev1.EnvVar{
-			Name:  "GITHUB_SERVER_ROOT_CA_PATH",
-			Value: "/etc/github-server-root-ca",
-		})
-	}
-
 	newRunnerScaleSetListenerPod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/actions/actions-runner-controller/build"
@@ -43,7 +42,7 @@ type RunnerScaleSetListenerConfig struct {
 	MaxRunners                  int    `split_words:"true"`
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
-	ServerRootCAPath            string `split_words:"true"`
+	ServerRootCA                string `split_words:"true"`
 }
 
 func main() {
@@ -160,36 +159,15 @@ func validateConfig(config *RunnerScaleSetListenerConfig) error {
 }
 
 func newActionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
-	if config.ServerRootCAPath != "" {
-		pool, err := certPoolFromPath(config.ServerRootCAPath)
-		if err != nil {
-			return nil, err
+	if config.ServerRootCA != "" {
+		pool := x509.NewCertPool()
+		ok := pool.AppendCertsFromPEM([]byte(config.ServerRootCA))
+		if !ok {
+			return nil, fmt.Errorf("failed to parse root certificate")
 		}
 
 		options = append(options, actions.WithRootCAs(pool))
 	}
 
 	return actions.NewClient(config.ConfigureUrl, creds, options...)
-}
-
-func certPoolFromPath(path string) (*x509.CertPool, error) {
-	files, err := os.ReadDir(path)
-	if err != nil {
-		return nil, err
-	}
-
-	pool := x509.NewCertPool()
-	for _, file := range files {
-		f, err := os.ReadFile(filepath.Join(path, file.Name()))
-		if err != nil {
-			return nil, err
-		}
-
-		ok := pool.AppendCertsFromPEM(f)
-		if !ok {
-			return nil, fmt.Errorf("failed to parse root certificate %q", file.Name())
-		}
-	}
-
-	return pool, nil
 }

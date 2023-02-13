@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -122,9 +123,18 @@ func TestCustomerServerRootCA(t *testing.T) {
 	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
 	server.StartTLS()
 
+	var certsString string
+	rootCA, err := os.ReadFile(filepath.Join(certsFolder, "rootCA.crt"))
+	require.NoError(t, err)
+	certsString = string(rootCA)
+
+	intermediate, err := os.ReadFile(filepath.Join(certsFolder, "intermediate.pem"))
+	require.NoError(t, err)
+	certsString = certsString + string(intermediate)
+
 	config := RunnerScaleSetListenerConfig{
-		ConfigureUrl:     server.ConfigURLForOrg("myorg"),
-		ServerRootCAPath: filepath.Join(certsFolder, "podvolume"),
+		ConfigureUrl: server.ConfigURLForOrg("myorg"),
+		ServerRootCA: certsString,
 	}
 	creds := &actions.ActionsAuth{
 		Token: "token",

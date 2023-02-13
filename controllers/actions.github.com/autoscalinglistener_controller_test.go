@@ -763,7 +763,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 	})
 
 	Context("When creating a new AutoScalingListener", func() {
-		It("It should create a volume on the pod using the config map, mount it and set the path it to it in an env variable", func() {
+		It("It should set the certificates as an environment variable on the pod", func() {
 			pod := new(corev1.Pod)
 			Eventually(
 				func(g Gomega) {
@@ -777,46 +777,30 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 					)
 
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get pod")
-					g.Expect(pod.Spec.Volumes).NotTo(BeEmpty(), "pod should have volumes")
-
-					var volume *corev1.Volume
-					for _, v := range pod.Spec.Volumes {
-						if v.Name == "github-server-root-ca" {
-							volume = &v
-							break
-						}
-					}
-					g.Expect(volume).NotTo(BeNil(), "pod should have a volume named github-server-root-ca")
-					g.Expect(volume.ConfigMap).NotTo(BeNil(), "github-server-root-ca volume should be a config map")
-					g.Expect(volume.ConfigMap.Name).To(
-						BeEquivalentTo(rootCAConfigMap.Name),
-						"github-server-root-ca volume should be the config map",
-					)
-
 					g.Expect(pod.Spec.Containers).NotTo(BeEmpty(), "pod should have containers")
-					g.Expect(pod.Spec.Containers[0].VolumeMounts).NotTo(BeEmpty(), "pod should have volume mounts")
-					g.Expect(pod.Spec.Containers[0].VolumeMounts[0].Name).To(
-						BeEquivalentTo("github-server-root-ca"),
-						"pod should have a volume mount named github-server-root-ca",
-					)
-					g.Expect(pod.Spec.Containers[0].VolumeMounts[0].MountPath).To(
-						BeEquivalentTo("/etc/github-server-root-ca"),
-						"pod should mount to etc/github-server-root-ca",
-					)
-
 					g.Expect(pod.Spec.Containers[0].Env).NotTo(BeEmpty(), "pod should have env variables")
 
 					var env *corev1.EnvVar
 					for _, e := range pod.Spec.Containers[0].Env {
-						if e.Name == "GITHUB_SERVER_ROOT_CA_PATH" {
+						if e.Name == "GITHUB_SERVER_ROOT_CA" {
 							env = &e
 							break
 						}
 					}
 					g.Expect(env).NotTo(BeNil(), "pod should have an env variable named GITHUB_SERVER_ROOT_CA_PATH")
+
+					cert, err := os.ReadFile(filepath.Join(
+						"../../",
+						"github",
+						"actions",
+						"testdata",
+						"rootCA.crt",
+					))
+					g.Expect(err).NotTo(HaveOccurred(), "failed to read rootCA.crt")
+
 					g.Expect(env.Value).To(
-						BeEquivalentTo("/etc/github-server-root-ca"),
-						"GITHUB_SERVER_ROOT_CA_PATH should be set to /etc/github-server-root-ca",
+						BeEquivalentTo(string(cert)),
+						"GITHUB_SERVER_ROOT_CA should be the rootCA.crt",
 					)
 				}).
 				WithTimeout(autoscalingRunnerSetTestTimeout).
