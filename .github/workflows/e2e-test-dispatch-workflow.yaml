@@ -1,0 +1,16 @@
+name: ARC-REUSABLE-WORKFLOW
+on:
+  workflow_dispatch:
+    inputs:
+      date_time:
+        description: 'Datetime for runner name uniqueness, format: %Y-%m-%d-%H-%M-%S-%3N, example: 2023-02-14-13-00-16-791'
+        required: true
+jobs:
+  arc-runner-job:
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [1, 2, 3]
+    runs-on: arc-runner-${{ inputs.date_time }}
+    steps:
+      - run: echo "Hello World!" >> $GITHUB_STEP_SUMMARY
