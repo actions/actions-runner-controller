@@ -76,6 +76,8 @@ type Client struct {
 
 	rootCAs               *x509.CertPool
 	tlsInsecureSkipVerify bool
+
+	proxyFunc func(req *http.Request) (*url.URL, error)
 }
 
 type ClientOption func(*Client)
@@ -113,6 +115,12 @@ func WithRootCAs(rootCAs *x509.CertPool) ClientOption {
 func WithoutTLSVerify() ClientOption {
 	return func(c *Client) {
 		c.tlsInsecureSkipVerify = true
+	}
+}
+
+func WithProxy(proxyFunc func(req *http.Request) (*url.URL, error)) ClientOption {
+	return func(c *Client) {
+		c.proxyFunc = proxyFunc
 	}
 }
 
@@ -159,6 +167,8 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	if ac.tlsInsecureSkipVerify {
 		transport.TLSClientConfig.InsecureSkipVerify = true
 	}
+
+	transport.Proxy = ac.proxyFunc
 
 	retryClient.HTTPClient.Transport = transport
 	ac.Client = retryClient.StandardClient()
@@ -259,7 +269,7 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
 	}

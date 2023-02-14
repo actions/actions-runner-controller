@@ -55,24 +55,48 @@ func TestMultiClientOptions(t *testing.T) {
 
 	defaultNamespace := "default"
 	defaultConfigURL := "https://github.com/org/repo"
-	defaultCreds := &ActionsAuth{
-		Token: "token",
-	}
 
-	multiClient := NewMultiClient("test-user-agent", logger)
-	service, err := multiClient.GetClientFor(
-		ctx,
-		defaultConfigURL,
-		*defaultCreds,
-		defaultNamespace,
-		WithUserAgent("test-option"),
-	)
-	require.NoError(t, err)
+	t.Run("GetClientFor", func(t *testing.T) {
+		defaultCreds := &ActionsAuth{
+			Token: "token",
+		}
 
-	client := service.(*Client)
-	req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "test-option", req.Header.Get("User-Agent"))
+		multiClient := NewMultiClient("test-user-agent", logger)
+		service, err := multiClient.GetClientFor(
+			ctx,
+			defaultConfigURL,
+			*defaultCreds,
+			defaultNamespace,
+			WithUserAgent("test-option"),
+		)
+		require.NoError(t, err)
+
+		client := service.(*Client)
+		req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "test-option", req.Header.Get("User-Agent"))
+	})
+
+	t.Run("GetClientFromSecret", func(t *testing.T) {
+		secret := map[string][]byte{
+			"github_token": []byte("token"),
+		}
+
+		multiClient := NewMultiClient("test-user-agent", logger)
+		service, err := multiClient.GetClientFromSecret(
+			ctx,
+			defaultConfigURL,
+			defaultNamespace,
+			secret,
+			WithUserAgent("test-option"),
+		)
+		require.NoError(t, err)
+
+		client := service.(*Client)
+		req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "test-option", req.Header.Get("User-Agent"))
+	})
 }
 
 func TestCreateJWT(t *testing.T) {

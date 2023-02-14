@@ -370,12 +370,12 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 			}
 		}
 
-		var err error
-		proxyEnvs, err = proxyEnvVars(autoscalingListener.Spec.Proxy, httpUserInfo, httpsUserInfo)
+		config, err := httpProxyConfig(autoscalingListener.Spec.Proxy, httpUserInfo, httpsUserInfo)
 		if err != nil {
 			logger.Error(err, "Unable to create proxy environment variables")
 			return ctrl.Result{}, nil
 		}
+		proxyEnvs = httpProxyEnvVarsFromConfig(config)
 	}
 
 	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, proxyEnvs...)

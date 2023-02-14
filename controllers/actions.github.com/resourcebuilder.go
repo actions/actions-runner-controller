@@ -11,6 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
+	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -450,8 +451,8 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 
 type userInfoFunc func() (userInfo *url.Userinfo, err error)
 
-func proxyEnvVars(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userInfoFunc) ([]corev1.EnvVar, error) {
-	var envVars []corev1.EnvVar
+func httpProxyConfig(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userInfoFunc) (*httpproxy.Config, error) {
+	var proxyConfig httpproxy.Config
 
 	// setup HTTP env vars
 	if proxy.HTTP != nil && proxy.HTTP.Url != "" {
@@ -468,7 +469,7 @@ func proxyEnvVars(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userI
 			parsed.User = userInfo
 		}
 
-		envVars = append(envVars, corev1.EnvVar{Name: EnvVarHTTPProxy, Value: parsed.String()})
+		proxyConfig.HTTPProxy = parsed.String()
 	}
 
 	// setup HTTPS env vars
@@ -486,16 +487,30 @@ func proxyEnvVars(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userI
 			parsed.User = userInfo
 		}
 
-		envVars = append(envVars, corev1.EnvVar{Name: EnvVarHTTPSProxy, Value: parsed.String()})
+		proxyConfig.HTTPSProxy = parsed.String()
 	}
 
 	// setup noproxy
 	if len(proxy.NoProxy) > 0 {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  EnvVarNoProxy,
-			Value: strings.Join(proxy.NoProxy, ","),
-		})
+		proxyConfig.NoProxy = strings.Join(proxy.NoProxy, ",")
 	}
 
-	return envVars, nil
+	return &proxyConfig, nil
+}
+
+func httpProxyEnvVarsFromConfig(config *httpproxy.Config) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  EnvVarHTTPProxy,
+			Value: config.HTTPProxy,
+		},
+		{
+			Name:  EnvVarHTTPSProxy,
+			Value: config.HTTPSProxy,
+		},
+		{
+			Name:  EnvVarNoProxy,
+			Value: config.NoProxy,
+		},
+	}
 }

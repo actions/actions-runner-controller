@@ -580,12 +580,12 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 			}
 		}
 
-		var err error
-		proxyEnvs, err = proxyEnvVars(runner.Spec.Proxy, httpUserInfo, httpsUserInfo)
+		config, err := httpProxyConfig(runner.Spec.Proxy, httpUserInfo, httpsUserInfo)
 		if err != nil {
 			log.Error(err, "Unable to create proxy environment variables")
 			return ctrl.Result{}, nil
 		}
+		proxyEnvs = httpProxyEnvVarsFromConfig(config)
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
