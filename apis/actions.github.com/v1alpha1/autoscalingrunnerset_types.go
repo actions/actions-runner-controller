@@ -144,6 +144,67 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 	return proxyFunc, nil
 }
 
+func (c *ProxyConfig) EnvVars(secretFetcher func(string) (*corev1.Secret, error)) ([]corev1.EnvVar, error) {
+	var vars []corev1.EnvVar
+
+	if c.HTTP != nil {
+		u, err := url.Parse(c.HTTP.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		if c.HTTP.CredentialSecretRef != "" {
+			secret, err := secretFetcher(c.HTTP.CredentialSecretRef)
+			if err != nil {
+				return nil, err
+			}
+
+			u.User = url.UserPassword(
+				string(secret.Data["username"]),
+				string(secret.Data["password"]),
+			)
+		}
+
+		vars = append(vars, corev1.EnvVar{
+			Name:  "http_proxy",
+			Value: u.String(),
+		})
+	}
+
+	if c.HTTPS != nil {
+		u, err := url.Parse(c.HTTPS.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		if c.HTTPS.CredentialSecretRef != "" {
+			secret, err := secretFetcher(c.HTTPS.CredentialSecretRef)
+			if err != nil {
+				return nil, err
+			}
+
+			u.User = url.UserPassword(
+				string(secret.Data["username"]),
+				string(secret.Data["password"]),
+			)
+		}
+
+		vars = append(vars, corev1.EnvVar{
+			Name:  "https_proxy",
+			Value: u.String(),
+		})
+	}
+
+	if len(c.NoProxy) > 0 {
+		vars = append(vars, corev1.EnvVar{
+			Name:  "no_proxy",
+			Value: strings.Join(c.NoProxy, ","),
+		})
+	}
+
+	return vars, nil
+}
+
 type ProxyServerConfig struct {
 	// Required
 	Url string `json:"url,omitempty"`

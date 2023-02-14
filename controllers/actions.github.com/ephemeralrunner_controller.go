@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -558,38 +557,28 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 }
 
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
-	var proxyEnvs []corev1.EnvVar
+	var envs []corev1.EnvVar
 	if runner.Spec.Proxy != nil {
-		var httpUserInfo userInfoFunc
-		if runner.Spec.Proxy.HTTP != nil && len(runner.Spec.Proxy.HTTP.CredentialSecretRef) != 0 {
-			httpUserInfo = func() (*url.Userinfo, error) {
-				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
-					Name:      runner.Spec.Proxy.HTTP.CredentialSecretRef,
-					Namespace: runner.Namespace,
-				})
+		proxyEnvs, err := runner.Spec.Proxy.EnvVars(func(s string) (*corev1.Secret, error) {
+			var secret corev1.Secret
+			err := r.Client.Get(ctx, types.NamespacedName{
+				Name:      s,
+				Namespace: runner.Namespace,
+			}, &secret)
+			if err != nil {
+				return nil, err
 			}
-		}
-
-		var httpsUserInfo userInfoFunc
-		if runner.Spec.Proxy.HTTPS != nil && len(runner.Spec.Proxy.HTTPS.CredentialSecretRef) != 0 {
-			httpsUserInfo = func() (*url.Userinfo, error) {
-				return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
-					Name:      runner.Spec.Proxy.HTTPS.CredentialSecretRef,
-					Namespace: runner.Namespace,
-				})
-			}
-		}
-
-		config, err := httpProxyConfig(runner.Spec.Proxy, httpUserInfo, httpsUserInfo)
+			return &secret, nil
+		})
 		if err != nil {
-			log.Error(err, "Unable to create proxy environment variables")
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, fmt.Errorf("failed to get proxy env vars: %w", err)
 		}
-		proxyEnvs = httpProxyEnvVarsFromConfig(config)
+
+		envs = append(envs, proxyEnvs...)
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, proxyEnvs...)
+	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")

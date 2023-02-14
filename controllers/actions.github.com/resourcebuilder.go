@@ -4,14 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
-	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -445,72 +442,6 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 			APIGroups: []string{"actions.github.com"},
 			Resources: []string{"ephemeralrunners", "ephemeralrunners/status"},
 			Verbs:     []string{"patch"},
-		},
-	}
-}
-
-type userInfoFunc func() (userInfo *url.Userinfo, err error)
-
-func httpProxyConfig(proxy *v1alpha1.ProxyConfig, httpUserInfo, httpsUserInfo userInfoFunc) (*httpproxy.Config, error) {
-	var proxyConfig httpproxy.Config
-
-	// setup HTTP env vars
-	if proxy.HTTP != nil && proxy.HTTP.Url != "" {
-		parsed, err := url.Parse(proxy.HTTP.Url)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse http proxy url: %v", err)
-		}
-
-		if httpUserInfo != nil {
-			userInfo, err := httpUserInfo()
-			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve http user info: %v", err)
-			}
-			parsed.User = userInfo
-		}
-
-		proxyConfig.HTTPProxy = parsed.String()
-	}
-
-	// setup HTTPS env vars
-	if proxy.HTTPS != nil && proxy.HTTPS.Url != "" {
-		parsed, err := url.Parse(proxy.HTTPS.Url)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse https proxy url: %v", err)
-		}
-
-		if httpsUserInfo != nil {
-			userInfo, err := httpsUserInfo()
-			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve https user info: %v", err)
-			}
-			parsed.User = userInfo
-		}
-
-		proxyConfig.HTTPSProxy = parsed.String()
-	}
-
-	// setup noproxy
-	if len(proxy.NoProxy) > 0 {
-		proxyConfig.NoProxy = strings.Join(proxy.NoProxy, ",")
-	}
-
-	return &proxyConfig, nil
-}
-
-func httpProxyEnvVarsFromConfig(config *httpproxy.Config) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  EnvVarHTTPProxy,
-			Value: config.HTTPProxy,
-		},
-		{
-			Name:  EnvVarHTTPSProxy,
-			Value: config.HTTPSProxy,
-		},
-		{
-			Name:  EnvVarNoProxy,
-			Value: config.NoProxy,
 		},
 	}
 }
