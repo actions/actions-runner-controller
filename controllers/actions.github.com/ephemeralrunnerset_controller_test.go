@@ -2,7 +2,11 @@ package actionsgithubcom
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -11,11 +15,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/github/actions/fake"
 )
 
@@ -583,5 +590,167 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(0), "0 EphemeralRunner should be created")
 		})
+	})
+})
+
+var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func() {
+	var ctx context.Context
+	var cancel context.CancelFunc
+	autoscalingNS := new(corev1.Namespace)
+	ephemeralRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
+	configSecret := new(corev1.Secret)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithCancel(context.TODO())
+		autoscalingNS = &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-runnerset" + RandStringRunes(5)},
+		}
+
+		err := k8sClient.Create(ctx, autoscalingNS)
+		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for EphemeralRunnerSet")
+
+		configSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "github-config-secret",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"github_token": []byte(ephemeralRunnerSetTestGitHubToken),
+			},
+		}
+
+		err = k8sClient.Create(ctx, configSecret)
+		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
+
+		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			Namespace:          autoscalingNS.Name,
+			MetricsBindAddress: "0",
+		})
+		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+
+		controller := &EphemeralRunnerSetReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			Log:           logf.Log,
+			ActionsClient: actions.NewMultiClient("test", logr.Discard()),
+		}
+		err = controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		go func() {
+			defer GinkgoRecover()
+
+			err := mgr.Start(ctx)
+			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
+		}()
+	})
+
+	AfterEach(func() {
+		defer cancel()
+
+		err := k8sClient.Delete(ctx, autoscalingNS)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
+	})
+
+	FIt("When providing proxy settings", func() {
+		secretCredentials := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "proxy-credentials",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"username": []byte("test"),
+				"password": []byte("password"),
+			},
+		}
+
+		err := k8sClient.Create(ctx, secretCredentials)
+		Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
+
+		proxySuccessfulllyCalled := false
+		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			header := r.Header.Get("Proxy-Authorization")
+			Expect(header).NotTo(BeEmpty())
+
+			header = strings.TrimPrefix(header, "Basic ")
+			decoded, err := base64.StdEncoding.DecodeString(header)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(decoded)).To(Equal("test:password"))
+
+			proxySuccessfulllyCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+		GinkgoT().Cleanup(func() {
+			proxy.Close()
+		})
+
+		ephemeralRunnerSet = &actionsv1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.EphemeralRunnerSetSpec{
+				Replicas: 1,
+				EphemeralRunnerSpec: actionsv1alpha1.EphemeralRunnerSpec{
+					GitHubConfigUrl:    "http://example.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					RunnerScaleSetId:   100,
+					Proxy: &v1alpha1.ProxyConfig{
+						HTTP: &v1alpha1.ProxyServerConfig{
+							Url:                 proxy.URL,
+							CredentialSecretRef: "proxy-credentials",
+						},
+					},
+					PodTemplateSpec: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err = k8sClient.Create(ctx, ephemeralRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
+
+		runnerList := new(actionsv1alpha1.EphemeralRunnerList)
+		Eventually(func() (int, error) {
+			err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+			if err != nil {
+				return -1, err
+			}
+
+			return len(runnerList.Items), nil
+		},
+			ephemeralRunnerSetTestTimeout,
+			ephemeralRunnerSetTestInterval,
+		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
+
+		runner := runnerList.Items[0].DeepCopy()
+		runner.Status.Phase = corev1.PodRunning
+		runner.Status.RunnerId = 100
+		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
+		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
+
+		updatedRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
+		err = k8sClient.Get(ctx, client.ObjectKey{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}, updatedRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+		updatedRunnerSet.Spec.Replicas = 0
+		err = k8sClient.Update(ctx, updatedRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
+
+		Eventually(
+			func() bool {
+				return proxySuccessfulllyCalled
+			},
+			2*time.Second,
+			interval,
+		).Should(BeEquivalentTo(true))
 	})
 })

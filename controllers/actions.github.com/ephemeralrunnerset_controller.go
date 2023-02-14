@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
+	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -366,8 +368,52 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
+	var opts []actions.ClientOption
+	if rs.Spec.EphemeralRunnerSpec.Proxy != nil {
+		proxyConfig, err := r.getProxyConfig(ctx, rs)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
+			return proxyConfig.ProxyFunc()(req.URL)
+		}))
+	}
 
-	return r.ActionsClient.GetClientFromSecret(ctx, rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl, rs.Namespace, secret.Data)
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl,
+		rs.Namespace,
+		secret.Data,
+		opts...,
+	)
+}
+
+func (r *EphemeralRunnerSetReconciler) getProxyConfig(ctx context.Context, runner *v1alpha1.EphemeralRunnerSet) (*httpproxy.Config, error) {
+	if runner.Spec.EphemeralRunnerSpec.Proxy == nil {
+		return nil, nil
+	}
+	var httpUserInfo userInfoFunc
+	proxySpec := runner.Spec.EphemeralRunnerSpec.Proxy
+	if proxySpec.HTTP != nil && len(proxySpec.HTTP.CredentialSecretRef) != 0 {
+		httpUserInfo = func() (*url.Userinfo, error) {
+			return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+				Name:      proxySpec.HTTP.CredentialSecretRef,
+				Namespace: runner.Namespace,
+			})
+		}
+	}
+
+	var httpsUserInfo userInfoFunc
+	if proxySpec.HTTPS != nil && len(proxySpec.HTTPS.CredentialSecretRef) != 0 {
+		httpsUserInfo = func() (*url.Userinfo, error) {
+			return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+				Name:      proxySpec.HTTPS.CredentialSecretRef,
+				Namespace: runner.Namespace,
+			})
+		}
+	}
+
+	return httpProxyConfig(proxySpec, httpUserInfo, httpsUserInfo)
 }
 
 // SetupWithManager sets up the controller with the Manager.
