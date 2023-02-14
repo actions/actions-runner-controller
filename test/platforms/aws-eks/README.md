@@ -1,4 +1,9 @@
-# Setup
+
+# Context
+
+Terraform templates to quickly create an EKS cluster with a managed node group. This is not a reference setup! It's a vanilla setup to be used when attempting to replicate issues and/or to test new features.
+
+⚠️ Do not use this setup in production.
 
 ## Pre-requisites
 
@@ -26,8 +31,8 @@ brew install awscli aws-iam-authenticator terraform
 
 ```bash
 # Export AWS region & profile env variables
-export AWS_REGION="eu-west-2"
-export AWS_PROFILE="actions-compute"
+export AWS_REGION="eu-west-2"           # Replace with your region
+export AWS_PROFILE="actions-compute"    # Replace with your profile
 ```
 
 ```bash
@@ -49,7 +54,8 @@ terraform apply
 ```bash
 # Retrieve access credentials for the cluster and configure kubectl
 aws eks --region "${AWS_REGION}" update-kubeconfig \
-    --name "$(terraform output -raw cluster_name)"
+    --name "$(terraform output -raw cluster_name)" \
+    --profile "${AWS_PROFILE}"
 
 # If you get this error: 'NoneType' object is not iterable
 # Remove the ~/.kube/config file and try again
