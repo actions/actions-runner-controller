@@ -40,5 +40,5 @@ runs:
       run: |
           export GITHUB_TOKEN="${{ inputs.github-token }}"
           export DATE_TIME="${{ env.DATE_TIME }}"
-          go test ./test/e2e_arc -v
+          go test ./test_e2e_arc -v
       shell: bash
