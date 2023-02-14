@@ -2,8 +2,11 @@ package actionsgithubcom
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -688,7 +691,7 @@ var _ = Describe("Test Client optional configuration", func() {
 			).Should(BeTrue(), "server was not called")
 		})
 
-		FIt("should be able to make requests to a server using a proxy with user info", func() {
+		It("should be able to make requests to a server using a proxy with user info", func() {
 			controller := &AutoscalingRunnerSetReconciler{
 				Client:                             mgr.GetClient(),
 				Scheme:                             mgr.GetScheme(),
@@ -701,18 +704,21 @@ var _ = Describe("Test Client optional configuration", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 			serverSuccessfullyCalled := false
-			proxy := testserver.New(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				r.ParseForm()
-				fmt.Printf("\n\n\n===\n")
-				fmt.Printf("%v\n", r.Header)
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				header := r.Header.Get("Proxy-Authorization")
+				Expect(header).NotTo(BeEmpty())
 
-				// Expect(u.User.Username()).To(Equal("test"))
-				// password, _ := u.User.Password()
-				// Expect(password).To(Equal("password"))
+				header = strings.TrimPrefix(header, "Basic ")
+				decoded, err := base64.StdEncoding.DecodeString(header)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(decoded)).To(Equal("test:password"))
 
 				serverSuccessfullyCalled = true
 				w.WriteHeader(http.StatusOK)
 			}))
+			GinkgoT().Cleanup(func() {
+				proxy.Close()
+			})
 
 			secretCredentials := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{

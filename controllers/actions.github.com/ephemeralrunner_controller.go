@@ -29,6 +29,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
+	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -663,7 +664,51 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 
-	return r.ActionsClient.GetClientFromSecret(ctx, runner.Spec.GitHubConfigUrl, runner.Namespace, secret.Data)
+	var opts []actions.ClientOption
+	if runner.Spec.Proxy != nil {
+		proxyConfig, err := r.getProxyConfig(ctx, runner)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
+			return proxyConfig.ProxyFunc()(req.URL)
+		}))
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		runner.Spec.GitHubConfigUrl,
+		runner.Namespace,
+		secret.Data,
+		opts...,
+	)
+}
+
+func (r *EphemeralRunnerReconciler) getProxyConfig(ctx context.Context, runner *v1alpha1.EphemeralRunner) (*httpproxy.Config, error) {
+	if runner.Spec.Proxy == nil {
+		return nil, nil
+	}
+	var httpUserInfo userInfoFunc
+	if runner.Spec.Proxy.HTTP != nil && len(runner.Spec.Proxy.HTTP.CredentialSecretRef) != 0 {
+		httpUserInfo = func() (*url.Userinfo, error) {
+			return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+				Name:      runner.Spec.Proxy.HTTP.CredentialSecretRef,
+				Namespace: runner.Namespace,
+			})
+		}
+	}
+
+	var httpsUserInfo userInfoFunc
+	if runner.Spec.Proxy.HTTPS != nil && len(runner.Spec.Proxy.HTTPS.CredentialSecretRef) != 0 {
+		httpsUserInfo = func() (*url.Userinfo, error) {
+			return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
+				Name:      runner.Spec.Proxy.HTTPS.CredentialSecretRef,
+				Namespace: runner.Namespace,
+			})
+		}
+	}
+
+	return httpProxyConfig(runner.Spec.Proxy, httpUserInfo, httpsUserInfo)
 }
 
 // runnerRegisteredWithService checks if the runner is still registered with the service

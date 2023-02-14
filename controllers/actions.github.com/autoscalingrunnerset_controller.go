@@ -506,7 +506,6 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		opts = append(opts, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
 			return proxyConfig.ProxyFunc()(req.URL)
 		}))
-		fmt.Printf("ProxyConfig=%+v\n", *proxyConfig)
 	}
 
 	return r.ActionsClient.GetClientFromSecret(
