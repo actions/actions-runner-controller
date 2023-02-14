@@ -1,6 +1,4 @@
-provider "aws" {
-  region = var.region
-}
+provider "aws" {}
 
 data "aws_availability_zones" "available" {}
 
@@ -51,12 +49,21 @@ module "eks" {
   subnet_ids                     = module.vpc.private_subnets
   cluster_endpoint_public_access = true
 
+  tags = {
+    # Critical: GitHub specific tag
+    # If removed, EC2 instance creation will fail
+    "catalog_service" = "actions-runner-controller"
+  }
+
   eks_managed_node_group_defaults = {
     ami_type = "AL2_x86_64"
-
   }
 
   eks_managed_node_groups = {
+    default = {
+      use_custom_launch_template = false
+    }
+
     one = {
       name = "node-group-1"
 

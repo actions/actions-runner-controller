@@ -9,19 +9,59 @@
 - kubectl v1.24.0 or newer
 
 <details>
-    <summary>Codespaces</summary>
+    <summary>Download & Authenticate</summary>
 
 ```bash
 brew install awscli aws-iam-authenticator terraform
 ```
 
 ```bash
-# Configure AWS CLI
-# Assumes key and secret are stored in pass
-aws configure set region eu-west-2 --profile gh # or your preferred region and profile
-aws configure set aws_access_key_id "***" --profile gh # replace with your access key value
-aws configure set aws_secret_access_key "***" --profile gh # replace with your secret key value
+# Configure & authenticate AWS CLI
+# This will vary based on your AWS account and IAM setup
 ```
 
 </details>
 
+## Setup
+
+```bash
+# Export AWS region & profile env variables
+export AWS_REGION="eu-west-2"
+export AWS_PROFILE="actions-compute"
+```
+
+```bash
+# You're free to use terraform cloud but you need to update main.tf first
+terraform init
+```
+
+```bash
+# Run terraform plan
+terraform plan
+```
+
+```bash
+# Verify the plan output from the previous step
+# Run terraform apply
+terraform apply
+```
+
+```bash
+# Retrieve access credentials for the cluster and configure kubectl
+aws eks --region "${AWS_REGION}" update-kubeconfig \
+    --name "$(terraform output -raw cluster_name)"
+
+# If you get this error: 'NoneType' object is not iterable
+# Remove the ~/.kube/config file and try again
+# https://github.com/aws/aws-cli/issues/4843
+```
+
+```bash
+# Verify your installation
+kubectl cluster-info
+```
+
+```bash
+# Setup ARC by following this guide:
+# https://github.com/actions/actions-runner-controller/tree/master/docs/preview/actions-runner-controller-2
+```
