@@ -17,7 +17,12 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/http"
+	"net/url"
+	"strings"
+
 	"github.com/actions/actions-runner-controller/hash"
+	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -83,6 +88,60 @@ type ProxyConfig struct {
 
 	// +optional
 	NoProxy []string `json:"noProxy,omitempty"`
+}
+
+func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
+	config := &httpproxy.Config{
+		NoProxy: strings.Join(c.NoProxy, ","),
+	}
+
+	if c.HTTP != nil {
+		u, err := url.Parse(c.HTTP.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		if c.HTTP.CredentialSecretRef != "" {
+			secret, err := secretFetcher(c.HTTP.CredentialSecretRef)
+			if err != nil {
+				return nil, err
+			}
+
+			u.User = url.UserPassword(
+				string(secret.Data["username"]),
+				string(secret.Data["password"]),
+			)
+		}
+
+		config.HTTPProxy = u.String()
+	}
+
+	if c.HTTPS != nil {
+		u, err := url.Parse(c.HTTPS.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		if c.HTTPS.CredentialSecretRef != "" {
+			secret, err := secretFetcher(c.HTTPS.CredentialSecretRef)
+			if err != nil {
+				return nil, err
+			}
+
+			u.User = url.UserPassword(
+				string(secret.Data["username"]),
+				string(secret.Data["password"]),
+			)
+		}
+
+		config.HTTPSProxy = u.String()
+	}
+
+	proxyFunc := func(req *http.Request) (*url.URL, error) {
+		return config.ProxyFunc()(req.URL)
+	}
+
+	return proxyFunc, nil
 }
 
 type ProxyServerConfig struct {
