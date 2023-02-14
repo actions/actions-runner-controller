@@ -71,6 +71,7 @@ func TestProxyConfig_ProxyFunc(t *testing.T) {
 			req, err := http.NewRequest("GET", test.in, nil)
 			require.NoError(t, err)
 			u, err := result(req)
+			require.NoError(t, err)
 
 			if test.out == "" {
 				assert.Nil(t, u)
