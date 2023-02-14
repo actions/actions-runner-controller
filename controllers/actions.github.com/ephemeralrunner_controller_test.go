@@ -1041,7 +1041,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Client:        mgr.GetClient(),
 				Scheme:        mgr.GetScheme(),
 				Log:           logf.Log,
-				ActionsClient: actions.NewMultiClient("test", logr.Discard()),
+				ActionsClient: fake.NewMultiClient(),
 			}
 
 			err = controller.SetupWithManager(mgr)
@@ -1063,6 +1063,9 @@ var _ = Describe("EphemeralRunner", func() {
 		})
 
 		It("uses an actions client with proxy transport", func() {
+			// Use an actual client
+			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+
 			proxySuccessfulllyCalled := false
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				header := r.Header.Get("Proxy-Authorization")

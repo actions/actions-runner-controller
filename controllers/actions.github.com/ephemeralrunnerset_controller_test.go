@@ -652,7 +652,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
 	})
 
-	FIt("When providing proxy settings", func() {
+	It("When providing proxy settings", func() {
 		secretCredentials := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "proxy-credentials",

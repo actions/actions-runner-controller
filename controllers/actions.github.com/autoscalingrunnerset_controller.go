@@ -19,8 +19,6 @@ package actionsgithubcom
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +26,6 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
-	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -499,13 +496,20 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 
 	var opts []actions.ClientOption
 	if autoscalingRunnerSet.Spec.Proxy != nil {
-		proxyConfig, err := r.getProxyConfig(ctx, autoscalingRunnerSet)
+		proxyFunc, err := autoscalingRunnerSet.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
+			var secret corev1.Secret
+			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: s}, &secret)
+			if err != nil {
+				return nil, err
+			}
+
+			return &secret, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		opts = append(opts, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
-			return proxyConfig.ProxyFunc()(req.URL)
-		}))
+
+		opts = append(opts, actions.WithProxy(proxyFunc))
 	}
 
 	return r.ActionsClient.GetClientFromSecret(
@@ -515,33 +519,6 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		configSecret.Data,
 		opts...,
 	)
-}
-
-func (r *AutoscalingRunnerSetReconciler) getProxyConfig(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*httpproxy.Config, error) {
-	if autoscalingRunnerSet.Spec.Proxy == nil {
-		return nil, nil
-	}
-	var httpUserInfo userInfoFunc
-	if autoscalingRunnerSet.Spec.Proxy.HTTP != nil && len(autoscalingRunnerSet.Spec.Proxy.HTTP.CredentialSecretRef) != 0 {
-		httpUserInfo = func() (*url.Userinfo, error) {
-			return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
-				Name:      autoscalingRunnerSet.Spec.Proxy.HTTP.CredentialSecretRef,
-				Namespace: autoscalingRunnerSet.Namespace,
-			})
-		}
-	}
-
-	var httpsUserInfo userInfoFunc
-	if autoscalingRunnerSet.Spec.Proxy.HTTPS != nil && len(autoscalingRunnerSet.Spec.Proxy.HTTPS.CredentialSecretRef) != 0 {
-		httpsUserInfo = func() (*url.Userinfo, error) {
-			return getProxyUserInfoBySecretNamespacedName(ctx, r.Client, types.NamespacedName{
-				Name:      autoscalingRunnerSet.Spec.Proxy.HTTPS.CredentialSecretRef,
-				Namespace: autoscalingRunnerSet.Namespace,
-			})
-		}
-	}
-
-	return httpProxyConfig(autoscalingRunnerSet.Spec.Proxy, httpUserInfo, httpsUserInfo)
 }
 
 // SetupWithManager sets up the controller with the Manager.
