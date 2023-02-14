@@ -73,7 +73,7 @@ GO_TEST_ARGS ?= -short
 
 # Run tests
 test: generate fmt vet manifests shellcheck
-	go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
+	go test $(GO_TEST_ARGS) `go list ./... | grep -v ./test_e2e_arc` -coverprofile cover.out
 	go test -fuzz=Fuzz -fuzztime=10s -run=Fuzz* ./controllers/actions.summerwind.net
 
 test-with-deps: kube-apiserver etcd kubectl
