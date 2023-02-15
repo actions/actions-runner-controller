@@ -36,6 +36,11 @@ module "vpc" {
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
     "kubernetes.io/role/internal-elb"             = 1
   }
+
+  tags = {
+    # Critical: GitHub specific tag
+    "catalog_service" = "actions-runner-controller"
+  }
 }
 
 module "eks" {
@@ -64,24 +69,14 @@ module "eks" {
       use_custom_launch_template = false
     }
 
-    one = {
-      name = "node-group-1"
+    primary = {
+      name = "primary-node-group"
 
       instance_types = ["t3.small"]
 
       min_size     = 1
       max_size     = 3
       desired_size = 2
-    }
-
-    two = {
-      name = "node-group-2"
-
-      instance_types = ["t3.small"]
-
-      min_size     = 1
-      max_size     = 2
-      desired_size = 1
     }
   }
 }
