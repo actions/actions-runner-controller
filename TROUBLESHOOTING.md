@@ -67,7 +67,7 @@ To fix this, you may either:
    # With helm, you'd set `webhookPort` to the port number of your choice
    # See https://github.com/actions/actions-runner-controller/pull/1410/files for more information
    helm upgrade --install --namespace actions-runner-system --create-namespace \
-                --wait actions-runner-controller actions/actions-runner-controller \
+                --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
                 --set webhookPort=10250
    ```
 
