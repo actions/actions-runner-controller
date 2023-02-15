@@ -594,9 +594,35 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "Template.Spec should have 2 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
+	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 3, "The runner container should have 3 env vars, DOCKER_HOST, DOCKER_TLS_VERIFY and DOCKER_CERT_PATH")
+	assert.Equal(t, "DOCKER_HOST", ars.Spec.Template.Spec.Containers[0].Env[0].Name)
+	assert.Equal(t, "tcp://localhost:2376", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "DOCKER_TLS_VERIFY", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
+	assert.Equal(t, "1", ars.Spec.Template.Spec.Containers[0].Env[1].Value)
+	assert.Equal(t, "DOCKER_CERT_PATH", ars.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].Env[2].Value)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, 2, "The runner container should have 2 volume mounts, dind-cert and work")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
+	assert.Equal(t, "/actions-runner/_work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
+	assert.False(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly)
+
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
+	assert.True(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly)
 
 	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name)
 	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
+	assert.True(t, *ars.Spec.Template.Spec.Containers[1].SecurityContext.Privileged)
+	assert.Len(t, ars.Spec.Template.Spec.Containers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-cert, work and externals")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name)
+	assert.Equal(t, "/actions-runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
+
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
+
+	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
+	assert.Equal(t, "/actions-runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T) {
