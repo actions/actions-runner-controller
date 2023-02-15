@@ -160,7 +160,7 @@ Set the Helm chart values as follows:
 
 ```shell
 $ CA_BUNDLE=$(cat path/to/ca.pem | base64)
-$ helm upgrade --install actions/actions-runner-controller \
+$ helm upgrade --install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false \
   admissionWebHooks.caBundle=${CA_BUNDLE}
 ```
@@ -170,7 +170,7 @@ $ helm upgrade --install actions/actions-runner-controller \
 Set the Helm chart values as follows:
 
 ```shell
-$ helm upgrade --install actions/actions-runner-controller \
+$ helm upgrade --install actions-runner-controller/actions-runner-controller \
   certManagerEnabled=false
 ```
 

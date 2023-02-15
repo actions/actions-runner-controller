@@ -260,7 +260,7 @@ _[see the values documentation for all configuration options](../charts/actions-
 
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
-             --wait actions-runner-controller actions/actions-runner-controller \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
              --set "githubWebhookServer.enabled=true,service.type=NodePort,githubWebhookServer.ports[0].nodePort=33080"
 ```
 
@@ -282,7 +282,7 @@ If you plan to expose ARC via Ingress, you might not be required to make it a `N
 
 ```console
 $ helm upgrade --install --namespace actions-runner-system --create-namespace \
-             --wait actions-runner-controller actions/actions-runner-controller \
+             --wait actions-runner-controller actions-runner-controller/actions-runner-controller \
              --set "githubWebhookServer.enabled=true"
 ```
 
