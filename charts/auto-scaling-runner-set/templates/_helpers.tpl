@@ -189,6 +189,7 @@ volumeMounts:
     {{- $setDockerHost := 1 }}
     {{- $setDockerTlsVerify := 1 }}
     {{- $setDockerCertPath := 1 }}
+    {{- $setRunnerWaitDocker := 1 }}
 env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -200,6 +201,9 @@ env:
         {{- end }}
         {{- if eq $env.name "DOCKER_CERT_PATH" }}
           {{- $setDockerCertPath = 0 -}}
+        {{- end }}
+        {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
+          {{- $setRunnerWaitDocker = 0 -}}
         {{- end }}
   - name: {{ $env.name }}
         {{- range $envKey, $envVal := $env }}
@@ -220,6 +224,10 @@ env:
     {{- if $setDockerCertPath }}
   - name: DOCKER_CERT_PATH
     value: /certs/client
+    {{- end }}
+    {{- if $setRunnerWaitDocker }}
+  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+    value: "120"
     {{- end }}
     {{- $mountWork := 1 }}
     {{- $mountDindCert := 1 }}
