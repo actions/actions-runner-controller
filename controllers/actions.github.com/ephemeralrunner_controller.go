@@ -566,7 +566,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 				Namespace: runner.Namespace,
 			}, &secret)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
 			}
 			return &secret, nil
 		})

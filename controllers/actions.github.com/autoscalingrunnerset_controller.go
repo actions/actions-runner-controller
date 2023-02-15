@@ -500,13 +500,13 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 			var secret corev1.Secret
 			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: s}, &secret)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
 			}
 
 			return &secret, nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get proxy func: %w", err)
 		}
 
 		opts = append(opts, actions.WithProxy(proxyFunc))

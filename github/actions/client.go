@@ -77,8 +77,10 @@ type Client struct {
 	rootCAs               *x509.CertPool
 	tlsInsecureSkipVerify bool
 
-	proxyFunc func(req *http.Request) (*url.URL, error)
+	proxyFunc ProxyFunc
 }
+
+type ProxyFunc func(req *http.Request) (*url.URL, error)
 
 type ClientOption func(*Client)
 
@@ -118,7 +120,7 @@ func WithoutTLSVerify() ClientOption {
 	}
 }
 
-func WithProxy(proxyFunc func(req *http.Request) (*url.URL, error)) ClientOption {
+func WithProxy(proxyFunc ProxyFunc) ClientOption {
 	return func(c *Client) {
 		c.proxyFunc = proxyFunc
 	}
@@ -269,7 +271,7 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
 	}

@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 )
 
 const (
@@ -28,9 +28,9 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	autoscalingNS := new(corev1.Namespace)
-	autoscalingRunnerSet := new(v1alpha1.AutoscalingRunnerSet)
+	autoscalingRunnerSet := new(actionsv1alpha1.AutoscalingRunnerSet)
 	configSecret := new(corev1.Secret)
-	autoscalingListener := new(v1alpha1.AutoscalingListener)
+	autoscalingListener := new(actionsv1alpha1.AutoscalingListener)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.TODO())
@@ -70,12 +70,12 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 
 		min := 1
 		max := 10
-		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
+		autoscalingRunnerSet = &actionsv1alpha1.AutoscalingRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
 			},
-			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			Spec: actionsv1alpha1.AutoscalingRunnerSetSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
@@ -96,12 +96,12 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 		err = k8sClient.Create(ctx, autoscalingRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
 
-		autoscalingListener = &v1alpha1.AutoscalingListener{
+		autoscalingListener = &actionsv1alpha1.AutoscalingListener{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asl",
 				Namespace: autoscalingNS.Name,
 			},
-			Spec: v1alpha1.AutoscalingListenerSpec{
+			Spec: actionsv1alpha1.AutoscalingListenerSpec{
 				GitHubConfigUrl:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
 				RunnerScaleSetId:              1,
@@ -135,7 +135,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	Context("When creating a new AutoScalingListener", func() {
 		It("It should create/add all required resources for a new AutoScalingListener (finalizer, secret, service account, role, rolebinding, pod)", func() {
 			// Check if finalizer is added
-			created := new(v1alpha1.AutoscalingListener)
+			created := new(actionsv1alpha1.AutoscalingListener)
 			Eventually(
 				func() (string, error) {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, created)
@@ -279,7 +279,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			// The AutoScalingListener should be deleted
 			Eventually(
 				func() error {
-					listenerList := new(v1alpha1.AutoscalingListenerList)
+					listenerList := new(actionsv1alpha1.AutoscalingListenerList)
 					err := k8sClient.List(ctx, listenerList, client.InNamespace(autoscalingListener.Namespace), client.MatchingFields{".metadata.name": autoscalingListener.Name})
 					if err != nil {
 						return err
@@ -396,19 +396,19 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	autoscalingNS := new(corev1.Namespace)
-	autoscalingRunnerSet := new(v1alpha1.AutoscalingRunnerSet)
+	autoscalingRunnerSet := new(actionsv1alpha1.AutoscalingRunnerSet)
 	configSecret := new(corev1.Secret)
-	autoscalingListener := new(v1alpha1.AutoscalingListener)
+	autoscalingListener := new(actionsv1alpha1.AutoscalingListener)
 
-	createRunnerSetAndListener := func(proxy *v1alpha1.ProxyConfig) {
+	createRunnerSetAndListener := func(proxy *actionsv1alpha1.ProxyConfig) {
 		min := 1
 		max := 10
-		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
+		autoscalingRunnerSet = &actionsv1alpha1.AutoscalingRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
 			},
-			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			Spec: actionsv1alpha1.AutoscalingRunnerSetSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
@@ -430,12 +430,12 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 		err := k8sClient.Create(ctx, autoscalingRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
 
-		autoscalingListener = &v1alpha1.AutoscalingListener{
+		autoscalingListener = &actionsv1alpha1.AutoscalingListener{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asl",
 				Namespace: autoscalingNS.Name,
 			},
-			Spec: v1alpha1.AutoscalingListenerSpec{
+			Spec: actionsv1alpha1.AutoscalingListenerSpec{
 				GitHubConfigUrl:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
 				RunnerScaleSetId:              1,
@@ -505,11 +505,11 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 	})
 
 	It("It should create pod with proxy environment variables set", func() {
-		proxy := &v1alpha1.ProxyConfig{
-			HTTP: &v1alpha1.ProxyServerConfig{
+		proxy := &actionsv1alpha1.ProxyConfig{
+			HTTP: &actionsv1alpha1.ProxyServerConfig{
 				Url: "http://localhost:8080",
 			},
-			HTTPS: &v1alpha1.ProxyServerConfig{
+			HTTPS: &actionsv1alpha1.ProxyServerConfig{
 				Url: "https://localhost:8443",
 			},
 			NoProxy: []string{
@@ -599,12 +599,12 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 		err = k8sClient.Create(ctx, httpsSecret)
 		Expect(err).To(BeNil(), "failed to create https secret")
 
-		proxy := &v1alpha1.ProxyConfig{
-			HTTP: &v1alpha1.ProxyServerConfig{
+		proxy := &actionsv1alpha1.ProxyConfig{
+			HTTP: &actionsv1alpha1.ProxyServerConfig{
 				Url:                 "http://localhost:8080",
 				CredentialSecretRef: httpSecret.Name,
 			},
-			HTTPS: &v1alpha1.ProxyServerConfig{
+			HTTPS: &actionsv1alpha1.ProxyServerConfig{
 				Url:                 "https://localhost:8443",
 				CredentialSecretRef: httpsSecret.Name,
 			},

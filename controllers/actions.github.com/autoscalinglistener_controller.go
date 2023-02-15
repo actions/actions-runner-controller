@@ -352,12 +352,13 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 			var secret corev1.Secret
 			err := r.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingRunnerSet.Namespace}, &secret)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
 			}
 			return &secret, nil
 		})
 		if err != nil {
-			return reconcile.Result{}, err
+			logger.Error(err, "Unable to get proxy env vars")
+			return reconcile.Result{}, fmt.Errorf("failed to get proxy env vars: %w", err)
 		}
 
 		envs = append(envs, proxyEnv...)
