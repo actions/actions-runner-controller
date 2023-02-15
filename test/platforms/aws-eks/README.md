@@ -20,10 +20,7 @@ Terraform templates to quickly create an EKS cluster with a managed node group. 
 brew install awscli aws-iam-authenticator terraform
 ```
 
-```bash
-# Configure & authenticate AWS CLI
-# This will vary based on your AWS account and IAM setup
-```
+Configure & authenticate AWS CLI. This will vary based on your AWS account and IAM setup
 
 </details>
 
@@ -67,7 +64,7 @@ aws eks --region "${AWS_REGION}" update-kubeconfig \
 kubectl cluster-info
 ```
 
-Setup ARC by following [this guide](https://github.com/actions/actions-runner-controller/tree/master/docs/preview/actions-runner-controller-2).
+Setup ARC by following [this quick-start guide](https://github.com/actions/actions-runner-controller/tree/master/docs/preview/actions-runner-controller-2).
 
 ### Troubleshooting
 
