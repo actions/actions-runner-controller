@@ -67,10 +67,7 @@ aws eks --region "${AWS_REGION}" update-kubeconfig \
 kubectl cluster-info
 ```
 
-```bash
-# Setup ARC by following this guide:
-# https://github.com/actions/actions-runner-controller/tree/master/docs/preview/actions-runner-controller-2
-```
+Setup ARC by following [this guide](https://github.com/actions/actions-runner-controller/tree/master/docs/preview/actions-runner-controller-2).
 
 ### Troubleshooting
 
