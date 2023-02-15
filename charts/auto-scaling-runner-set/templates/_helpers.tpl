@@ -208,18 +208,18 @@ env:
           {{- end }}
         {{- end }}
       {{- end }}
-      {{- if $setDockerHost }}
+    {{- end }}
+    {{- if $setDockerHost }}
   - name: DOCKER_HOST
     value: tcp://localhost:2376
-      {{- end }}
-      {{- if $setDockerTlsVerify }}
+    {{- end }}
+    {{- if $setDockerTlsVerify }}
   - name: DOCKER_TLS_VERIFY
     value: "1"
-      {{- end }}
-      {{- if $setDockerCertPath }}
+    {{- end }}
+    {{- if $setDockerCertPath }}
   - name: DOCKER_CERT_PATH
     value: /certs/client
-      {{- end }}
     {{- end }}
     {{- $mountWork := 1 }}
     {{- $mountDindCert := 1 }}
@@ -247,6 +247,7 @@ volumeMounts:
     {{- if $mountDindCert }}
   - name: dind-cert
     mountPath: /certs/client
+    readOnly: true
     {{- end }}
   {{- end }}
 {{- end }}
