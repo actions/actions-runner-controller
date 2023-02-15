@@ -71,3 +71,17 @@ kubectl cluster-info
 # Setup ARC by following this guide:
 # https://github.com/actions/actions-runner-controller/tree/master/docs/preview/actions-runner-controller-2
 ```
+
+### Troubleshooting
+
+#### dial tcp: lookup api.github.com: i/o timeout
+
+If you see this error in the controller pod logs:
+
+```log
+ERROR   AutoscalingRunnerSet    Failed to initialize Actions service client for creating a new runner scale set {"autoscalingrunnerset": "arc-runners/arc-runner-set", "error": "failed to get runner registration token: Post \"https://api.github.com/app/installations/33454774/access_tokens\": POST https://api.github.com/app/installations/33454774/access_tokens giving up after 5 attempt(s): Post \"https://api.github.com/app/installations/33454774/access_tokens\": dial tcp: lookup api.github.com: i/o timeout"}
+```
+
+This is because the controller pod is not able to resolve the `api.github.com` domain name. This is a good guide for [troubleshooting DNS failures in EKS](https://aws.amazon.com/premiumsupport/knowledge-center/eks-dns-failure/). For a fresh setup this is most likely **a security group configuration problem.**
+
+The controller could have allocated to a node that cannot reach coredns. You need to allow the DNS (TCP / UDP) traffic to flow between the worker nodes' security groups.
