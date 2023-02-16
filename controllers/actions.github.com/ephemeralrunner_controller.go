@@ -566,7 +566,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 				Namespace: runner.Namespace,
 			}, &secret)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
 			}
 			return &secret, nil
 		})
@@ -658,13 +658,13 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 			var secret corev1.Secret
 			err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: s}, &secret)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
 			}
 
 			return &secret, nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get proxy func: %w", err)
 		}
 
 		opts = append(opts, actions.WithProxy(proxyFunc))
