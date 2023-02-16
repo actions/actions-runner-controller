@@ -9,14 +9,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Helm installation
-      run: |
-        curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
-        sudo apt-get install apt-transport-https --yes
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
-        sudo apt-get update
-        sudo apt-get install helm
-      shell: bash
     - name: Install ARC
       run: helm install arc --namespace "arc-systems" --create-namespace oci://ghcr.io/actions/actions-runner-controller-charts/actions-runner-controller-2 --version 0.1.0
       shell: bash

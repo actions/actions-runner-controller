@@ -8,11 +8,6 @@ jobs:
     runs-on: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.18
-      - name: Install latest version of Kind
-        run: go install sigs.k8s.io/kind@latest
       - name: Create Kind cluster
         run: |
           PATH=$(go env GOPATH)/bin:$PATH
