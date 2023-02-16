@@ -3,7 +3,7 @@ description: 'Includes common arc installation, setup and test file run'
 
 inputs:
   github-token:
-    description: 'A Github PAT'
+    description: 'JWT generated with Github App inputs'
     required: true
 
 runs:
