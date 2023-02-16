@@ -1,0 +1,9 @@
+# This file sets some opinionated values for kube-score to use
+# when parsing the chart
+# Custom resource configuration
+
+# Keep CRDs on chart uninstall
+keep: true
+# Annotations to be added to all CRDs
+annotations:
+  test: test

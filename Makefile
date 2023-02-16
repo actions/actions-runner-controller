@@ -112,7 +112,7 @@ deploy: manifests
 	kustomize build config/default | kubectl apply --server-side -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests: manifests-gen-crds chart-crds
+manifests: manifests-gen-crds chart-crds chart-crds-template
 
 manifests-gen-crds: controller-gen yq
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
@@ -188,6 +188,9 @@ chart-crds:
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalinglisteners.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunnersets.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunners.yaml
+
+chart-crds-template:
+	./charts/actions-runner-controller-crds/hack/template-crds.sh
 
 # Run go fmt against code
 fmt:
