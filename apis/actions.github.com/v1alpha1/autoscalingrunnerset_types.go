@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -90,7 +91,7 @@ type ProxyConfig struct {
 	NoProxy []string `json:"noProxy,omitempty"`
 }
 
-func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
+func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
 	config := &httpproxy.Config{
 		NoProxy: strings.Join(c.NoProxy, ","),
 	}
@@ -98,13 +99,17 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 	if c.HTTP != nil {
 		u, err := url.Parse(c.HTTP.Url)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.Url, err)
 		}
 
 		if c.HTTP.CredentialSecretRef != "" {
 			secret, err := secretFetcher(c.HTTP.CredentialSecretRef)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf(
+					"failed to get secret %s for http proxy: %w",
+					c.HTTP.CredentialSecretRef,
+					err,
+				)
 			}
 
 			u.User = url.UserPassword(
@@ -119,13 +124,17 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 	if c.HTTPS != nil {
 		u, err := url.Parse(c.HTTPS.Url)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.Url, err)
 		}
 
 		if c.HTTPS.CredentialSecretRef != "" {
 			secret, err := secretFetcher(c.HTTPS.CredentialSecretRef)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf(
+					"failed to get secret %s for https proxy: %w",
+					c.HTTPS.CredentialSecretRef,
+					err,
+				)
 			}
 
 			u.User = url.UserPassword(
@@ -135,6 +144,15 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 		}
 
 		config.HTTPSProxy = u.String()
+	}
+
+	return config, nil
+}
+
+func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
+	config, err := c.toHTTPProxyConfig(secretFetcher)
+	if err != nil {
+		return nil, err
 	}
 
 	proxyFunc := func(req *http.Request) (*url.URL, error) {
@@ -147,58 +165,29 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 func (c *ProxyConfig) EnvVars(secretFetcher func(string) (*corev1.Secret, error)) ([]corev1.EnvVar, error) {
 	var vars []corev1.EnvVar
 
-	if c.HTTP != nil {
-		u, err := url.Parse(c.HTTP.Url)
-		if err != nil {
-			return nil, err
-		}
+	config, err := c.toHTTPProxyConfig(secretFetcher)
+	if err != nil {
+		return nil, err
+	}
 
-		if c.HTTP.CredentialSecretRef != "" {
-			secret, err := secretFetcher(c.HTTP.CredentialSecretRef)
-			if err != nil {
-				return nil, err
-			}
-
-			u.User = url.UserPassword(
-				string(secret.Data["username"]),
-				string(secret.Data["password"]),
-			)
-		}
-
+	if config.HTTPProxy != "" {
 		vars = append(vars, corev1.EnvVar{
 			Name:  "http_proxy",
-			Value: u.String(),
+			Value: config.HTTPProxy,
 		})
 	}
 
-	if c.HTTPS != nil {
-		u, err := url.Parse(c.HTTPS.Url)
-		if err != nil {
-			return nil, err
-		}
-
-		if c.HTTPS.CredentialSecretRef != "" {
-			secret, err := secretFetcher(c.HTTPS.CredentialSecretRef)
-			if err != nil {
-				return nil, err
-			}
-
-			u.User = url.UserPassword(
-				string(secret.Data["username"]),
-				string(secret.Data["password"]),
-			)
-		}
-
+	if config.HTTPSProxy != "" {
 		vars = append(vars, corev1.EnvVar{
 			Name:  "https_proxy",
-			Value: u.String(),
+			Value: config.HTTPSProxy,
 		})
 	}
 
-	if len(c.NoProxy) > 0 {
+	if config.NoProxy != "" {
 		vars = append(vars, corev1.EnvVar{
 			Name:  "no_proxy",
-			Value: strings.Join(c.NoProxy, ","),
+			Value: config.NoProxy,
 		})
 	}
 
