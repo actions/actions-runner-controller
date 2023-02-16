@@ -1,4 +1,4 @@
-package e2e_dev_arc
+package e2e_arc
 
 import (
 	"bytes"
