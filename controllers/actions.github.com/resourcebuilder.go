@@ -438,6 +438,14 @@ func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) 
 	return fmt.Sprintf("%v-%v-listener-proxy", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
 }
 
+func proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) string {
+	namespaceHash := hash.FNVHashString(ephemeralRunnerSet.Namespace)
+	if len(namespaceHash) > 8 {
+		namespaceHash = namespaceHash[:8]
+	}
+	return fmt.Sprintf("%v-%v-set-proxy", ephemeralRunnerSet.Name, namespaceHash)
+}
+
 func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		{

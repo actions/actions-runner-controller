@@ -652,10 +652,108 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
 	})
 
-	It("should create a proxy secret and pass a reference to runners", func() {})
+	FIt("should create a proxy secret and pass a reference to runners", func() {
+		secretCredentials := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "proxy-credentials",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"username": []byte("test"),
+				"password": []byte("password"),
+			},
+		}
+
+		err := k8sClient.Create(ctx, secretCredentials)
+		Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
+
+		ephemeralRunnerSet = &actionsv1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.EphemeralRunnerSetSpec{
+				Replicas: 1,
+				EphemeralRunnerSpec: actionsv1alpha1.EphemeralRunnerSpec{
+					GitHubConfigUrl:    "http://example.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					RunnerScaleSetId:   100,
+					Proxy: &v1alpha1.ProxyConfig{
+						HTTP: &v1alpha1.ProxyServerConfig{
+							Url:                 "http://proxy.example.com",
+							CredentialSecretRef: "proxy-credentials",
+						},
+						HTTPS: &v1alpha1.ProxyServerConfig{
+							Url:                 "https://proxy.example.com",
+							CredentialSecretRef: "proxy-credentials",
+						},
+						NoProxy: []string{"example.com", "example.org"},
+					},
+					PodTemplateSpec: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err = k8sClient.Create(ctx, ephemeralRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
+
+		Eventually(func(g Gomega) {
+			// Compiled / flattened proxy secret should exist at this point
+			proxySecret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: autoscalingNS.Name,
+				Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+			}, proxySecret)
+			g.Expect(err).NotTo(HaveOccurred(), "failed to get compiled / flattened proxy secret")
+
+			secretFetcher := func(string) (*corev1.Secret, error) {
+				return &corev1.Secret{
+					Data: map[string][]byte{
+						"username": []byte("username"),
+						"password": []byte("password"),
+					},
+				}, nil
+			}
+
+			// Assert that the proxy secret is created with the correct values
+			data, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(secretFetcher)
+			g.Expect(err).NotTo(HaveOccurred(), "failed to get proxy secret data")
+			g.Expect(proxySecret.Data).To(Equal(data))
+		},
+			ephemeralRunnerSetTestTimeout,
+			ephemeralRunnerSetTestInterval,
+		).Should(Succeed(), "compiled / flattened proxy secret should exist")
+
+		err = k8sClient.Delete(ctx, ephemeralRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete EphemeralRunnerSet")
+
+		// Assert that the proxy secret is deleted
+		Eventually(func(g Gomega) {
+			proxySecret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: autoscalingNS.Name,
+				Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+			}, proxySecret)
+			g.Expect(err).To(HaveOccurred(), "proxy secret should be deleted")
+			g.Expect(kerrors.IsNotFound(err)).To(BeTrue(), "proxy secret should be deleted")
+		},
+			ephemeralRunnerSetTestTimeout,
+			ephemeralRunnerSetTestInterval,
+		).Should(Succeed(), "proxy secret should be deleted")
+	})
+
 	It("should delete the proxy secret on deletion", func() {})
 
-	It("When providing proxy settings", func() {
+	It("should configure the actions client to use proxy details", func() {
 		secretCredentials := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "proxy-credentials",
