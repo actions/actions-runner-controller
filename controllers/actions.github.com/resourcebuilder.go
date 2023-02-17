@@ -430,6 +430,14 @@ func scaleSetListenerSecretMirrorName(autoscalingListener *v1alpha1.AutoscalingL
 	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
 }
 
+func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) string {
+	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
+	if len(namespaceHash) > 8 {
+		namespaceHash = namespaceHash[:8]
+	}
+	return fmt.Sprintf("%v-%v-listener-proxy", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
+}
+
 func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		{

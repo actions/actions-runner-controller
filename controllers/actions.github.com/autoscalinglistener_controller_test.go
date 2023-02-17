@@ -7,6 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -14,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 )
@@ -222,7 +224,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 
 	Context("When deleting a new AutoScalingListener", func() {
 		It("It should cleanup all resources for a deleting AutoScalingListener before removing it", func() {
-			// Waiting for the pod is created
+			// Waiting for the pod to be created
 			pod := new(corev1.Pod)
 			Eventually(
 				func() (string, error) {
@@ -392,7 +394,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	})
 })
 
-var _ = Describe("Test AutoScalingListener controller without proxy", func() {
+var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	autoscalingNS := new(corev1.Namespace)
@@ -502,6 +504,124 @@ var _ = Describe("Test AutoScalingListener controller without proxy", func() {
 
 		err := k8sClient.Delete(ctx, autoscalingNS)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
+	})
+
+	It("should create a secret in the listener namespace containing proxy details, use it to populate env vars on the pod and should delete it as part of cleanup", func() {
+		proxyCredentials := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "proxy-credentials",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"username": []byte("test"),
+				"password": []byte("password"),
+			},
+		}
+
+		err := k8sClient.Create(ctx, proxyCredentials)
+		Expect(err).NotTo(HaveOccurred(), "failed to create proxy credentials secret")
+
+		proxy := &actionsv1alpha1.ProxyConfig{
+			HTTP: &actionsv1alpha1.ProxyServerConfig{
+				Url:                 "http://localhost:8080",
+				CredentialSecretRef: "proxy-credentials",
+			},
+			HTTPS: &actionsv1alpha1.ProxyServerConfig{
+				Url:                 "https://localhost:8443",
+				CredentialSecretRef: "proxy-credentials",
+			},
+			NoProxy: []string{
+				"example.com",
+				"example.org",
+			},
+		}
+
+		createRunnerSetAndListener(proxy)
+
+		var proxySecret corev1.Secret
+		Eventually(
+			func(g Gomega) {
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
+					&proxySecret,
+				)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get secret")
+				expected, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+					var secret corev1.Secret
+					err := k8sClient.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingNS.Name}, &secret)
+					if err != nil {
+						return nil, err
+					}
+					return &secret, nil
+				})
+				g.Expect(err).NotTo(HaveOccurred(), "failed to convert proxy config to secret data")
+				g.Expect(proxySecret.Data).To(Equal(expected))
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		)
+
+		// wait for listener pod to be created
+		Eventually(
+			func(g Gomega) {
+				pod := new(corev1.Pod)
+				err := k8sClient.Get(
+					ctx,
+					client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace},
+					pod,
+				)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get pod")
+
+				g.Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+					Name: "http_proxy",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: proxyListenerSecretName(autoscalingListener)},
+							Key:                  "http_proxy",
+						},
+					},
+				}), "http_proxy environment variable not found")
+
+				g.Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+					Name: "https_proxy",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: proxyListenerSecretName(autoscalingListener)},
+							Key:                  "https_proxy",
+						},
+					},
+				}), "https_proxy environment variable not found")
+
+				g.Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+					Name: "no_proxy",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: proxyListenerSecretName(autoscalingListener)},
+							Key:                  "no_proxy",
+						},
+					},
+				}), "no_proxy environment variable not found")
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval)
+
+		// Delete the AutoScalingListener
+		err = k8sClient.Delete(ctx, autoscalingListener)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete test AutoScalingListener")
+
+		Eventually(
+			func(g Gomega) {
+				var proxySecret corev1.Secret
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
+					&proxySecret,
+				)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval)
 	})
 
 	It("It should create pod with proxy environment variables set", func() {

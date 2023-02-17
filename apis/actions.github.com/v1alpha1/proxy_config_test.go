@@ -11,6 +11,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestProxyConfig_ToSecret(t *testing.T) {
+	config := &v1alpha1.ProxyConfig{
+		HTTP: &v1alpha1.ProxyServerConfig{
+			Url:                 "http://proxy.example.com:8080",
+			CredentialSecretRef: "my-secret",
+		},
+		HTTPS: &v1alpha1.ProxyServerConfig{
+			Url:                 "https://proxy.example.com:8080",
+			CredentialSecretRef: "my-secret",
+		},
+		NoProxy: []string{
+			"noproxy.example.com",
+			"noproxy2.example.com",
+		},
+	}
+
+	secretFetcher := func(string) (*corev1.Secret, error) {
+		return &corev1.Secret{
+			Data: map[string][]byte{
+				"username": []byte("username"),
+				"password": []byte("password"),
+			},
+		}, nil
+	}
+
+	result, err := config.ToSecretData(secretFetcher)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, "http://username:password@proxy.example.com:8080", string(result["http_proxy"]))
+	assert.Equal(t, "https://username:password@proxy.example.com:8080", string(result["https_proxy"]))
+	assert.Equal(t, "noproxy.example.com,noproxy2.example.com", string(result["no_proxy"]))
+}
+
 func TestProxyConfig_ProxyFunc(t *testing.T) {
 	config := &v1alpha1.ProxyConfig{
 		HTTP: &v1alpha1.ProxyServerConfig{

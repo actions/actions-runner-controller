@@ -840,6 +840,8 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil(), "failed to delete test namespace for EphemeralRunner")
 		})
 
+		It("should mount proxy secret into env vars", func() {})
+
 		It("It should create EphemeralRunner with proxy environment variables without secrets", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{

@@ -149,6 +149,20 @@ func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	return config, nil
 }
 
+func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, error)) (map[string][]byte, error) {
+	config, err := c.toHTTPProxyConfig(secretFetcher)
+	if err != nil {
+		return nil, err
+	}
+
+	data := map[string][]byte{}
+	data["http_proxy"] = []byte(config.HTTPProxy)
+	data["https_proxy"] = []byte(config.HTTPSProxy)
+	data["no_proxy"] = []byte(config.NoProxy)
+
+	return data, nil
+}
+
 func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
 	config, err := c.toHTTPProxyConfig(secretFetcher)
 	if err != nil {
