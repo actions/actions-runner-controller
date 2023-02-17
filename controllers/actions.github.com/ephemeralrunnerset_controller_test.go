@@ -652,7 +652,8 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
 	})
 
-	FIt("should create a proxy secret and pass a reference to runners", func() {
+	// TODO: pass a reference to runners
+	FIt("should create a proxy secret and delete the proxy secreat after the runner-set is deleted", func() {
 		secretCredentials := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "proxy-credentials",
@@ -750,8 +751,6 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			ephemeralRunnerSetTestInterval,
 		).Should(Succeed(), "proxy secret should be deleted")
 	})
-
-	It("should delete the proxy secret on deletion", func() {})
 
 	It("should configure the actions client to use proxy details", func() {
 		secretCredentials := &corev1.Secret{
