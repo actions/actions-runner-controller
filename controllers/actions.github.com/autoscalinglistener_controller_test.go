@@ -7,13 +7,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -560,7 +560,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
-		)
+		).Should(Succeed(), "failed to create secret with proxy details")
 
 		// wait for listener pod to be created
 		Eventually(
@@ -604,7 +604,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 				}), "no_proxy environment variable not found")
 			},
 			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval)
+			autoscalingListenerTestInterval).Should(Succeed(), "failed to create listener pod with proxy details")
 
 		// Delete the AutoScalingListener
 		err = k8sClient.Delete(ctx, autoscalingListener)
@@ -618,168 +618,9 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
 					&proxySecret,
 				)
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				g.Expect(kerrors.IsNotFound(err)).To(BeTrue())
 			},
 			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval)
-	})
-
-	It("It should create pod with proxy environment variables set", func() {
-		proxy := &actionsv1alpha1.ProxyConfig{
-			HTTP: &actionsv1alpha1.ProxyServerConfig{
-				Url: "http://localhost:8080",
-			},
-			HTTPS: &actionsv1alpha1.ProxyServerConfig{
-				Url: "https://localhost:8443",
-			},
-			NoProxy: []string{
-				"http://localhost:8088",
-				"https://localhost:8088",
-			},
-		}
-
-		createRunnerSetAndListener(proxy)
-
-		// Waiting for the pod is created
-		pod := new(corev1.Pod)
-		Eventually(
-			func() (string, error) {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-				if err != nil {
-					return "", err
-				}
-
-				return pod.Name, nil
-			},
-			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval,
-		).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
-
-		expectedValues := map[string]string{
-			EnvVarHTTPProxy:  "http://localhost:8080",
-			EnvVarHTTPSProxy: "https://localhost:8443",
-			EnvVarNoProxy:    "http://localhost:8088,https://localhost:8088",
-		}
-
-		envFrequency := map[string]int{}
-
-		for i := range pod.Spec.Containers {
-			c := &pod.Spec.Containers[i]
-			if c.Name == autoscalingListenerContainerName {
-				for _, env := range c.Env {
-					switch env.Name {
-					case EnvVarHTTPProxy:
-						envFrequency[EnvVarHTTPProxy]++
-						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPProxy]))
-					case EnvVarHTTPSProxy:
-						envFrequency[EnvVarHTTPSProxy]++
-						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPSProxy]))
-					case EnvVarNoProxy:
-						envFrequency[EnvVarNoProxy]++
-						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarNoProxy]))
-					}
-				}
-				break
-			}
-		}
-
-		for _, name := range []string{EnvVarHTTPProxy, EnvVarHTTPSProxy, EnvVarNoProxy} {
-			frequency := envFrequency[name]
-			Expect(frequency).To(BeEquivalentTo(1), fmt.Sprintf("expected %s env variable frequency to be 1, got %d", name, frequency))
-		}
-	})
-
-	It("It should create proxy environment variables with username:password set", func() {
-		httpSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "httpsecret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"username": []byte("testuser"),
-				"password": []byte("testpassword"),
-			},
-			Type: corev1.SecretTypeOpaque,
-		}
-		err := k8sClient.Create(ctx, httpSecret)
-		Expect(err).To(BeNil(), "failed to create http secret")
-
-		httpsSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "httpssecret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"username": []byte("testuser"),
-				"password": []byte("testpassword"),
-			},
-			Type: corev1.SecretTypeOpaque,
-		}
-
-		err = k8sClient.Create(ctx, httpsSecret)
-		Expect(err).To(BeNil(), "failed to create https secret")
-
-		proxy := &actionsv1alpha1.ProxyConfig{
-			HTTP: &actionsv1alpha1.ProxyServerConfig{
-				Url:                 "http://localhost:8080",
-				CredentialSecretRef: httpSecret.Name,
-			},
-			HTTPS: &actionsv1alpha1.ProxyServerConfig{
-				Url:                 "https://localhost:8443",
-				CredentialSecretRef: httpsSecret.Name,
-			},
-			NoProxy: []string{
-				"http://localhost:8088",
-				"https://localhost:8088",
-			},
-		}
-		createRunnerSetAndListener(proxy)
-
-		// Waiting for the pod is created
-		pod := new(corev1.Pod)
-		Eventually(
-			func() (string, error) {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-				if err != nil {
-					return "", err
-				}
-
-				return pod.Name, nil
-			},
-			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval,
-		).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
-
-		expectedValues := map[string]string{
-			EnvVarHTTPProxy:  fmt.Sprintf("http://%s:%s@localhost:8080", httpSecret.Data["username"], httpSecret.Data["password"]),
-			EnvVarHTTPSProxy: fmt.Sprintf("https://%s:%s@localhost:8443", httpsSecret.Data["username"], httpsSecret.Data["password"]),
-			EnvVarNoProxy:    "http://localhost:8088,https://localhost:8088",
-		}
-
-		envFrequency := map[string]int{}
-		for i := range pod.Spec.Containers {
-			c := &pod.Spec.Containers[i]
-			if c.Name == autoscalingListenerContainerName {
-				for _, env := range c.Env {
-					switch env.Name {
-					case EnvVarHTTPProxy:
-						envFrequency[EnvVarHTTPProxy]++
-						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPProxy]))
-					case EnvVarHTTPSProxy:
-						envFrequency[EnvVarHTTPSProxy]++
-						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPSProxy]))
-					case EnvVarNoProxy:
-						envFrequency[EnvVarNoProxy]++
-						Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarNoProxy]))
-					}
-				}
-				break
-			}
-		}
-
-		for _, name := range []string{EnvVarHTTPProxy, EnvVarHTTPSProxy, EnvVarNoProxy} {
-			frequency := envFrequency[name]
-			Expect(frequency).To(BeEquivalentTo(1), fmt.Sprintf("expected %s env variable frequency to be 1, got %d", name, frequency))
-		}
+			autoscalingListenerTestInterval).Should(Succeed(), "failed to delete secret with proxy details")
 	})
 })
