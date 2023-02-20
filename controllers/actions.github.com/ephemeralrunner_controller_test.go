@@ -1120,99 +1120,57 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
-		It("It should create EphemeralRunner with proxy environment variables with secrets", func() {
-			httpSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "httpsecret",
-					Namespace: autoScalingNS.Name,
-				},
-				Data: map[string][]byte{
-					"username": []byte("testuser"),
-					"password": []byte("testpassword"),
-				},
-				Type: corev1.SecretTypeOpaque,
-			}
-			err := k8sClient.Create(ctx, httpSecret)
-			Expect(err).To(BeNil(), "failed to create http secret")
-
-			httpsSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "httpssecret",
-					Namespace: autoScalingNS.Name,
-				},
-				Data: map[string][]byte{
-					"username": []byte("testuser"),
-					"password": []byte("testpassword"),
-				},
-				Type: corev1.SecretTypeOpaque,
-			}
-
-			err = k8sClient.Create(ctx, httpsSecret)
-			Expect(err).To(BeNil(), "failed to create https secret")
-
-			proxy := &v1alpha1.ProxyConfig{
-				HTTP: &v1alpha1.ProxyServerConfig{
-					Url:                 "http://localhost:8080",
-					CredentialSecretRef: httpSecret.Name,
-				},
-				HTTPS: &v1alpha1.ProxyServerConfig{
-					Url:                 "https://localhost:8443",
-					CredentialSecretRef: httpsSecret.Name,
-				},
-				NoProxy: []string{
-					"http://localhost:8088",
-					"https://localhost:8088",
-				},
-			}
+		It("It should create EphemeralRunner with proxy environment variables using ProxySecretRef", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
-			ephemeralRunner.Spec.Proxy = proxy
-			err = k8sClient.Create(ctx, ephemeralRunner)
+			ephemeralRunner.Spec.ProxySecretRef = "proxy-secret"
+			err := k8sClient.Create(ctx, ephemeralRunner)
 			Expect(err).To(BeNil(), "failed to create ephemeral runner")
 
 			pod := new(corev1.Pod)
 			Eventually(
-				func() (bool, error) {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
-						return false, err
-					}
-					return true, nil
+				func(g Gomega) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					g.Expect(err).To(BeNil(), "failed to get ephemeral runner pod")
 				},
 				timeout,
 				interval,
-			).Should(BeEquivalentTo(true))
+			).Should(Succeed(), "failed to get ephemeral runner pod")
 
-			expectedValues := map[string]string{
-				EnvVarHTTPProxy:  fmt.Sprintf("http://%s:%s@localhost:8080", httpSecret.Data["username"], httpSecret.Data["password"]),
-				EnvVarHTTPSProxy: fmt.Sprintf("https://%s:%s@localhost:8443", httpsSecret.Data["username"], httpsSecret.Data["password"]),
-				EnvVarNoProxy:    "http://localhost:8088,https://localhost:8088",
-			}
+			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: EnvVarHTTPProxy,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ephemeralRunner.Spec.ProxySecretRef,
+						},
+						Key: "http_proxy",
+					},
+				},
+			}))
 
-			envFrequency := map[string]int{}
+			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: EnvVarHTTPSProxy,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ephemeralRunner.Spec.ProxySecretRef,
+						},
+						Key: "https_proxy",
+					},
+				},
+			}))
 
-			for i := range pod.Spec.Containers {
-				c := &pod.Spec.Containers[i]
-				if c.Name == EphemeralRunnerContainerName {
-					for _, env := range c.Env {
-						switch env.Name {
-						case EnvVarHTTPProxy:
-							envFrequency[EnvVarHTTPProxy]++
-							Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPProxy]))
-						case EnvVarHTTPSProxy:
-							envFrequency[EnvVarHTTPSProxy]++
-							Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarHTTPSProxy]))
-						case EnvVarNoProxy:
-							envFrequency[EnvVarNoProxy]++
-							Expect(env.Value).To(BeEquivalentTo(expectedValues[EnvVarNoProxy]))
-						}
-					}
-					break
-				}
-			}
-
-			for _, name := range []string{EnvVarHTTPProxy, EnvVarHTTPSProxy, EnvVarNoProxy} {
-				frequency := envFrequency[name]
-				Expect(frequency).To(BeEquivalentTo(1), fmt.Sprintf("expected %s env variable frequency to be 1, got %d", name, frequency))
-			}
+			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: EnvVarNoProxy,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ephemeralRunner.Spec.ProxySecretRef,
+						},
+						Key: "no_proxy",
+					},
+				},
+			}))
 		})
 	})
 })

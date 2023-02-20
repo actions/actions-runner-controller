@@ -558,23 +558,44 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
 	var envs []corev1.EnvVar
-	if runner.Spec.Proxy != nil {
-		proxyEnvs, err := runner.Spec.Proxy.EnvVars(func(s string) (*corev1.Secret, error) {
-			var secret corev1.Secret
-			err := r.Client.Get(ctx, types.NamespacedName{
-				Name:      s,
-				Namespace: runner.Namespace,
-			}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
-			}
-			return &secret, nil
-		})
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get proxy env vars: %w", err)
+	if runner.Spec.ProxySecretRef != "" {
+		http := corev1.EnvVar{
+			Name: "http_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: runner.Spec.ProxySecretRef,
+					},
+					Key: "http_proxy",
+				},
+			},
 		}
 
-		envs = append(envs, proxyEnvs...)
+		https := corev1.EnvVar{
+			Name: "https_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: runner.Spec.ProxySecretRef,
+					},
+					Key: "https_proxy",
+				},
+			},
+		}
+
+		noProxy := corev1.EnvVar{
+			Name: "no_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: runner.Spec.ProxySecretRef,
+					},
+					Key: "no_proxy",
+				},
+			},
+		}
+
+		envs = append(envs, http, https, noProxy)
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
