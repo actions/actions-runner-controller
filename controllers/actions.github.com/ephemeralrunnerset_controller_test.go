@@ -660,7 +660,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				Namespace: autoscalingNS.Name,
 			},
 			Data: map[string][]byte{
-				"username": []byte("test"),
+				"username": []byte("username"),
 				"password": []byte("password"),
 			},
 		}
@@ -682,11 +682,11 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
 							Url:                 "http://proxy.example.com",
-							CredentialSecretRef: "proxy-credentials",
+							CredentialSecretRef: secretCredentials.Name,
 						},
 						HTTPS: &v1alpha1.ProxyServerConfig{
 							Url:                 "https://proxy.example.com",
-							CredentialSecretRef: "proxy-credentials",
+							CredentialSecretRef: secretCredentials.Name,
 						},
 						NoProxy: []string{"example.com", "example.org"},
 					},
@@ -709,30 +709,38 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 
 		Eventually(func(g Gomega) {
 			// Compiled / flattened proxy secret should exist at this point
-			proxySecret := &corev1.Secret{}
+			actualProxySecret := &corev1.Secret{}
 			err = k8sClient.Get(ctx, client.ObjectKey{
 				Namespace: autoscalingNS.Name,
 				Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
-			}, proxySecret)
+			}, actualProxySecret)
 			g.Expect(err).NotTo(HaveOccurred(), "failed to get compiled / flattened proxy secret")
 
-			secretFetcher := func(string) (*corev1.Secret, error) {
-				return &corev1.Secret{
-					Data: map[string][]byte{
-						"username": []byte("username"),
-						"password": []byte("password"),
-					},
-				}, nil
+			secretFetcher := func(name string) (*corev1.Secret, error) {
+				secret := &corev1.Secret{}
+				err = k8sClient.Get(ctx, client.ObjectKey{
+					Namespace: autoscalingNS.Name,
+					Name:      name,
+				}, secret)
+				return secret, err
 			}
 
 			// Assert that the proxy secret is created with the correct values
-			data, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(secretFetcher)
+			expectedData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(secretFetcher)
 			g.Expect(err).NotTo(HaveOccurred(), "failed to get proxy secret data")
-			g.Expect(proxySecret.Data).To(Equal(data))
+			g.Expect(actualProxySecret.Data).To(Equal(expectedData))
 		},
 			ephemeralRunnerSetTestTimeout,
 			ephemeralRunnerSetTestInterval,
 		).Should(Succeed(), "compiled / flattened proxy secret should exist")
+
+		// patch ephemeral runner set to have 0 replicas
+		patch := client.MergeFrom(ephemeralRunnerSet.DeepCopy())
+		ephemeralRunnerSet.Spec.Replicas = 0
+		err = k8sClient.Patch(ctx, ephemeralRunnerSet, patch)
+		Expect(err).NotTo(HaveOccurred(), "failed to patch EphemeralRunnerSet")
+
+		// TODO: wait for the scaledown!
 
 		err = k8sClient.Delete(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete EphemeralRunnerSet")

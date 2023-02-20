@@ -443,7 +443,7 @@ func proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet *v1alpha1.EphemeralRun
 	if len(namespaceHash) > 8 {
 		namespaceHash = namespaceHash[:8]
 	}
-	return fmt.Sprintf("%v-%v-set-proxy", ephemeralRunnerSet.Name, namespaceHash)
+	return fmt.Sprintf("%v-%v-runner-proxy", ephemeralRunnerSet.Name, namespaceHash)
 }
 
 func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {

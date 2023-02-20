@@ -133,7 +133,10 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 			// Create a compiled secret for the runner pods in the runnerset namespace
 			log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
-			return r.createProxySecret(ctx, ephemeralRunnerSet, log)
+			if err := r.createProxySecret(ctx, ephemeralRunnerSet, log); err != nil {
+				log.Error(err, "Unable to create ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "set-name", ephemeralRunnerSet.Name)
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -211,15 +214,39 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {
+func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy == nil {
+		return nil
+	}
+	log.Info("Deleting proxy secret")
+
+	proxySecret := new(corev1.Secret)
+	proxySecret.Namespace = ephemeralRunnerSet.Namespace
+	proxySecret.Name = proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)
+
+	if err := r.Delete(ctx, proxySecret); err != nil && !kerrors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete proxy secret: %v", err)
+	}
+
+	log.Info("Deleted proxy secret")
+
+	return nil
+}
+
+func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	err = r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{ephemeralRunnerSetReconcilerOwnerKey: ephemeralRunnerSet.Name})
+	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{ephemeralRunnerSetReconcilerOwnerKey: ephemeralRunnerSet.Name})
 	if err != nil {
 		return false, fmt.Errorf("failed to list child ephemeral runners: %v", err)
 	}
 
+	log.Info("Actual Ephemeral runner counts", "count", len(ephemeralRunnerList.Items))
 	// only if there are no ephemeral runners left, return true
 	if len(ephemeralRunnerList.Items) == 0 {
+		err := r.cleanUpProxySecret(ctx, ephemeralRunnerSet, log)
+		if err != nil {
+			return false, err
+		}
 		log.Info("All ephemeral runners are deleted")
 		return true, nil
 	}
@@ -306,16 +333,38 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 }
 
 func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
-	secret := //TODO
+	proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+		secret := new(corev1.Secret)
+		err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
+		return secret, err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+	}
+
+	runnerPodProxySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+			Namespace: ephemeralRunnerSet.Namespace,
+			Labels:    map[string]string{
+				// TODO: figure out autoScalingRunnerSet name and set it as a label for this secret
+				// "auto-scaling-runner-set-namespace": ephemeralRunnerSet.Namespace,
+				// "auto-scaling-runner-set-name": ephemeralRunnerSet.Name,
+			},
+		},
+		Data: proxySecretData,
+	}
+
+	// create runnerPodProxySecret
 
 	// Make sure that we own the resource we create.
-	if err := ctrl.SetControllerReference(ephemeralRunnerSet, secret, r.Scheme); err != nil {
+	if err := ctrl.SetControllerReference(ephemeralRunnerSet, runnerPodProxySecret, r.Scheme); err != nil {
 		log.Error(err, "failed to set controller reference on proxy secret")
 		return err
 	}
 
 	log.Info("Creating new proxy secret")
-	if err := r.Create(ctx, secret); err != nil {
+	if err := r.Create(ctx, runnerPodProxySecret); err != nil {
 		log.Error(err, "failed to create proxy secret")
 		return err
 	}
