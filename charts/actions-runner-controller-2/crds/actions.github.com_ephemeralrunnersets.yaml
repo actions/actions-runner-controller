@@ -93,6 +93,8 @@ spec:
                             type: string
                           type: array
                       type: object
+                    proxySecretRef:
+                      type: string
                     runnerScaleSetId:
                       type: integer
                     spec:

@@ -734,6 +734,16 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			ephemeralRunnerSetTestInterval,
 		).Should(Succeed(), "compiled / flattened proxy secret should exist")
 
+		Eventually(func(g Gomega) {
+			runnerList := new(actionsv1alpha1.EphemeralRunnerList)
+			err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+			g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunners")
+
+			for _, runner := range runnerList.Items {
+				g.Expect(runner.Spec.ProxySecretRef).To(Equal(proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)))
+			}
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed(), "EphemeralRunners should have a reference to the proxy secret")
+
 		// patch ephemeral runner set to have 0 replicas
 		patch := client.MergeFrom(ephemeralRunnerSet.DeepCopy())
 		ephemeralRunnerSet.Spec.Replicas = 0
@@ -742,7 +752,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 
 		// Set pods to PodSucceeded to simulate an actual EphemeralRunner stopping
 		Eventually(
-			func() (int, error) {
+			func(g Gomega) (int, error) {
 				runnerList := new(actionsv1alpha1.EphemeralRunnerList)
 				err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
 				if err != nil {
@@ -772,7 +782,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				return len(runnerList.Items), nil
 			},
 			ephemeralRunnerSetTestTimeout,
-			ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(0), "0 EphemeralRunner should exist")
+			ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(1), "1 EphemeralRunner should exist")
 
 		// Delete the EphemeralRunnerSet
 		err = k8sClient.Delete(ctx, ephemeralRunnerSet)

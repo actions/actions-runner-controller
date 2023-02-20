@@ -311,6 +311,9 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	errs := make([]error, 0)
 	for i := 0; i < count; i++ {
 		ephemeralRunner := r.resourceBuilder.newEphemeralRunner(runnerSet)
+		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
+		}
 
 		// Make sure that we own the resource we create.
 		if err := ctrl.SetControllerReference(runnerSet, ephemeralRunner, r.Scheme); err != nil {
