@@ -1,9 +1,9 @@
 ifdef DOCKER_USER
-	NAME ?= ${DOCKER_USER}/actions-runner-controller
+	DOCKER_IMAGE_NAME ?= ${DOCKER_USER}/actions-runner-controller
 else
-	NAME ?= summerwind/actions-runner-controller
+	DOCKER_IMAGE_NAME ?= summerwind/actions-runner-controller
 endif
-DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
+DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
 RUNNER_VERSION ?= 2.301.1
 TARGETPLATFORM ?= $(shell arch)
@@ -102,7 +102,7 @@ uninstall: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
+	cd config/manager && kustomize edit set image controller=${DOCKER_IMAGE_NAME}:${VERSION}
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
@@ -204,18 +204,18 @@ docker-buildx:
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		--build-arg VERSION=${VERSION} \
-		-t "${NAME}:${VERSION}" \
+		-t "${DOCKER_IMAGE_NAME}:${VERSION}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
 
 # Push the docker image
 docker-push:
-	docker push ${NAME}:${VERSION}
+	docker push ${DOCKER_IMAGE_NAME}:${VERSION}
 	docker push ${RUNNER_NAME}:${RUNNER_TAG}
 
 # Generate the release manifest file
 release: manifests
-	cd config/manager && kustomize edit set image controller=${NAME}:${VERSION}
+	cd config/manager && kustomize edit set image controller=${DOCKER_IMAGE_NAME}:${VERSION}
 	mkdir -p release
 	kustomize build config/default > release/actions-runner-controller.yaml
 
@@ -239,7 +239,7 @@ acceptance/kind:
 # Otherwise `load docker-image` fail while running `docker save`.
 # See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
 acceptance/load:
-	kind load docker-image ${NAME}:${VERSION} --name ${CLUSTER}
+	kind load docker-image ${DOCKER_IMAGE_NAME}:${VERSION} --name ${CLUSTER}
 	kind load docker-image quay.io/brancz/kube-rbac-proxy:$(KUBE_RBAC_PROXY_VERSION) --name ${CLUSTER}
 	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name ${CLUSTER}
 	kind load docker-image docker:dind --name ${CLUSTER}
@@ -269,7 +269,7 @@ acceptance/teardown:
 	kind delete cluster --name ${CLUSTER}
 
 acceptance/deploy:
-	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
+	DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
 	TEST_ORG=${TEST_ORG} TEST_ORG_REPO=${TEST_ORG_REPO} SYNC_PERIOD=${SYNC_PERIOD} \
 	USE_RUNNERSET=${USE_RUNNERSET} \
 	TEST_EPHEMERAL=${TEST_EPHEMERAL} \
