@@ -740,8 +740,41 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		err = k8sClient.Patch(ctx, ephemeralRunnerSet, patch)
 		Expect(err).NotTo(HaveOccurred(), "failed to patch EphemeralRunnerSet")
 
-		// TODO: wait for the scaledown!
+		// Set pods to PodSucceeded to simulate an actual EphemeralRunner stopping
+		Eventually(
+			func() (int, error) {
+				runnerList := new(actionsv1alpha1.EphemeralRunnerList)
+				err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+				if err != nil {
+					return -1, err
+				}
 
+				// Set status to simulate a configured EphemeralRunner
+				refetch := false
+				for i, runner := range runnerList.Items {
+					if runner.Status.RunnerId == 0 {
+						updatedRunner := runner.DeepCopy()
+						updatedRunner.Status.Phase = corev1.PodSucceeded
+						updatedRunner.Status.RunnerId = i + 100
+						err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
+						Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
+						refetch = true
+					}
+				}
+
+				if refetch {
+					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					if err != nil {
+						return -1, err
+					}
+				}
+
+				return len(runnerList.Items), nil
+			},
+			ephemeralRunnerSetTestTimeout,
+			ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(0), "0 EphemeralRunner should exist")
+
+		// Delete the EphemeralRunnerSet
 		err = k8sClient.Delete(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete EphemeralRunnerSet")
 
