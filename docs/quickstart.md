@@ -107,7 +107,7 @@ spec:
     spec:
       repository: mumoshu/actions-runner-controller-ci
 ````
-<sub> *note:- Replace "mumoshu/actions-runner-controller-ci" with your repository name. </sub>
+<sub> *note:- Replace "mumoshu/actions-runner-controller-ci" with the name of the GitHub repository the runner will be associated with. </sub>
 
 Apply this file to your K8s cluster.
 ```shell

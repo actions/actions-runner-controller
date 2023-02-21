@@ -303,4 +303,4 @@ If you noticed that it takes several minutes for sidecar dind container to be cr
 
 **Solution**
 
-The solution is to switch to using faster storage, if you are experiencing this issue you are probably using hdd, switch to ssh fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some ssds.
+The solution is to switch to using faster storage, if you are experiencing this issue you are probably using HDD storage. Switching to SSD storage fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some SSDs.
