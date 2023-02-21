@@ -210,9 +210,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			if e.GetAction() == "queued" {
 				target.Amount = 1
 				break
-			} else if e.GetAction() == "completed" && e.GetWorkflowJob().GetConclusion() != "skipped" {
-				// A nagative amount is processed in the tryScale func as a scale-down request,
-				// that erasese the oldest CapacityReservation with the same amount.
+			} else if e.GetAction() == "completed" && e.GetWorkflowJob().GetConclusion() != "skipped" && e.GetWorkflowJob().GetRunnerID() > 0 {
+				// A negative amount is processed in the tryScale func as a scale-down request,
+				// that erases the oldest CapacityReservation with the same amount.
 				// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
 				// so that the resulting desired replicas decreases by 1.
 				target.Amount = -1
