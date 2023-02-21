@@ -898,6 +898,15 @@ var _ = Describe("EphemeralRunner", func() {
 
 		It("It should create EphemeralRunner with proxy environment variables using ProxySecretRef", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
+				HTTP: &v1alpha1.ProxyServerConfig{
+					Url: "http://proxy.example.com:8080",
+				},
+				HTTPS: &v1alpha1.ProxyServerConfig{
+					Url: "http://proxy.example.com:8080",
+				},
+				NoProxy: []string{"example.com"},
+			}
 			ephemeralRunner.Spec.ProxySecretRef = "proxy-secret"
 			err := k8sClient.Create(ctx, ephemeralRunner)
 			Expect(err).To(BeNil(), "failed to create ephemeral runner")
