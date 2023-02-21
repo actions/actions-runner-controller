@@ -40,6 +40,7 @@ import (
 )
 
 const (
+	autoscalingListenerContainerName = "autoscaler"
 	autoscalingListenerOwnerKey      = ".metadata.controller"
 	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
 )
@@ -202,6 +203,21 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.createRoleBindingForListener(ctx, autoscalingListener, listenerRole, serviceAccount, log)
 	}
 
+	// Create a secret containing proxy config if specifiec
+	if autoscalingListener.Spec.Proxy != nil {
+		proxySecret := new(corev1.Secret)
+		if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: proxyListenerSecretName(autoscalingListener)}, proxySecret); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Error(err, "Unable to get listener proxy secret", "namespace", autoscalingListener.Namespace, "name", proxyListenerSecretName(autoscalingListener))
+				return ctrl.Result{}, err
+			}
+
+			// Create a mirror secret for the listener pod in the Controller namespace for listener pod to use
+			log.Info("Creating a listener proxy secret for the listener pod")
+			return r.createProxySecret(ctx, autoscalingListener, log)
+		}
+	}
+
 	// TODO: make sure the role binding has the up-to-date role and service account
 
 	listenerPod := new(corev1.Pod)
@@ -307,6 +323,25 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	}
 	logger.Info("Listener pod is deleted")
 
+	if autoscalingListener.Spec.Proxy != nil {
+		logger.Info("Cleaning up the listener proxy secret")
+		proxySecret := new(corev1.Secret)
+		err = r.Get(ctx, types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingListener.Namespace}, proxySecret)
+		switch {
+		case err == nil:
+			if proxySecret.ObjectMeta.DeletionTimestamp.IsZero() {
+				logger.Info("Deleting the listener proxy secret")
+				if err := r.Delete(ctx, proxySecret); err != nil {
+					return false, fmt.Errorf("failed to delete listener proxy secret: %v", err)
+				}
+			}
+			return false, nil
+		case err != nil && !kerrors.IsNotFound(err):
+			return false, fmt.Errorf("failed to get listener proxy secret: %v", err)
+		}
+		logger.Info("Listener proxy secret is deleted")
+	}
+
 	logger.Info("Cleaning up the listener service account")
 	listenerSa := new(corev1.ServiceAccount)
 	err = r.Get(ctx, types.NamespacedName{Name: scaleSetListenerServiceAccountName(autoscalingListener), Namespace: autoscalingListener.Namespace}, listenerSa)
@@ -345,7 +380,49 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 }
 
 func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {
-	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret)
+	var envs []corev1.EnvVar
+	if autoscalingListener.Spec.Proxy != nil {
+		httpURL := corev1.EnvVar{
+			Name: "http_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: proxyListenerSecretName(autoscalingListener)},
+					Key:                  "http_proxy",
+				},
+			},
+		}
+		if autoscalingListener.Spec.Proxy.HTTP != nil {
+			envs = append(envs, httpURL)
+		}
+
+		httpsURL := corev1.EnvVar{
+			Name: "https_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: proxyListenerSecretName(autoscalingListener)},
+					Key:                  "https_proxy",
+				},
+			},
+		}
+		if autoscalingListener.Spec.Proxy.HTTPS != nil {
+			envs = append(envs, httpsURL)
+		}
+
+		noProxy := corev1.EnvVar{
+			Name: "no_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: proxyListenerSecretName(autoscalingListener)},
+					Key:                  "no_proxy",
+				},
+			},
+		}
+		if len(autoscalingListener.Spec.Proxy.NoProxy) > 0 {
+			envs = append(envs, noProxy)
+		}
+	}
+
+	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
 
 	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
 		return ctrl.Result{}, err
@@ -375,6 +452,45 @@ func (r *AutoscalingListenerReconciler) createSecretsForListener(ctx context.Con
 	}
 
 	logger.Info("Created listener secret", "namespace", newListenerSecret.Namespace, "name", newListenerSecret.Name)
+	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
+	data, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+		var secret corev1.Secret
+		err := r.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, &secret)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+		}
+		return &secret, nil
+	})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+	}
+
+	newProxySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyListenerSecretName(autoscalingListener),
+			Namespace: autoscalingListener.Namespace,
+			Labels: map[string]string{
+				"auto-scaling-runner-set-namespace": autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				"auto-scaling-runner-set-name":      autoscalingListener.Spec.AutoscalingRunnerSetName,
+			},
+		},
+		Data: data,
+	}
+	if err := ctrl.SetControllerReference(autoscalingListener, newProxySecret, r.Scheme); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create listener proxy secret: %w", err)
+	}
+
+	logger.Info("Creating listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
+	if err := r.Create(ctx, newProxySecret); err != nil {
+		logger.Error(err, "Unable to create listener secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Created listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
+
 	return ctrl.Result{}, nil
 }
 

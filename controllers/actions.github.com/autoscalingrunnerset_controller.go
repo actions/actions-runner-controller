@@ -42,7 +42,6 @@ import (
 
 const (
 	// TODO: Replace with shared image.
-	name                              = "autoscaler"
 	autoscalingRunnerSetOwnerKey      = ".metadata.controller"
 	LabelKeyRunnerSpecHash            = "runner-spec-hash"
 	LabelKeyAutoScaleRunnerSetName    = "auto-scale-runner-set-name"
@@ -495,7 +494,31 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		return nil, fmt.Errorf("failed to find GitHub config secret: %w", err)
 	}
 
-	return r.ActionsClient.GetClientFromSecret(ctx, autoscalingRunnerSet.Spec.GitHubConfigUrl, autoscalingRunnerSet.Namespace, configSecret.Data)
+	var opts []actions.ClientOption
+	if autoscalingRunnerSet.Spec.Proxy != nil {
+		proxyFunc, err := autoscalingRunnerSet.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
+			var secret corev1.Secret
+			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: s}, &secret)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
+			}
+
+			return &secret, nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get proxy func: %w", err)
+		}
+
+		opts = append(opts, actions.WithProxy(proxyFunc))
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		autoscalingRunnerSet.Spec.GitHubConfigUrl,
+		autoscalingRunnerSet.Namespace,
+		configSecret.Data,
+		opts...,
+	)
 }
 
 // SetupWithManager sets up the controller with the Manager.

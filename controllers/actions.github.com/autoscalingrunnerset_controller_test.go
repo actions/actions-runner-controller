@@ -2,7 +2,11 @@ package actionsgithubcom
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -11,13 +15,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/github/actions/fake"
+	"github.com/actions/actions-runner-controller/github/actions/testserver"
 )
 
 const (
@@ -567,6 +574,209 @@ var _ = Describe("Test AutoscalingController creation failures", func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo(true), "Finalizer and resource should eventually be deleted")
+		})
+	})
+})
+
+var _ = Describe("Test Client optional configuration", func() {
+	Context("When specifying a proxy", func() {
+		var ctx context.Context
+		var cancel context.CancelFunc
+
+		autoscalingNS := new(corev1.Namespace)
+		configSecret := new(corev1.Secret)
+		var mgr ctrl.Manager
+
+		BeforeEach(func() {
+			ctx, cancel = context.WithCancel(context.TODO())
+			autoscalingNS = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
+			}
+
+			err := k8sClient.Create(ctx, autoscalingNS)
+			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for AutoScalingRunnerSet")
+
+			configSecret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github-config-secret",
+					Namespace: autoscalingNS.Name,
+				},
+				Data: map[string][]byte{
+					"github_token": []byte(autoscalingRunnerSetTestGitHubToken),
+				},
+			}
+
+			err = k8sClient.Create(ctx, configSecret)
+			Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
+
+			mgr, err = ctrl.NewManager(cfg, ctrl.Options{
+				Namespace: autoscalingNS.Name,
+			})
+			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+
+			go func() {
+				defer GinkgoRecover()
+
+				err := mgr.Start(ctx)
+				Expect(err).NotTo(HaveOccurred(), "failed to start manager")
+			}()
+		})
+
+		AfterEach(func() {
+			defer cancel()
+
+			err := k8sClient.Delete(ctx, autoscalingNS)
+			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
+		})
+
+		It("should be able to make requests to a server using a proxy", func() {
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      actions.NewMultiClient("test", logr.Discard()),
+			}
+			err := controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			serverSuccessfullyCalled := false
+			proxy := testserver.New(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				serverSuccessfullyCalled = true
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "http://example.com/org/repo",
+					GitHubConfigSecret: configSecret.Name,
+					MaxRunners:         &max,
+					MinRunners:         &min,
+					RunnerGroup:        "testgroup",
+					Proxy: &v1alpha1.ProxyConfig{
+						HTTP: &v1alpha1.ProxyServerConfig{
+							Url: proxy.URL,
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			// wait for server to be called
+			Eventually(
+				func() (bool, error) {
+					return serverSuccessfullyCalled, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				1*time.Nanosecond,
+			).Should(BeTrue(), "server was not called")
+		})
+
+		It("should be able to make requests to a server using a proxy with user info", func() {
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      actions.NewMultiClient("test", logr.Discard()),
+			}
+			err := controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			serverSuccessfullyCalled := false
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				header := r.Header.Get("Proxy-Authorization")
+				Expect(header).NotTo(BeEmpty())
+
+				header = strings.TrimPrefix(header, "Basic ")
+				decoded, err := base64.StdEncoding.DecodeString(header)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(decoded)).To(Equal("test:password"))
+
+				serverSuccessfullyCalled = true
+				w.WriteHeader(http.StatusOK)
+			}))
+			GinkgoT().Cleanup(func() {
+				proxy.Close()
+			})
+
+			secretCredentials := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "proxy-credentials",
+					Namespace: autoscalingNS.Name,
+				},
+				Data: map[string][]byte{
+					"username": []byte("test"),
+					"password": []byte("password"),
+				},
+			}
+
+			err = k8sClient.Create(ctx, secretCredentials)
+			Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "http://example.com/org/repo",
+					GitHubConfigSecret: configSecret.Name,
+					MaxRunners:         &max,
+					MinRunners:         &min,
+					RunnerGroup:        "testgroup",
+					Proxy: &v1alpha1.ProxyConfig{
+						HTTP: &v1alpha1.ProxyServerConfig{
+							Url:                 proxy.URL,
+							CredentialSecretRef: "proxy-credentials",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			// wait for server to be called
+			Eventually(
+				func() (bool, error) {
+					return serverSuccessfullyCalled, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				1*time.Nanosecond,
+			).Should(BeTrue(), "server was not called")
 		})
 	})
 })

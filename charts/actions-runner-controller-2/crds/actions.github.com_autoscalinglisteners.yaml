@@ -76,6 +76,29 @@ spec:
                   description: Required
                   minimum: 0
                   type: integer
+                proxy:
+                  properties:
+                    http:
+                      properties:
+                        credentialSecretRef:
+                          type: string
+                        url:
+                          description: Required
+                          type: string
+                      type: object
+                    https:
+                      properties:
+                        credentialSecretRef:
+                          type: string
+                        url:
+                          description: Required
+                          type: string
+                      type: object
+                    noProxy:
+                      items:
+                        type: string
+                      type: array
+                  type: object
                 runnerScaleSetId:
                   description: Required
                   type: integer

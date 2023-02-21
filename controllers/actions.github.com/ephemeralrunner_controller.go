@@ -557,8 +557,56 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 }
 
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
+	var envs []corev1.EnvVar
+	if runner.Spec.ProxySecretRef != "" {
+		http := corev1.EnvVar{
+			Name: "http_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: runner.Spec.ProxySecretRef,
+					},
+					Key: "http_proxy",
+				},
+			},
+		}
+		if runner.Spec.Proxy.HTTP != nil {
+			envs = append(envs, http)
+		}
+
+		https := corev1.EnvVar{
+			Name: "https_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: runner.Spec.ProxySecretRef,
+					},
+					Key: "https_proxy",
+				},
+			},
+		}
+		if runner.Spec.Proxy.HTTPS != nil {
+			envs = append(envs, https)
+		}
+
+		noProxy := corev1.EnvVar{
+			Name: "no_proxy",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: runner.Spec.ProxySecretRef,
+					},
+					Key: "no_proxy",
+				},
+			},
+		}
+		if len(runner.Spec.Proxy.NoProxy) > 0 {
+			envs = append(envs, noProxy)
+		}
+	}
+
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret)
+	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
@@ -632,7 +680,31 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 
-	return r.ActionsClient.GetClientFromSecret(ctx, runner.Spec.GitHubConfigUrl, runner.Namespace, secret.Data)
+	var opts []actions.ClientOption
+	if runner.Spec.Proxy != nil {
+		proxyFunc, err := runner.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
+			var secret corev1.Secret
+			err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: s}, &secret)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
+			}
+
+			return &secret, nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get proxy func: %w", err)
+		}
+
+		opts = append(opts, actions.WithProxy(proxyFunc))
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		runner.Spec.GitHubConfigUrl,
+		runner.Namespace,
+		secret.Data,
+		opts...,
+	)
 }
 
 // runnerRegisteredWithService checks if the runner is still registered with the service

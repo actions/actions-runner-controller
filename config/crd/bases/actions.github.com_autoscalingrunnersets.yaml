@@ -67,10 +67,6 @@ spec:
                       properties:
                         credentialSecretRef:
                           type: string
-                        noProxy:
-                          items:
-                            type: string
-                          type: array
                         url:
                           description: Required
                           type: string
@@ -79,14 +75,14 @@ spec:
                       properties:
                         credentialSecretRef:
                           type: string
-                        noProxy:
-                          items:
-                            type: string
-                          type: array
                         url:
                           description: Required
                           type: string
                       type: object
+                    noProxy:
+                      items:
+                        type: string
+                      type: array
                   type: object
                 runnerGroup:
                   type: string

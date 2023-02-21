@@ -122,6 +122,24 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	// Create proxy secret if not present
+	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+		proxySecret := new(corev1.Secret)
+		if err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)}, proxySecret); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet))
+				return ctrl.Result{}, err
+			}
+
+			// Create a compiled secret for the runner pods in the runnerset namespace
+			log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
+			if err := r.createProxySecret(ctx, ephemeralRunnerSet, log); err != nil {
+				log.Error(err, "Unable to create ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "set-name", ephemeralRunnerSet.Name)
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
 	err := r.List(
@@ -196,15 +214,39 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {
+func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy == nil {
+		return nil
+	}
+	log.Info("Deleting proxy secret")
+
+	proxySecret := new(corev1.Secret)
+	proxySecret.Namespace = ephemeralRunnerSet.Namespace
+	proxySecret.Name = proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)
+
+	if err := r.Delete(ctx, proxySecret); err != nil && !kerrors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete proxy secret: %v", err)
+	}
+
+	log.Info("Deleted proxy secret")
+
+	return nil
+}
+
+func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	err = r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{ephemeralRunnerSetReconcilerOwnerKey: ephemeralRunnerSet.Name})
+	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{ephemeralRunnerSetReconcilerOwnerKey: ephemeralRunnerSet.Name})
 	if err != nil {
 		return false, fmt.Errorf("failed to list child ephemeral runners: %v", err)
 	}
 
+	log.Info("Actual Ephemeral runner counts", "count", len(ephemeralRunnerList.Items))
 	// only if there are no ephemeral runners left, return true
 	if len(ephemeralRunnerList.Items) == 0 {
+		err := r.cleanUpProxySecret(ctx, ephemeralRunnerSet, log)
+		if err != nil {
+			return false, err
+		}
 		log.Info("All ephemeral runners are deleted")
 		return true, nil
 	}
@@ -269,6 +311,9 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	errs := make([]error, 0)
 	for i := 0; i < count; i++ {
 		ephemeralRunner := r.resourceBuilder.newEphemeralRunner(runnerSet)
+		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
+		}
 
 		// Make sure that we own the resource we create.
 		if err := ctrl.SetControllerReference(runnerSet, ephemeralRunner, r.Scheme); err != nil {
@@ -288,6 +333,45 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	}
 
 	return multierr.Combine(errs...)
+}
+
+func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+		secret := new(corev1.Secret)
+		err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
+		return secret, err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+	}
+
+	runnerPodProxySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+			Namespace: ephemeralRunnerSet.Namespace,
+			Labels:    map[string]string{
+				// TODO: figure out autoScalingRunnerSet name and set it as a label for this secret
+				// "auto-scaling-runner-set-namespace": ephemeralRunnerSet.Namespace,
+				// "auto-scaling-runner-set-name": ephemeralRunnerSet.Name,
+			},
+		},
+		Data: proxySecretData,
+	}
+
+	// Make sure that we own the resource we create.
+	if err := ctrl.SetControllerReference(ephemeralRunnerSet, runnerPodProxySecret, r.Scheme); err != nil {
+		log.Error(err, "failed to set controller reference on proxy secret")
+		return err
+	}
+
+	log.Info("Creating new proxy secret")
+	if err := r.Create(ctx, runnerPodProxySecret); err != nil {
+		log.Error(err, "failed to create proxy secret")
+		return err
+	}
+
+	log.Info("Created new proxy secret")
+	return nil
 }
 
 // deleteIdleEphemeralRunners try to deletes `count` number of v1alpha1.EphemeralRunner resources in the cluster.
@@ -366,8 +450,31 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
+	var opts []actions.ClientOption
+	if rs.Spec.EphemeralRunnerSpec.Proxy != nil {
+		proxyFunc, err := rs.Spec.EphemeralRunnerSpec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
+			var secret corev1.Secret
+			err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: s}, &secret)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+			}
 
-	return r.ActionsClient.GetClientFromSecret(ctx, rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl, rs.Namespace, secret.Data)
+			return &secret, nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get proxy func: %w", err)
+		}
+
+		opts = append(opts, actions.WithProxy(proxyFunc))
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl,
+		rs.Namespace,
+		secret.Data,
+		opts...,
+	)
 }
 
 // SetupWithManager sets up the controller with the Manager.

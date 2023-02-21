@@ -17,7 +17,13 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
 	"github.com/actions/actions-runner-controller/hash"
+	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -80,6 +86,94 @@ type ProxyConfig struct {
 
 	// +optional
 	HTTPS *ProxyServerConfig `json:"https,omitempty"`
+
+	// +optional
+	NoProxy []string `json:"noProxy,omitempty"`
+}
+
+func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
+	config := &httpproxy.Config{
+		NoProxy: strings.Join(c.NoProxy, ","),
+	}
+
+	if c.HTTP != nil {
+		u, err := url.Parse(c.HTTP.Url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.Url, err)
+		}
+
+		if c.HTTP.CredentialSecretRef != "" {
+			secret, err := secretFetcher(c.HTTP.CredentialSecretRef)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to get secret %s for http proxy: %w",
+					c.HTTP.CredentialSecretRef,
+					err,
+				)
+			}
+
+			u.User = url.UserPassword(
+				string(secret.Data["username"]),
+				string(secret.Data["password"]),
+			)
+		}
+
+		config.HTTPProxy = u.String()
+	}
+
+	if c.HTTPS != nil {
+		u, err := url.Parse(c.HTTPS.Url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.Url, err)
+		}
+
+		if c.HTTPS.CredentialSecretRef != "" {
+			secret, err := secretFetcher(c.HTTPS.CredentialSecretRef)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to get secret %s for https proxy: %w",
+					c.HTTPS.CredentialSecretRef,
+					err,
+				)
+			}
+
+			u.User = url.UserPassword(
+				string(secret.Data["username"]),
+				string(secret.Data["password"]),
+			)
+		}
+
+		config.HTTPSProxy = u.String()
+	}
+
+	return config, nil
+}
+
+func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, error)) (map[string][]byte, error) {
+	config, err := c.toHTTPProxyConfig(secretFetcher)
+	if err != nil {
+		return nil, err
+	}
+
+	data := map[string][]byte{}
+	data["http_proxy"] = []byte(config.HTTPProxy)
+	data["https_proxy"] = []byte(config.HTTPSProxy)
+	data["no_proxy"] = []byte(config.NoProxy)
+
+	return data, nil
+}
+
+func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
+	config, err := c.toHTTPProxyConfig(secretFetcher)
+	if err != nil {
+		return nil, err
+	}
+
+	proxyFunc := func(req *http.Request) (*url.URL, error) {
+		return config.ProxyFunc()(req.URL)
+	}
+
+	return proxyFunc, nil
 }
 
 type ProxyServerConfig struct {
@@ -88,9 +182,6 @@ type ProxyServerConfig struct {
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
-
-	// +optional
-	NoProxy []string `json:"noProxy,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet

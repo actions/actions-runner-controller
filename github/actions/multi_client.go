@@ -125,7 +125,7 @@ func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, 
 
 	if hasToken {
 		auth.Token = token
-		return m.GetClientFor(ctx, githubConfigURL, auth, namespace)
+		return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
 	}
 
 	parsedAppID, err := strconv.ParseInt(appID, 10, 64)
@@ -139,7 +139,7 @@ func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, 
 	}
 
 	auth.AppCreds = &GitHubAppAuth{AppID: parsedAppID, AppInstallationID: parsedAppInstallationID, AppPrivateKey: appPrivateKey}
-	return m.GetClientFor(ctx, githubConfigURL, auth, namespace)
+	return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
 }
 
 func RootCAsFromConfigMap(configMapData map[string][]byte) (*x509.CertPool, error) {

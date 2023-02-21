@@ -737,3 +737,46 @@ func TestTemplateRenderedAutoScalingRunnerSet_ErrorOnEmptyPredefinedSecret(t *te
 
 	assert.ErrorContains(t, err, "Values.githubConfigSecret is required for setting auth with GitHub server")
 }
+
+func TestTemplateRenderedWithProxy(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":                 "https://github.com/actions",
+			"githubConfigSecret":              "pre-defined-secrets",
+			"proxy.http.url":                  "http://proxy.example.com",
+			"proxy.http.credentialSecretRef":  "http-secret",
+			"proxy.https.url":                 "https://proxy.example.com",
+			"proxy.https.credentialSecretRef": "https-secret",
+			"proxy.noProxy":                   "{example.com,example.org}",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	require.NotNil(t, ars.Spec.Proxy)
+	require.NotNil(t, ars.Spec.Proxy.HTTP)
+	assert.Equal(t, "http://proxy.example.com", ars.Spec.Proxy.HTTP.Url)
+	assert.Equal(t, "http-secret", ars.Spec.Proxy.HTTP.CredentialSecretRef)
+
+	require.NotNil(t, ars.Spec.Proxy.HTTPS)
+	assert.Equal(t, "https://proxy.example.com", ars.Spec.Proxy.HTTPS.Url)
+	assert.Equal(t, "https-secret", ars.Spec.Proxy.HTTPS.CredentialSecretRef)
+
+	require.NotNil(t, ars.Spec.Proxy.NoProxy)
+	require.Len(t, ars.Spec.Proxy.NoProxy, 2)
+	assert.Contains(t, ars.Spec.Proxy.NoProxy, "example.com")
+	assert.Contains(t, ars.Spec.Proxy.NoProxy, "example.org")
+}

@@ -60,6 +60,9 @@ type EphemeralRunnerSpec struct {
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
+	ProxySecretRef string `json:"proxySecretRef,omitempty"`
+
+	// +optional
 	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +required

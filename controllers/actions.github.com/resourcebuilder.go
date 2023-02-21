@@ -18,10 +18,9 @@ const (
 	jitTokenKey = "jitToken"
 )
 
-type resourceBuilder struct {
-}
+type resourceBuilder struct{}
 
-func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret) *corev1.Pod {
+func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
 	newLabels := map[string]string{}
 	newLabels[scaleSetListenerLabel] = fmt.Sprintf("%v-%v", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, autoscalingListener.Spec.AutoscalingRunnerSetName)
 
@@ -51,6 +50,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Value: strconv.Itoa(autoscalingListener.Spec.RunnerScaleSetId),
 		},
 	}
+	listenerEnv = append(listenerEnv, envs...)
 
 	if _, ok := secret.Data["github_token"]; ok {
 		listenerEnv = append(listenerEnv, corev1.EnvVar{
@@ -112,7 +112,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ServiceAccountName: serviceAccount.Name,
 		Containers: []corev1.Container{
 			{
-				Name:            name,
+				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
 				ImagePullPolicy: corev1.PullIfNotPresent,
@@ -299,6 +299,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			MaxRunners:                    effectiveMaxRunners,
 			Image:                         image,
 			ImagePullSecrets:              imagePullSecrets,
+			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 		},
 	}
 
@@ -316,7 +317,7 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	}
 }
 
-func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret) *corev1.Pod {
+func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
 	var newPod corev1.Pod
 
 	labels := map[string]string{}
@@ -374,7 +375,9 @@ func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 				corev1.EnvVar{
 					Name:  EnvVarRunnerExtraUserAgent,
 					Value: fmt.Sprintf("actions-runner-controller/%s", build.Version),
-				})
+				},
+			)
+			c.Env = append(c.Env, envs...)
 		}
 
 		newPod.Spec.Containers = append(newPod.Spec.Containers, c)
@@ -425,6 +428,22 @@ func scaleSetListenerSecretMirrorName(autoscalingListener *v1alpha1.AutoscalingL
 		namespaceHash = namespaceHash[:8]
 	}
 	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
+}
+
+func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) string {
+	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
+	if len(namespaceHash) > 8 {
+		namespaceHash = namespaceHash[:8]
+	}
+	return fmt.Sprintf("%v-%v-listener-proxy", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
+}
+
+func proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) string {
+	namespaceHash := hash.FNVHashString(ephemeralRunnerSet.Namespace)
+	if len(namespaceHash) > 8 {
+		namespaceHash = namespaceHash[:8]
+	}
+	return fmt.Sprintf("%v-%v-runner-proxy", ephemeralRunnerSet.Name, namespaceHash)
 }
 
 func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {

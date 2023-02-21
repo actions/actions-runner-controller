@@ -2,12 +2,16 @@ package actionsgithubcom
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/go-logr/logr"
 
 	"github.com/actions/actions-runner-controller/github/actions/fake"
 	. "github.com/onsi/ginkgo/v2"
@@ -771,6 +775,187 @@ var _ = Describe("EphemeralRunner", func() {
 				}
 				return updated.Status.Phase, nil
 			}, timeout, interval).Should(BeEquivalentTo(corev1.PodSucceeded))
+		})
+	})
+
+	Describe("Pod proxy config", func() {
+		var ctx context.Context
+		var cancel context.CancelFunc
+
+		autoScalingNS := new(corev1.Namespace)
+		configSecret := new(corev1.Secret)
+		controller := new(EphemeralRunnerReconciler)
+
+		BeforeEach(func() {
+			ctx, cancel = context.WithCancel(context.Background())
+			autoScalingNS = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "testns-autoscaling-runner" + RandStringRunes(5),
+				},
+			}
+			err := k8sClient.Create(ctx, autoScalingNS)
+			Expect(err).To(BeNil(), "failed to create test namespace for EphemeralRunner")
+
+			configSecret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github-config-secret",
+					Namespace: autoScalingNS.Name,
+				},
+				Data: map[string][]byte{
+					"github_token": []byte(gh_token),
+				},
+			}
+
+			err = k8sClient.Create(ctx, configSecret)
+			Expect(err).To(BeNil(), "failed to create config secret")
+
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+				Namespace:          autoScalingNS.Name,
+				MetricsBindAddress: "0",
+			})
+			Expect(err).To(BeNil(), "failed to create manager")
+
+			controller = &EphemeralRunnerReconciler{
+				Client:        mgr.GetClient(),
+				Scheme:        mgr.GetScheme(),
+				Log:           logf.Log,
+				ActionsClient: fake.NewMultiClient(),
+			}
+
+			err = controller.SetupWithManager(mgr)
+			Expect(err).To(BeNil(), "failed to setup controller")
+
+			go func() {
+				defer GinkgoRecover()
+
+				err := mgr.Start(ctx)
+				Expect(err).To(BeNil(), "failed to start manager")
+			}()
+		})
+
+		AfterEach(func() {
+			defer cancel()
+
+			err := k8sClient.Delete(ctx, autoScalingNS)
+			Expect(err).To(BeNil(), "failed to delete test namespace for EphemeralRunner")
+		})
+
+		It("uses an actions client with proxy transport", func() {
+			// Use an actual client
+			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+
+			proxySuccessfulllyCalled := false
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				header := r.Header.Get("Proxy-Authorization")
+				Expect(header).NotTo(BeEmpty())
+
+				header = strings.TrimPrefix(header, "Basic ")
+				decoded, err := base64.StdEncoding.DecodeString(header)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(decoded)).To(Equal("test:password"))
+
+				proxySuccessfulllyCalled = true
+				w.WriteHeader(http.StatusOK)
+			}))
+			GinkgoT().Cleanup(func() {
+				proxy.Close()
+			})
+
+			secretCredentials := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "proxy-credentials",
+					Namespace: autoScalingNS.Name,
+				},
+				Data: map[string][]byte{
+					"username": []byte("test"),
+					"password": []byte("password"),
+				},
+			}
+
+			err := k8sClient.Create(ctx, secretCredentials)
+			Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
+
+			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner.Spec.GitHubConfigUrl = "http://example.com/org/repo"
+			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
+				HTTP: &v1alpha1.ProxyServerConfig{
+					Url:                 proxy.URL,
+					CredentialSecretRef: "proxy-credentials",
+				},
+			}
+
+			err = k8sClient.Create(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			Eventually(
+				func() bool {
+					return proxySuccessfulllyCalled
+				},
+				2*time.Second,
+				interval,
+			).Should(BeEquivalentTo(true))
+		})
+
+		It("It should create EphemeralRunner with proxy environment variables using ProxySecretRef", func() {
+			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
+				HTTP: &v1alpha1.ProxyServerConfig{
+					Url: "http://proxy.example.com:8080",
+				},
+				HTTPS: &v1alpha1.ProxyServerConfig{
+					Url: "http://proxy.example.com:8080",
+				},
+				NoProxy: []string{"example.com"},
+			}
+			ephemeralRunner.Spec.ProxySecretRef = "proxy-secret"
+			err := k8sClient.Create(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			pod := new(corev1.Pod)
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					g.Expect(err).To(BeNil(), "failed to get ephemeral runner pod")
+				},
+				timeout,
+				interval,
+			).Should(Succeed(), "failed to get ephemeral runner pod")
+
+			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: EnvVarHTTPProxy,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ephemeralRunner.Spec.ProxySecretRef,
+						},
+						Key: "http_proxy",
+					},
+				},
+			}))
+
+			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: EnvVarHTTPSProxy,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ephemeralRunner.Spec.ProxySecretRef,
+						},
+						Key: "https_proxy",
+					},
+				},
+			}))
+
+			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: EnvVarNoProxy,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ephemeralRunner.Spec.ProxySecretRef,
+						},
+						Key: "no_proxy",
+					},
+				},
+			}))
 		})
 	})
 })
