@@ -240,6 +240,7 @@ githubWebhookServer:
         protocol: TCP
         name: http
         #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+    loadBalancerSourceRanges: []
   ingress:
     enabled: false
     ingressClassName: ""
