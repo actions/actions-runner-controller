@@ -349,9 +349,10 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
 			Namespace: ephemeralRunnerSet.Namespace,
-			Labels: map[string]string{
-				"auto-scaling-runner-set-namespace": ephemeralRunnerSet.Namespace,
-				"auto-scaling-runner-set-name":      ephemeralRunnerSet.Name,
+			Labels:    map[string]string{
+				// TODO: figure out autoScalingRunnerSet name and set it as a label for this secret
+				// "auto-scaling-runner-set-namespace": ephemeralRunnerSet.Namespace,
+				// "auto-scaling-runner-set-name": ephemeralRunnerSet.Name,
 			},
 		},
 		Data: proxySecretData,
