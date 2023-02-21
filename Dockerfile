@@ -39,7 +39,8 @@ RUN --mount=target=. \
   go build -trimpath -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=${VERSION}'" -o /out/manager main.go && \
   go build -trimpath -ldflags="-s -w" -o /out/github-runnerscaleset-listener ./cmd/githubrunnerscalesetlistener && \
   go build -trimpath -ldflags="-s -w" -o /out/github-webhook-server ./cmd/githubwebhookserver && \
-  go build -trimpath -ldflags="-s -w" -o /out/actions-metrics-server ./cmd/actionsmetricsserver
+  go build -trimpath -ldflags="-s -w" -o /out/actions-metrics-server ./cmd/actionsmetricsserver && \
+  go build -trimpath -ldflags="-s -w" -o /out/sleep ./cmd/sleep
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -51,6 +52,7 @@ COPY --from=builder /out/manager .
 COPY --from=builder /out/github-webhook-server .
 COPY --from=builder /out/actions-metrics-server .
 COPY --from=builder /out/github-runnerscaleset-listener .
+COPY --from=builder /out/sleep .
 
 USER 65532:65532
 
