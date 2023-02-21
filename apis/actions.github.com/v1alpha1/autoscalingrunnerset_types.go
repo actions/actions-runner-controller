@@ -176,38 +176,6 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 	return proxyFunc, nil
 }
 
-func (c *ProxyConfig) EnvVars(secretFetcher func(string) (*corev1.Secret, error)) ([]corev1.EnvVar, error) {
-	var vars []corev1.EnvVar
-
-	config, err := c.toHTTPProxyConfig(secretFetcher)
-	if err != nil {
-		return nil, err
-	}
-
-	if config.HTTPProxy != "" {
-		vars = append(vars, corev1.EnvVar{
-			Name:  "http_proxy",
-			Value: config.HTTPProxy,
-		})
-	}
-
-	if config.HTTPSProxy != "" {
-		vars = append(vars, corev1.EnvVar{
-			Name:  "https_proxy",
-			Value: config.HTTPSProxy,
-		})
-	}
-
-	if config.NoProxy != "" {
-		vars = append(vars, corev1.EnvVar{
-			Name:  "no_proxy",
-			Value: config.NoProxy,
-		})
-	}
-
-	return vars, nil
-}
-
 type ProxyServerConfig struct {
 	// Required
 	Url string `json:"url,omitempty"`
