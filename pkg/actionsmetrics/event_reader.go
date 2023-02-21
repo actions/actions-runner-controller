@@ -66,7 +66,9 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	labels["job_name"] = *e.WorkflowJob.Name
 	labels["repository"] = *e.Repo.Name
 	labels["repository_full_name"] = *e.Repo.FullName
-	labels["organization"] = *e.Org.Name
+	if len(*e.Org.Name) > 0 {
+		labels["organization"] = *e.Org.Name
+	}
 
 	// switch on job status
 	switch action := e.GetAction(); action {
@@ -85,13 +87,11 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			reader.Log.Error(err, "reading workflow job log")
 			return
 		} else {
-			reader.Log.Info("reading workflow_job logs",
-				"job_name", *e.WorkflowJob.Name,
-				"job_id", fmt.Sprint(*e.WorkflowJob.ID),
-				"repository", *e.Repo.Name,
-				"repository_full_name", *e.Repo.FullName,
-				"organization", *e.Org.Name,
-			)
+			reader.Log.WithValues("job_name", *e.WorkflowJob.Name, "job_id", fmt.Sprint(*e.WorkflowJob.ID), "repository", *e.Repo.Name, "repository_full_name", *e.Repo.FullName)
+			if len(*e.Org.Name) > 0 {
+				reader.Log.WithValues("organization", *e.Org.Name)
+			}
+			reader.Log.Info("reading workflow_job logs")
 		}
 
 		githubWorkflowJobQueueDurationSeconds.With(labels).Observe(parseResult.QueueTime.Seconds())
