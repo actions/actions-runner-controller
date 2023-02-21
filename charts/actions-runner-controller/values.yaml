@@ -276,6 +276,8 @@ githubWebhookServer:
     # minAvailable: 1
     # maxUnavailable: 3
   # queueLimit: 100
+  terminationGracePeriodSeconds: 10
+  lifecycle: {}
 
 actionsMetrics:
   serviceAnnotations: {}
