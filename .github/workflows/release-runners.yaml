@@ -3,23 +3,20 @@ name: Runners
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
 on:
-  # We must do a trigger on a push: instead of a types: closed so GitHub Secrets 
+  # We must do a trigger on a push: instead of a types: closed so GitHub Secrets
   # are available to the workflow run
   push:
     branches:
       - 'master'
     paths:
-      - 'runner/**'
-      - '!runner/Makefile'
-      - '.github/workflows/runners.yaml'
-      - '!**.md'
+      - 'runner/VERSION'
+      - '.github/workflows/release-runners.yaml'
 
 env:
-  # Safeguard to prevent pushing images to registeries after build  
+  # Safeguard to prevent pushing images to registeries after build
   PUSH_TO_REGISTRIES: true
   TARGET_ORG: actions-runner-controller
   TARGET_WORKFLOW: release-runners.yaml
-  RUNNER_VERSION: 2.301.1
   DOCKER_VERSION: 20.10.21
   RUNNER_CONTAINER_HOOKS_VERSION: 0.2.0
 
@@ -28,6 +25,13 @@ jobs:
     name: Trigger Build and Push of Runner Images
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+      - name: Get runner version
+        id: runner_version
+        run: |
+          version=$(echo -n $(cat runner/VERSION))
+          echo runner_version=$version >> $GITHUB_OUTPUT
+
       - name: Get Token
         id: get_workflow_token
         uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
@@ -37,6 +41,8 @@ jobs:
           organization: ${{ env.TARGET_ORG }}
 
       - name: Trigger Build And Push Runner Images To Registries
+        env:
+          RUNNER_VERSION: ${{ steps.runner_version.outputs.runner_version }}
         run: |
           # Authenticate
           gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
@@ -50,6 +56,8 @@ jobs:
             -f push_to_registries=${{ env.PUSH_TO_REGISTRIES }}
 
       - name: Job summary
+        env:
+          RUNNER_VERSION: ${{ steps.runner_version.outputs.runner_version }}
         run: |
           echo "The [release-runners.yaml](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/release-runners.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

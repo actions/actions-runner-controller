@@ -44,7 +44,7 @@ The helm command (in the QuickStart guide) installs the custom resources into th
 ```console
 helm install -f custom-values.yaml --wait --namespace actions-runner-system \
   --create-namespace actions-runner-controller \
-  actions/actions-runner-controller
+  actions-runner-controller/actions-runner-controller
  ```
 
 ### Runner deployment

@@ -63,3 +63,8 @@ affinity: {}
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
+
+flags:
+  # Log level can be set here with one of the following values: "debug", "info", "warn", "error".
+  # Defaults to "debug".
+  logLevel: "debug"

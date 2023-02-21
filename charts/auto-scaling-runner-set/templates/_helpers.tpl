@@ -51,7 +51,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "auto-scaling-runner-set.githubsecret" -}}
+  {{- if kindIs "string" .Values.githubConfigSecret }}
+    {{- if not (empty .Values.githubConfigSecret) }}
+{{- .Values.githubConfigSecret }}
+    {{- else}}
+{{- fail "Values.githubConfigSecret is required for setting auth with GitHub server." }}
+    {{- end }}
+  {{- else }}
 {{- include "auto-scaling-runner-set.fullname" . }}-github-secret
+  {{- end }}
 {{- end }}
 
 {{- define "auto-scaling-runner-set.noPermissionServiceAccountName" -}}
@@ -181,6 +189,7 @@ volumeMounts:
     {{- $setDockerHost := 1 }}
     {{- $setDockerTlsVerify := 1 }}
     {{- $setDockerCertPath := 1 }}
+    {{- $setRunnerWaitDocker := 1 }}
 env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -193,6 +202,9 @@ env:
         {{- if eq $env.name "DOCKER_CERT_PATH" }}
           {{- $setDockerCertPath = 0 -}}
         {{- end }}
+        {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
+          {{- $setRunnerWaitDocker = 0 -}}
+        {{- end }}
   - name: {{ $env.name }}
         {{- range $envKey, $envVal := $env }}
           {{- if ne $envKey "name" }}
@@ -200,18 +212,22 @@ env:
           {{- end }}
         {{- end }}
       {{- end }}
-      {{- if $setDockerHost }}
+    {{- end }}
+    {{- if $setDockerHost }}
   - name: DOCKER_HOST
     value: tcp://localhost:2376
-      {{- end }}
-      {{- if $setDockerTlsVerify }}
+    {{- end }}
+    {{- if $setDockerTlsVerify }}
   - name: DOCKER_TLS_VERIFY
     value: "1"
-      {{- end }}
-      {{- if $setDockerCertPath }}
+    {{- end }}
+    {{- if $setDockerCertPath }}
   - name: DOCKER_CERT_PATH
     value: /certs/client
-      {{- end }}
+    {{- end }}
+    {{- if $setRunnerWaitDocker }}
+  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+    value: "120"
     {{- end }}
     {{- $mountWork := 1 }}
     {{- $mountDindCert := 1 }}
@@ -239,6 +255,7 @@ volumeMounts:
     {{- if $mountDindCert }}
   - name: dind-cert
     mountPath: /certs/client
+    readOnly: true
     {{- end }}
   {{- end }}
 {{- end }}

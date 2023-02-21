@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
-	"net/url"
 	"strconv"
 	"sync"
 
@@ -12,14 +11,14 @@ import (
 )
 
 type MultiClient interface {
-	GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string) (ActionsService, error)
-	GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData) (ActionsService, error)
+	GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string, options ...ClientOption) (ActionsService, error)
+	GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData, options ...ClientOption) (ActionsService, error)
 }
 
 type multiClient struct {
 	// To lock adding and removing of individual clients.
 	mu      sync.Mutex
-	clients map[ActionsClientKey]*actionsClientWrapper
+	clients map[ActionsClientKey]*Client
 
 	logger    logr.Logger
 	userAgent string
@@ -40,34 +39,21 @@ type ActionsAuth struct {
 }
 
 type ActionsClientKey struct {
-	ActionsURL string
-	Auth       ActionsAuth
+	Identifier string
 	Namespace  string
-}
-
-type actionsClientWrapper struct {
-	// To lock client usage when tokens are being refreshed.
-	mu sync.Mutex
-
-	client ActionsService
 }
 
 func NewMultiClient(userAgent string, logger logr.Logger) MultiClient {
 	return &multiClient{
 		mu:        sync.Mutex{},
-		clients:   make(map[ActionsClientKey]*actionsClientWrapper),
+		clients:   make(map[ActionsClientKey]*Client),
 		logger:    logger,
 		userAgent: userAgent,
 	}
 }
 
-func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string) (ActionsService, error) {
+func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string, options ...ClientOption) (ActionsService, error) {
 	m.logger.Info("retrieve actions client", "githubConfigURL", githubConfigURL, "namespace", namespace)
-
-	parsedGitHubURL, err := url.Parse(githubConfigURL)
-	if err != nil {
-		return nil, err
-	}
 
 	if creds.Token == "" && creds.AppCreds == nil {
 		return nil, fmt.Errorf("no credentials provided. either a PAT or GitHub App credentials should be provided")
@@ -77,49 +63,35 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 		return nil, fmt.Errorf("both PAT and GitHub App credentials provided. should only provide one")
 	}
 
-	key := ActionsClientKey{
-		ActionsURL: parsedGitHubURL.String(),
-		Namespace:  namespace,
-	}
-
-	if creds.AppCreds != nil {
-		key.Auth = ActionsAuth{
-			AppCreds: creds.AppCreds,
-		}
-	}
-
-	if creds.Token != "" {
-		key.Auth = ActionsAuth{
-			Token: creds.Token,
-		}
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	clientWrapper, has := m.clients[key]
-	if has {
-		m.logger.Info("using cache client", "githubConfigURL", githubConfigURL, "namespace", namespace)
-		return clientWrapper.client, nil
-	}
-
-	m.logger.Info("creating new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
-
 	client, err := NewClient(
-		ctx,
 		githubConfigURL,
 		&creds,
-		WithUserAgent(m.userAgent),
-		WithLogger(m.logger),
+		append([]ClientOption{
+			WithUserAgent(m.userAgent),
+			WithLogger(m.logger),
+		}, options...)...,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	m.clients[key] = &actionsClientWrapper{
-		mu:     sync.Mutex{},
-		client: client,
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := ActionsClientKey{
+		Identifier: client.Identifier(),
+		Namespace:  namespace,
 	}
+
+	cachedClient, has := m.clients[key]
+	if has {
+		m.logger.Info("using cache client", "githubConfigURL", githubConfigURL, "namespace", namespace)
+		return cachedClient, nil
+	}
+
+	m.logger.Info("creating new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
+
+	m.clients[key] = client
 
 	m.logger.Info("successfully created new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
@@ -128,7 +100,7 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 
 type KubernetesSecretData map[string][]byte
 
-func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData) (ActionsService, error) {
+func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData, options ...ClientOption) (ActionsService, error) {
 	if len(secretData) == 0 {
 		return nil, fmt.Errorf("must provide secret data with either PAT or GitHub App Auth")
 	}

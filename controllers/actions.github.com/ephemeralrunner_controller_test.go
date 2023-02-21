@@ -153,19 +153,21 @@ var _ = Describe("EphemeralRunner", func() {
 			created := new(v1alpha1.EphemeralRunner)
 			// Check if finalizer is added
 			Eventually(
-				func() (string, error) {
+				func() ([]string, error) {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, created)
 					if err != nil {
-						return "", err
+						return nil, err
 					}
 					if len(created.Finalizers) == 0 {
-						return "", nil
+						return nil, nil
 					}
-					return created.Finalizers[0], nil
+
+					n := len(created.Finalizers) // avoid capacity mismatch
+					return created.Finalizers[:n:n], nil
 				},
 				timeout,
 				interval,
-			).Should(BeEquivalentTo(ephemeralRunnerFinalizerName))
+			).Should(BeEquivalentTo([]string{ephemeralRunnerActionsFinalizerName, ephemeralRunnerFinalizerName}))
 
 			Eventually(
 				func() (bool, error) {

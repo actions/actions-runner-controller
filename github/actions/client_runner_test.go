@@ -29,7 +29,7 @@ func TestGetRunner(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunner(ctx, runnerID)
@@ -50,7 +50,7 @@ func TestGetRunner(t *testing.T) {
 			actualRetry++
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth, actions.WithRetryMax(retryMax), actions.WithRetryWaitMax(retryWaitMax))
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth, actions.WithRetryMax(retryMax), actions.WithRetryWaitMax(retryWaitMax))
 		require.NoError(t, err)
 
 		_, err = client.GetRunner(ctx, runnerID)
@@ -78,7 +78,7 @@ func TestGetRunnerByName(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerByName(ctx, runnerName)
@@ -94,7 +94,7 @@ func TestGetRunnerByName(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerByName(ctx, runnerName)
@@ -116,7 +116,7 @@ func TestGetRunnerByName(t *testing.T) {
 			actualRetry++
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth, actions.WithRetryMax(retryMax), actions.WithRetryWaitMax(retryWaitMax))
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth, actions.WithRetryMax(retryMax), actions.WithRetryWaitMax(retryWaitMax))
 		require.NoError(t, err)
 
 		_, err = client.GetRunnerByName(ctx, runnerName)
@@ -138,7 +138,7 @@ func TestDeleteRunner(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		err = client.RemoveRunner(ctx, runnerID)
@@ -160,7 +160,6 @@ func TestDeleteRunner(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
@@ -193,7 +192,7 @@ func TestGetRunnerGroupByName(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerGroupByName(ctx, runnerGroupName)
@@ -209,7 +208,7 @@ func TestGetRunnerGroupByName(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetRunnerGroupByName(ctx, runnerGroupName)

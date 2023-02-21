@@ -3,6 +3,7 @@ package actions_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,11 +28,19 @@ func TestAcquireJobs(t *testing.T) {
 		}
 		requestIDs := want
 
-		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/acquirablejobs") {
+				w.Write([]byte(`{"count": 1}`))
+				return
+			}
+
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		_, err = client.GetAcquirableJobs(ctx, 1)
 		require.NoError(t, err)
 
 		got, err := client.AcquireJobs(ctx, session.RunnerScaleSet.Id, session.MessageQueueAccessToken, requestIDs)
@@ -50,18 +59,25 @@ func TestAcquireJobs(t *testing.T) {
 		actualRetry := 0
 		expectedRetry := retryMax + 1
 
-		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/acquirablejobs") {
+				w.Write([]byte(`{"count": 1}`))
+				return
+			}
+
 			w.WriteHeader(http.StatusServiceUnavailable)
 			actualRetry++
 		}))
 
 		client, err := actions.NewClient(
-			ctx,
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),
 			actions.WithRetryWaitMax(1*time.Millisecond),
 		)
+		require.NoError(t, err)
+
+		_, err = client.GetAcquirableJobs(ctx, 1)
 		require.NoError(t, err)
 
 		_, err = client.AcquireJobs(context.Background(), session.RunnerScaleSet.Id, session.MessageQueueAccessToken, requestIDs)
@@ -71,7 +87,6 @@ func TestAcquireJobs(t *testing.T) {
 }
 
 func TestGetAcquirableJobs(t *testing.T) {
-	ctx := context.Background()
 	auth := &actions.ActionsAuth{
 		Token: "token",
 	}
@@ -86,7 +101,7 @@ func TestGetAcquirableJobs(t *testing.T) {
 			w.Write(response)
 		}))
 
-		client, err := actions.NewClient(ctx, server.configURLForOrg("my-org"), auth)
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
 		got, err := client.GetAcquirableJobs(context.Background(), runnerScaleSet.Id)
@@ -108,7 +123,6 @@ func TestGetAcquirableJobs(t *testing.T) {
 		}))
 
 		client, err := actions.NewClient(
-			context.Background(),
 			server.configURLForOrg("my-org"),
 			auth,
 			actions.WithRetryMax(retryMax),

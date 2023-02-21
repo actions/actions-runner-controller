@@ -43,7 +43,8 @@ const (
 	// It represents the name of the container running the self-hosted runner image.
 	EphemeralRunnerContainerName = "runner"
 
-	ephemeralRunnerFinalizerName = "ephemeralrunner.actions.github.com/finalizer"
+	ephemeralRunnerFinalizerName        = "ephemeralrunner.actions.github.com/finalizer"
+	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/runner-registration-finalizer"
 )
 
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
@@ -59,12 +60,8 @@ type EphemeralRunnerReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=create;delete;get
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get
+// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=create;get;list;watch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -80,41 +77,73 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if !ephemeralRunner.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
-			log.Info("Finalizing ephemeral runner")
-			done, err := r.cleanupResources(ctx, ephemeralRunner, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up ephemeral runner owned resources")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for ephemeral runner owned resources to be deleted")
-				return ctrl.Result{}, nil
-			}
-
-			done, err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up container hooks resources")
-				return ctrl.Result{}, err
-			}
-			if !done {
-				log.Info("Waiting for container hooks resources to be deleted")
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-			}
-
-			log.Info("Removing finalizer")
-			err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-				controllerutil.RemoveFinalizer(obj, ephemeralRunnerFinalizerName)
-			})
-			if err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to update ephemeral runner without the finalizer")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Successfully removed finalizer after cleanup")
+		if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
 			return ctrl.Result{}, nil
 		}
+
+		if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+			switch ephemeralRunner.Status.Phase {
+			case corev1.PodSucceeded:
+				// deleted by the runner set, we can just remove finalizer without API calls
+				err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+					controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+				})
+				if err != nil {
+					log.Error(err, "Failed to update ephemeral runner without runner registration finalizer")
+					return ctrl.Result{}, err
+				}
+				log.Info("Successfully removed runner registration finalizer")
+				return ctrl.Result{}, nil
+			default:
+				return r.cleanupRunnerFromService(ctx, ephemeralRunner, log)
+			}
+		}
+
+		log.Info("Finalizing ephemeral runner")
+		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up ephemeral runner owned resources")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for ephemeral runner owned resources to be deleted")
+			return ctrl.Result{}, nil
+		}
+
+		done, err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up container hooks resources")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for container hooks resources to be deleted")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
+		log.Info("Removing finalizer")
+		err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+			controllerutil.RemoveFinalizer(obj, ephemeralRunnerFinalizerName)
+		})
+		if err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to update ephemeral runner without the finalizer")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully removed finalizer after cleanup")
 		return ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+		log.Info("Adding runner registration finalizer")
+		err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+			controllerutil.AddFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+		})
+		if err != nil {
+			log.Error(err, "Failed to update with runner registration finalizer set")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully added runner registration finalizer")
 	}
 
 	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
@@ -237,6 +266,33 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, nil
 	}
+}
+
+func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+	actionsError := &actions.ActionsError{}
+	err := r.deleteRunnerFromService(ctx, ephemeralRunner, log)
+	if err != nil {
+		if errors.As(err, &actionsError) &&
+			actionsError.StatusCode == http.StatusBadRequest &&
+			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
+			log.Info("Runner is still running the job. Re-queue in 30 seconds")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		log.Error(err, "Failed clean up runner from the service")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully removed runner registration from service")
+	err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+		controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully removed runner registration finalizer")
+	return ctrl.Result{}, nil
 }
 
 func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (deleted bool, err error) {
@@ -617,7 +673,7 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 	log.Info("Removing runner from the service", "runnerId", ephemeralRunner.Status.RunnerId)
 	err = client.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId))
 	if err != nil {
-		return fmt.Errorf("failed to remove runner from the service: %v", err)
+		return fmt.Errorf("failed to remove runner from the service: %w", err)
 	}
 
 	log.Info("Removed runner from the service", "runnerId", ephemeralRunner.Status.RunnerId)

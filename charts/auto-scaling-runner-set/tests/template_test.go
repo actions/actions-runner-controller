@@ -124,6 +124,28 @@ func TestTemplateRenderedGitHubSecretErrorWithMissingAppInput(t *testing.T) {
 	assert.ErrorContains(t, err, "provide .Values.githubConfigSecret.github_app_installation_id and .Values.githubConfigSecret.github_app_private_key")
 }
 
+func TestTemplateNotRenderedGitHubSecretWithPredefinedSecret(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":    "https://github.com/actions",
+			"githubConfigSecret": "pre-defined-secret",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
+	assert.ErrorContains(t, err, "could not find template templates/githubsecret.yaml in chart", "secret should not be rendered since a pre-defined secret is provided")
+}
+
 func TestTemplateRenderedSetServiceAccountToNoPermission(t *testing.T) {
 	t.Parallel()
 
@@ -495,6 +517,33 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidation_OnlyMax(t 
 	assert.Nil(t, ars.Spec.MinRunners, "MinRunners should be nil")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunners_FromValuesFile(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, 5, *ars.Spec.MinRunners, "MinRunners should be 5")
+	assert.Equal(t, 10, *ars.Spec.MaxRunners, "MaxRunners should be 10")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	t.Parallel()
 
@@ -545,9 +594,37 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "Template.Spec should have 2 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
+	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 4, "The runner container should have 4 env vars, DOCKER_HOST, DOCKER_TLS_VERIFY, DOCKER_CERT_PATH and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS")
+	assert.Equal(t, "DOCKER_HOST", ars.Spec.Template.Spec.Containers[0].Env[0].Name)
+	assert.Equal(t, "tcp://localhost:2376", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "DOCKER_TLS_VERIFY", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
+	assert.Equal(t, "1", ars.Spec.Template.Spec.Containers[0].Env[1].Value)
+	assert.Equal(t, "DOCKER_CERT_PATH", ars.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].Env[2].Value)
+	assert.Equal(t, "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS", ars.Spec.Template.Spec.Containers[0].Env[3].Name)
+	assert.Equal(t, "120", ars.Spec.Template.Spec.Containers[0].Env[3].Value)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, 2, "The runner container should have 2 volume mounts, dind-cert and work")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
+	assert.Equal(t, "/actions-runner/_work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
+	assert.False(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly)
+
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
+	assert.True(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly)
 
 	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name)
 	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
+	assert.True(t, *ars.Spec.Template.Spec.Containers[1].SecurityContext.Privileged)
+	assert.Len(t, ars.Spec.Template.Spec.Containers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-cert, work and externals")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name)
+	assert.Equal(t, "/actions-runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
+
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
+
+	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
+	assert.Equal(t, "/actions-runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T) {
@@ -603,4 +680,60 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 1, "Template.Spec should have 1 volume")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[0].Name)
 	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[0].Ephemeral, "Template.Spec should have 1 ephemeral volume")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":    "https://github.com/actions",
+			"githubConfigSecret": "pre-defined-secrets",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, namespaceName, ars.Namespace)
+	assert.Equal(t, "test-runners", ars.Name)
+
+	assert.Equal(t, "auto-scaling-runner-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "pre-defined-secrets", ars.Spec.GitHubConfigSecret)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ErrorOnEmptyPredefinedSecret(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":    "https://github.com/actions",
+			"githubConfigSecret": "",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+
+	assert.ErrorContains(t, err, "Values.githubConfigSecret is required for setting auth with GitHub server")
 }

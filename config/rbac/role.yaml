@@ -309,26 +309,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - namespaces
-  - pods
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces/status
-  - pods/status
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
   - persistentvolumeclaims
   verbs:
   - create
