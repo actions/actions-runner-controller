@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -608,7 +609,7 @@ HRA:
 				// TODO labels related to OS and architecture needs to be explicitly declared or the current implementation will not be able to find them.
 
 				for _, l2 := range rs.Spec.Labels {
-					if l == l2 {
+					if strings.EqualFold(l, l2) {
 						matched = true
 						break
 					}
@@ -639,7 +640,7 @@ HRA:
 				// TODO labels related to OS and architecture needs to be explicitly declared or the current implementation will not be able to find them.
 
 				for _, l2 := range rd.Spec.Template.Spec.Labels {
-					if l == l2 {
+					if strings.EqualFold(l, l2) {
 						matched = true
 						break
 					}
