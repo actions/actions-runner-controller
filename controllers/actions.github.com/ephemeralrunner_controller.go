@@ -570,6 +570,9 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 				},
 			},
 		}
+		if runner.Spec.Proxy.HTTP != nil {
+			envs = append(envs, http)
+		}
 
 		https := corev1.EnvVar{
 			Name: "https_proxy",
@@ -581,6 +584,9 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 					Key: "https_proxy",
 				},
 			},
+		}
+		if runner.Spec.Proxy.HTTPS != nil {
+			envs = append(envs, https)
 		}
 
 		noProxy := corev1.EnvVar{
@@ -594,8 +600,9 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 				},
 			},
 		}
-
-		envs = append(envs, http, https, noProxy)
+		if len(runner.Spec.Proxy.NoProxy) > 0 {
+			envs = append(envs, noProxy)
+		}
 	}
 
 	log.Info("Creating new pod for ephemeral runner")

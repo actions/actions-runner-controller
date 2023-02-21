@@ -391,7 +391,9 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 				},
 			},
 		}
-		envs = append(envs, httpURL)
+		if autoscalingListener.Spec.Proxy.HTTP != nil {
+			envs = append(envs, httpURL)
+		}
 
 		httpsURL := corev1.EnvVar{
 			Name: "https_proxy",
@@ -402,7 +404,9 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 				},
 			},
 		}
-		envs = append(envs, httpsURL)
+		if autoscalingListener.Spec.Proxy.HTTPS != nil {
+			envs = append(envs, httpsURL)
+		}
 
 		noProxy := corev1.EnvVar{
 			Name: "no_proxy",
@@ -413,7 +417,9 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 				},
 			},
 		}
-		envs = append(envs, noProxy)
+		if len(autoscalingListener.Spec.Proxy.NoProxy) > 0 {
+			envs = append(envs, noProxy)
+		}
 	}
 
 	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
