@@ -248,8 +248,58 @@ type RunnerStatus struct {
 	// +optional
 	Message string `json:"message,omitempty"`
 	// +optional
+	WorkflowStatus *WorkflowStatus `json:"workflow"`
+	// +optional
 	// +nullable
 	LastRegistrationCheckTime *metav1.Time `json:"lastRegistrationCheckTime,omitempty"`
+}
+
+// WorkflowStatus contains various information that is propagated
+// from GitHub Actions workflow run environment variables to
+// ease monitoring workflow run/job/steps that are triggerred on the runner.
+type WorkflowStatus struct {
+	// +optional
+	// Name is the name of the workflow
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_WORKFLOW defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	Name string `json:"name,omitempty"`
+	// +optional
+	// Repository is the owner and repository name of the workflow
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_REPOSITORY defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	Repository string `json:"repository,omitempty"`
+	// +optional
+	// ReositoryOwner is the repository owner's name for the workflow
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_REPOSITORY_OWNER defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	RepositoryOwner string `json:"repositoryOwner,omitempty"`
+	// +optional
+	// GITHUB_RUN_NUMBER is the unique number for the current workflow run
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_RUN_ID defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	RunNumber string `json:"runNumber,omitempty"`
+	// +optional
+	// RunID is the unique number for the current workflow run
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_RUN_ID defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	RunID string `json:"runID,omitempty"`
+	// +optional
+	// Job is the name of the current job
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_JOB defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	Job string `json:"job,omitempty"`
+	// +optional
+	// Action is the name of the current action or the step ID of the current step
+	// that is triggerred within the runner.
+	// It corresponds to GITHUB_ACTION defined in
+	// https://docs.github.com/en/actions/learn-github-actions/environment-variables
+	Action string `json:"action,omitempty"`
 }
 
 // RunnerStatusRegistration contains runner registration status
@@ -316,6 +366,8 @@ func (w *WorkVolumeClaimTemplate) V1VolumeMount(mountPath string) corev1.VolumeM
 // +kubebuilder:printcolumn:JSONPath=".spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.workflow.repository",name=WF Repo,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.workflow.runID",name=WF Run,type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Runner is the Schema for the runners API

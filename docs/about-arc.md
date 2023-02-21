@@ -44,7 +44,7 @@ The helm command (in the QuickStart guide) installs the custom resources into th
 ```console
 helm install -f custom-values.yaml --wait --namespace actions-runner-system \
   --create-namespace actions-runner-controller \
-  actions/actions-runner-controller
+  actions-runner-controller/actions-runner-controller
  ```
 
 ### Runner deployment
@@ -122,7 +122,7 @@ spec:
     scaleDownFactor: '0.5'
   ```
 
-For more details - please see "[Pull Driven Scaling](detailed-docs.md#pull-driven-scaling)."
+For more details - please see "[Pull Driven Scaling](automatically-scaling-runners.md#pull-driven-scaling)."
 
 *The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.*
 

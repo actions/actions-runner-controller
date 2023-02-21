@@ -1,0 +1,5 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+maxRunners: 10
+minRunners: 5

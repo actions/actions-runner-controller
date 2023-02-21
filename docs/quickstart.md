@@ -12,7 +12,7 @@ With ARC you can :
 
 ## Overview
 
-For an overview of ARC, please refer to "[ARC Overview](https://github.com/actions/actions-runner-controller/blob/master/docs/about-arc.md)."
+For an overview of ARC, please refer to "[About ARC](https://github.com/actions/actions-runner-controller/blob/master/docs/about-arc.md)."
 
 ## Getting Started
 
@@ -46,7 +46,7 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 
 ### Deploy and Configure ARC
 
-1️⃣ Deploy  and configure ARC on your K8s cluster. You may use Helm or Kubectl.
+1️⃣ Deploy and configure ARC on your K8s cluster. You may use Helm or Kubectl.
 
 <details><summary>Helm deployment</summary>
 
@@ -62,7 +62,7 @@ helm repo add actions-runner-controller https://actions-runner-controller.github
 helm upgrade --install --namespace actions-runner-system --create-namespace\
   --set=authSecret.create=true\
   --set=authSecret.github_token="REPLACE_YOUR_TOKEN_HERE"\
-  --wait actions-runner-controller actions/actions-runner-controller
+  --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
 
 <sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated previously. </sub>
@@ -140,7 +140,7 @@ There is also a quick start guide to get started on Actions, For more informatio
 
 ## Learn more
 
-For more detailed documentation, please refer to "[Detailed Documentation](https://github.com/actions/actions-runner-controller/tree/master/docs)."
+For more detailed documentation, please refer to "[Actions Runner Controller Documentation](https://github.com/actions/actions-runner-controller/blob/master/README.md#documentation)."
 
 ## Contributing
 

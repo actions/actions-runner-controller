@@ -1,0 +1,6 @@
+# Set the following to dummy values.
+# This is only useful in CI
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+
+githubConfigSecret:
+  github_token: test
