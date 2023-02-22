@@ -477,7 +477,6 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					// Set status to simulate a configured EphemeralRunner
-					fmt.Println("runnerList.Items", len(runnerList.Items))
 					refetch := false
 					for i, runner := range runnerList.Items {
 						if runner.Status.RunnerId == 0 {
