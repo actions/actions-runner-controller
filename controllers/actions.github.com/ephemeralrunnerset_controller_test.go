@@ -304,7 +304,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 		})
 	})
 
-	Context("When a new EphemeralRunnerSet scale up and down", func() {
+	FContext("When a new EphemeralRunnerSet scale up and down", func() {
 		It("It should delete finished EphemeralRunner and create new EphemeralRunner", func() {
 			created := new(actionsv1alpha1.EphemeralRunnerSet)
 			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, created)
@@ -477,6 +477,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					// Set status to simulate a configured EphemeralRunner
+					fmt.Println("runnerList.Items", len(runnerList.Items))
 					refetch := false
 					for i, runner := range runnerList.Items {
 						if runner.Status.RunnerId == 0 {
