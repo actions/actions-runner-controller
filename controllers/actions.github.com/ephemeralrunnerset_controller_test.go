@@ -304,7 +304,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 		})
 	})
 
-	FContext("When a new EphemeralRunnerSet scale up and down", func() {
+	Context("When a new EphemeralRunnerSet scale up and down", func() {
 		It("It should delete finished EphemeralRunner and create new EphemeralRunner", func() {
 			created := new(actionsv1alpha1.EphemeralRunnerSet)
 			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, created)
@@ -458,7 +458,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			runningRunner = runnerList.Items[1].DeepCopy()
 			runningRunner.Status.JobRequestId = 1001
-			err = k8sClient.Status().Patch(ctx, runningRunner, client.MergeFrom(&runnerList.Items[0]))
+			err = k8sClient.Status().Patch(ctx, runningRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			// Scale down to 1
