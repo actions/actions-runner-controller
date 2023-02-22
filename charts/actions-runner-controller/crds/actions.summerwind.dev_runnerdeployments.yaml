@@ -32,6 +32,10 @@ spec:
         - jsonPath: .metadata.creationTimestamp
           name: Age
           type: date
+        - jsonPath: .spec.template.spec.labels
+          name: Labels
+          type: string
+          priority: 1
       name: v1alpha1
       schema:
         openAPIV3Schema:
