@@ -3,6 +3,7 @@ package actionsgithubcom
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -476,7 +477,7 @@ var _ = Describe("EphemeralRunner", func() {
 					})
 					err = k8sClient.Status().Update(ctx, pod)
 					Expect(err).To(BeNil(), "Failed to update pod status")
-					return false, nil
+					return false, fmt.Errorf("pod haven't failed for 5 times.")
 				},
 				timeout,
 				interval,
