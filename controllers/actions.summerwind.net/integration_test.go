@@ -69,7 +69,8 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace: ns.Name,
+			Namespace:          ns.Name,
+			MetricsBindAddress: "0",
 		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
@@ -188,7 +189,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 	ns := env.Namespace
 
 	Describe("when no existing resources exist", func() {
-
 		It("should create and scale organization's repository runners on workflow_job event", func() {
 			name := "example-runnerdeploy"
 
@@ -455,7 +455,6 @@ var _ = Context("INTEGRATION: Inside of a new namespace", func() {
 				env.ExpectRegisteredNumberCountEventuallyEquals(2, "count of fake list runners")
 			}
 		})
-
 	})
 })
 

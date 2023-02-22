@@ -464,7 +464,9 @@ var _ = Describe("Test AutoscalingController creation failures", func() {
 			err = k8sClient.Create(ctx, configSecret)
 			Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
 
-			mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+				MetricsBindAddress: "0",
+			})
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
 			controller := &AutoscalingRunnerSetReconciler{
@@ -610,7 +612,8 @@ var _ = Describe("Test Client optional configuration", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
 
 			mgr, err = ctrl.NewManager(cfg, ctrl.Options{
-				Namespace: autoscalingNS.Name,
+				Namespace:          autoscalingNS.Name,
+				MetricsBindAddress: "0",
 			})
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 

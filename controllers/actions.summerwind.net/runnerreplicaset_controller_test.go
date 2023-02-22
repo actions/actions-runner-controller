@@ -46,7 +46,8 @@ func SetupTest(ctx2 context.Context) *corev1.Namespace {
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace: ns.Name,
+			Namespace:          ns.Name,
+			MetricsBindAddress: "0",
 		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 

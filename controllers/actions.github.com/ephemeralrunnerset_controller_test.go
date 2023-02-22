@@ -458,7 +458,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			runningRunner = runnerList.Items[1].DeepCopy()
 			runningRunner.Status.JobRequestId = 1001
-			err = k8sClient.Status().Patch(ctx, runningRunner, client.MergeFrom(&runnerList.Items[0]))
+			err = k8sClient.Status().Patch(ctx, runningRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			// Scale down to 1
