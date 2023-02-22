@@ -612,7 +612,8 @@ var _ = Describe("Test Client optional configuration", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
 
 			mgr, err = ctrl.NewManager(cfg, ctrl.Options{
-				Namespace: autoscalingNS.Name,
+				Namespace:          autoscalingNS.Name,
+				MetricsBindAddress: "0",
 			})
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
