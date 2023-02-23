@@ -693,7 +693,7 @@ Note that this feature is currently intended for use with runner pods being term
 For example, a runner pod can be terminated prematurely by cluster-autoscaler when it's about to terminate the node on cluster scale down.
 All the variants of RunnerDeployment and RunnerSet managed runner pods, including runners with dockerd sidecars, rootless and rootful dind runners are affected by it. For dind runner pods only, you can use this feature to fix or alleviate the issue.
 
-To be clear, an increase/decrease in the desired replicas of RunnerDeployment and RunnerSet will never result in worklfow jobs being termianted prematurely.
+To be clear, an increase/decrease in the desired replicas of RunnerDeployment and RunnerSet will never result in worklfow jobs being terminated prematurely.
 That's because it's handled BEFORE the runner pod is terminated, by ARC respective controller.
 
 For anyone interested in improving it, adding a dedicated pod finalizer for this issue will never work.
