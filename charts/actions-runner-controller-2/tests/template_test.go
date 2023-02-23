@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -208,7 +208,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
 	require.NoError(t, err)
 
-	chartContent, err := ioutil.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
+	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
 	require.NoError(t, err)
 
 	chart := new(Chart)
@@ -294,7 +294,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
 	require.NoError(t, err)
 
-	chartContent, err := ioutil.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
+	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
 	require.NoError(t, err)
 
 	chart := new(Chart)
