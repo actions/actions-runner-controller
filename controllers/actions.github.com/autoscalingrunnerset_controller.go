@@ -500,6 +500,18 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		return nil, err
 	}
 
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		autoscalingRunnerSet.Spec.GitHubConfigUrl,
+		autoscalingRunnerSet.Namespace,
+		configSecret.Data,
+		opts...,
+	)
+}
+
+func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
+	var options []actions.ClientOption
+
 	if autoscalingRunnerSet.Spec.Proxy != nil {
 		proxyFunc, err := autoscalingRunnerSet.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
 			var secret corev1.Secret
@@ -514,20 +526,8 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 			return nil, fmt.Errorf("failed to get proxy func: %w", err)
 		}
 
-		opts = append(opts, actions.WithProxy(proxyFunc))
+		options = append(options, actions.WithProxy(proxyFunc))
 	}
-
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		autoscalingRunnerSet.Spec.GitHubConfigUrl,
-		autoscalingRunnerSet.Namespace,
-		configSecret.Data,
-		opts...,
-	)
-}
-
-func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
-	var options []actions.ClientOption
 
 	tlsConfig := autoscalingRunnerSet.Spec.GitHubServerTLS
 	if tlsConfig != nil && tlsConfig.RootCAsConfigMapRef != "" {
