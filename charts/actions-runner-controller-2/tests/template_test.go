@@ -218,10 +218,10 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
 	assert.Equal(t, "test-arc-actions-runner-controller-2", deployment.Name)
-	assert.Equal(t, "actions-runner-controller-2-0.1.0", deployment.Labels["helm.sh/chart"])
+	assert.Equal(t, "actions-runner-controller-2-0.2.0", deployment.Labels["helm.sh/chart"])
 	assert.Equal(t, "actions-runner-controller-2", deployment.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "preview", deployment.Labels["app.kubernetes.io/version"])
+	assert.Equal(t, "0.2.0", deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
@@ -315,10 +315,10 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
 	assert.Equal(t, "actions-runner-controller-2-fullname-override", deployment.Name)
-	assert.Equal(t, "actions-runner-controller-2-0.1.0", deployment.Labels["helm.sh/chart"])
+	assert.Equal(t, "actions-runner-controller-2-0.2.0", deployment.Labels["helm.sh/chart"])
 	assert.Equal(t, "actions-runner-controller-2-override", deployment.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "preview", deployment.Labels["app.kubernetes.io/version"])
+	assert.Equal(t, "0.2.0", deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
 	assert.Equal(t, "bar", deployment.Labels["foo"])
 	assert.Equal(t, "actions", deployment.Labels["github"])
