@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,10 +11,16 @@ import (
 	"github.com/gruntwork-io/terratest/modules/random"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
+
+type Chart struct {
+	Version    string `yaml:"version"`
+	AppVersion string `yaml:"appVersion"`
+}
 
 func TestTemplate_CreateServiceAccount(t *testing.T) {
 	t.Parallel()
@@ -201,6 +208,13 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
 	require.NoError(t, err)
 
+	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
+	require.NoError(t, err)
+
+	chart := new(Chart)
+	err = yaml.Unmarshal(chartContent, chart)
+	require.NoError(t, err)
+
 	releaseName := "test-arc"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
@@ -218,10 +232,10 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
 	assert.Equal(t, "test-arc-actions-runner-controller-2", deployment.Name)
-	assert.Equal(t, "actions-runner-controller-2-0.1.0", deployment.Labels["helm.sh/chart"])
+	assert.Equal(t, "actions-runner-controller-2-"+chart.Version, deployment.Labels["helm.sh/chart"])
 	assert.Equal(t, "actions-runner-controller-2", deployment.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "preview", deployment.Labels["app.kubernetes.io/version"])
+	assert.Equal(t, chart.AppVersion, deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
@@ -280,6 +294,13 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
 	require.NoError(t, err)
 
+	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
+	require.NoError(t, err)
+
+	chart := new(Chart)
+	err = yaml.Unmarshal(chartContent, chart)
+	require.NoError(t, err)
+
 	releaseName := "test-arc"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
@@ -315,10 +336,10 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
 	assert.Equal(t, "actions-runner-controller-2-fullname-override", deployment.Name)
-	assert.Equal(t, "actions-runner-controller-2-0.1.0", deployment.Labels["helm.sh/chart"])
+	assert.Equal(t, "actions-runner-controller-2-"+chart.Version, deployment.Labels["helm.sh/chart"])
 	assert.Equal(t, "actions-runner-controller-2-override", deployment.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "preview", deployment.Labels["app.kubernetes.io/version"])
+	assert.Equal(t, chart.AppVersion, deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
 	assert.Equal(t, "bar", deployment.Labels["foo"])
 	assert.Equal(t, "actions", deployment.Labels["github"])
