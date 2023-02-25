@@ -491,7 +491,7 @@ In case you have a more complex scenario, try writing two or more entries under 
 
 The earlier entry is prioritized higher than later entries. So you usually define one-time overrides at the top of your list, then yearly, monthly, weekly, and lastly daily overrides.
 
-A common use case for this may be to have 1 override to scale to 0 during the week outside of core business hours and another override to scale to 0 during all hours of the weekend.
+A common use case for this may be to have 1 override to scale to 0 during non-working hours and another override to scale to 0 on weekends.
 
 ## Configuring automatic termination
 
