@@ -59,15 +59,33 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	}
 
 	// collect labels
-	labels := make(prometheus.Labels)
+	var (
+		labels        = make(prometheus.Labels)
+		keysAndValues = []interface{}{"job_id", fmt.Sprint(*e.WorkflowJob.ID)}
+	)
 
 	runsOn := strings.Join(e.WorkflowJob.Labels, `,`)
 	labels["runs_on"] = runsOn
+
 	labels["job_name"] = *e.WorkflowJob.Name
-	labels["repository"] = *e.Repo.Name
-	labels["repository_full_name"] = *e.Repo.FullName
-	if len(*e.Org.Name) > 0 {
-		labels["organization"] = *e.Org.Name
+	keysAndValues = append(keysAndValues, "job_name", *e.WorkflowJob.Name)
+
+	if e.Repo != nil {
+		if n := e.Repo.Name; n != nil {
+			labels["repository"] = *n
+			keysAndValues = append(keysAndValues, "repository", *n)
+		}
+		if n := e.Repo.FullName; n != nil {
+			labels["repository_full_name"] = *n
+			keysAndValues = append(keysAndValues, "repository_full_name", *n)
+		}
+	}
+
+	if e.Org != nil {
+		if n := e.Org.Name; n != nil {
+			labels["organization"] = *e.Org.Name
+			keysAndValues = append(keysAndValues, "organization", *n)
+		}
 	}
 
 	// switch on job status
@@ -107,13 +125,7 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			reader.Log.Error(err, "reading workflow job log")
 			return
 		} else {
-			reader.Log.Info("reading workflow_job logs",
-				"job_name", *e.WorkflowJob.Name,
-				"job_id", fmt.Sprint(*e.WorkflowJob.ID),
-				"repository", *e.Repo.Name,
-				"repository_full_name", *e.Repo.FullName,
-				"organization", *e.Org.Name,
-			)
+			reader.Log.Info("reading workflow_job logs", keysAndValues...)
 		}
 
 		if *e.WorkflowJob.Conclusion == "failure" {
