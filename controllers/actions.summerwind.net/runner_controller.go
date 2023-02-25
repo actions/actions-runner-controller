@@ -30,6 +30,7 @@ import (
 	"github.com/go-logr/logr"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -1001,6 +1002,35 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
+		// explicitly invoke `dockerd` to avoid automatic TLS / TCP binding
+		dockerdContainer.Args = append([]string{
+			"dockerd",
+			"--host=unix:///run/docker/docker.sock",
+		}, dockerdContainer.Args...)
+
+		// this must match a GID for the user in the runner image
+		// default matches GitHub Actions infra (and default runner images
+		// for actions-runner-controller) so typically should not need to be
+		// overridden
+		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
+			dockerdContainer.Env = append(dockerdContainer.Env,
+				corev1.EnvVar{
+					Name: "DOCKER_GROUP_GID",
+					Value: "121",
+				})
+		}
+		dockerdContainer.Args = append(dockerdContainer.Args, "--group=$(DOCKER_GROUP_GID)")
+
+		// ideally, we could mount the socket directly at `/var/run/docker.sock`
+		// to use the default, but that's not practical since it won't exist
+		// when the container starts, so can't use subPath on the volume mount
+		runnerContainer.Env = append(runnerContainer.Env,
+			corev1.EnvVar{
+				Name: "DOCKER_HOST",
+				Value: "unix:///run/docker/docker.sock",
+			},
+		)
+
 		if ok, _ := workVolumePresent(pod.Spec.Volumes); !ok {
 			pod.Spec.Volumes = append(pod.Spec.Volumes,
 				corev1.Volume{
@@ -1014,9 +1044,12 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
-				Name: "certs-client",
+				Name: "docker-sock",
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+						SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+					},
 				},
 			},
 		)
@@ -1032,26 +1065,10 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
 			corev1.VolumeMount{
-				Name:      "certs-client",
-				MountPath: "/certs/client",
-				ReadOnly:  true,
+				Name:      "docker-sock",
+				MountPath: "/run/docker",
 			},
 		)
-
-		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
-			{
-				Name:  "DOCKER_HOST",
-				Value: "tcp://localhost:2376",
-			},
-			{
-				Name:  "DOCKER_TLS_VERIFY",
-				Value: "1",
-			},
-			{
-				Name:  "DOCKER_CERT_PATH",
-				Value: "/certs/client",
-			},
-		}...)
 
 		// Determine the volume mounts assigned to the docker sidecar. In case extra mounts are included in the RunnerSpec, append them to the standard
 		// set of mounts. See https://github.com/actions/actions-runner-controller/issues/435 for context.
@@ -1061,8 +1078,8 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				MountPath: runnerVolumeMountPath,
 			},
 			{
-				Name:      "certs-client",
-				MountPath: "/certs/client",
+				Name:      "docker-sock",
+				MountPath: "/run/docker",
 			},
 		}
 
@@ -1077,11 +1094,6 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		if dockerdContainer.Image == "" {
 			dockerdContainer.Image = defaultDockerImage
 		}
-
-		dockerdContainer.Env = append(dockerdContainer.Env, corev1.EnvVar{
-			Name:  "DOCKER_TLS_CERTDIR",
-			Value: "/certs",
-		})
 
 		if dockerdContainer.SecurityContext == nil {
 			dockerdContainer.SecurityContext = &corev1.SecurityContext{
@@ -1271,6 +1283,15 @@ func removeFinalizer(finalizers []string, finalizerName string) ([]string, bool)
 	}
 
 	return result, removed
+}
+
+func envVarPresent(name string, items []corev1.EnvVar) (bool, int) {
+	for index, item := range items {
+		if item.Name == name {
+			return true, index
+		}
+	}
+	return false, -1
 }
 
 func workVolumePresent(items []corev1.Volume) (bool, int) {
