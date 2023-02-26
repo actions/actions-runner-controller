@@ -131,6 +131,10 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 		if *e.WorkflowJob.Conclusion == "failure" {
 			failedStep := "null"
 			for i, step := range e.WorkflowJob.Steps {
+				conclusion := step.Conclusion
+				if conclusion == nil {
+					continue
+				}
 
 				// *step.Conclusion ~
 				// "success",
@@ -141,11 +145,11 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 				// "timed_out",
 				// "action_required",
 				// null
-				if *step.Conclusion == "failure" {
+				if *conclusion == "failure" {
 					failedStep = fmt.Sprint(i)
 					break
 				}
-				if *step.Conclusion == "timed_out" {
+				if *conclusion == "timed_out" {
 					failedStep = fmt.Sprint(i)
 					parseResult.ExitCode = "timed_out"
 					break
