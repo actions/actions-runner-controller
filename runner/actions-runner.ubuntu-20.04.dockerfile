@@ -6,7 +6,7 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION=0.2.0
 # Docker and Docker Compose arguments
 ARG CHANNEL=stable
 ARG DOCKER_VERSION=20.10.18
-ARG DOCKER_COMPOSE_VERSION=v2.6.0
+ARG DOCKER_COMPOSE_VERSION=v2.16.0
 ARG DUMB_INIT_VERSION=1.2.5
 
 # Use 1001 and 121 for compatibility with GitHub-hosted runners
