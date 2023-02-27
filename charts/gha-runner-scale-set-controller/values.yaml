@@ -1,15 +1,15 @@
-# Default values for actions-runner-controller-2.
+# Default values for gha-runner-scale-set-controller.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 labels: {}
 
 # leaderElection will be enabled when replicaCount>1,
 # So, only one replica will in charge of reconciliation at a given time
-# leaderElectionId will be set to {{ define actions-runner-controller-2.fullname }}.
+# leaderElectionId will be set to {{ define gha-runner-scale-set-controller.fullname }}.
 replicaCount: 1
 
 image:
-  repository: "ghcr.io/actions/actions-runner-controller-2"
+  repository: "ghcr.io/actions/gha-runner-scale-set-controller"
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""

@@ -13,7 +13,7 @@ githubConfigSecret:
 
   ### GitHub PAT Configuration
   github_token: ""
-## If you have a pre-define Kubernetes secret in the same namespace the auto-scaling-runner-set is going to deploy,
+## If you have a pre-define Kubernetes secret in the same namespace the gha-runner-scale-set is going to deploy,
 ## you can also reference it via `githubConfigSecret: pre-defined-secret`.
 ## You need to make sure your predefined secret has all the required secret data set properly.
 ##   For a pre-defined secret using GitHub PAT, the secret needs to be created like this:

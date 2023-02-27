@@ -4,10 +4,10 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "auto-scaling-runner-set.labels" . | nindent 4 }}
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" .Values.githubConfigUrl }}
-  githubConfigSecret: {{ include "auto-scaling-runner-set.githubsecret" . }}
+  githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}
   {{- with .Values.runnerGroup }}
   runnerGroup: {{ . }}
   {{- end }}
@@ -68,15 +68,15 @@ spec:
         {{- end }}
       {{- end }}
       {{- if eq .Values.containerMode.type "kubernetes" }}
-      serviceAccountName: {{ default (include "auto-scaling-runner-set.kubeModeServiceAccountName" .) .Values.template.spec.serviceAccountName }}
+      serviceAccountName: {{ default (include "gha-runner-scale-set.kubeModeServiceAccountName" .) .Values.template.spec.serviceAccountName }}
       {{- else }}
-      serviceAccountName: {{ default (include "auto-scaling-runner-set.noPermissionServiceAccountName" .) .Values.template.spec.serviceAccountName }}
+      serviceAccountName: {{ default (include "gha-runner-scale-set.noPermissionServiceAccountName" .) .Values.template.spec.serviceAccountName }}
       {{- end }}
       {{- if or .Values.template.spec.initContainers (eq .Values.containerMode.type "dind") }}
       initContainers:
         {{- if eq .Values.containerMode.type "dind" }}
       - name: init-dind-externals
-        {{- include "auto-scaling-runner-set.dind-init-container" . | nindent 8 }}
+        {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
         {{- end }}
         {{- with .Values.template.spec.initContainers }}
       {{- toYaml . | nindent 8 }}
@@ -85,24 +85,24 @@ spec:
       containers: 
       {{- if eq .Values.containerMode.type "dind" }}
       - name: runner
-        {{- include "auto-scaling-runner-set.dind-runner-container" . | nindent 8 }}
+        {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
       - name: dind
-        {{- include "auto-scaling-runner-set.dind-container" . | nindent 8 }}
-      {{- include "auto-scaling-runner-set.non-runner-containers" . | nindent 6 }}
+        {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
+      {{- include "gha-runner-scale-set.non-runner-containers" . | nindent 6 }}
       {{- else if eq .Values.containerMode.type "kubernetes" }}
       - name: runner
-        {{- include "auto-scaling-runner-set.kubernetes-mode-runner-container" . | nindent 8 }}
-      {{- include "auto-scaling-runner-set.non-runner-containers" . | nindent 6 }}
+        {{- include "gha-runner-scale-set.kubernetes-mode-runner-container" . | nindent 8 }}
+      {{- include "gha-runner-scale-set.non-runner-containers" . | nindent 6 }}
       {{- else }}
       {{ .Values.template.spec.containers | toYaml | nindent 6 }}
       {{- end }}
       {{- if or .Values.template.spec.volumes (eq .Values.containerMode.type "dind") (eq .Values.containerMode.type "kubernetes") }}
       volumes: 
         {{- if eq .Values.containerMode.type "dind" }}
-          {{- include "auto-scaling-runner-set.dind-volume" . | nindent 6 }}
-          {{- include "auto-scaling-runner-set.dind-work-volume" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}
         {{- else if eq .Values.containerMode.type "kubernetes" }}
-          {{- include "auto-scaling-runner-set.kubernetes-mode-work-volume" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.kubernetes-mode-work-volume" . | nindent 6 }}
         {{- end }}
-        {{- include "auto-scaling-runner-set.non-work-volumes" . | nindent 6 }}
+        {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
       {{- end }}
