@@ -1,0 +1,36 @@
+name: 'E2E ARC Test Action'
+description: 'Includes common arc installation, setup and test file run'
+
+inputs:
+  github-token:
+    description: 'JWT generated with Github App inputs'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install ARC
+      run: helm install arc --namespace "arc-systems" --create-namespace ./charts/actions-runner-controller-2
+      shell: bash
+    - name: Get datetime
+      # We are using this value further in the runner installation to avoid runner name collision that are a risk with hard coded values.
+      # A datetime including the 3 nanoseconds are a good option for this and also adds to readability and runner sorting if needed.
+      run: echo "DATE_TIME=$(date +'%Y-%m-%d-%H-%M-%S-%3N')" >> $GITHUB_ENV
+      shell: bash
+    - name: Install runners
+      run: |
+          helm install "arc-runner-${{ env.DATE_TIME }}" \
+          --namespace "arc-runners" \
+          --create-namespace \
+          --set githubConfigUrl="https://github.com/actions/actions-runner-controller" \
+          --set githubConfigSecret.github_token="${{ inputs.github-token }}" \
+          ./charts/auto-scaling-runner-set \
+          --debug
+          kubectl get pods -A
+      shell: bash
+    - name: Test ARC scales pods up and down
+      run: |
+          export GITHUB_TOKEN="${{ inputs.github-token }}"
+          export DATE_TIME="${{ env.DATE_TIME }}"
+          go test ./test_e2e_arc -v
+      shell: bash
