@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "auto-scaling-runner-set.name" -}}
+{{- define "gha-runner-scale-set.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "auto-scaling-runner-set.fullname" -}}
+{{- define "gha-runner-scale-set.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "auto-scaling-runner-set.chart" -}}
+{{- define "gha-runner-scale-set.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "auto-scaling-runner-set.labels" -}}
-helm.sh/chart: {{ include "auto-scaling-runner-set.chart" . }}
-{{ include "auto-scaling-runner-set.selectorLabels" . }}
+{{- define "gha-runner-scale-set.labels" -}}
+helm.sh/chart: {{ include "gha-runner-scale-set.chart" . }}
+{{ include "gha-runner-scale-set.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,12 +45,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "auto-scaling-runner-set.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "auto-scaling-runner-set.name" . }}
+{{- define "gha-runner-scale-set.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "gha-runner-scale-set.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.githubsecret" -}}
+{{- define "gha-runner-scale-set.githubsecret" -}}
   {{- if kindIs "string" .Values.githubConfigSecret }}
     {{- if not (empty .Values.githubConfigSecret) }}
 {{- .Values.githubConfigSecret }}
@@ -58,23 +58,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "Values.githubConfigSecret is required for setting auth with GitHub server." }}
     {{- end }}
   {{- else }}
-{{- include "auto-scaling-runner-set.fullname" . }}-github-secret
+{{- include "gha-runner-scale-set.fullname" . }}-github-secret
   {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.noPermissionServiceAccountName" -}}
-{{- include "auto-scaling-runner-set.fullname" . }}-no-permission-service-account
+{{- define "gha-runner-scale-set.noPermissionServiceAccountName" -}}
+{{- include "gha-runner-scale-set.fullname" . }}-no-permission-service-account
 {{- end }}
 
-{{- define "auto-scaling-runner-set.kubeModeRoleName" -}}
-{{- include "auto-scaling-runner-set.fullname" . }}-kube-mode-role
+{{- define "gha-runner-scale-set.kubeModeRoleName" -}}
+{{- include "gha-runner-scale-set.fullname" . }}-kube-mode-role
 {{- end }}
 
-{{- define "auto-scaling-runner-set.kubeModeServiceAccountName" -}}
-{{- include "auto-scaling-runner-set.fullname" . }}-kube-mode-service-account
+{{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
+{{- include "gha-runner-scale-set.fullname" . }}-kube-mode-service-account
 {{- end }}
 
-{{- define "auto-scaling-runner-set.dind-init-container" -}}
+{{- define "gha-runner-scale-set.dind-init-container" -}}
 {{- range $i, $val := .Values.template.spec.containers -}}
 {{- if eq $val.name "runner" -}}
 image: {{ $val.image }}
@@ -91,7 +91,7 @@ volumeMounts:
 {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.dind-container" -}}
+{{- define "gha-runner-scale-set.dind-container" -}}
 image: docker:dind
 securityContext:
   privileged: true
@@ -104,14 +104,14 @@ volumeMounts:
     mountPath: /actions-runner/externals
 {{- end }}
 
-{{- define "auto-scaling-runner-set.dind-volume" -}}
+{{- define "gha-runner-scale-set.dind-volume" -}}
 - name: dind-cert
   emptyDir: {}
 - name: dind-externals
   emptyDir: {}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.dind-work-volume" -}}
+{{- define "gha-runner-scale-set.dind-work-volume" -}}
 {{- $createWorkVolume := 1 }}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if eq $volume.name "work" }}
@@ -130,7 +130,7 @@ volumeMounts:
   {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.kubernetes-mode-work-volume" -}}
+{{- define "gha-runner-scale-set.kubernetes-mode-work-volume" -}}
 {{- $createWorkVolume := 1 }}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if eq $volume.name "work" }}
@@ -152,7 +152,7 @@ volumeMounts:
   {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.non-work-volumes" -}}
+{{- define "gha-runner-scale-set.non-work-volumes" -}}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if ne $volume.name "work" }}
 - name: {{ $volume.name }}
@@ -165,7 +165,7 @@ volumeMounts:
   {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.non-runner-containers" -}}
+{{- define "gha-runner-scale-set.non-runner-containers" -}}
   {{- range $i, $container := .Values.template.spec.containers -}}
     {{- if ne $container.name "runner" -}}
 - name: {{ $container.name }}
@@ -178,7 +178,7 @@ volumeMounts:
   {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.dind-runner-container" -}}
+{{- define "gha-runner-scale-set.dind-runner-container" -}}
 {{- range $i, $container := .Values.template.spec.containers -}}
   {{- if eq $container.name "runner" -}}
     {{- range $key, $val := $container }}
@@ -261,7 +261,7 @@ volumeMounts:
 {{- end }}
 {{- end }}
 
-{{- define "auto-scaling-runner-set.kubernetes-mode-runner-container" -}}
+{{- define "gha-runner-scale-set.kubernetes-mode-runner-container" -}}
 {{- range $i, $container := .Values.template.spec.containers -}}
   {{- if eq $container.name "runner" -}}
     {{- range $key, $val := $container }}

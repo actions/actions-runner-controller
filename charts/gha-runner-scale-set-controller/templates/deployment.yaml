@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "actions-runner-controller-2.fullname" . }}
+  name: {{ include "gha-runner-scale-set-controller.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "actions-runner-controller-2.labels" . | nindent 4 }}
+    {{- include "gha-runner-scale-set-controller.labels" . | nindent 4 }}
 spec:
   replicas: {{ default 1 .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "actions-runner-controller-2.selectorLabels" . | nindent 6 }}
+      {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -21,13 +21,13 @@ spec:
         app.kubernetes.io/part-of: actions-runner-controller
         app.kubernetes.io/component: controller-manager
         app.kubernetes.io/version: {{ .Chart.Version }}
-        {{- include "actions-runner-controller-2.selectorLabels" . | nindent 8 }}
+        {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "actions-runner-controller-2.serviceAccountName" . }}
+      serviceAccountName: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -43,10 +43,10 @@ spec:
         - "--auto-scaling-runner-set-only"
         {{- if gt (int (default 1 .Values.replicaCount)) 1 }}
         - "--enable-leader-election"
-        - "--leader-election-id={{ include "actions-runner-controller-2.fullname" . }}"
+        - "--leader-election-id={{ include "gha-runner-scale-set-controller.fullname" . }}"
         {{- end }}
         {{- with .Values.imagePullSecrets }}
-        - "--auto-scaler-image-pull-secrets={{ include "actions-runner-controller-2.imagePullSecretsNames" . }}"
+        - "--auto-scaler-image-pull-secrets={{ include "gha-runner-scale-set-controller.imagePullSecretsNames" . }}"
         {{- end }}
         {{- with .Values.flags.logLevel }}
         - "--log-level={{ . }}"

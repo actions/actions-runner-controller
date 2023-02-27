@@ -26,7 +26,7 @@ func TestTemplate_CreateServiceAccount(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -46,7 +46,7 @@ func TestTemplate_CreateServiceAccount(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
-	assert.Equal(t, "test-arc-actions-runner-controller-2", serviceAccount.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", serviceAccount.Name)
 	assert.Equal(t, "bar", string(serviceAccount.Annotations["foo"]))
 }
 
@@ -54,7 +54,7 @@ func TestTemplate_CreateServiceAccount_OverwriteName(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -83,7 +83,7 @@ func TestTemplate_CreateServiceAccount_CannotUseDefaultServiceAccount(t *testing
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -106,7 +106,7 @@ func TestTemplate_NotCreateServiceAccount(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -129,7 +129,7 @@ func TestTemplate_NotCreateServiceAccount_ServiceAccountNotSet(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -151,7 +151,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -168,7 +168,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRole)
 
 	assert.Empty(t, managerRole.Namespace, "ClusterRole should not have a namespace")
-	assert.Equal(t, "test-arc-actions-runner-controller-2-manager-role", managerRole.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-role", managerRole.Name)
 	assert.Equal(t, 17, len(managerRole.Rules))
 }
 
@@ -176,7 +176,7 @@ func TestTemplate_ManagerRoleBinding(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -195,9 +195,9 @@ func TestTemplate_ManagerRoleBinding(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRoleBinding)
 
 	assert.Empty(t, managerRoleBinding.Namespace, "ClusterRoleBinding should not have a namespace")
-	assert.Equal(t, "test-arc-actions-runner-controller-2-manager-rolebinding", managerRoleBinding.Name)
-	assert.Equal(t, "test-arc-actions-runner-controller-2-manager-role", managerRoleBinding.RoleRef.Name)
-	assert.Equal(t, "test-arc-actions-runner-controller-2", managerRoleBinding.Subjects[0].Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-rolebinding", managerRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-role", managerRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerRoleBinding.Subjects[0].Namespace)
 }
 
@@ -205,7 +205,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
@@ -231,25 +231,25 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &deployment)
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
-	assert.Equal(t, "test-arc-actions-runner-controller-2", deployment.Name)
-	assert.Equal(t, "actions-runner-controller-2-"+chart.Version, deployment.Labels["helm.sh/chart"])
-	assert.Equal(t, "actions-runner-controller-2", deployment.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Name)
+	assert.Equal(t, "gha-runner-scale-set-controller-"+chart.Version, deployment.Labels["helm.sh/chart"])
+	assert.Equal(t, "gha-runner-scale-set-controller", deployment.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, chart.AppVersion, deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
 
-	assert.Equal(t, "actions-runner-controller-2", deployment.Spec.Selector.MatchLabels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set-controller", deployment.Spec.Selector.MatchLabels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Spec.Selector.MatchLabels["app.kubernetes.io/instance"])
 
-	assert.Equal(t, "actions-runner-controller-2", deployment.Spec.Template.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set-controller", deployment.Spec.Template.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Spec.Template.Labels["app.kubernetes.io/instance"])
 
 	assert.Equal(t, "manager", deployment.Spec.Template.Annotations["kubectl.kubernetes.io/default-container"])
 
 	assert.Len(t, deployment.Spec.Template.Spec.ImagePullSecrets, 0)
-	assert.Equal(t, "test-arc-actions-runner-controller-2", deployment.Spec.Template.Spec.ServiceAccountName)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Nil(t, deployment.Spec.Template.Spec.SecurityContext)
 	assert.Empty(t, deployment.Spec.Template.Spec.PriorityClassName)
 	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
@@ -263,7 +263,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	assert.Equal(t, "manager", deployment.Spec.Template.Spec.Containers[0].Name)
-	assert.Equal(t, "ghcr.io/actions/actions-runner-controller-2:dev", deployment.Spec.Template.Spec.Containers[0].Image)
+	assert.Equal(t, "ghcr.io/actions/gha-runner-scale-set-controller:dev", deployment.Spec.Template.Spec.Containers[0].Image)
 	assert.Equal(t, corev1.PullIfNotPresent, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
@@ -291,7 +291,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
@@ -312,9 +312,9 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"image.pullPolicy":             "Always",
 			"image.tag":                    "dev",
 			"imagePullSecrets[0].name":     "dockerhub",
-			"nameOverride":                 "actions-runner-controller-2-override",
-			"fullnameOverride":             "actions-runner-controller-2-fullname-override",
-			"serviceAccount.name":          "actions-runner-controller-2-sa",
+			"nameOverride":                 "gha-runner-scale-set-controller-override",
+			"fullnameOverride":             "gha-runner-scale-set-controller-fullname-override",
+			"serviceAccount.name":          "gha-runner-scale-set-controller-sa",
 			"podAnnotations.foo":           "bar",
 			"podSecurityContext.fsGroup":   "1000",
 			"securityContext.runAsUser":    "1000",
@@ -335,9 +335,9 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &deployment)
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
-	assert.Equal(t, "actions-runner-controller-2-fullname-override", deployment.Name)
-	assert.Equal(t, "actions-runner-controller-2-"+chart.Version, deployment.Labels["helm.sh/chart"])
-	assert.Equal(t, "actions-runner-controller-2-override", deployment.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set-controller-fullname-override", deployment.Name)
+	assert.Equal(t, "gha-runner-scale-set-controller-"+chart.Version, deployment.Labels["helm.sh/chart"])
+	assert.Equal(t, "gha-runner-scale-set-controller-override", deployment.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, chart.AppVersion, deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
@@ -346,10 +346,10 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
 
-	assert.Equal(t, "actions-runner-controller-2-override", deployment.Spec.Selector.MatchLabels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set-controller-override", deployment.Spec.Selector.MatchLabels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Spec.Selector.MatchLabels["app.kubernetes.io/instance"])
 
-	assert.Equal(t, "actions-runner-controller-2-override", deployment.Spec.Template.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set-controller-override", deployment.Spec.Template.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-arc", deployment.Spec.Template.Labels["app.kubernetes.io/instance"])
 
 	assert.Equal(t, "bar", deployment.Spec.Template.Annotations["foo"])
@@ -357,7 +357,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 
 	assert.Len(t, deployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	assert.Equal(t, "dockerhub", deployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
-	assert.Equal(t, "actions-runner-controller-2-sa", deployment.Spec.Template.Spec.ServiceAccountName)
+	assert.Equal(t, "gha-runner-scale-set-controller-sa", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Equal(t, int64(1000), *deployment.Spec.Template.Spec.SecurityContext.FSGroup)
 	assert.Equal(t, "test-priority-class", deployment.Spec.Template.Spec.PriorityClassName)
 	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
@@ -377,7 +377,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	assert.Equal(t, "manager", deployment.Spec.Template.Spec.Containers[0].Name)
-	assert.Equal(t, "ghcr.io/actions/actions-runner-controller-2:dev", deployment.Spec.Template.Spec.Containers[0].Image)
+	assert.Equal(t, "ghcr.io/actions/gha-runner-scale-set-controller:dev", deployment.Spec.Template.Spec.Containers[0].Image)
 	assert.Equal(t, corev1.PullAlways, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
@@ -408,7 +408,7 @@ func TestTemplate_EnableLeaderElectionRole(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -426,7 +426,7 @@ func TestTemplate_EnableLeaderElectionRole(t *testing.T) {
 	var leaderRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &leaderRole)
 
-	assert.Equal(t, "test-arc-actions-runner-controller-2-leader-election-role", leaderRole.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-leader-election-role", leaderRole.Name)
 	assert.Equal(t, namespaceName, leaderRole.Namespace)
 }
 
@@ -434,7 +434,7 @@ func TestTemplate_EnableLeaderElectionRoleBinding(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -452,17 +452,17 @@ func TestTemplate_EnableLeaderElectionRoleBinding(t *testing.T) {
 	var leaderRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &leaderRoleBinding)
 
-	assert.Equal(t, "test-arc-actions-runner-controller-2-leader-election-rolebinding", leaderRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-leader-election-rolebinding", leaderRoleBinding.Name)
 	assert.Equal(t, namespaceName, leaderRoleBinding.Namespace)
-	assert.Equal(t, "test-arc-actions-runner-controller-2-leader-election-role", leaderRoleBinding.RoleRef.Name)
-	assert.Equal(t, "test-arc-actions-runner-controller-2", leaderRoleBinding.Subjects[0].Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-leader-election-role", leaderRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", leaderRoleBinding.Subjects[0].Name)
 }
 
 func TestTemplate_EnableLeaderElection(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
@@ -482,13 +482,13 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &deployment)
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
-	assert.Equal(t, "test-arc-actions-runner-controller-2", deployment.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Name)
 
 	assert.Equal(t, int32(2), *deployment.Spec.Replicas)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	assert.Equal(t, "manager", deployment.Spec.Template.Spec.Containers[0].Name)
-	assert.Equal(t, "ghcr.io/actions/actions-runner-controller-2:dev", deployment.Spec.Template.Spec.Containers[0].Image)
+	assert.Equal(t, "ghcr.io/actions/gha-runner-scale-set-controller:dev", deployment.Spec.Template.Spec.Containers[0].Image)
 	assert.Equal(t, corev1.PullIfNotPresent, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
@@ -497,7 +497,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--enable-leader-election", deployment.Spec.Template.Spec.Containers[0].Args[1])
-	assert.Equal(t, "--leader-election-id=test-arc-actions-runner-controller-2", deployment.Spec.Template.Spec.Containers[0].Args[2])
+	assert.Equal(t, "--leader-election-id=test-arc-gha-runner-scale-set-controller", deployment.Spec.Template.Spec.Containers[0].Args[2])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[3])
 }
 
@@ -505,7 +505,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../actions-runner-controller-2")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
 	require.NoError(t, err)
 
 	releaseName := "test-arc"

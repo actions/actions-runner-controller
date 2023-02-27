@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "actions-runner-controller-2.name" -}}
+{{- define "gha-runner-scale-set-controller.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "actions-runner-controller-2.fullname" -}}
+{{- define "gha-runner-scale-set-controller.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "actions-runner-controller-2.chart" -}}
+{{- define "gha-runner-scale-set-controller.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "actions-runner-controller-2.labels" -}}
-helm.sh/chart: {{ include "actions-runner-controller-2.chart" . }}
-{{ include "actions-runner-controller-2.selectorLabels" . }}
+{{- define "gha-runner-scale-set-controller.labels" -}}
+helm.sh/chart: {{ include "gha-runner-scale-set-controller.chart" . }}
+{{ include "gha-runner-scale-set-controller.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -49,20 +49,20 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "actions-runner-controller-2.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "actions-runner-controller-2.name" . }}
+{{- define "gha-runner-scale-set-controller.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "gha-runner-scale-set-controller.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "actions-runner-controller-2.serviceAccountName" -}}
+{{- define "gha-runner-scale-set-controller.serviceAccountName" -}}
 {{- if eq .Values.serviceAccount.name "default"}}
 {{- fail "serviceAccount.name cannot be set to 'default'" }}
 {{- end }}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "actions-runner-controller-2.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "gha-runner-scale-set-controller.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
     {{- if not .Values.serviceAccount.name }}
 {{- fail "serviceAccount.name must be set if serviceAccount.create is false" }}
@@ -72,23 +72,23 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
-{{- define "actions-runner-controller-2.managerRoleName" -}}
-{{- include "actions-runner-controller-2.fullname" . }}-manager-role
+{{- define "gha-runner-scale-set-controller.managerRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-role
 {{- end }}
 
-{{- define "actions-runner-controller-2.managerRoleBinding" -}}
-{{- include "actions-runner-controller-2.fullname" . }}-manager-rolebinding
+{{- define "gha-runner-scale-set-controller.managerRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-rolebinding
 {{- end }}
 
-{{- define "actions-runner-controller-2.leaderElectionRoleName" -}}
-{{- include "actions-runner-controller-2.fullname" . }}-leader-election-role
+{{- define "gha-runner-scale-set-controller.leaderElectionRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election-role
 {{- end }}
 
-{{- define "actions-runner-controller-2.leaderElectionRoleBinding" -}}
-{{- include "actions-runner-controller-2.fullname" . }}-leader-election-rolebinding
+{{- define "gha-runner-scale-set-controller.leaderElectionRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election-rolebinding
 {{- end }}
 
-{{- define "actions-runner-controller-2.imagePullSecretsNames" -}}
+{{- define "gha-runner-scale-set-controller.imagePullSecretsNames" -}}
 {{- $names := list }}
 {{- range $k, $v := . }}
 {{- $names = append $names $v.name }}
