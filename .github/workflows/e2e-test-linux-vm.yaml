@@ -2,6 +2,9 @@ name: CI ARC E2E Linux VM Test
 
 on:
   workflow_dispatch:
+
+env:
+  TARGET_ORG: actions-runner-controller
   
 jobs:
   setup-steps:
@@ -18,6 +21,7 @@ jobs:
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
       - uses: ./.github/actions/e2e-arc-test
         with:
           github-token: ${{ steps.get_workflow_token.outputs.token }}
