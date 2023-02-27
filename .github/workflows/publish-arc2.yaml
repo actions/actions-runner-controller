@@ -151,7 +151,7 @@ jobs:
           echo "- gha-runner-scale-set-controller Chart version: ${{ env.GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
 
   publish-helm-chart-gha-runner-scale-set:
-    if: ${{ inputs.publish_gha-runner-scale-set_chart == true }}
+    if: ${{ inputs.publish_gha_runner_scale_set_chart == true }}
     needs: build-push-image
     name: Publish Helm chart for gha-runner-scale-set
     runs-on: ubuntu-latest

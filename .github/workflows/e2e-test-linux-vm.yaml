@@ -1,0 +1,23 @@
+name: CI ARC E2E Linux VM Test
+
+on:
+  workflow_dispatch:
+  
+jobs:
+  setup-steps:
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create Kind cluster
+        run: |
+          PATH=$(go env GOPATH)/bin:$PATH
+          kind create cluster --name e2e-test
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
+        with:
+          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
+      - uses: ./.github/actions/e2e-arc-test
+        with:
+          github-token: ${{ steps.get_workflow_token.outputs.token }}
