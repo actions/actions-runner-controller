@@ -51,7 +51,7 @@ spec:
         {{- if .Values.githubWebhookServer.queueLimit }}
         - "--queue-limit={{ .Values.githubWebhookServer.queueLimit }}"
         {{- end }}
-        {{- if .Values.githubWebhookServer.logFormat  }}  
+        {{- if .Values.githubWebhookServer.logFormat  }}
         - "--log-format={{ .Values.githubWebhookServer.logFormat }}"
         {{- end }}
         command:
