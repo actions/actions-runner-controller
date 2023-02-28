@@ -6,7 +6,7 @@ inputs:
     description: 'JWT generated with Github App inputs'
     required: true
   config-url:
-    description: "Url of repo or org where runners will be installed"
+    description: "URL of the repo, org or enterprise where the runner scale sets will be registered"
     required: true
 
 runs:
