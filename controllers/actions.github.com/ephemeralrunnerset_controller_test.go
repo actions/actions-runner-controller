@@ -2,10 +2,13 @@ package actionsgithubcom
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/github/actions/fake"
+	"github.com/actions/actions-runner-controller/github/actions/testserver"
 )
 
 const (
@@ -902,5 +906,175 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			2*time.Second,
 			interval,
 		).Should(BeEquivalentTo(true))
+	})
+})
+
+var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func() {
+	var ctx context.Context
+	var cancel context.CancelFunc
+	autoscalingNS := new(corev1.Namespace)
+	ephemeralRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
+	configSecret := new(corev1.Secret)
+	rootCAConfigMap := new(corev1.ConfigMap)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithCancel(context.TODO())
+		autoscalingNS = &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-runnerset" + RandStringRunes(5)},
+		}
+
+		err := k8sClient.Create(ctx, autoscalingNS)
+		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for EphemeralRunnerSet")
+
+		configSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "github-config-secret",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"github_token": []byte(ephemeralRunnerSetTestGitHubToken),
+			},
+		}
+
+		err = k8sClient.Create(ctx, configSecret)
+		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
+
+		cert, err := os.ReadFile(filepath.Join(
+			"../../",
+			"github",
+			"actions",
+			"testdata",
+			"rootCA.crt",
+		))
+		Expect(err).NotTo(HaveOccurred(), "failed to read root CA cert")
+		rootCAConfigMap = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "root-ca-configmap",
+				Namespace: autoscalingNS.Name,
+			},
+			BinaryData: map[string][]byte{
+				"rootCA.crt": cert,
+			},
+		}
+		err = k8sClient.Create(ctx, rootCAConfigMap)
+		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
+
+		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			Namespace:          autoscalingNS.Name,
+			MetricsBindAddress: "0",
+		})
+		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+
+		controller := &EphemeralRunnerSetReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			Log:           logf.Log,
+			ActionsClient: actions.NewMultiClient("test", logr.Discard()),
+		}
+		err = controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		go func() {
+			defer GinkgoRecover()
+
+			err := mgr.Start(ctx)
+			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
+		}()
+	})
+
+	AfterEach(func() {
+		defer cancel()
+
+		err := k8sClient.Delete(ctx, autoscalingNS)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
+	})
+
+	It("should be able to make requests to a server using root CAs", func() {
+		certsFolder := filepath.Join(
+			"../../",
+			"github",
+			"actions",
+			"testdata",
+		)
+		certPath := filepath.Join(certsFolder, "server.crt")
+		keyPath := filepath.Join(certsFolder, "server.key")
+
+		serverSuccessfullyCalled := false
+		server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverSuccessfullyCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		Expect(err).NotTo(HaveOccurred(), "failed to load server cert")
+
+		server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+		server.StartTLS()
+
+		ephemeralRunnerSet = &actionsv1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.EphemeralRunnerSetSpec{
+				Replicas: 1,
+				GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
+					RootCAsConfigMapRef: rootCAConfigMap.Name,
+				},
+				EphemeralRunnerSpec: actionsv1alpha1.EphemeralRunnerSpec{
+					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigSecret: configSecret.Name,
+					RunnerScaleSetId:   100,
+					PodTemplateSpec: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err = k8sClient.Create(ctx, ephemeralRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
+
+		runnerList := new(actionsv1alpha1.EphemeralRunnerList)
+		Eventually(func() (int, error) {
+			err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+			if err != nil {
+				return -1, err
+			}
+
+			return len(runnerList.Items), nil
+		},
+			ephemeralRunnerSetTestTimeout,
+			ephemeralRunnerSetTestInterval,
+		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
+
+		runner := runnerList.Items[0].DeepCopy()
+		runner.Status.Phase = corev1.PodRunning
+		runner.Status.RunnerId = 100
+		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
+		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
+
+		updatedRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
+		err = k8sClient.Get(ctx, client.ObjectKey{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}, updatedRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+		updatedRunnerSet.Spec.Replicas = 0
+		err = k8sClient.Update(ctx, updatedRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
+
+		// wait for server to be called
+		Eventually(
+			func() bool {
+				return serverSuccessfullyCalled
+			},
+			autoscalingRunnerSetTestTimeout,
+			1*time.Nanosecond,
+		).Should(BeTrue(), "server was not called")
 	})
 })

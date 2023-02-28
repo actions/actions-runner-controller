@@ -159,7 +159,8 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			Labels:       newLabels,
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
-			Replicas: 0,
+			Replicas:        0,
+			GitHubServerTLS: autoscalingRunnerSet.Spec.GitHubServerTLS,
 			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 				RunnerScaleSetId:   runnerScaleSetId,
 				GitHubConfigUrl:    autoscalingRunnerSet.Spec.GitHubConfigUrl,

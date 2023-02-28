@@ -4270,6 +4270,12 @@ spec:
                         - containers
                       type: object
                   type: object
+                githubServerTLS:
+                  properties:
+                    certConfigMapRef:
+                      description: Required
+                      type: string
+                  type: object
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
                   type: integer

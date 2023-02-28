@@ -26,6 +26,9 @@ type EphemeralRunnerSetSpec struct {
 	Replicas int `json:"replicas,omitempty"`
 
 	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
+
+	// +optional
+	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
 }
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet

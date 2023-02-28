@@ -837,7 +837,8 @@ var _ = Describe("Test Client optional configuration", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
 			mgr, err = ctrl.NewManager(cfg, ctrl.Options{
-				Namespace: autoscalingNS.Name,
+				Namespace:          autoscalingNS.Name,
+				MetricsBindAddress: "0",
 			})
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
@@ -998,6 +999,68 @@ var _ = Describe("Test Client optional configuration", func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
+		})
+
+		It("it creates an ephemeral runner set referencing the right configmap for TLS", func() {
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      fake.NewMultiClient(),
+			}
+			err := controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+						RootCAsConfigMapRef: rootCAConfigMap.Name,
+					},
+					MaxRunners:  &max,
+					MinRunners:  &min,
+					RunnerGroup: "testgroup",
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func(g Gomega) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+					g.Expect(runnerSetList.Items).To(HaveLen(1), "expected 1 EphemeralRunnerSet to be created")
+
+					runnerSet := &runnerSetList.Items[0]
+					fmt.Println(len(runnerSetList.Items))
+					fmt.Println(runnerSet.Name)
+					g.Expect(runnerSet.Spec.GitHubServerTLS).NotTo(BeNil(), "expected GitHubServerTLS to be set")
+					g.Expect(runnerSet.Spec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
 		})
 	})
 })
