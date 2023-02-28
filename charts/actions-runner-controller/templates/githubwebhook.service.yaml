@@ -23,4 +23,10 @@ spec:
     {{- end }}
   selector:
     {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}
+  {{- if .Values.githubWebhookServer.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range $ip := .Values.githubWebhookServer.service.loadBalancerSourceRanges }}
+    - {{ $ip -}}
+    {{- end }}
+  {{- end }}
 {{- end }}

@@ -1,4 +1,4 @@
-name: ARC-REUSABLE-WORKFLOW
+name: ARC Reusable Workflow
 on:
   workflow_dispatch:
     inputs:

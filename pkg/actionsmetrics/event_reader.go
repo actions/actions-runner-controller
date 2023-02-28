@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v47/github"
+	gogithub "github.com/google/go-github/v50/github"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/actions/actions-runner-controller/github"
@@ -59,11 +59,34 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	}
 
 	// collect labels
-	labels := make(prometheus.Labels)
+	var (
+		labels        = make(prometheus.Labels)
+		keysAndValues = []interface{}{"job_id", fmt.Sprint(*e.WorkflowJob.ID)}
+	)
 
 	runsOn := strings.Join(e.WorkflowJob.Labels, `,`)
 	labels["runs_on"] = runsOn
+
 	labels["job_name"] = *e.WorkflowJob.Name
+	keysAndValues = append(keysAndValues, "job_name", *e.WorkflowJob.Name)
+
+	if e.Repo != nil {
+		if n := e.Repo.Name; n != nil {
+			labels["repository"] = *n
+			keysAndValues = append(keysAndValues, "repository", *n)
+		}
+		if n := e.Repo.FullName; n != nil {
+			labels["repository_full_name"] = *n
+			keysAndValues = append(keysAndValues, "repository_full_name", *n)
+		}
+	}
+
+	if e.Org != nil {
+		if n := e.Org.Name; n != nil {
+			labels["organization"] = *e.Org.Name
+			keysAndValues = append(keysAndValues, "organization", *n)
+		}
+	}
 
 	// switch on job status
 	switch action := e.GetAction(); action {
@@ -82,10 +105,11 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			reader.Log.Error(err, "reading workflow job log")
 			return
 		} else {
-			reader.Log.Info("reading workflow_job logs",
-				"job_name", *e.WorkflowJob.Name,
-				"job_id", fmt.Sprint(*e.WorkflowJob.ID),
-			)
+			reader.Log.WithValues("job_name", *e.WorkflowJob.Name, "job_id", fmt.Sprint(*e.WorkflowJob.ID), "repository", *e.Repo.Name, "repository_full_name", *e.Repo.FullName)
+			if len(*e.Org.Name) > 0 {
+				reader.Log.WithValues("organization", *e.Org.Name)
+			}
+			reader.Log.Info("reading workflow_job logs")
 		}
 
 		githubWorkflowJobQueueDurationSeconds.With(labels).Observe(parseResult.QueueTime.Seconds())
@@ -101,15 +125,16 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			reader.Log.Error(err, "reading workflow job log")
 			return
 		} else {
-			reader.Log.Info("reading workflow_job logs",
-				"job_name", *e.WorkflowJob.Name,
-				"job_id", fmt.Sprint(*e.WorkflowJob.ID),
-			)
+			reader.Log.Info("reading workflow_job logs", keysAndValues...)
 		}
 
 		if *e.WorkflowJob.Conclusion == "failure" {
 			failedStep := "null"
 			for i, step := range e.WorkflowJob.Steps {
+				conclusion := step.Conclusion
+				if conclusion == nil {
+					continue
+				}
 
 				// *step.Conclusion ~
 				// "success",
@@ -120,11 +145,11 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 				// "timed_out",
 				// "action_required",
 				// null
-				if *step.Conclusion == "failure" {
+				if *conclusion == "failure" {
 					failedStep = fmt.Sprint(i)
 					break
 				}
-				if *step.Conclusion == "timed_out" {
+				if *conclusion == "timed_out" {
 					failedStep = fmt.Sprint(i)
 					parseResult.ExitCode = "timed_out"
 					break
