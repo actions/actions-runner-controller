@@ -47,9 +47,7 @@ const (
 	defaultDockerImage = "docker:dind"
 )
 
-var (
-	scheme = runtime.NewScheme()
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
@@ -68,6 +66,7 @@ func (i *stringSlice) Set(value string) error {
 	*i = append(*i, value)
 	return nil
 }
+
 func main() {
 	var (
 		err      error
@@ -170,17 +169,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	multiClient := actionssummerwindnet.NewMultiGitHubClient(
-		mgr.GetClient(),
-		ghClient,
-	)
-
-	actionsMultiClient := actions.NewMultiClient(
-		"actions-runner-controller/"+build.Version,
-		log.WithName("actions-clients"),
-	)
-
 	if !autoScalingRunnerSetOnly {
+		multiClient := actionssummerwindnet.NewMultiGitHubClient(
+			mgr.GetClient(),
+			ghClient,
+		)
+
 		runnerReconciler := &actionssummerwindnet.RunnerReconciler{
 			Client:                    mgr.GetClient(),
 			Log:                       log.WithName("runner"),
@@ -315,6 +309,18 @@ func main() {
 				os.Exit(1)
 			}
 		}
+
+		if !disableAdmissionWebhook {
+			injector := &actionssummerwindnet.PodRunnerTokenInjector{
+				Client:       mgr.GetClient(),
+				GitHubClient: multiClient,
+				Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
+			}
+			if err = injector.SetupWithManager(mgr); err != nil {
+				log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
+				os.Exit(1)
+			}
+		}
 	}
 
 	// We use this environment avariable to turn on the ScaleSet related controllers.
@@ -327,6 +333,10 @@ func main() {
 	// However, doing so would affect either private ARC testers or current ARC users
 	// who run ARC without those variabls.
 	mgrPodName := os.Getenv("CONTROLLER_MANAGER_POD_NAME")
+	mgrPodNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
+
+	listenerImage := os.Getenv("SCALE_SET_LISTENER_IMAGE") // default
+
 	if mgrPodName != "" {
 		mgrPodNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
 		var mgrPod corev1.Pod
@@ -346,63 +356,63 @@ func main() {
 
 		if mgrContainer != nil {
 			log.Info("Detected manager container", "image", mgrContainer.Image)
+			listenerImage = mgrContainer.Image
 		} else {
 			log.Error(err, "unable to obtain manager container image")
-			os.Exit(1)
-		}
-		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
-			Client:                             mgr.GetClient(),
-			Log:                                log.WithName("AutoscalingRunnerSet"),
-			Scheme:                             mgr.GetScheme(),
-			ControllerNamespace:                mgrPodNamespace,
-			DefaultRunnerScaleSetListenerImage: mgrContainer.Image,
-			ActionsClient:                      actionsMultiClient,
-			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
-		}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
-			os.Exit(1)
-		}
-
-		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunner"),
-			Scheme:        mgr.GetScheme(),
-			ActionsClient: actionsMultiClient,
-		}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
-			os.Exit(1)
-		}
-
-		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunnerSet"),
-			Scheme:        mgr.GetScheme(),
-			ActionsClient: actionsMultiClient,
-		}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
-			os.Exit(1)
-		}
-		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Log:    log.WithName("AutoscalingListener"),
-			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
 		}
 		// +kubebuilder:scaffold:builder
 	}
 
-	if !disableAdmissionWebhook && !autoScalingRunnerSetOnly {
-		injector := &actionssummerwindnet.PodRunnerTokenInjector{
-			Client:       mgr.GetClient(),
-			GitHubClient: multiClient,
-			Log:          ctrl.Log.WithName("webhook").WithName("PodRunnerTokenInjector"),
-		}
-		if err = injector.SetupWithManager(mgr); err != nil {
-			log.Error(err, "unable to create webhook server", "webhook", "PodRunnerTokenInjector")
-			os.Exit(1)
-		}
+	if listenerImage == "" {
+		log.Error(err, "unable to obtain listener image")
+		os.Exit(1)
+	}
+
+	actionsMultiClient := actions.NewMultiClient(
+		"actions-runner-controller/"+build.Version,
+		log.WithName("actions-clients"),
+	)
+
+	if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
+		Client:                             mgr.GetClient(),
+		Log:                                log.WithName("AutoscalingRunnerSet"),
+		Scheme:                             mgr.GetScheme(),
+		ControllerNamespace:                mgrPodNamespace,
+		DefaultRunnerScaleSetListenerImage: listenerImage,
+		ActionsClient:                      actionsMultiClient,
+		DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+		os.Exit(1)
+	}
+
+	if err = (&actionsgithubcom.EphemeralRunnerReconciler{
+		Client:        mgr.GetClient(),
+		Log:           log.WithName("EphemeralRunner"),
+		Scheme:        mgr.GetScheme(),
+		ActionsClient: actionsMultiClient,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
+		os.Exit(1)
+	}
+
+	if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
+		Client:        mgr.GetClient(),
+		Log:           log.WithName("EphemeralRunnerSet"),
+		Scheme:        mgr.GetScheme(),
+		ActionsClient: actionsMultiClient,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
+		os.Exit(1)
+	}
+	if err = (&actionsgithubcom.AutoscalingListenerReconciler{
+		Client: mgr.GetClient(),
+		Log:    log.WithName("AutoscalingListener"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
+		os.Exit(1)
 	}
 
 	log.Info("starting manager")

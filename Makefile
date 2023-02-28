@@ -92,9 +92,14 @@ manager: generate fmt vet
 run: generate fmt vet manifests
 	go run ./main.go
 
+run-scaleset: generate fmt vet
+	CONTROLLER_MANAGER_POD_NAMESPACE=default \
+	SCALE_SET_LISTENER_IMAGE="${$DOCKER_USER}/actions-runner-controller:dev" \
+	go run ./main.go --auto-scaling-runner-set-only
+
 # Install CRDs into a cluster
 install: manifests
-	kustomize build config/crd | kubectl apply -f -
+	kustomize build config/crd | kubectl apply --server-side -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests
