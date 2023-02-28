@@ -5,6 +5,9 @@ inputs:
   github-token:
     description: 'JWT generated with Github App inputs'
     required: true
+  config-url:
+    description: "URL of the repo, org or enterprise where the runner scale sets will be registered"
+    required: true
 
 runs:
   using: "composite"
@@ -22,7 +25,7 @@ runs:
           helm install "arc-runner-${{ env.DATE_TIME }}" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/actions/actions-runner-controller" \
+          --set githubConfigUrl="${{ inputs.config-url }}"\
           --set githubConfigSecret.github_token="${{ inputs.github-token }}" \
           ./charts/auto-scaling-runner-set \
           --debug
