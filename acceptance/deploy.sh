@@ -35,7 +35,7 @@ else
   echo 'Skipped deploying secret "github-webhook-server". Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2
 fi
 
-if [ -n "${WEBHOOK_GITHUB_TOKEN}" ]; then
+if [ -n "${WEBHOOK_GITHUB_TOKEN}" ] && [ -z "${CREATE_SECRETS_USING_HELM}" ]; then
   kubectl -n actions-runner-system delete secret \
       actions-metrics-server || :
   kubectl -n actions-runner-system create secret generic \
@@ -68,6 +68,14 @@ if [ "${tool}" == "helm" ]; then
     flags+=( --set logFormat=${LOG_FORMAT})
     flags+=( --set githubWebhookServer.logFormat=${LOG_FORMAT})
     flags+=( --set actionsMetricsServer.logFormat=${LOG_FORMAT})
+  fi
+  if [ -n "${CREATE_SECRETS_USING_HELM}" ]; then
+    if [ -z "${WEBHOOK_GITHUB_TOKEN}" ]; then
+      echo 'Failed deploying secret "actions-metrics-server" using helm. Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2
+      exit 1
+    fi
+    flags+=( --set actionsMetricsServer.secret.create=true)
+    flags+=( --set actionsMetricsServer.secret.github_token=${WEBHOOK_GITHUB_TOKEN})
   fi
 
   set -vx

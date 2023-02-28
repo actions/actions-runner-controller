@@ -398,6 +398,7 @@ type env struct {
 	appID, appInstallationID, appPrivateKeyFile string
 	githubToken, testRepo, testOrg, testOrgRepo string
 	githubTokenWebhook                          string
+	createSecretsUsingHelm                      string
 	testEnterprise                              string
 	testEphemeral                               string
 	scaleDownDelaySecondsAfterScaleOut          int64
@@ -533,6 +534,7 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.appInstallationID = testing.Getenv(t, "GITHUB_APP_INSTALLATION_ID")
 	e.appPrivateKeyFile = testing.Getenv(t, "GITHUB_APP_PRIVATE_KEY_FILE")
 	e.githubTokenWebhook = testing.Getenv(t, "WEBHOOK_GITHUB_TOKEN")
+	e.createSecretsUsingHelm = testing.Getenv(t, "CREATE_SECRETS_USING_HELM")
 	e.repoToCommit = testing.Getenv(t, "TEST_COMMIT_REPO")
 	e.testRepo = testing.Getenv(t, "TEST_REPO", "")
 	e.testOrg = testing.Getenv(t, "TEST_ORG", "")
@@ -718,6 +720,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 
 	varEnv := []string{
 		"WEBHOOK_GITHUB_TOKEN=" + e.githubTokenWebhook,
+		"CREATE_SECRETS_USING_HELM=" + e.createSecretsUsingHelm,
 		"TEST_ID=" + testID,
 		"NAME=" + repo,
 		"VERSION=" + tag,
