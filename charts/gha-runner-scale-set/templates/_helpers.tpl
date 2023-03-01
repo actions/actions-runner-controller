@@ -155,12 +155,7 @@ volumeMounts:
 {{- define "gha-runner-scale-set.non-work-volumes" -}}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if ne $volume.name "work" }}
-- name: {{ $volume.name }}
-      {{- range $key, $val := $volume }}
-        {{- if ne $key "name" }}
-  {{ $key }}: {{ $val }}
-        {{- end }}
-      {{- end }}
+- {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
 {{- end }}

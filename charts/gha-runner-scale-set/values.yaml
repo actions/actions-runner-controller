@@ -4,7 +4,7 @@ githubConfigUrl: ""
 
 ## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
 ## You can choose to use GitHub App or a PAT token
-githubConfigSecret: 
+githubConfigSecret:
   ### GitHub Apps Configuration
   ## NOTE: IDs MUST be strings, use quotes
   #github_app_id: ""
@@ -43,6 +43,37 @@ githubConfigSecret:
 # minRunners: 0
 
 # runnerGroup: "default"
+
+## Custom CA certificates can be provided by bundling them in a configmap and
+## referring it in githubServerTLS.certConfigMapRef, for example:
+#
+# githubServerTLS:
+#   certConfigMapRef: your-configmap-name
+#
+## If you do need custom CA certificates do remember that the runner (and your
+## actions) will probably need access to them as well. Below is an example
+## configuration for the default runner:
+#
+# template:
+#   spec:
+#     containers:
+#       - name: runner
+#         image: ghcr.io/actions/actions-runner:latest
+#         command: ["/bin/sh","-c"]
+#         args:
+#           - "update-ca-certificates; /actions-runner/run.sh"
+#         volumeMounts:
+#           - name: tls-volume
+#             mountPath: /usr/local/share/ca-certificates/
+#         ## environment variables needed by your actions to pick up the certificates
+#         env:
+#           - name: SSL_CERT_DIR
+#             value: /usr/local/share/ca-certificates/
+#     volumes:
+#       - name: tls-volume
+#         configMap:
+#           name: tls-config
+
 
 ## template is the PodSpec for each runner Pod
 template:
