@@ -138,7 +138,7 @@ $ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-
 kubectl logs -n "${NAMESPACE}" -l runner-scale-set-listener=arc-systems-arc-runner-set
 ```
 
-### Naming restrictions
+### Naming error: `Name must have up to characters`
 
 Because we generate labels and resource names based on the `AutoscalingRunnerSet`,
 the name of the installation must have up to 45 characters long. If you exceed the
