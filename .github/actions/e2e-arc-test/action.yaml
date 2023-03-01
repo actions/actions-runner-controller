@@ -25,7 +25,7 @@ runs:
           helm install "arc-runner-${{ env.DATE_TIME }}" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="${{ inputs.config-url }}"\
+          --set githubConfigUrl="${{ inputs.config-url }}" \
           --set githubConfigSecret.github_token="${{ inputs.github-token }}" \
           ./charts/auto-scaling-runner-set \
           --debug
