@@ -308,9 +308,6 @@ func main() {
 				log.Error(err, "unable to create webhook", "webhook", "RunnerReplicaSet")
 				os.Exit(1)
 			}
-		}
-
-		if !disableAdmissionWebhook {
 			injector := &actionssummerwindnet.PodRunnerTokenInjector{
 				Client:       mgr.GetClient(),
 				GitHubClient: multiClient,
