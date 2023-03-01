@@ -50,7 +50,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 
     ```bash
     # Using a Personal Access Token (PAT)
-    INSTALLATION_NAME="arc-runner-set" 
+    INSTALLATION_NAME="arc-runner-set"
     NAMESPACE="arc-runners"
     GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>"
     GITHUB_PAT="<PAT>"
@@ -64,9 +64,9 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 
     ```bash
     # Using a GitHub App
-    INSTALLATION_NAME="arc-runner-set" 
+    INSTALLATION_NAME="arc-runner-set"
     NAMESPACE="arc-runners"
-    GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>" 
+    GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>"
     GITHUB_APP_ID="<GITHUB_APP_ID>"
     GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
     GITHUB_APP_PRIVATE_KEY="<GITHUB_APP_PRIVATE_KEY>"
@@ -86,8 +86,8 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     $ helm list -n "${NAMESPACE}"
 
     NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                                    APP VERSION
-    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.2.0        preview    
-    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.2.0            0.2.0 
+    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.2.0        preview
+    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.2.0            0.2.0
     ```
 
     ```bash
@@ -135,8 +135,9 @@ You can check the logs of the controller pod using the following command:
 $ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-controller
 
 # Runner set listener logs
-kubectl logs -n "${NAMESPACE}" -l runner-scale-set-listener=arc-systems-arc-runner-set
+kubectl logs -n "${NAMESPACE}" -l auto-scaling-runner-set-namespace=arc-systems -l auto-scaling-runner-set-name=arc-runner-set
 ```
+
 
 ### If you installed the autoscaling runner set, but the listener pod is not created
 

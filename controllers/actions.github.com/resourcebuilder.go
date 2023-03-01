@@ -21,9 +21,6 @@ const (
 type resourceBuilder struct{}
 
 func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
-	newLabels := map[string]string{}
-	newLabels[scaleSetListenerLabel] = fmt.Sprintf("%v-%v", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, autoscalingListener.Spec.AutoscalingRunnerSetName)
-
 	listenerEnv := []corev1.EnvVar{
 		{
 			Name:  "GITHUB_CONFIGURE_URL",
@@ -133,7 +130,10 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
-			Labels:    newLabels,
+			Labels: map[string]string{
+				"auto-scaling-runner-set-namespace": autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				"auto-scaling-runner-set-name":      autoscalingListener.Spec.AutoscalingRunnerSetName,
+			},
 		},
 		Spec: podSpec,
 	}
