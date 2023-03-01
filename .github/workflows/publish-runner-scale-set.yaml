@@ -1,4 +1,4 @@
-name: Publish ARC 2
+name: Publish Runner Scale Set Controller Charts
 
 on:
   workflow_dispatch:
@@ -18,13 +18,13 @@ on:
         required: true
         type: boolean
         default: false
-      publish_actions_runner_controller_2_chart:
-        description: 'Publish new helm chart for actions-runner-controller-2'
+      publish_gha_runner_scale_set_controller_chart:
+        description: 'Publish new helm chart for gha-runner-scale-set-controller'
         required: true
         type: boolean
         default: false
-      publish_auto_scaling_runner_set_chart:
-        description: 'Publish new helm chart for auto-scaling-runner-set'
+      publish_gha_runner_scale_set_chart:
+        description: 'Publish new helm chart for gha-runner-scale-set'
         required: true
         type: boolean
         default: false
@@ -87,14 +87,14 @@ jobs:
           build-args: VERSION=${{ inputs.release_tag_name }}
           push: ${{ inputs.push_to_registries }}
           tags: |
-            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-2:${{ inputs.release_tag_name }}
-            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-2:${{ inputs.release_tag_name }}-${{ steps.resolve_parameters.outputs.short_sha }}
+            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:${{ inputs.release_tag_name }}
+            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:${{ inputs.release_tag_name }}-${{ steps.resolve_parameters.outputs.short_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Job summary
         run: |
-          echo "The [publish-arc2](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/publish-arc2.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "The [publish-runner-scale-set.yaml](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/publish-runner-scale-set.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
@@ -103,10 +103,10 @@ jobs:
           echo "- Push to registries: ${{ inputs.push_to_registries }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-  publish-helm-chart-arc-2:
-    if: ${{ inputs.publish_actions_runner_controller_2_chart == true }}
+  publish-helm-chart-gha-runner-scale-set-controller:
+    if: ${{ inputs.publish_gha_runner_scale_set_controller_chart == true }}
     needs: build-push-image
-    name: Publish Helm chart for actions-runner-controller-2
+    name: Publish Helm chart for gha-runner-scale-set-controller
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -133,27 +133,27 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Publish new helm chart for actions-runner-controller-2
+      - name: Publish new helm chart for gha-runner-scale-set-controller
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
-          ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG=$(cat charts/actions-runner-controller-2/Chart.yaml | grep version: | cut -d " " -f 2)
-          echo "ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG=${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}" >> $GITHUB_ENV
-          helm package charts/actions-runner-controller-2/ --version="${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}"
-          helm push actions-runner-controller-2-"${ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+          GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set-controller/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/gha-runner-scale-set-controller/ --version="${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}"
+          helm push gha-runner-scale-set-controller-"${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
 
       - name: Job summary
         run: |
-          echo "New helm chart for actions-runner-controller-2 published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "New helm chart for gha-runner-scale-set-controller published successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Actions-Runner-Controller-2 Chart version: ${{ env.ACTIONS_RUNNER_CONTROLLER_2_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "- gha-runner-scale-set-controller Chart version: ${{ env.GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
 
-  publish-helm-chart-auto-scaling-runner-set:
-    if: ${{ inputs.publish_auto_scaling_runner_set_chart == true }}
+  publish-helm-chart-gha-runner-scale-set:
+    if: ${{ inputs.publish_gha_runner_scale_set_chart == true }}
     needs: build-push-image
-    name: Publish Helm chart for auto-scaling-runner-set
+    name: Publish Helm chart for gha-runner-scale-set
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -180,20 +180,20 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Publish new helm chart for auto-scaling-runner-set
+      - name: Publish new helm chart for gha-runner-scale-set
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
 
-          AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG=$(cat charts/auto-scaling-runner-set/Chart.yaml | grep version: | cut -d " " -f 2)
-          echo "AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG=${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}" >> $GITHUB_ENV
-          helm package charts/auto-scaling-runner-set/ --version="${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}"
-          helm push auto-scaling-runner-set-"${AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+          GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/gha-runner-scale-set/ --version="${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}"
+          helm push gha-runner-scale-set-"${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
 
       - name: Job summary
         run: |
-          echo "New helm chart for auto-scaling-runner-set published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "New helm chart for gha-runner-scale-set published successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Auto-Scaling-Runner-Set Chart version: ${{ env.AUTO_SCALING_RUNNER_SET_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "- gha-runner-scale-set Chart version: ${{ env.GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY

@@ -19,7 +19,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -39,7 +39,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &githubSecret)
 
 	assert.Equal(t, namespaceName, githubSecret.Namespace)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-github-secret", githubSecret.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", githubSecret.Name)
 	assert.Equal(t, "gh_token12345", string(githubSecret.Data["github_token"]))
 	assert.Equal(t, "actions.github.com/secret-protection", githubSecret.Finalizers[0])
 }
@@ -48,7 +48,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubApp(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -79,7 +79,7 @@ func TestTemplateRenderedGitHubSecretErrorWithMissingAuthInput(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -104,7 +104,7 @@ func TestTemplateRenderedGitHubSecretErrorWithMissingAppInput(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -128,7 +128,7 @@ func TestTemplateNotRenderedGitHubSecretWithPredefinedSecret(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -150,7 +150,7 @@ func TestTemplateRenderedSetServiceAccountToNoPermission(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -169,20 +169,20 @@ func TestTemplateRenderedSetServiceAccountToNoPermission(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-no-permission-service-account", serviceAccount.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-no-permission-service-account", serviceAccount.Name)
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-no-permission-service-account", ars.Spec.Template.Spec.ServiceAccountName)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-no-permission-service-account", ars.Spec.Template.Spec.ServiceAccountName)
 }
 
 func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -202,14 +202,14 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-kube-mode-service-account", serviceAccount.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", serviceAccount.Name)
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role.yaml"})
 	var role rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &role)
 
 	assert.Equal(t, namespaceName, role.Namespace)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-kube-mode-role", role.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", role.Name)
 	assert.Len(t, role.Rules, 5, "kube mode role should have 5 rules")
 	assert.Equal(t, "pods", role.Rules[0].Resources[0])
 	assert.Equal(t, "pods/exec", role.Rules[1].Resources[0])
@@ -222,25 +222,25 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &roleBinding)
 
 	assert.Equal(t, namespaceName, roleBinding.Namespace)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-kube-mode-role", roleBinding.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.Name)
 	assert.Len(t, roleBinding.Subjects, 1)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-kube-mode-service-account", roleBinding.Subjects[0].Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", roleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, roleBinding.Subjects[0].Namespace)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-kube-mode-role", roleBinding.RoleRef.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.RoleRef.Name)
 	assert.Equal(t, "Role", roleBinding.RoleRef.Kind)
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-kube-mode-service-account", ars.Spec.Template.Spec.ServiceAccountName)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", ars.Spec.Template.Spec.ServiceAccountName)
 }
 
 func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -269,7 +269,7 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -291,10 +291,10 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "auto-scaling-runner-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
 
@@ -314,7 +314,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -359,7 +359,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MaxRunnersValidationError(t *testi
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -384,7 +384,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinRunnersValidationError(t *testi
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -410,7 +410,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidationError(t *te
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -436,7 +436,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidationSameValue(t
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -465,7 +465,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidation_OnlyMin(t 
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -493,7 +493,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidation_OnlyMax(t 
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -521,7 +521,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunners_FromValuesFile(t *te
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	testValuesPath, err := filepath.Abs("../tests/values.yaml")
@@ -548,7 +548,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -571,10 +571,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "auto-scaling-runner-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
 
@@ -631,7 +631,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -654,10 +654,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "auto-scaling-runner-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-auto-scaling-runner-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
 	assert.Nil(t, ars.Spec.MinRunners, "MinRunners should be nil")
@@ -686,7 +686,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) 
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -708,7 +708,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) 
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "auto-scaling-runner-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "pre-defined-secrets", ars.Spec.GitHubConfigSecret)
@@ -718,7 +718,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ErrorOnEmptyPredefinedSecret(t *te
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -742,7 +742,7 @@ func TestTemplateRenderedWithProxy(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"

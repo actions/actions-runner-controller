@@ -2,14 +2,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "actions-runner-controller-2.leaderElectionRoleBinding" . }}
+  name: {{ include "gha-runner-scale-set-controller.leaderElectionRoleBinding" . }}
   namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "actions-runner-controller-2.leaderElectionRoleName" . }}
+  name: {{ include "gha-runner-scale-set-controller.leaderElectionRoleName" . }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "actions-runner-controller-2.serviceAccountName" . }}
+  name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
 {{- end }}

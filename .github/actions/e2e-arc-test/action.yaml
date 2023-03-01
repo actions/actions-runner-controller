@@ -13,7 +13,7 @@ runs:
   using: "composite"
   steps:
     - name: Install ARC
-      run: helm install arc --namespace "arc-systems" --create-namespace ./charts/actions-runner-controller-2
+      run: helm install arc --namespace "arc-systems" --create-namespace ./charts/gha-runner-scale-set-controller
       shell: bash
     - name: Get datetime
       # We are using this value further in the runner installation to avoid runner name collision that are a risk with hard coded values.
@@ -27,7 +27,7 @@ runs:
           --create-namespace \
           --set githubConfigUrl="${{ inputs.config-url }}" \
           --set githubConfigSecret.github_token="${{ inputs.github-token }}" \
-          ./charts/auto-scaling-runner-set \
+          ./charts/gha-runner-scale-set \
           --debug
           kubectl get pods -A
       shell: bash
