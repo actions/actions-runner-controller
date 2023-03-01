@@ -1,6 +1,14 @@
 name: Validate Helm Chart
 
 on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'charts/**'
+      - '.github/workflows/validate-chart.yaml'
+      - '!charts/actions-runner-controller/docs/**'
+      - '!**.md'
   push:
     paths:
       - 'charts/**'
