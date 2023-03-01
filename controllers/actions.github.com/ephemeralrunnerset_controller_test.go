@@ -952,8 +952,8 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 				Name:      "root-ca-configmap",
 				Namespace: autoscalingNS.Name,
 			},
-			BinaryData: map[string][]byte{
-				"rootCA.crt": cert,
+			Data: map[string]string{
+				"rootCA.crt": string(cert),
 			},
 		}
 		err = k8sClient.Create(ctx, rootCAConfigMap)

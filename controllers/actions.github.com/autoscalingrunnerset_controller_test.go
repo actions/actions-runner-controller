@@ -829,8 +829,8 @@ var _ = Describe("Test Client optional configuration", func() {
 					Name:      "root-ca-configmap",
 					Namespace: autoscalingNS.Name,
 				},
-				BinaryData: map[string][]byte{
-					"rootCA.crt": cert,
+				Data: map[string]string{
+					"rootCA.crt": string(cert),
 				},
 			}
 			err = k8sClient.Create(ctx, rootCAConfigMap)
@@ -1053,8 +1053,6 @@ var _ = Describe("Test Client optional configuration", func() {
 					g.Expect(runnerSetList.Items).To(HaveLen(1), "expected 1 EphemeralRunnerSet to be created")
 
 					runnerSet := &runnerSetList.Items[0]
-					fmt.Println(len(runnerSetList.Items))
-					fmt.Println(runnerSet.Name)
 					g.Expect(runnerSet.Spec.GitHubServerTLS).NotTo(BeNil(), "expected GitHubServerTLS to be set")
 					g.Expect(runnerSet.Spec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
 				},

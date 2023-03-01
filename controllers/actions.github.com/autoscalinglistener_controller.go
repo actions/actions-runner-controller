@@ -443,8 +443,8 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 
 		var certString string
-		for _, cert := range rootCAsConfigMap.BinaryData {
-			certString += string(cert)
+		for _, cert := range rootCAsConfigMap.Data {
+			certString += cert
 		}
 
 		newPod.Spec.Containers[0].Env = append(newPod.Spec.Containers[0].Env, corev1.EnvVar{

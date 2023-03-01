@@ -142,14 +142,14 @@ func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, 
 	return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
 }
 
-func RootCAsFromConfigMap(configMapData map[string][]byte) (*x509.CertPool, error) {
+func RootCAsFromConfigMap(configMapData map[string]string) (*x509.CertPool, error) {
 	caCertPool, err := x509.SystemCertPool()
 	if err != nil {
 		caCertPool = x509.NewCertPool()
 	}
 
 	for key, certData := range configMapData {
-		ok := caCertPool.AppendCertsFromPEM(certData)
+		ok := caCertPool.AppendCertsFromPEM([]byte(certData))
 		if !ok {
 			return nil, fmt.Errorf("no certificates successfully parsed from key %s", key)
 		}

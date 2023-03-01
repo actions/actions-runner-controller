@@ -487,7 +487,7 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 			)
 		}
 
-		certs, err := actions.RootCAsFromConfigMap(rootCAsConfigMap.BinaryData)
+		certs, err := actions.RootCAsFromConfigMap(rootCAsConfigMap.Data)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to get certificates from configmap %s: %w",
