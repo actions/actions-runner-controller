@@ -1023,7 +1023,10 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 				EphemeralRunnerSpec: actionsv1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
+						RootCAsConfigMapRef: rootCAConfigMap.Name,
+					},
+					RunnerScaleSetId: 100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -1055,6 +1058,9 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
 
 		runner := runnerList.Items[0].DeepCopy()
+		Expect(runner.Spec.GitHubServerTLS).NotTo(BeNil(), "runner tls config should not be nil")
+		Expect(runner.Spec.GitHubServerTLS.RootCAsConfigMapRef).To(Equal(rootCAConfigMap.Name), "runner tls config should be correct")
+
 		runner.Status.Phase = corev1.PodRunning
 		runner.Status.RunnerId = 100
 		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))

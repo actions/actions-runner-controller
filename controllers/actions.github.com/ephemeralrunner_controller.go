@@ -698,6 +698,37 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 		opts = append(opts, actions.WithProxy(proxyFunc))
 	}
 
+	tlsConfig := runner.Spec.GitHubServerTLS
+	if tlsConfig != nil && tlsConfig.RootCAsConfigMapRef != "" {
+		var rootCAsConfigMap corev1.ConfigMap
+		err := r.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: runner.Namespace,
+				Name:      tlsConfig.RootCAsConfigMapRef,
+			},
+			&rootCAsConfigMap,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to get configmap %s: %w",
+				tlsConfig.RootCAsConfigMapRef,
+				err,
+			)
+		}
+
+		certs, err := actions.RootCAsFromConfigMap(rootCAsConfigMap.Data)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to get certificates from configmap %s: %w",
+				tlsConfig.RootCAsConfigMapRef,
+				err,
+			)
+		}
+
+		opts = append(opts, actions.WithRootCAs(certs))
+	}
+
 	return r.ActionsClient.GetClientFromSecret(
 		ctx,
 		runner.Spec.GitHubConfigUrl,

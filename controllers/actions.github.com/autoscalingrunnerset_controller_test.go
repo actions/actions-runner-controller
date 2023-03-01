@@ -1055,6 +1055,9 @@ var _ = Describe("Test Client optional configuration", func() {
 					runnerSet := &runnerSetList.Items[0]
 					g.Expect(runnerSet.Spec.GitHubServerTLS).NotTo(BeNil(), "expected GitHubServerTLS to be set")
 					g.Expect(runnerSet.Spec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
+
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).NotTo(BeNil(), "expected EphemeralRunnerSpec.GitHubServerTLS to be set")
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingListenerTestInterval,
