@@ -591,6 +591,98 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunners_FromValuesFile(t *te
 	assert.Equal(t, 10, *ars.Spec.MaxRunners, "MaxRunners should be 10")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_ExtraVolumes(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_extra_volumes.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 3, "Volumes should be 3")
+	assert.Equal(t, "foo", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be foo")
+	assert.Equal(t, "bar", ars.Spec.Template.Spec.Volumes[1].Name, "Volume name should be bar")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[2].Name, "Volume name should be work")
+	assert.Equal(t, "/data", ars.Spec.Template.Spec.Volumes[2].HostPath.Path, "Volume host path should be /data")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_extra_volumes.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 5, "Volumes should be 5")
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-cert")
+	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Volumes[1].Name, "Volume name should be dind-externals")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[2].Name, "Volume name should be work")
+	assert.Equal(t, "/data", ars.Spec.Template.Spec.Volumes[2].HostPath.Path, "Volume host path should be /data")
+	assert.Equal(t, "foo", ars.Spec.Template.Spec.Volumes[3].Name, "Volume name should be foo")
+	assert.Equal(t, "bar", ars.Spec.Template.Spec.Volumes[4].Name, "Volume name should be bar")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_K8S_ExtraVolumes(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_k8s_extra_volumes.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 3, "Volumes should be 3")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be work")
+	assert.Equal(t, "/data", ars.Spec.Template.Spec.Volumes[0].HostPath.Path, "Volume host path should be /data")
+	assert.Equal(t, "foo", ars.Spec.Template.Spec.Volumes[1].Name, "Volume name should be foo")
+	assert.Equal(t, "bar", ars.Spec.Template.Spec.Volumes[2].Name, "Volume name should be bar")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	t.Parallel()
 
@@ -636,7 +728,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, "init-dind-externals", ars.Spec.Template.Spec.InitContainers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.InitContainers[0].Image)
 	assert.Equal(t, "cp", ars.Spec.Template.Spec.InitContainers[0].Command[0])
-	assert.Equal(t, "-r -v /actions-runner/externals/. /actions-runner/tmpDir/", strings.Join(ars.Spec.Template.Spec.InitContainers[0].Args, " "))
+	assert.Equal(t, "-r -v /home/runner/externals/. /home/runner/tmpDir/", strings.Join(ars.Spec.Template.Spec.InitContainers[0].Args, " "))
 
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "Template.Spec should have 2 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
@@ -653,7 +745,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 
 	assert.Len(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, 2, "The runner container should have 2 volume mounts, dind-cert and work")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
-	assert.Equal(t, "/actions-runner/_work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
 	assert.False(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly)
 
 	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
@@ -665,13 +757,19 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.True(t, *ars.Spec.Template.Spec.Containers[1].SecurityContext.Privileged)
 	assert.Len(t, ars.Spec.Template.Spec.Containers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-cert, work and externals")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name)
-	assert.Equal(t, "/actions-runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
 
 	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
 	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
 
 	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
-	assert.Equal(t, "/actions-runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
+	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
+
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 3, "Volumes should be 3")
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-cert")
+	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Volumes[1].Name, "Volume name should be dind-externals")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[2].Name, "Volume name should be work")
+	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[2].EmptyDir, "Volume work should be an emptyDir")
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T) {
@@ -719,7 +817,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
 
 	assert.Equal(t, "ACTIONS_RUNNER_CONTAINER_HOOKS", ars.Spec.Template.Spec.Containers[0].Env[0].Name)
-	assert.Equal(t, "/actions-runner/k8s/index.js", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "/home/runner/k8s/index.js", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
 	assert.Equal(t, "ACTIONS_RUNNER_POD_NAME", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER", ars.Spec.Template.Spec.Containers[0].Env[2].Name)
 	assert.Equal(t, "true", ars.Spec.Template.Spec.Containers[0].Env[2].Value)

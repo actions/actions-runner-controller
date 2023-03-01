@@ -1,0 +1,19 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    containers:
+    - name: other
+      image: other-image:latest
+    volumes:
+    - name: foo
+      emptyDir: {}
+    - name: bar
+      emptyDir: {}
+    - name: work
+      hostPath:
+        path: /data
+        type: Directory
+containerMode:
+  type: kubernetes

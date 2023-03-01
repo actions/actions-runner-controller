@@ -124,8 +124,13 @@ spec:
         {{- if eq .Values.containerMode.type "dind" }}
           {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
           {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
         {{- else if eq .Values.containerMode.type "kubernetes" }}
           {{- include "gha-runner-scale-set.kubernetes-mode-work-volume" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
+        {{- else }}
+          {{- with .Values.template.spec.volumes }}
+        {{- toYaml . | nindent 6 }}
+          {{- end }}
         {{- end }}
-        {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
       {{- end }}
