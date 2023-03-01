@@ -12,6 +12,11 @@ spec:
   runnerGroup: {{ . }}
   {{- end }}
 
+  {{- if .Values.githubServerTLS }}
+  githubServerTLS:
+    certConfigMapRef: {{ .Values.githubServerTLS.certConfigMapRef }}
+  {{ end }}
+
   {{- if .Values.proxy }}
   proxy:
     {{- if .Values.proxy.http }}
@@ -82,7 +87,7 @@ spec:
       {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}
-      containers: 
+      containers:
       {{- if eq .Values.containerMode.type "dind" }}
       - name: runner
         {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
@@ -97,7 +102,7 @@ spec:
       {{ .Values.template.spec.containers | toYaml | nindent 6 }}
       {{- end }}
       {{- if or .Values.template.spec.volumes (eq .Values.containerMode.type "dind") (eq .Values.containerMode.type "kubernetes") }}
-      volumes: 
+      volumes:
         {{- if eq .Values.containerMode.type "dind" }}
           {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
           {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}

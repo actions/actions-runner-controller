@@ -780,3 +780,31 @@ func TestTemplateRenderedWithProxy(t *testing.T) {
 	assert.Contains(t, ars.Spec.Proxy.NoProxy, "example.com")
 	assert.Contains(t, ars.Spec.Proxy.NoProxy, "example.org")
 }
+
+func TestTemplateRenderedWithTLS(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":                  "https://github.com/actions",
+			"githubConfigSecret":               "pre-defined-secrets",
+			"githubServerTLS.certConfigMapRef": "certs-configmap",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	require.NotNil(t, ars.Spec.GitHubServerTLS)
+	assert.Equal(t, "certs-configmap", ars.Spec.GitHubServerTLS.RootCAsConfigMapRef)
+}
