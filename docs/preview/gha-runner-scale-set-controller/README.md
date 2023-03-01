@@ -140,18 +140,15 @@ kubectl logs -n "${NAMESPACE}" -l runner-scale-set-listener=arc-systems-arc-runn
 
 ### Naming error: `Name must have up to characters`
 
-Because we generate labels and resource names based on the `AutoscalingRunnerSet`,
-the name of the installation must have up to 45 characters long. If you exceed the
-limit, the `helm install` command will fail with an error:
+We are using some of the resources generated names as labels for other resources. Resource names have a max length of 263 characters while labels are limited to 63 characters. Given this constraint, we have to limit the resource names to 63 characters.
+
+Since part of the resource name is defined by you, we have to impose a limit on the amount of characters you can use for the installation and namespace names.
+
+If you see these errors, you have to use shorter installation or namespace names.
 
 ```bash
 Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/autoscalingrunnerset.yaml:5:5): Name must have up to 45 characters
-```
 
-The name of the namespace is restricted to have up to 63 characters. Using more
-than 63 characters will result in error:
-
-```bash
 Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/autoscalingrunnerset.yaml:8:5): Namespace must have up to 63 characters
 ```
 
