@@ -140,7 +140,7 @@ kubectl logs -n "${NAMESPACE}" -l runner-scale-set-listener=arc-systems-arc-runn
 
 ### Naming error: `Name must have up to characters`
 
-We are using some of the resources generated names as labels for other resources. Resource names have a max length of 263 characters while labels are limited to 63 characters. Given this constraint, we have to limit the resource names to 63 characters.
+We are using some of the resources generated names as labels for other resources. Resource names have a max length of `263 characters` while labels are limited to `63 characters`. Given this constraint, we have to limit the resource names to `63 characters`.
 
 Since part of the resource name is defined by you, we have to impose a limit on the amount of characters you can use for the installation and namespace names.
 
