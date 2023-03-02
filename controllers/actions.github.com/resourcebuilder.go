@@ -21,8 +21,8 @@ const (
 
 // labels applied to resources
 const (
-	LabelKeyAutoScaleRunnerSetName      = "auto-scale-runner-set-name"
-	LabelKeyAutoScaleRunnerSetNamespace = "auto-scale-runner-set-namespace"
+	LabelKeyAutoScaleRunnerSetName      = "auto-scaling-runner-set-name"
+	LabelKeyAutoScaleRunnerSetNamespace = "auto-scaling-runner-set-namespace"
 )
 
 type resourceBuilder struct{}
