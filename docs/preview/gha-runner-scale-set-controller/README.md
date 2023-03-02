@@ -135,7 +135,7 @@ You can check the logs of the controller pod using the following command:
 $ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-controller
 
 # Runner set listener logs
-kubectl logs -n "${NAMESPACE}" -l runner-scale-set-listener=arc-systems-arc-runner-set
+kubectl logs -n "${NAMESPACE}" -l auto-scaling-runner-set-namespace=arc-systems -l auto-scaling-runner-set-name=arc-runner-set
 ```
 
 ### Naming error: `Name must have up to characters`
