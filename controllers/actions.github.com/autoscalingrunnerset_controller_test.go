@@ -14,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
@@ -36,7 +35,7 @@ const (
 
 var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 	var ctx context.Context
-	var mgr manager.Manager
+	var mgr ctrl.Manager
 	var autoscalingNS *corev1.Namespace
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
@@ -404,7 +403,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 var _ = Describe("Test AutoscalingController creation failures", func() {
 	Context("When autoscaling runner set creation fails on the client", func() {
 		var ctx context.Context
-		var mgr manager.Manager
+		var mgr ctrl.Manager
 		var autoscalingNS *corev1.Namespace
 
 		BeforeEach(func() {
