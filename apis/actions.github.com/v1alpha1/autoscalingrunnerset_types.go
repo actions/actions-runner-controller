@@ -77,7 +77,7 @@ type AutoscalingRunnerSetSpec struct {
 
 type GitHubServerTLSConfig struct {
 	// Required, the summed size of the values of the configmap must be less than
-	// 1048576 bytes as these will be mounted as an environment variable on the
+	// 1048576 bytes (~1 MB) as these will be mounted as an environment variable on the
 	// listener pod.
 	RootCAsConfigMapRef string `json:"certConfigMapRef,omitempty"`
 }
