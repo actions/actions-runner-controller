@@ -808,3 +808,45 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 	require.NotNil(t, ars.Spec.GitHubServerTLS)
 	assert.Equal(t, "certs-configmap", ars.Spec.GitHubServerTLS.RootCAsConfigMapRef)
 }
+
+func TestTemplateNamingConstraints(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	setValues := map[string]string{
+		"githubConfigUrl":    "https://github.com/actions",
+		"githubConfigSecret": "",
+	}
+
+	tt := map[string]struct {
+		releaseName   string
+		namespaceName string
+		expectedError string
+	}{
+		"Name too long": {
+			releaseName:   strings.Repeat("a", 46),
+			namespaceName: "test-" + strings.ToLower(random.UniqueId()),
+			expectedError: "Name must have up to 45 characters",
+		},
+		"Namespace too long": {
+			releaseName:   "test-" + strings.ToLower(random.UniqueId()),
+			namespaceName: strings.Repeat("a", 64),
+			expectedError: "Namespace must have up to 63 characters",
+		},
+	}
+
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			options := &helm.Options{
+				SetValues:      setValues,
+				KubectlOptions: k8s.NewKubectlOptions("", "", tc.namespaceName),
+			}
+			_, err = helm.RenderTemplateE(t, options, helmChartPath, tc.releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tc.expectedError)
+		})
+	}
+}

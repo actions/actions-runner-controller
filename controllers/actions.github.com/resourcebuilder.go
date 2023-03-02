@@ -14,16 +14,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// secret constants
 const (
 	jitTokenKey = "jitToken"
+)
+
+// labels applied to resources
+const (
+	LabelKeyAutoScaleRunnerSetName      = "auto-scaling-runner-set-name"
+	LabelKeyAutoScaleRunnerSetNamespace = "auto-scaling-runner-set-namespace"
 )
 
 type resourceBuilder struct{}
 
 func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
-	newLabels := map[string]string{}
-	newLabels[scaleSetListenerLabel] = fmt.Sprintf("%v-%v", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, autoscalingListener.Spec.AutoscalingRunnerSetName)
-
 	listenerEnv := []corev1.EnvVar{
 		{
 			Name:  "GITHUB_CONFIGURE_URL",
@@ -133,7 +137,10 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
-			Labels:    newLabels,
+			Labels: map[string]string{
+				LabelKeyAutoScaleRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyAutoScaleRunnerSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+			},
 		},
 		Spec: podSpec,
 	}
@@ -180,8 +187,8 @@ func (b *resourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 			Name:      scaleSetListenerServiceAccountName(autoscalingListener),
 			Namespace: autoscalingListener.Namespace,
 			Labels: map[string]string{
-				"auto-scaling-runner-set-namespace": autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				"auto-scaling-runner-set-name":      autoscalingListener.Spec.AutoscalingRunnerSetName,
+				LabelKeyAutoScaleRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyAutoScaleRunnerSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 			},
 		},
 	}
@@ -195,8 +202,8 @@ func (b *resourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 			Name:      scaleSetListenerRoleName(autoscalingListener),
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			Labels: map[string]string{
-				"auto-scaling-runner-set-namespace": autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				"auto-scaling-runner-set-name":      autoscalingListener.Spec.AutoscalingRunnerSetName,
+				LabelKeyAutoScaleRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyAutoScaleRunnerSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				"auto-scaling-listener-namespace":   autoscalingListener.Namespace,
 				"auto-scaling-listener-name":        autoscalingListener.Name,
 				"role-policy-rules-hash":            rulesHash,
@@ -229,8 +236,8 @@ func (b *resourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 			Name:      scaleSetListenerRoleName(autoscalingListener),
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			Labels: map[string]string{
-				"auto-scaling-runner-set-namespace": autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				"auto-scaling-runner-set-name":      autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyAutoScaleRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyAutoScaleRunnerSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				"auto-scaling-listener-namespace":   autoscalingListener.Namespace,
 				"auto-scaling-listener-name":        autoscalingListener.Name,
 				"role-binding-role-ref-hash":        roleRefHash,
@@ -252,8 +259,8 @@ func (b *resourceBuilder) newScaleSetListenerSecretMirror(autoscalingListener *v
 			Name:      scaleSetListenerSecretMirrorName(autoscalingListener),
 			Namespace: autoscalingListener.Namespace,
 			Labels: map[string]string{
-				"auto-scaling-runner-set-namespace": autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				"auto-scaling-runner-set-name":      autoscalingListener.Spec.AutoscalingRunnerSetName,
+				LabelKeyAutoScaleRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyAutoScaleRunnerSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				"secret-data-hash":                  dataHash,
 			},
 		},
@@ -283,8 +290,8 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			Name:      scaleSetListenerName(autoscalingRunnerSet),
 			Namespace: namespace,
 			Labels: map[string]string{
-				"auto-scaling-runner-set-namespace": autoscalingRunnerSet.Namespace,
-				"auto-scaling-runner-set-name":      autoscalingRunnerSet.Name,
+				LabelKeyAutoScaleRunnerSetNamespace: autoscalingRunnerSet.Namespace,
+				LabelKeyAutoScaleRunnerSetName:      autoscalingRunnerSet.Name,
 				LabelKeyRunnerSpecHash:              autoscalingRunnerSet.ListenerSpecHash(),
 			},
 		},

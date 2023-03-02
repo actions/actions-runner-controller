@@ -44,14 +44,9 @@ const (
 	// TODO: Replace with shared image.
 	autoscalingRunnerSetOwnerKey      = ".metadata.controller"
 	LabelKeyRunnerSpecHash            = "runner-spec-hash"
-	LabelKeyAutoScaleRunnerSetName    = "auto-scale-runner-set-name"
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdKey               = "runner-scale-set-id"
 	runnerScaleSetRunnerGroupNameKey  = "runner-scale-set-runner-group-name"
-
-	// scaleSetListenerLabel is the key of pod.meta.labels to label
-	// that the pod is a listener application
-	scaleSetListenerLabel = "runner-scale-set-listener"
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
