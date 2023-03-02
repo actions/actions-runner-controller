@@ -25,7 +25,6 @@ import (
 )
 
 const (
-	gh_token    = "gh_token"
 	timeout     = time.Second * 10
 	interval    = time.Millisecond * 250
 	runnerImage = "ghcr.io/actions/actions-runner:latest"
@@ -83,7 +82,7 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 	}
 }
 
-var _ = FDescribe("EphemeralRunner", func() {
+var _ = Describe("EphemeralRunner", func() {
 	Describe("Resource manipulation", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager
