@@ -95,8 +95,8 @@ func TestARCJobs(t *testing.T) {
 		dateTime := os.Getenv("DATE_TIME")
 		// We are triggering manually a workflow that already exists in the repo.
 		// This workflow is expected to spin up a number of runner pods matching the runners value set in podCountsByType.
-		url := "https://api.github.com/repos/actions/actions-runner-controller/actions/workflows/e2e-test-dispatch-workflow.yaml/dispatches"
-		jsonStr := []byte(fmt.Sprintf(`{"ref":"master", "inputs":{"date_time":"%s"}}`, dateTime))
+		url := "https://api.github.com/repos/actions-runner-controller/arc_e2e_test_dummy/actions/workflows/e2e-test-dispatch-workflow.yaml/dispatches"
+		jsonStr := []byte(fmt.Sprintf(`{"ref":"main", "inputs":{"date_time":"%s"}}`, dateTime))
 
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 		if err != nil {
