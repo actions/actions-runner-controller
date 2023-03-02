@@ -44,7 +44,6 @@ const (
 	// TODO: Replace with shared image.
 	autoscalingRunnerSetOwnerKey      = ".metadata.controller"
 	LabelKeyRunnerSpecHash            = "runner-spec-hash"
-	LabelKeyAutoScaleRunnerSetName    = "auto-scale-runner-set-name"
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdKey               = "runner-scale-set-id"
 	runnerScaleSetRunnerGroupNameKey  = "runner-scale-set-runner-group-name"
