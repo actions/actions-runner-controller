@@ -1017,9 +1017,6 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			},
 			Spec: actionsv1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
-				GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
-					RootCAsConfigMapRef: rootCAConfigMap.Name,
-				},
 				EphemeralRunnerSpec: actionsv1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,

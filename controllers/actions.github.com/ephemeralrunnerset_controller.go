@@ -468,7 +468,7 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 		opts = append(opts, actions.WithProxy(proxyFunc))
 	}
 
-	tlsConfig := rs.Spec.GitHubServerTLS
+	tlsConfig := rs.Spec.EphemeralRunnerSpec.GitHubServerTLS
 	if tlsConfig != nil && tlsConfig.RootCAsConfigMapRef != "" {
 		var rootCAsConfigMap corev1.ConfigMap
 		err := r.Get(

@@ -1053,8 +1053,6 @@ var _ = Describe("Test Client optional configuration", func() {
 					g.Expect(runnerSetList.Items).To(HaveLen(1), "expected 1 EphemeralRunnerSet to be created")
 
 					runnerSet := &runnerSetList.Items[0]
-					g.Expect(runnerSet.Spec.GitHubServerTLS).NotTo(BeNil(), "expected GitHubServerTLS to be set")
-					g.Expect(runnerSet.Spec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
 
 					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).NotTo(BeNil(), "expected EphemeralRunnerSpec.GitHubServerTLS to be set")
 					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
