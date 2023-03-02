@@ -497,7 +497,7 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 
 	opts, err := r.actionsClientOptionsFor(ctx, autoscalingRunnerSet)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get actions client options: %w", err)
 	}
 
 	return r.ActionsClient.GetClientFromSecret(
