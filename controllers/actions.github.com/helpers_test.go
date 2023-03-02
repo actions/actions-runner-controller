@@ -15,8 +15,8 @@ import (
 
 const defaultGitHubToken = "gh_token"
 
-func startManagers(t ginkgo.GinkgoTInterface, managers ...manager.Manager) {
-	for _, mgr := range managers {
+func startManagers(t ginkgo.GinkgoTInterface, first manager.Manager, others ...manager.Manager) {
+	for _, mgr := range append([]manager.Manager{first}, others...) {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g, ctx := errgroup.WithContext(ctx)
