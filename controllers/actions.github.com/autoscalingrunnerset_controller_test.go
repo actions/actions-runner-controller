@@ -34,7 +34,7 @@ const (
 	autoscalingRunnerSetTestGitHubToken = "gh_token"
 )
 
-var _ = FDescribe("Test AutoScalingRunnerSet controller", func() {
+var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 	var ctx context.Context
 	var mgr manager.Manager
 	var autoscalingNS *corev1.Namespace
@@ -401,7 +401,7 @@ var _ = FDescribe("Test AutoScalingRunnerSet controller", func() {
 	})
 })
 
-var _ = FDescribe("Test AutoscalingController creation failures", func() {
+var _ = Describe("Test AutoscalingController creation failures", func() {
 	Context("When autoscaling runner set creation fails on the client", func() {
 		var ctx context.Context
 		var mgr manager.Manager
@@ -510,7 +510,7 @@ var _ = FDescribe("Test AutoscalingController creation failures", func() {
 	})
 })
 
-var _ = FDescribe("Test Client optional configuration", func() {
+var _ = Describe("Test Client optional configuration", func() {
 	Context("When specifying a proxy", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager
