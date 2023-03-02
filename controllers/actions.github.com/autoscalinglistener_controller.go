@@ -422,8 +422,6 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 	}
 
-	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
-
 	if autoscalingListener.Spec.GitHubServerTLS != nil {
 		var rootCAsConfigMap corev1.ConfigMap
 		err := r.Get(
@@ -447,11 +445,13 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 			certString += cert
 		}
 
-		newPod.Spec.Containers[0].Env = append(newPod.Spec.Containers[0].Env, corev1.EnvVar{
+		envs = append(envs, corev1.EnvVar{
 			Name:  "GITHUB_SERVER_ROOT_CA",
 			Value: certString,
 		})
 	}
+
+	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
 
 	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
 		return ctrl.Result{}, err
