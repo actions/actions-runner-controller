@@ -50,7 +50,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 
     ```bash
     # Using a Personal Access Token (PAT)
-    INSTALLATION_NAME="arc-runner-set" 
+    INSTALLATION_NAME="arc-runner-set"
     NAMESPACE="arc-runners"
     GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>"
     GITHUB_PAT="<PAT>"
@@ -64,9 +64,9 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
 
     ```bash
     # Using a GitHub App
-    INSTALLATION_NAME="arc-runner-set" 
+    INSTALLATION_NAME="arc-runner-set"
     NAMESPACE="arc-runners"
-    GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>" 
+    GITHUB_CONFIG_URL="https://github.com/<your_enterprise/org/repo>"
     GITHUB_APP_ID="<GITHUB_APP_ID>"
     GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
     GITHUB_APP_PRIVATE_KEY="<GITHUB_APP_PRIVATE_KEY>"
@@ -86,8 +86,8 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     $ helm list -n "${NAMESPACE}"
 
     NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                                    APP VERSION
-    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.2.0        preview    
-    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.2.0            0.2.0 
+    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.2.0        preview
+    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.2.0            0.2.0
     ```
 
     ```bash
@@ -118,10 +118,10 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     ```bash
     $ kubectl get pods -A
 
-    NAMESPACE     NAME                                              READY   STATUS    RESTARTS      AGE
+    NAMESPACE     NAME                                                  READY   STATUS    RESTARTS      AGE
     arc-systems   arc-gha-runner-scale-set-controller-8c74b6f95-gr7zr   1/1     Running   0             27m
-    arc-systems   arc-runner-set-6cd58d58-listener                  1/1     Running   0             7m52s
-    arc-runners   arc-runner-set-rmrgw-runner-p9p5n                 1/1     Running   0             21s
+    arc-systems   arc-runner-set-6cd58d58-listener                      1/1     Running   0             7m52s
+    arc-runners   arc-runner-set-rmrgw-runner-p9p5n                     1/1     Running   0             21s
     ```
 
 ## Troubleshooting
@@ -136,6 +136,20 @@ $ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-
 
 # Runner set listener logs
 kubectl logs -n "${NAMESPACE}" -l runner-scale-set-listener=arc-systems-arc-runner-set
+```
+
+### Naming error: `Name must have up to characters`
+
+We are using some of the resources generated names as labels for other resources. Resource names have a max length of `263 characters` while labels are limited to `63 characters`. Given this constraint, we have to limit the resource names to `63 characters`.
+
+Since part of the resource name is defined by you, we have to impose a limit on the amount of characters you can use for the installation and namespace names.
+
+If you see these errors, you have to use shorter installation or namespace names.
+
+```bash
+Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/autoscalingrunnerset.yaml:5:5): Name must have up to 45 characters
+
+Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/autoscalingrunnerset.yaml:8:5): Namespace must have up to 63 characters
 ```
 
 ### If you installed the autoscaling runner set, but the listener pod is not created
