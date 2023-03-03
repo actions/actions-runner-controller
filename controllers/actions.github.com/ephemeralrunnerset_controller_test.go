@@ -841,33 +841,16 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 
 var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func() {
 	var ctx context.Context
-	var cancel context.CancelFunc
-	autoscalingNS := new(corev1.Namespace)
-	ephemeralRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
-	configSecret := new(corev1.Secret)
-	rootCAConfigMap := new(corev1.ConfigMap)
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var ephemeralRunnerSet *actionsv1alpha1.EphemeralRunnerSet
+	var configSecret *corev1.Secret
+	var rootCAConfigMap *corev1.ConfigMap
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
-		autoscalingNS = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-runnerset" + RandStringRunes(5)},
-		}
-
-		err := k8sClient.Create(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for EphemeralRunnerSet")
-
-		configSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "github-config-secret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"github_token": []byte(ephemeralRunnerSetTestGitHubToken),
-			},
-		}
-
-		err = k8sClient.Create(ctx, configSecret)
-		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		cert, err := os.ReadFile(filepath.Join(
 			"../../",
@@ -889,12 +872,6 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 		err = k8sClient.Create(ctx, rootCAConfigMap)
 		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoscalingNS.Name,
-			MetricsBindAddress: "0",
-		})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
-
 		controller := &EphemeralRunnerSetReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
@@ -904,19 +881,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
-		go func() {
-			defer GinkgoRecover()
-
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
-	})
-
-	AfterEach(func() {
-		defer cancel()
-
-		err := k8sClient.Delete(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
+		startManagers(GinkgoT(), mgr)
 	})
 
 	It("should be able to make requests to a server using root CAs", func() {

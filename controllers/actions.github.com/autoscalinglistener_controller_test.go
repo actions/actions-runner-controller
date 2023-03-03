@@ -559,34 +559,17 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 
 var _ = Describe("Test GitHub Server TLS configuration", func() {
 	var ctx context.Context
-	var cancel context.CancelFunc
-	autoscalingNS := new(corev1.Namespace)
-	autoscalingRunnerSet := new(actionsv1alpha1.AutoscalingRunnerSet)
-	configSecret := new(corev1.Secret)
-	autoscalingListener := new(actionsv1alpha1.AutoscalingListener)
-	rootCAConfigMap := new(corev1.ConfigMap)
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var autoscalingRunnerSet *actionsv1alpha1.AutoscalingRunnerSet
+	var configSecret *corev1.Secret
+	var autoscalingListener *actionsv1alpha1.AutoscalingListener
+	var rootCAConfigMap *corev1.ConfigMap
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
-		autoscalingNS = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-listener" + RandStringRunes(5)},
-		}
-
-		err := k8sClient.Create(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for AutoScalingRunnerSet")
-
-		configSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "github-config-secret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"github_token": []byte(autoscalingListenerTestGitHubToken),
-			},
-		}
-
-		err = k8sClient.Create(ctx, configSecret)
-		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		cert, err := os.ReadFile(filepath.Join(
 			"../../",
@@ -607,12 +590,6 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		}
 		err = k8sClient.Create(ctx, rootCAConfigMap)
 		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
-
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoscalingNS.Name,
-			MetricsBindAddress: "0",
-		})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
 		controller := &AutoscalingListenerReconciler{
 			Client: mgr.GetClient(),
@@ -677,19 +654,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		err = k8sClient.Create(ctx, autoscalingListener)
 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingListener")
 
-		go func() {
-			defer GinkgoRecover()
-
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
-	})
-
-	AfterEach(func() {
-		defer cancel()
-
-		err := k8sClient.Delete(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
+		startManagers(GinkgoT(), mgr)
 	})
 
 	Context("When creating a new AutoScalingListener", func() {
