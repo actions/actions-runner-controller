@@ -99,6 +99,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		return ctrl.Result{}, nil
 	}
 
 	if !controllerutil.ContainsFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {

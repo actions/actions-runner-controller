@@ -310,6 +310,53 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"githubConfigUrl":                 "https://github.com/actions",
+			"githubConfigSecret.github_token": "gh_token12345",
+			"runnerScaleSetName":              "test-runner-scale-set-name",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, namespaceName, ars.Namespace)
+	assert.Equal(t, "test-runners", ars.Name)
+
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
+
+	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
+
+	assert.Nil(t, ars.Spec.MinRunners, "MinRunners should be nil")
+	assert.Nil(t, ars.Spec.MaxRunners, "MaxRunners should be nil")
+	assert.Nil(t, ars.Spec.Proxy, "Proxy should be nil")
+	assert.Nil(t, ars.Spec.GitHubServerTLS, "GitHubServerTLS should be nil")
+
+	assert.NotNil(t, ars.Spec.Template.Spec, "Template.Spec should not be nil")
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "Template.Spec should have 1 container")
+	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
+	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
 	t.Parallel()
 

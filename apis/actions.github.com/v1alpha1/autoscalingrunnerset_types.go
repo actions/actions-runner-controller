@@ -60,6 +60,9 @@ type AutoscalingRunnerSetSpec struct {
 	RunnerGroup string `json:"runnerGroup,omitempty"`
 
 	// +optional
+	RunnerScaleSetName string `json:"runnerScaleSetName,omitempty"`
+
+	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
@@ -298,6 +301,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 		GitHubConfigUrl    string
 		GitHubConfigSecret string
 		RunnerGroup        string
+		RunnerScaleSetName string
 		Proxy              *ProxyConfig
 		GitHubServerTLS    *GitHubServerTLSConfig
 		Template           corev1.PodTemplateSpec
@@ -306,6 +310,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 		GitHubConfigUrl:    ars.Spec.GitHubConfigUrl,
 		GitHubConfigSecret: ars.Spec.GitHubConfigSecret,
 		RunnerGroup:        ars.Spec.RunnerGroup,
+		RunnerScaleSetName: ars.Spec.RunnerScaleSetName,
 		Proxy:              ars.Spec.Proxy,
 		GitHubServerTLS:    ars.Spec.GitHubServerTLS,
 		Template:           ars.Spec.Template,
