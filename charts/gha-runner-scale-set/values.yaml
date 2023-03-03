@@ -44,41 +44,19 @@ githubConfigSecret:
 
 # runnerGroup: "default"
 
-## Custom CA certificates can be provided by bundling them in a configmap and
-## referring it in githubServerTLS.certConfigMapRef, for example:
+## A self-signed CA certificate for communication with the GitHub server can be provided using a config map key selector.
+## If provided, the certificate will also be mounted on runner pods under the
+## path specified with `runnerMountPath` (defaults to
+## /usr/local/share/ca-certificates/ if left blank) and NODE_EXTRA_CA_CERTS
+## environment variable will be set to the path to that certificate to help with
+## NodeJS-based actions. Example configuration:
 #
-# githubServerTLS:
-#   certConfigMapRef: your-configmap-name
 # githubServerTLS:
 #   certificateFrom:
 #     configMapKeyRef:
 #       name: config-map-name
 #       key: ca.pem
 #   runnerMountPath: /usr/local/share/ca-certificates/
-#
-## If you do need custom CA certificates do remember that the runner (and your
-## actions) will probably need access to them as well. Below is an example
-## configuration for the default runner:
-#
-# template:
-#   spec:
-#     containers:
-#       - name: runner
-#         image: ghcr.io/actions/actions-runner:latest
-#         command: ["/bin/sh","-c"]
-#         args:
-#           - "update-ca-certificates; /actions-runner/run.sh"
-#         volumeMounts:
-#           - name: tls-volume
-#             mountPath: /usr/local/share/ca-certificates/
-#         ## environment variables needed by your actions to pick up the certificates
-#         env:
-#           - name: SSL_CERT_DIR
-#             value: /usr/local/share/ca-certificates/
-#     volumes:
-#       - name: tls-volume
-#         configMap:
-#           name: tls-config
 
 ## template is the PodSpec for each runner Pod
 template:

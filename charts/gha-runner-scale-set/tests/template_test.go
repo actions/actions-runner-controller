@@ -793,20 +793,39 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 	options := &helm.Options{
 		SetValues: map[string]string{
-			"githubConfigUrl":                  "https://github.com/actions",
-			"githubConfigSecret":               "pre-defined-secrets",
-			"githubServerTLS.certConfigMapRef": "certs-configmap",
+			"githubConfigUrl":                                      "https://github.com/actions",
+			"githubConfigSecret":                                   "pre-defined-secrets",
+			"githubServerTLS.runnerMountPath":                      "/runner/certs",
+			"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+			"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	output := helm.RenderTemplate(
+		t,
+		options,
+		helmChartPath,
+		releaseName,
+		[]string{"templates/autoscalingrunnerset.yaml"},
+	)
 
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	require.NotNil(t, ars.Spec.GitHubServerTLS)
-	assert.Equal(t, "certs-configmap", ars.Spec.GitHubServerTLS.RootCAsConfigMapRef)
+	expected := &v1alpha1.GitHubServerTLSConfig{
+		RunnerMountPath: "/runner/certs",
+		CertificateFrom: &v1alpha1.TLSCertificateSource{
+			ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "certs-configmap",
+				},
+				Key: "cert.pem",
+			},
+		},
+	}
+	assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
 }
 
 func TestTemplateNamingConstraints(t *testing.T) {

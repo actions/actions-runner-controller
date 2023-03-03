@@ -20,7 +20,17 @@ spec:
 
   {{- if .Values.githubServerTLS }}
   githubServerTLS:
-    certConfigMapRef: {{ .Values.githubServerTLS.certConfigMapRef }}
+    {{- if .Values.githubServerTLS.certificateFrom }}
+    {{- with .Values.githubServerTLS.certificateFrom }}
+    certificateFrom:
+      configMapKeyRef:
+        name: {{ .configMapKeyRef.name }}
+        key: {{ .configMapKeyRef.key }}
+    {{ end }}
+    {{ end }}
+    {{- if .Values.githubServerTLS.runnerMountPath }}
+    runnerMountPath: {{ .Values.githubServerTLS.runnerMountPath }}
+    {{ end }}
   {{ end }}
 
   {{- if .Values.proxy }}
