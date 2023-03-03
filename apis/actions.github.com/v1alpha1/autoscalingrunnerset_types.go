@@ -76,10 +76,17 @@ type AutoscalingRunnerSetSpec struct {
 }
 
 type GitHubServerTLSConfig struct {
-	// Required, the summed size of the values of the configmap must be less than
-	// 1048576 bytes (~1 MB) as these will be mounted as an environment variable on the
-	// listener pod.
-	RootCAsConfigMapRef string `json:"certConfigMapRef,omitempty"`
+	// Required
+	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
+
+	// +optional
+	// +kubebuilder:default:=/usr/local/share/ca-certificates/
+	RunnerMountPath string `json:"runnerMountPath,omitempty"`
+}
+
+type TLSCertificateSource struct {
+	// Required
+	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
 type ProxyConfig struct {

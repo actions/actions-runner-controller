@@ -49,6 +49,12 @@ githubConfigSecret:
 #
 # githubServerTLS:
 #   certConfigMapRef: your-configmap-name
+# githubServerTLS:
+#   certificateFrom:
+#     configMapKeyRef:
+#       name: config-map-name
+#       key: ca.pem
+#   runnerMountPath: /usr/local/share/ca-certificates/
 #
 ## If you do need custom CA certificates do remember that the runner (and your
 ## actions) will probably need access to them as well. Below is an example
