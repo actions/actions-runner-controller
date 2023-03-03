@@ -525,34 +525,32 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Con
 	}
 
 	tlsConfig := autoscalingRunnerSet.Spec.GitHubServerTLS
-	if tlsConfig != nil && tlsConfig.RootCAsConfigMapRef != "" {
-		var rootCAsConfigMap corev1.ConfigMap
-		err := r.Get(
-			ctx,
-			types.NamespacedName{
-				Namespace: autoscalingRunnerSet.Namespace,
-				Name:      tlsConfig.RootCAsConfigMapRef,
-			},
-			&rootCAsConfigMap,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to get configmap %s: %w",
-				tlsConfig.RootCAsConfigMapRef,
-				err,
+	if tlsConfig != nil {
+		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
+			var configmap corev1.ConfigMap
+			err := r.Get(
+				ctx,
+				types.NamespacedName{
+					Namespace: autoscalingRunnerSet.Namespace,
+					Name:      name,
+				},
+				&configmap,
 			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to get configmap %s: %w",
+					name,
+					err,
+				)
+			}
+
+			return []byte(configmap.Data[key]), nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tls config: %w", err)
 		}
 
-		certs, err := actions.RootCAsFromConfigMap(rootCAsConfigMap.Data)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to get certificates from configmap %s: %w",
-				tlsConfig.RootCAsConfigMapRef,
-				err,
-			)
-		}
-
-		options = append(options, actions.WithRootCAs(certs))
+		options = append(options, actions.WithRootCAs(pool))
 	}
 
 	return options, nil

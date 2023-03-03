@@ -749,7 +749,14 @@ var _ = Describe("Test Client optional configuration", func() {
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
-						RootCAsConfigMapRef: rootCAConfigMap.Name,
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
 					},
 					MaxRunners:  &max,
 					MinRunners:  &min,
@@ -792,7 +799,15 @@ var _ = Describe("Test Client optional configuration", func() {
 					GitHubConfigUrl:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
-						RootCAsConfigMapRef: rootCAConfigMap.Name,
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
+						RunnerMountPath: "/runner/certs",
 					},
 					MaxRunners:  &max,
 					MinRunners:  &min,
@@ -814,7 +829,7 @@ var _ = Describe("Test Client optional configuration", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
 
 			Eventually(
-				func() (string, error) {
+				func(g Gomega) {
 					listener := new(v1alpha1.AutoscalingListener)
 					err := k8sClient.Get(
 						ctx,
@@ -824,19 +839,14 @@ var _ = Describe("Test Client optional configuration", func() {
 						},
 						listener,
 					)
-					if err != nil {
-						return "", err
-					}
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get listener")
 
-					if listener.Spec.GitHubServerTLS == nil {
-						return "", nil
-					}
-
-					return listener.Spec.GitHubServerTLS.RootCAsConfigMapRef, nil
+					g.Expect(listener.Spec.GitHubServerTLS).NotTo(BeNil(), "listener does not have TLS config")
+					g.Expect(listener.Spec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "listener does not have TLS config")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingListenerTestInterval,
-			).Should(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
+			).Should(Succeed(), "tls config is incorrect")
 		})
 
 		It("it creates an ephemeral runner set referencing the right configmap for TLS", func() {
@@ -851,7 +861,15 @@ var _ = Describe("Test Client optional configuration", func() {
 					GitHubConfigUrl:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
-						RootCAsConfigMapRef: rootCAConfigMap.Name,
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
+						RunnerMountPath: "/runner/certs",
 					},
 					MaxRunners:  &max,
 					MinRunners:  &min,
@@ -882,7 +900,7 @@ var _ = Describe("Test Client optional configuration", func() {
 					runnerSet := &runnerSetList.Items[0]
 
 					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).NotTo(BeNil(), "expected EphemeralRunnerSpec.GitHubServerTLS to be set")
-					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS.RootCAsConfigMapRef).To(BeEquivalentTo(rootCAConfigMap.Name), "configmap reference is incorrect")
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "EphemeralRunnerSpec does not have TLS config")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingListenerTestInterval,
