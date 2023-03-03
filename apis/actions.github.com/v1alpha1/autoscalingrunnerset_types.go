@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -82,6 +83,37 @@ type GitHubServerTLSConfig struct {
 	// +optional
 	// +kubebuilder:default:=/usr/local/share/ca-certificates/
 	RunnerMountPath string `json:"runnerMountPath,omitempty"`
+}
+
+func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
+	if c == nil {
+		return nil, nil
+	}
+
+	if c.CertificateFrom == nil {
+		return nil, fmt.Errorf("certificateFrom not specified")
+	}
+
+	if c.CertificateFrom.ConfigMapKeyRef == nil {
+		return nil, fmt.Errorf("configMapKeyRef not specified")
+	}
+
+	cert, err := keyFetcher(c.CertificateFrom.ConfigMapKeyRef.Name, c.CertificateFrom.ConfigMapKeyRef.Key)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to fetch key %s in %s: %w",
+			c.CertificateFrom.ConfigMapKeyRef.Key,
+			c.CertificateFrom.ConfigMapKeyRef.Name,
+			err,
+		)
+	}
+
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(cert) {
+		return nil, fmt.Errorf("failed to parse certificate")
+	}
+
+	return pool, nil
 }
 
 type TLSCertificateSource struct {
