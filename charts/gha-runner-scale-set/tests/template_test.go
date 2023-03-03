@@ -785,7 +785,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../auto-scaling-runner-set")
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
