@@ -44,7 +44,9 @@ githubConfigSecret:
 
 # runnerGroup: "default"
 
-<<<<<<< HEAD
+## name of the runner scale set to create.  Defaults to the helm release name
+# runnerScaleSetName: ""
+
 ## A self-signed CA certificate for communication with the GitHub server can be provided using a config map key selector.
 ## If provided, the certificate will also be mounted on runner pods under the
 ## path specified with `runnerMountPath` (defaults to
@@ -58,10 +60,6 @@ githubConfigSecret:
 #       name: config-map-name
 #       key: ca.pem
 #   runnerMountPath: /usr/local/share/ca-certificates/
-=======
-## name of the runner scale set to create.  Defaults to the helm release name
-# runnerScaleSetName: ""
->>>>>>> master
 
 ## template is the PodSpec for each runner Pod
 template:
