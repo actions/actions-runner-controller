@@ -919,7 +919,14 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
 			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.GitHubServerTLSConfig{
-				RootCAsConfigMapRef: rootCAConfigMap.Name,
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: rootCAConfigMap.Name,
+						},
+						Key: "rootCA.crt",
+					},
+				},
 			}
 
 			err = k8sClient.Create(ctx, ephemeralRunner)
@@ -932,6 +939,92 @@ var _ = Describe("EphemeralRunner", func() {
 				2*time.Second,
 				interval,
 			).Should(BeTrue(), "failed to contact server")
+		})
+
+		It("mounts the certificate under RunnerMountPath", func() {
+			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: rootCAConfigMap.Name,
+						},
+						Key: "rootCA.crt",
+					},
+				},
+				RunnerMountPath: "/custom/path/to/certs/",
+			}
+
+			err := k8sClient.Create(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			Eventually(
+				func(g Gomega) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					g.Expect(err).To(BeNil(), "failed to get ephemeral runner pod")
+
+					// Check that the volume is created
+					// get the volume
+					var volume *corev1.Volume
+					for _, v := range pod.Spec.Volumes {
+						if v.Name == "github-server-tls-cert" {
+							volume = &v
+							break
+						}
+					}
+					g.Expect(volume).NotTo(BeNil(), "failed to find volume for github-server-tls-cert")
+					g.Expect(volume.VolumeSource.ConfigMap).NotTo(BeNil(), "failed to find volume source for github-server-tls-cert")
+					g.Expect(volume.VolumeSource.ConfigMap.LocalObjectReference.Name).To(Equal(rootCAConfigMap.Name), "volume should be referencing the rootCA configmap")
+					g.Expect(volume.VolumeSource.ConfigMap.Items).To(ContainElement(corev1.KeyToPath{
+						Key:  "rootCA.crt",
+						Path: "rootCA.crt",
+					}), "volume should be referencing the rootCA configmap key")
+
+					// Check that the volume is mounted
+					g.Expect(pod.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+						Name:      "github-server-tls-cert",
+						MountPath: "/custom/path/to/certs/rootCA.crt",
+						SubPath:   "rootCA.crt",
+					}))
+				},
+				timeout,
+				interval,
+			).Should(Succeed(), "failed to get ephemeral runner pod")
+		})
+
+		It("sets NODE_EXTRA_CA_CERTS to the path of the certificate", func() {
+			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: rootCAConfigMap.Name,
+						},
+						Key: "rootCA.crt",
+					},
+				},
+				RunnerMountPath: "/custom/path/to/certs/",
+			}
+
+			err := k8sClient.Create(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			Eventually(
+				func(g Gomega) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					g.Expect(err).To(BeNil(), "failed to get ephemeral runner pod")
+
+					// Check that the environment variable is set
+					g.Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+						Name:  "NODE_EXTRA_CA_CERTS",
+						Value: "/custom/path/to/certs/rootCA.crt",
+					}))
+				},
+				timeout,
+				interval,
+			).Should(Succeed(), "failed to get ephemeral runner pod")
 		})
 	})
 })
