@@ -17,6 +17,9 @@ spec:
   {{- with .Values.runnerGroup }}
   runnerGroup: {{ . }}
   {{- end }}
+  {{- with .Values.runnerScaleSetName }}
+  runnerScaleSetName: {{ . }}
+  {{- end }}
 
   {{- if .Values.proxy }}
   proxy:

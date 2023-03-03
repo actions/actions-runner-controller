@@ -44,6 +44,9 @@ githubConfigSecret:
 
 # runnerGroup: "default"
 
+## name of the runner scale set to create.  Defaults to the helm release name
+# runnerScaleSetName: ""
+
 ## template is the PodSpec for each runner Pod
 template:
   spec:
