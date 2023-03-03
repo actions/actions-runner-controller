@@ -469,34 +469,28 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 	}
 
 	tlsConfig := rs.Spec.EphemeralRunnerSpec.GitHubServerTLS
-	if tlsConfig != nil && tlsConfig.RootCAsConfigMapRef != "" {
-		var rootCAsConfigMap corev1.ConfigMap
-		err := r.Get(
-			ctx,
-			types.NamespacedName{
-				Namespace: rs.Namespace,
-				Name:      tlsConfig.RootCAsConfigMapRef,
-			},
-			&rootCAsConfigMap,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to get configmap %s: %w",
-				tlsConfig.RootCAsConfigMapRef,
-				err,
+	if tlsConfig != nil {
+		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
+			var configmap corev1.ConfigMap
+			err := r.Get(
+				ctx,
+				types.NamespacedName{
+					Namespace: rs.Namespace,
+					Name:      name,
+				},
+				&configmap,
 			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
+			}
+
+			return []byte(configmap.Data[key]), nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tls config: %w", err)
 		}
 
-		certs, err := actions.RootCAsFromConfigMap(rootCAsConfigMap.Data)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to get certificates from configmap %s: %w",
-				tlsConfig.RootCAsConfigMapRef,
-				err,
-			)
-		}
-
-		opts = append(opts, actions.WithRootCAs(certs))
+		opts = append(opts, actions.WithRootCAs(pool))
 	}
 
 	return r.ActionsClient.GetClientFromSecret(

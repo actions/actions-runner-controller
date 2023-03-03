@@ -916,7 +916,15 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
-						RootCAsConfigMapRef: rootCAConfigMap.Name,
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
+						RunnerMountPath: "/runner/certs",
 					},
 					RunnerScaleSetId: 100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
@@ -951,7 +959,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 
 		runner := runnerList.Items[0].DeepCopy()
 		Expect(runner.Spec.GitHubServerTLS).NotTo(BeNil(), "runner tls config should not be nil")
-		Expect(runner.Spec.GitHubServerTLS.RootCAsConfigMapRef).To(Equal(rootCAConfigMap.Name), "runner tls config should be correct")
+		Expect(runner.Spec.GitHubServerTLS).To(BeEquivalentTo(ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS), "runner tls config should be correct")
 
 		runner.Status.Phase = corev1.PodRunning
 		runner.Status.RunnerId = 100

@@ -537,11 +537,7 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Con
 				&configmap,
 			)
 			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to get configmap %s: %w",
-					name,
-					err,
-				)
+				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
 			}
 
 			return []byte(configmap.Data[key]), nil

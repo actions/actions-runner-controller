@@ -610,7 +610,15 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
-					RootCAsConfigMapRef: rootCAConfigMap.Name,
+					CertificateFrom: &actionsv1alpha1.TLSCertificateSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: rootCAConfigMap.Name,
+							},
+							Key: "rootCA.crt",
+						},
+					},
+					RunnerMountPath: "/runner/certs",
 				},
 				MaxRunners: &max,
 				MinRunners: &min,
@@ -639,7 +647,15 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
-					RootCAsConfigMapRef: rootCAConfigMap.Name,
+					CertificateFrom: &actionsv1alpha1.TLSCertificateSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: rootCAConfigMap.Name,
+							},
+							Key: "rootCA.crt",
+						},
+					},
+					RunnerMountPath: "/runner/certs",
 				},
 				RunnerScaleSetId:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
