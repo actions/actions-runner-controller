@@ -28,46 +28,23 @@ const (
 
 var _ = Describe("Test AutoScalingListener controller", func() {
 	var ctx context.Context
-	var cancel context.CancelFunc
-	autoscalingNS := new(corev1.Namespace)
-	autoscalingRunnerSet := new(actionsv1alpha1.AutoscalingRunnerSet)
-	configSecret := new(corev1.Secret)
-	autoscalingListener := new(actionsv1alpha1.AutoscalingListener)
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var autoscalingRunnerSet *actionsv1alpha1.AutoscalingRunnerSet
+	var configSecret *corev1.Secret
+	var autoscalingListener *actionsv1alpha1.AutoscalingListener
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
-		autoscalingNS = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-listener" + RandStringRunes(5)},
-		}
-
-		err := k8sClient.Create(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for AutoScalingRunnerSet")
-
-		configSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "github-config-secret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"github_token": []byte(autoscalingListenerTestGitHubToken),
-			},
-		}
-
-		err = k8sClient.Create(ctx, configSecret)
-		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
-
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoscalingNS.Name,
-			MetricsBindAddress: "0",
-		})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller := &AutoscalingListenerReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 		}
-		err = controller.SetupWithManager(mgr)
+		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 		min := 1
@@ -119,19 +96,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 		err = k8sClient.Create(ctx, autoscalingListener)
 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingListener")
 
-		go func() {
-			defer GinkgoRecover()
-
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
-	})
-
-	AfterEach(func() {
-		defer cancel()
-
-		err := k8sClient.Delete(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
+		startManagers(GinkgoT(), mgr)
 	})
 
 	Context("When creating a new AutoScalingListener", func() {
@@ -396,11 +361,11 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 
 var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 	var ctx context.Context
-	var cancel context.CancelFunc
-	autoscalingNS := new(corev1.Namespace)
-	autoscalingRunnerSet := new(actionsv1alpha1.AutoscalingRunnerSet)
-	configSecret := new(corev1.Secret)
-	autoscalingListener := new(actionsv1alpha1.AutoscalingListener)
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var autoscalingRunnerSet *actionsv1alpha1.AutoscalingRunnerSet
+	var configSecret *corev1.Secret
+	var autoscalingListener *actionsv1alpha1.AutoscalingListener
 
 	createRunnerSetAndListener := func(proxy *actionsv1alpha1.ProxyConfig) {
 		min := 1
@@ -456,54 +421,19 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 	}
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
-		autoscalingNS = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-listener" + RandStringRunes(5)},
-		}
-
-		err := k8sClient.Create(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for AutoScalingRunnerSet")
-
-		configSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "github-config-secret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"github_token": []byte(autoscalingListenerTestGitHubToken),
-			},
-		}
-
-		err = k8sClient.Create(ctx, configSecret)
-		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
-
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoscalingNS.Name,
-			MetricsBindAddress: "0",
-		})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller := &AutoscalingListenerReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 		}
-		err = controller.SetupWithManager(mgr)
+		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
-		go func() {
-			defer GinkgoRecover()
-
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
-	})
-
-	AfterEach(func() {
-		defer cancel()
-
-		err := k8sClient.Delete(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for AutoScalingRunnerSet")
+		startManagers(GinkgoT(), mgr)
 	})
 
 	It("should create a secret in the listener namespace containing proxy details, use it to populate env vars on the pod and should delete it as part of cleanup", func() {

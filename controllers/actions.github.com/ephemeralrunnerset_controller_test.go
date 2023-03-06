@@ -34,38 +34,15 @@ const (
 
 var _ = Describe("Test EphemeralRunnerSet controller", func() {
 	var ctx context.Context
-	var cancel context.CancelFunc
-	autoscalingNS := new(corev1.Namespace)
-	ephemeralRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
-	configSecret := new(corev1.Secret)
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var ephemeralRunnerSet *actionsv1alpha1.EphemeralRunnerSet
+	var configSecret *corev1.Secret
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
-		autoscalingNS = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-runnerset" + RandStringRunes(5)},
-		}
-
-		err := k8sClient.Create(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for EphemeralRunnerSet")
-
-		configSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "github-config-secret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"github_token": []byte(ephemeralRunnerSetTestGitHubToken),
-			},
-		}
-
-		err = k8sClient.Create(ctx, configSecret)
-		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
-
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoscalingNS.Name,
-			MetricsBindAddress: "0",
-		})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller := &EphemeralRunnerSetReconciler{
 			Client:        mgr.GetClient(),
@@ -73,7 +50,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Log:           logf.Log,
 			ActionsClient: fake.NewMultiClient(),
 		}
-		err = controller.SetupWithManager(mgr)
+		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 		ephemeralRunnerSet = &actionsv1alpha1.EphemeralRunnerSet{
@@ -103,19 +80,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 		err = k8sClient.Create(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
 
-		go func() {
-			defer GinkgoRecover()
-
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
-	})
-
-	AfterEach(func() {
-		defer cancel()
-
-		err := k8sClient.Delete(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
+		startManagers(GinkgoT(), mgr)
 	})
 
 	Context("When creating a new EphemeralRunnerSet", func() {
@@ -595,38 +560,15 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func() {
 	var ctx context.Context
-	var cancel context.CancelFunc
-	autoscalingNS := new(corev1.Namespace)
-	ephemeralRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
-	configSecret := new(corev1.Secret)
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var ephemeralRunnerSet *actionsv1alpha1.EphemeralRunnerSet
+	var configSecret *corev1.Secret
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.TODO())
-		autoscalingNS = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling-runnerset" + RandStringRunes(5)},
-		}
-
-		err := k8sClient.Create(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace for EphemeralRunnerSet")
-
-		configSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "github-config-secret",
-				Namespace: autoscalingNS.Name,
-			},
-			Data: map[string][]byte{
-				"github_token": []byte(ephemeralRunnerSetTestGitHubToken),
-			},
-		}
-
-		err = k8sClient.Create(ctx, configSecret)
-		Expect(err).NotTo(HaveOccurred(), "failed to create config secret")
-
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          autoscalingNS.Name,
-			MetricsBindAddress: "0",
-		})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller := &EphemeralRunnerSetReconciler{
 			Client:        mgr.GetClient(),
@@ -634,22 +576,10 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Log:           logf.Log,
 			ActionsClient: actions.NewMultiClient("test", logr.Discard()),
 		}
-		err = controller.SetupWithManager(mgr)
+		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
-		go func() {
-			defer GinkgoRecover()
-
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
-	})
-
-	AfterEach(func() {
-		defer cancel()
-
-		err := k8sClient.Delete(ctx, autoscalingNS)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace for EphemeralRunnerSet")
+		startManagers(GinkgoT(), mgr)
 	})
 
 	It("should create a proxy secret and delete the proxy secreat after the runner-set is deleted", func() {

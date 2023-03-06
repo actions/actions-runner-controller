@@ -157,8 +157,8 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 
 		scale.log.V(2).Info("Adding capacity reservation", "amount", amount)
 
+		now := time.Now()
 		if amount > 0 {
-			now := time.Now()
 			copy.Spec.CapacityReservations = append(copy.Spec.CapacityReservations, v1alpha1.CapacityReservation{
 				EffectiveTime:  metav1.Time{Time: now},
 				ExpirationTime: metav1.Time{Time: now.Add(scale.trigger.Duration.Duration)},
@@ -169,12 +169,48 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 		} else if amount < 0 {
 			var reservations []v1alpha1.CapacityReservation
 
-			var found bool
+			var (
+				found    bool
+				foundIdx int
+			)
 
-			for _, r := range copy.Spec.CapacityReservations {
+			for i, r := range copy.Spec.CapacityReservations {
+				r := r
 				if !found && r.Replicas+amount == 0 {
 					found = true
+					foundIdx = i
 				} else {
+					// Note that we nil-check max replicas because this "fix" is needed only when there is the upper limit of runners.
+					// In other words, you don't need to reset effective time and expiration time when there is no max replicas.
+					// That's because the desired replicas would already contain the reservation since it's creation.
+					if found && copy.Spec.MaxReplicas != nil && i > foundIdx+*copy.Spec.MaxReplicas {
+						// Update newer CapacityReservations' time to now to trigger reconcile
+						// Without this, we might stuck in minReplicas unnecessarily long.
+						// That is, we might not scale up after an ephemeral runner has been deleted
+						// until a new scale up, all runners finish, or after DefaultRunnerPodRecreationDelayAfterWebhookScale
+						// See https://github.com/actions/actions-runner-controller/issues/2254 for more context.
+						r.EffectiveTime = metav1.Time{Time: now}
+
+						// We also reset the scale trigger expiration time, so that you don't need to tweak
+						// scale trigger duratoin depending on maxReplicas.
+						// A detailed explanation follows.
+						//
+						// Let's say maxReplicas=3 and the workflow job of status=canceled result in deleting the first capacity reservation hence i=0.
+						// We are interested in at least four reservations and runners:
+						//   i=0   - already included in the current desired replicas, but just got deleted
+						//   i=1-2 - already included in the current desired replicas
+						//   i=3   - not yet included in the current desired replicas, might have been expired while waiting in the queue
+						//
+						// i=3 is especially important here- If we didn't reset the expiration time of 3rd reservation,
+						// it might expire before a corresponding runner is created, due to the delay between the expiration timer starts and the runner is created.
+						//
+						// Why is there such delay? Because ARC implements the scale duration and expiration as such...
+						// The expiration timer starts when the reservation is created, while the runner is created only after the corresponding reservation fits within maxReplicas.
+						//
+						// We address that, by resetting the expiration time for fourth(i=3 in the above example) and subsequent reservations when the first reservation gets cancelled.
+						r.ExpirationTime = metav1.Time{Time: now.Add(scale.trigger.Duration.Duration)}
+					}
+
 					reservations = append(reservations, r)
 				}
 			}

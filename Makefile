@@ -5,7 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.301.1
+RUNNER_VERSION ?= 2.302.1
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -73,7 +73,7 @@ GO_TEST_ARGS ?= -short
 
 # Run tests
 test: generate fmt vet manifests shellcheck
-	go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
+	go test $(GO_TEST_ARGS) `go list ./... | grep -v ./test_e2e_arc` -coverprofile cover.out
 	go test -fuzz=Fuzz -fuzztime=10s -run=Fuzz* ./controllers/actions.summerwind.net
 
 test-with-deps: kube-apiserver etcd kubectl
@@ -113,66 +113,71 @@ manifests-gen-crds: controller-gen yq
 	for YAMLFILE in config/crd/bases/actions*.yaml; do \
 		$(YQ) '.spec.preserveUnknownFields = false' --inplace "$$YAMLFILE" ; \
 	done
+	make manifests-gen-crds-fix DELETE_KEY=x-kubernetes-list-type
+	make manifests-gen-crds-fix DELETE_KEY=x-kubernetes-list-map-keys
+
+manifests-gen-crds-fix: DELETE_KEY ?=
+manifests-gen-crds-fix:
 	#runners
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.sidecarContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.dockerdContainerResources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.sidecarContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.dockerdContainerResources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runners.yaml
 	#runnerreplicasets
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.sidecarContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.dockerdContainerResources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.sidecarContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.dockerdContainerResources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerreplicasets.yaml
 	#runnerdeployments
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.sidecarContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.dockerdContainerResources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.sidecarContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.dockerdContainerResources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnerdeployments.yaml
 	#runnersets
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.volumeClaimTemplates.items.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.volumeClaimTemplates.items.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.workVolumeClaimTemplate.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.summerwind.dev_runnersets.yaml
 	#autoscalingrunnersets
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_autoscalingrunnersets.yaml
 	#ehemeralrunnersets
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.template.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.ephemeralRunnerSpec.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunnersets.yaml
 	# ephemeralrunners
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.containers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.initContainers.items.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
-	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.x-kubernetes-list-type)' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.ephemeralContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.containers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.initContainers.items.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
+	$(YQ) 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.spec.properties.volumes.items.properties.ephemeral.properties.volumeClaimTemplate.properties.spec.properties.resources.properties.claims.$(DELETE_KEY))' --inplace config/crd/bases/actions.github.com_ephemeralrunners.yaml
 
 chart-crds:
 	cp config/crd/bases/*.yaml charts/actions-runner-controller/crds/
-	cp config/crd/bases/actions.github.com_autoscalingrunnersets.yaml charts/actions-runner-controller-2/crds/
-	cp config/crd/bases/actions.github.com_autoscalinglisteners.yaml charts/actions-runner-controller-2/crds/
-	cp config/crd/bases/actions.github.com_ephemeralrunnersets.yaml charts/actions-runner-controller-2/crds/
-	cp config/crd/bases/actions.github.com_ephemeralrunners.yaml charts/actions-runner-controller-2/crds/
+	cp config/crd/bases/actions.github.com_autoscalingrunnersets.yaml charts/gha-runner-scale-set-controller/crds/
+	cp config/crd/bases/actions.github.com_autoscalinglisteners.yaml charts/gha-runner-scale-set-controller/crds/
+	cp config/crd/bases/actions.github.com_ephemeralrunnersets.yaml charts/gha-runner-scale-set-controller/crds/
+	cp config/crd/bases/actions.github.com_ephemeralrunners.yaml charts/gha-runner-scale-set-controller/crds/
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalingrunnersets.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalinglisteners.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunnersets.yaml
