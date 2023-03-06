@@ -104,7 +104,9 @@ func TestProxySettings(t *testing.T) {
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wentThroughProxy = true
 		}))
-		defer proxy.Close()
+		t.Cleanup(func() {
+			proxy.Close()
+		})
 
 		prevProxy := os.Getenv("http_proxy")
 		os.Setenv("http_proxy", proxy.URL)
@@ -134,7 +136,9 @@ func TestProxySettings(t *testing.T) {
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wentThroughProxy = true
 		}))
-		defer proxy.Close()
+		t.Cleanup(func() {
+			proxy.Close()
+		})
 
 		prevProxy := os.Getenv("https_proxy")
 		os.Setenv("https_proxy", proxy.URL)
@@ -165,6 +169,9 @@ func TestProxySettings(t *testing.T) {
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wentThroughProxy = true
 		}))
+		t.Cleanup(func() {
+			proxy.Close()
+		})
 
 		prevProxy := os.Getenv("http_proxy")
 		os.Setenv("http_proxy", proxy.URL)
