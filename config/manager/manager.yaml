@@ -50,10 +50,8 @@ spec:
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           value: /etc/actions-runner-controller/github_app_private_key
-        - name: CONTROLLER_MANAGER_POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+        - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
+          value: CONTROLLER_MANAGER_CONTAINER_IMAGE
         - name: CONTROLLER_MANAGER_POD_NAMESPACE
           valueFrom:
             fieldRef:

@@ -94,7 +94,7 @@ run: generate fmt vet manifests
 
 run-scaleset: generate fmt vet
 	CONTROLLER_MANAGER_POD_NAMESPACE=default \
-	SCALE_SET_LISTENER_IMAGE="${DOCKER_IMAGE_NAME}:${VERSION}" \
+	CONTROLLER_MANAGER_CONTAINER_IMAGE="${DOCKER_IMAGE_NAME}:${VERSION}" \
 	go run ./main.go --auto-scaling-runner-set-only
 
 # Install CRDs into a cluster
@@ -108,7 +108,7 @@ uninstall: manifests
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
 	cd config/manager && kustomize edit set image controller=${DOCKER_IMAGE_NAME}:${VERSION}
-	kustomize build config/default | kubectl apply -f -
+	kustomize build config/default | kubectl apply --server-side -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: manifests-gen-crds chart-crds

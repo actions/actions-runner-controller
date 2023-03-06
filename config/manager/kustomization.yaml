@@ -6,3 +6,6 @@ images:
 - name: controller
   newName: summerwind/actions-runner-controller
   newTag: dev
+
+replacements:
+- path: env-replacement.yaml

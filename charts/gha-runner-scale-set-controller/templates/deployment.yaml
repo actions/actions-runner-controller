@@ -54,10 +54,8 @@ spec:
         command:
         - "/manager"
         env:
-        - name: CONTROLLER_MANAGER_POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+        - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
+          value: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         - name: CONTROLLER_MANAGER_POD_NAMESPACE
           valueFrom:
             fieldRef:

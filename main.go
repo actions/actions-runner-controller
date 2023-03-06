@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -33,9 +32,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -320,49 +317,14 @@ func main() {
 		}
 	}
 
-	// We use this environment avariable to turn on the ScaleSet related controllers.
-	// Otherwise ARC's legacy chart is unable to deploy a working ARC controller-manager pod,
-	// due to that the chart does not contain new actions.* CRDs while ARC requires those CRDs.
-	//
-	// We might have used a more explicitly named environment variable for this,
-	// e.g. "CONTROLLER_MANAGER_ENABLE_SCALE_SET" to explicitly enable the new controllers,
-	// or "CONTROLLER_MANAGER_DISABLE_SCALE_SET" to explicitly disable the new controllers.
-	// However, doing so would affect either private ARC testers or current ARC users
-	// who run ARC without those variabls.
-	mgrPodName := os.Getenv("CONTROLLER_MANAGER_POD_NAME")
-	mgrPodNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
-
-	listenerImage := os.Getenv("SCALE_SET_LISTENER_IMAGE") // default
-
-	if mgrPodName != "" {
-		mgrPodNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
-		var mgrPod corev1.Pod
-		err = mgr.GetAPIReader().Get(context.Background(), types.NamespacedName{Namespace: mgrPodNamespace, Name: mgrPodName}, &mgrPod)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("unable to obtain manager pod: %s (%s)", mgrPodName, mgrPodNamespace))
-			os.Exit(1)
-		}
-
-		var mgrContainer *corev1.Container
-		for _, container := range mgrPod.Spec.Containers {
-			if container.Name == "manager" {
-				mgrContainer = &container
-				break
-			}
-		}
-
-		if mgrContainer != nil {
-			log.Info("Detected manager container", "image", mgrContainer.Image)
-			listenerImage = mgrContainer.Image
-		} else {
-			log.Error(err, "unable to obtain manager container image")
-			os.Exit(1)
-		}
-		// +kubebuilder:scaffold:builder
-	}
-
-	if listenerImage == "" {
+	managerImage := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE")
+	if managerImage == "" {
 		log.Error(err, "unable to obtain listener image")
+		os.Exit(1)
+	}
+	managerNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
+	if managerNamespace == "" {
+		log.Error(err, "unable to obtain manager pod namespace")
 		os.Exit(1)
 	}
 
@@ -375,8 +337,8 @@ func main() {
 		Client:                             mgr.GetClient(),
 		Log:                                log.WithName("AutoscalingRunnerSet"),
 		Scheme:                             mgr.GetScheme(),
-		ControllerNamespace:                mgrPodNamespace,
-		DefaultRunnerScaleSetListenerImage: listenerImage,
+		ControllerNamespace:                managerNamespace,
+		DefaultRunnerScaleSetListenerImage: managerImage,
 		ActionsClient:                      actionsMultiClient,
 		DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 	}).SetupWithManager(mgr); err != nil {
