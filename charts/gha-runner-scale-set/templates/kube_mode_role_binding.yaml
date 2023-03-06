@@ -1,0 +1,15 @@
+{{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "gha-runner-scale-set.kubeModeServiceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

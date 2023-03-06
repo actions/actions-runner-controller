@@ -1,6 +1,14 @@
 name: Validate Helm Chart
 
 on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'charts/**'
+      - '.github/workflows/validate-chart.yaml'
+      - '!charts/actions-runner-controller/docs/**'
+      - '!**.md'
   push:
     paths:
       - 'charts/**'
@@ -26,7 +34,8 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v3.4
+        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
         with:
           version: ${{ env.HELM_VERSION }}
 
