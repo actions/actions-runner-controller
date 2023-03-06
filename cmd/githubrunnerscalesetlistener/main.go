@@ -87,7 +87,9 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		}
 	}
 
-	actionsServiceClient, err := newActionsClientFromConfig(rc, creds,
+	actionsServiceClient, err := newActionsClientFromConfig(
+	        rc,
+	        creds,
 		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
 		actions.WithLogger(logger),
 	)
