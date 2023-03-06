@@ -19,6 +19,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -28,6 +30,7 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
+	"golang.org/x/net/http/httpproxy"
 )
 
 type RunnerScaleSetListenerConfig struct {
@@ -84,8 +87,8 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		}
 	}
 
-	actionsServiceClient, err := actions.NewClient(
-		rc.ConfigureUrl,
+	actionsServiceClient, err := newActionsClientFromConfig(
+		rc,
 		creds,
 		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
 		actions.WithLogger(logger),
@@ -154,4 +157,13 @@ func validateConfig(config *RunnerScaleSetListenerConfig) error {
 	}
 
 	return nil
+}
+
+func newActionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
+	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
+	options = append(options, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
+		return proxyFunc(req.URL)
+	}))
+
+	return actions.NewClient(config.ConfigureUrl, creds, options...)
 }
