@@ -608,30 +608,6 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	log.Info("Creating new pod for ephemeral runner")
 	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
-	if runner.Spec.GitHubServerTLS != nil {
-		// create volume for GitHub server TLS certificate
-		volume, err := runner.Spec.GitHubServerTLS.ToVolume()
-		if err != nil {
-			log.Error(err, "Failed to create volume for GitHub server TLS certificate")
-			return ctrl.Result{}, err
-		}
-		newPod.Spec.Volumes = append(newPod.Spec.Volumes, *volume)
-
-		// mount the volume to the runner container
-		mount, err := runner.Spec.GitHubServerTLS.ToVolumeMount()
-		if err != nil {
-			log.Error(err, "Failed to create volume mount for GitHub server TLS certificate")
-			return ctrl.Result{}, err
-		}
-		newPod.Spec.Containers[0].VolumeMounts = append(newPod.Spec.Containers[0].VolumeMounts, *mount)
-
-		// set the node environment variable for the runner container
-		newPod.Spec.Containers[0].Env = append(newPod.Spec.Containers[0].Env, corev1.EnvVar{
-			Name:  "NODE_EXTRA_CA_CERTS",
-			Value: mount.MountPath,
-		})
-	}
-
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
 		return ctrl.Result{}, err

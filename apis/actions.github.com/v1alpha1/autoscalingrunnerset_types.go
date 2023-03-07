@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 
 	"github.com/actions/actions-runner-controller/hash"
@@ -114,57 +113,6 @@ func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]
 	}
 
 	return pool, nil
-}
-
-func (c *GitHubServerTLSConfig) ToVolume() (*corev1.Volume, error) {
-	if c == nil {
-		return nil, nil
-	}
-
-	if c.CertificateFrom == nil {
-		return nil, fmt.Errorf("certificateFrom not specified")
-	}
-
-	if c.CertificateFrom.ConfigMapKeyRef == nil {
-		return nil, fmt.Errorf("configMapKeyRef not specified")
-	}
-
-	return &corev1.Volume{
-		Name: "github-server-tls-cert",
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: c.CertificateFrom.ConfigMapKeyRef.Name,
-				},
-				Items: []corev1.KeyToPath{
-					{
-						Key:  c.CertificateFrom.ConfigMapKeyRef.Key,
-						Path: c.CertificateFrom.ConfigMapKeyRef.Key,
-					},
-				},
-			},
-		},
-	}, nil
-}
-
-func (c *GitHubServerTLSConfig) ToVolumeMount() (*corev1.VolumeMount, error) {
-	if c == nil {
-		return nil, nil
-	}
-
-	if c.CertificateFrom == nil {
-		return nil, fmt.Errorf("certificateFrom not specified")
-	}
-
-	if c.CertificateFrom.ConfigMapKeyRef == nil {
-		return nil, fmt.Errorf("configMapKeyRef not specified")
-	}
-
-	return &corev1.VolumeMount{
-		Name:      "github-server-tls-cert",
-		MountPath: filepath.Join(c.RunnerMountPath, c.CertificateFrom.ConfigMapKeyRef.Key),
-		SubPath:   c.CertificateFrom.ConfigMapKeyRef.Key,
-	}, nil
 }
 
 type TLSCertificateSource struct {
