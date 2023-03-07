@@ -70,9 +70,6 @@ spec:
                             - key
                           type: object
                       type: object
-                    runnerMountPath:
-                      default: /usr/local/share/ca-certificates/
-                      type: string
                   type: object
                 maxRunners:
                   minimum: 0

@@ -65,9 +65,6 @@ spec:
                                 - key
                               type: object
                           type: object
-                        runnerMountPath:
-                          default: /usr/local/share/ca-certificates/
-                          type: string
                       type: object
                     metadata:
                       description: 'Standard object''s metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata'
