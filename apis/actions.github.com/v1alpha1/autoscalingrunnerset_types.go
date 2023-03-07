@@ -83,10 +83,6 @@ type AutoscalingRunnerSetSpec struct {
 type GitHubServerTLSConfig struct {
 	// Required
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
-
-	// +optional
-	// +kubebuilder:default:=/usr/local/share/ca-certificates/
-	RunnerMountPath string `json:"runnerMountPath,omitempty"`
 }
 
 func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {

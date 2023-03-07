@@ -840,9 +840,8 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 	options := &helm.Options{
 		SetValues: map[string]string{
-			"githubConfigUrl":                                      "https://github.com/actions",
-			"githubConfigSecret":                                   "pre-defined-secrets",
-			"githubServerTLS.runnerMountPath":                      "/runner/certs",
+			"githubConfigUrl":    "https://github.com/actions",
+			"githubConfigSecret": "pre-defined-secrets",
 			"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
 			"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
 		},
@@ -862,7 +861,6 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 	require.NotNil(t, ars.Spec.GitHubServerTLS)
 	expected := &v1alpha1.GitHubServerTLSConfig{
-		RunnerMountPath: "/runner/certs",
 		CertificateFrom: &v1alpha1.TLSCertificateSource{
 			ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
@@ -873,6 +871,17 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 		},
 	}
 	assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+	t.Run("providing githubServerTLS.runnerMountPath", func(t *testing.T) {
+		// TODO: creates a volume containing the certificate
+		// TODO: creates a volume mount on runnerMountPath
+		// TODO: sets NODE_EXTRA_CA_CERTS to runnerMountPath/{cert name}
+		// TODO: sets RUNNER_UPDATE_CA_CERTS to "1"
+	})
+
+	t.Run("without providing githubServerTLS.runnerMountPath", func(t *testing.T) {
+		// TODO: does nothing of the above
+	})
 }
 
 func TestTemplateNamingConstraints(t *testing.T) {
