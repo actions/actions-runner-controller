@@ -96,7 +96,7 @@ func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]
 	cert, err := keyFetcher(c.CertificateFrom.ConfigMapKeyRef.Name, c.CertificateFrom.ConfigMapKeyRef.Key)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"failed to fetch key %s in %s: %w",
+			"failed to fetch key %q in configmap %q: %w",
 			c.CertificateFrom.ConfigMapKeyRef.Key,
 			c.CertificateFrom.ConfigMapKeyRef.Name,
 			err,
