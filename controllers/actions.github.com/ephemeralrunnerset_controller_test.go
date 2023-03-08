@@ -924,7 +924,6 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 								Key: "rootCA.crt",
 							},
 						},
-						RunnerMountPath: "/runner/certs",
 					},
 					RunnerScaleSetId: 100,
 					PodTemplateSpec: corev1.PodTemplateSpec{

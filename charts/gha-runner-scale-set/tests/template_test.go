@@ -831,56 +831,359 @@ func TestTemplateRenderedWithProxy(t *testing.T) {
 func TestTemplateRenderedWithTLS(t *testing.T) {
 	t.Parallel()
 
-	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
-	require.NoError(t, err)
-
-	releaseName := "test-runners"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
-	options := &helm.Options{
-		SetValues: map[string]string{
-			"githubConfigUrl":    "https://github.com/actions",
-			"githubConfigSecret": "pre-defined-secrets",
-			"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
-			"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
-		},
-		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	render := func(t *testing.T, options *helm.Options) v1alpha1.AutoscalingRunnerSet {
+		// Path to the helm chart we will test
+		helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+		require.NoError(t, err)
+
+		releaseName := "test-runners"
+
+		output := helm.RenderTemplate(
+			t,
+			options,
+			helmChartPath,
+			releaseName,
+			[]string{"templates/autoscalingrunnerset.yaml"},
+		)
+
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+
+		return ars
 	}
-
-	output := helm.RenderTemplate(
-		t,
-		options,
-		helmChartPath,
-		releaseName,
-		[]string{"templates/autoscalingrunnerset.yaml"},
-	)
-
-	var ars v1alpha1.AutoscalingRunnerSet
-	helm.UnmarshalK8SYaml(t, output, &ars)
-
-	require.NotNil(t, ars.Spec.GitHubServerTLS)
-	expected := &v1alpha1.GitHubServerTLSConfig{
-		CertificateFrom: &v1alpha1.TLSCertificateSource{
-			ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "certs-configmap",
-				},
-				Key: "cert.pem",
-			},
-		},
-	}
-	assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
 
 	t.Run("providing githubServerTLS.runnerMountPath", func(t *testing.T) {
-		// TODO: creates a volume containing the certificate
-		// TODO: creates a volume mount on runnerMountPath
-		// TODO: sets NODE_EXTRA_CA_CERTS to runnerMountPath/{cert name}
-		// TODO: sets RUNNER_UPDATE_CA_CERTS to "1"
+		t.Run("mode: default", func(t *testing.T) {
+			options := &helm.Options{
+				SetValues: map[string]string{
+					"githubConfigUrl":    "https://github.com/actions",
+					"githubConfigSecret": "pre-defined-secrets",
+					"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+					"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
+					"githubServerTLS.runnerMountPath":                      "/runner/mount/path",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			ars := render(t, options)
+
+			require.NotNil(t, ars.Spec.GitHubServerTLS)
+			expected := &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "certs-configmap",
+						},
+						Key: "cert.pem",
+					},
+				},
+			}
+			assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+			var volume *corev1.Volume
+			for _, v := range ars.Spec.Template.Spec.Volumes {
+				if v.Name == "github-server-tls-cert" {
+					volume = &v
+					break
+				}
+			}
+			require.NotNil(t, volume)
+			assert.Equal(t, "certs-configmap", volume.ConfigMap.LocalObjectReference.Name)
+			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Key)
+			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Path)
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "github-server-tls-cert",
+				MountPath: "/runner/mount/path/cert.pem",
+				SubPath:   "cert.pem",
+			})
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "NODE_EXTRA_CA_CERTS",
+				Value: "/runner/mount/path/cert.pem",
+			})
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "RUNNER_UPDATE_CA_CERTS",
+				Value: "1",
+			})
+		})
+
+		t.Run("mode: dind", func(t *testing.T) {
+			options := &helm.Options{
+				SetValues: map[string]string{
+					"githubConfigUrl":    "https://github.com/actions",
+					"githubConfigSecret": "pre-defined-secrets",
+					"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+					"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
+					"githubServerTLS.runnerMountPath":                      "/runner/mount/path/",
+					"containerMode.type":                                   "dind",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			ars := render(t, options)
+
+			require.NotNil(t, ars.Spec.GitHubServerTLS)
+			expected := &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "certs-configmap",
+						},
+						Key: "cert.pem",
+					},
+				},
+			}
+			assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+			var volume *corev1.Volume
+			for _, v := range ars.Spec.Template.Spec.Volumes {
+				if v.Name == "github-server-tls-cert" {
+					volume = &v
+					break
+				}
+			}
+			require.NotNil(t, volume)
+			assert.Equal(t, "certs-configmap", volume.ConfigMap.LocalObjectReference.Name)
+			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Key)
+			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Path)
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "github-server-tls-cert",
+				MountPath: "/runner/mount/path/cert.pem",
+				SubPath:   "cert.pem",
+			})
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "NODE_EXTRA_CA_CERTS",
+				Value: "/runner/mount/path/cert.pem",
+			})
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "RUNNER_UPDATE_CA_CERTS",
+				Value: "1",
+			})
+		})
+
+		t.Run("mode: kubernetes", func(t *testing.T) {
+			options := &helm.Options{
+				SetValues: map[string]string{
+					"githubConfigUrl":    "https://github.com/actions",
+					"githubConfigSecret": "pre-defined-secrets",
+					"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+					"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
+					"githubServerTLS.runnerMountPath":                      "/runner/mount/path",
+					"containerMode.type":                                   "kubernetes",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			ars := render(t, options)
+
+			require.NotNil(t, ars.Spec.GitHubServerTLS)
+			expected := &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "certs-configmap",
+						},
+						Key: "cert.pem",
+					},
+				},
+			}
+			assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+			var volume *corev1.Volume
+			for _, v := range ars.Spec.Template.Spec.Volumes {
+				if v.Name == "github-server-tls-cert" {
+					volume = &v
+					break
+				}
+			}
+			require.NotNil(t, volume)
+			assert.Equal(t, "certs-configmap", volume.ConfigMap.LocalObjectReference.Name)
+			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Key)
+			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Path)
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "github-server-tls-cert",
+				MountPath: "/runner/mount/path/cert.pem",
+				SubPath:   "cert.pem",
+			})
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "NODE_EXTRA_CA_CERTS",
+				Value: "/runner/mount/path/cert.pem",
+			})
+
+			assert.Contains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "RUNNER_UPDATE_CA_CERTS",
+				Value: "1",
+			})
+		})
 	})
 
 	t.Run("without providing githubServerTLS.runnerMountPath", func(t *testing.T) {
-		// TODO: does nothing of the above
+		t.Run("mode: default", func(t *testing.T) {
+			options := &helm.Options{
+				SetValues: map[string]string{
+					"githubConfigUrl":    "https://github.com/actions",
+					"githubConfigSecret": "pre-defined-secrets",
+					"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+					"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			ars := render(t, options)
+
+			require.NotNil(t, ars.Spec.GitHubServerTLS)
+			expected := &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "certs-configmap",
+						},
+						Key: "cert.pem",
+					},
+				},
+			}
+			assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+			var volume *corev1.Volume
+			for _, v := range ars.Spec.Template.Spec.Volumes {
+				if v.Name == "github-server-tls-cert" {
+					volume = &v
+					break
+				}
+			}
+			assert.Nil(t, volume)
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "github-server-tls-cert",
+				MountPath: "/runner/mount/path/cert.pem",
+				SubPath:   "cert.pem",
+			})
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "NODE_EXTRA_CA_CERTS",
+				Value: "/runner/mount/path/cert.pem",
+			})
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "RUNNER_UPDATE_CA_CERTS",
+				Value: "1",
+			})
+		})
+
+		t.Run("mode: dind", func(t *testing.T) {
+			options := &helm.Options{
+				SetValues: map[string]string{
+					"githubConfigUrl":    "https://github.com/actions",
+					"githubConfigSecret": "pre-defined-secrets",
+					"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+					"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
+					"containerMode.type": "dind",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			ars := render(t, options)
+
+			require.NotNil(t, ars.Spec.GitHubServerTLS)
+			expected := &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "certs-configmap",
+						},
+						Key: "cert.pem",
+					},
+				},
+			}
+			assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+			var volume *corev1.Volume
+			for _, v := range ars.Spec.Template.Spec.Volumes {
+				if v.Name == "github-server-tls-cert" {
+					volume = &v
+					break
+				}
+			}
+			assert.Nil(t, volume)
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "github-server-tls-cert",
+				MountPath: "/runner/mount/path/cert.pem",
+				SubPath:   "cert.pem",
+			})
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "NODE_EXTRA_CA_CERTS",
+				Value: "/runner/mount/path/cert.pem",
+			})
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "RUNNER_UPDATE_CA_CERTS",
+				Value: "1",
+			})
+		})
+
+		t.Run("mode: kubernetes", func(t *testing.T) {
+			options := &helm.Options{
+				SetValues: map[string]string{
+					"githubConfigUrl":    "https://github.com/actions",
+					"githubConfigSecret": "pre-defined-secrets",
+					"githubServerTLS.certificateFrom.configMapKeyRef.name": "certs-configmap",
+					"githubServerTLS.certificateFrom.configMapKeyRef.key":  "cert.pem",
+					"containerMode.type": "kubernetes",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			ars := render(t, options)
+
+			require.NotNil(t, ars.Spec.GitHubServerTLS)
+			expected := &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "certs-configmap",
+						},
+						Key: "cert.pem",
+					},
+				},
+			}
+			assert.Equal(t, expected, ars.Spec.GitHubServerTLS)
+
+			var volume *corev1.Volume
+			for _, v := range ars.Spec.Template.Spec.Volumes {
+				if v.Name == "github-server-tls-cert" {
+					volume = &v
+					break
+				}
+			}
+			assert.Nil(t, volume)
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "github-server-tls-cert",
+				MountPath: "/runner/mount/path/cert.pem",
+				SubPath:   "cert.pem",
+			})
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "NODE_EXTRA_CA_CERTS",
+				Value: "/runner/mount/path/cert.pem",
+			})
+
+			assert.NotContains(t, ars.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "RUNNER_UPDATE_CA_CERTS",
+				Value: "1",
+			})
+		})
 	})
 }
 
