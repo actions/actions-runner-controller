@@ -9,16 +9,34 @@ on:
 
 env:
   TARGET_ORG: actions-runner-controller
+  CLUSTER_NAME: e2e-test
+  RUNNER_VERSION: 2.302.1
   
 jobs:
   setup-steps:
     runs-on: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v3
+      - name: Add env variables
+        run: |
+            VERSION=$(echo "0.0.$GITHUB_SHA")
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            echo "IMAGE_TAG=$(echo "test-image:"$VERSION)" >> $GITHUB_ENV
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: latest
+      - name: Docker Build Test Image
+        run: |
+            docker buildx build --build-arg RUNNER_VERSION=$RUNNER_VERSION --build-arg VERSION=$VERSION -t $IMAGE_TAG . --load
+            docker images
       - name: Create Kind cluster
         run: |
           PATH=$(go env GOPATH)/bin:$PATH
-          kind create cluster --name e2e-test
+          kind create cluster --name $CLUSTER_NAME
+          docker images
+      - name: Load Image to Kind Cluster
+        run: kind load docker-image $IMAGE_TAG --name $CLUSTER_NAME
       - name: Get Token
         id: get_workflow_token
         uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
@@ -30,3 +48,4 @@ jobs:
         with:
           github-token: ${{ steps.get_workflow_token.outputs.token }}
           config-url: "https://github.com/actions-runner-controller/arc_e2e_test_dummy"
+          docker-image-tag: $IMAGE_TAG
