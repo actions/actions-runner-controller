@@ -151,9 +151,15 @@ func main() {
 
 	ctrl.SetLogger(log)
 
+	mgrPodNamespace := ""
+	mgrPodName := ""
+
 	if autoScalingRunnerSetOnly {
 		// We don't support metrics for AutoRunnerScaleSet for now
 		metricsAddr = "0"
+
+		mgrPodName = os.Getenv("CONTROLLER_MANAGER_POD_NAME")
+		mgrPodNamespace = os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -317,18 +323,7 @@ func main() {
 		}
 	}
 
-	// We use this environment avariable to turn on the ScaleSet related controllers.
-	// Otherwise ARC's legacy chart is unable to deploy a working ARC controller-manager pod,
-	// due to that the chart does not contain new actions.* CRDs while ARC requires those CRDs.
-	//
-	// We might have used a more explicitly named environment variable for this,
-	// e.g. "CONTROLLER_MANAGER_ENABLE_SCALE_SET" to explicitly enable the new controllers,
-	// or "CONTROLLER_MANAGER_DISABLE_SCALE_SET" to explicitly disable the new controllers.
-	// However, doing so would affect either private ARC testers or current ARC users
-	// who run ARC without those variabls.
-	mgrPodName := os.Getenv("CONTROLLER_MANAGER_POD_NAME")
-	if mgrPodName != "" {
-		mgrPodNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
+	if autoScalingRunnerSetOnly {
 		var mgrPod corev1.Pod
 		err = mgr.GetAPIReader().Get(context.Background(), types.NamespacedName{Namespace: mgrPodNamespace, Name: mgrPodName}, &mgrPod)
 		if err != nil {
