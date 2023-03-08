@@ -29,12 +29,10 @@ jobs:
       - name: Docker Build Test Image
         run: |
             docker buildx build --build-arg RUNNER_VERSION=$RUNNER_VERSION --build-arg VERSION=$VERSION -t $IMAGE_TAG . --load
-            docker images
       - name: Create Kind cluster
         run: |
           PATH=$(go env GOPATH)/bin:$PATH
           kind create cluster --name $CLUSTER_NAME
-          docker images
       - name: Load Image to Kind Cluster
         run: kind load docker-image $IMAGE_TAG --name $CLUSTER_NAME
       - name: Get Token
