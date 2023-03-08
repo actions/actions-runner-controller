@@ -48,11 +48,11 @@ githubConfigSecret:
 # runnerScaleSetName: ""
 
 ## A self-signed CA certificate for communication with the GitHub server can be
-## provided using a config map key selector. # If provided, the certificate will
-## also be mounted on runner pods under the # path specified with
-## `runnerMountPath` (defaults to # /usr/local/share/ca-certificates/ if left
-## blank) and NODE_EXTRA_CA_CERTS # environment variable will be set to the path
-## to that certificate to help with # NodeJS-based actions. Example configuration:
+## provided using a config map key selector. If provided, the certificate will
+## also be mounted on runner pods under the path specified with
+## `runnerMountPath` (defaults to /usr/local/share/ca-certificates/ if left
+## blank) and NODE_EXTRA_CA_CERTS environment variable will be set to the path
+## to that certificate to help with NodeJS-based actions. Example configuration:
 #
 # githubServerTLS:
 #   certificateFrom:
