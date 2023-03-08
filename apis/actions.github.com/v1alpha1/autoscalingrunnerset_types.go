@@ -85,10 +85,6 @@ type GitHubServerTLSConfig struct {
 }
 
 func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
-	if c == nil {
-		return nil, nil
-	}
-
 	if c.CertificateFrom == nil {
 		return nil, fmt.Errorf("certificateFrom not specified")
 	}
