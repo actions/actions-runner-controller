@@ -49,8 +49,8 @@ authSecret:
 
 dockerRegistryMirror: ""
 image:
-  repository: "summerwind/actions-runner-controller"
-  actionsRunnerRepositoryAndTag: "summerwind/actions-runner:latest"
+  repository: "ghcr.io/actions/actions-runner-controller/actions-runner-controller"
+  actionsRunnerRepositoryAndTag: "ghcr.io/actions/actions-runner-controller/actions-runner:ubuntu-22.04"
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
   # The default image-pull secrets name for self-hosted runner container.
