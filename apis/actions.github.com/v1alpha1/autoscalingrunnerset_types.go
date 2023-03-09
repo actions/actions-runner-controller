@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -80,7 +81,44 @@ type AutoscalingRunnerSetSpec struct {
 
 type GitHubServerTLSConfig struct {
 	// Required
-	RootCAsConfigMapRef string `json:"certConfigMapRef,omitempty"`
+	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
+}
+
+func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
+	if c.CertificateFrom == nil {
+		return nil, fmt.Errorf("certificateFrom not specified")
+	}
+
+	if c.CertificateFrom.ConfigMapKeyRef == nil {
+		return nil, fmt.Errorf("configMapKeyRef not specified")
+	}
+
+	cert, err := keyFetcher(c.CertificateFrom.ConfigMapKeyRef.Name, c.CertificateFrom.ConfigMapKeyRef.Key)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to fetch key %q in configmap %q: %w",
+			c.CertificateFrom.ConfigMapKeyRef.Key,
+			c.CertificateFrom.ConfigMapKeyRef.Name,
+			err,
+		)
+	}
+
+	systemPool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system cert pool: %w", err)
+	}
+
+	pool := systemPool.Clone()
+	if !pool.AppendCertsFromPEM(cert) {
+		return nil, fmt.Errorf("failed to parse certificate")
+	}
+
+	return pool, nil
+}
+
+type TLSCertificateSource struct {
+	// Required
+	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
 type ProxyConfig struct {

@@ -307,6 +307,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			Image:                         image,
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
+			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
 		},
 	}
 

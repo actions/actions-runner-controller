@@ -21,6 +21,16 @@ spec:
   runnerScaleSetName: {{ . }}
   {{- end }}
 
+  {{- if .Values.githubServerTLS }}
+  githubServerTLS:
+    {{- with .Values.githubServerTLS.certificateFrom }}
+    certificateFrom:
+      configMapKeyRef:
+        name: {{ .configMapKeyRef.name }}
+        key: {{ .configMapKeyRef.key }}
+    {{- end }}
+  {{- end }}
+
   {{- if .Values.proxy }}
   proxy:
     {{- if .Values.proxy.http }}
@@ -103,10 +113,14 @@ spec:
         {{- include "gha-runner-scale-set.kubernetes-mode-runner-container" . | nindent 8 }}
       {{- include "gha-runner-scale-set.non-runner-containers" . | nindent 6 }}
       {{- else }}
-      {{ .Values.template.spec.containers | toYaml | nindent 6 }}
+      {{- include "gha-runner-scale-set.default-mode-runner-containers" . | nindent 6 }}
       {{- end }}
-      {{- if or .Values.template.spec.volumes (eq .Values.containerMode.type "dind") (eq .Values.containerMode.type "kubernetes") }}
+      {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
+      {{- if or .Values.template.spec.volumes (eq .Values.containerMode.type "dind") (eq .Values.containerMode.type "kubernetes") $tlsConfig.runnerMountPath }}
       volumes:
+        {{- if $tlsConfig.runnerMountPath }}
+          {{- include "gha-runner-scale-set.tls-volume" $tlsConfig | nindent 6 }}
+        {{- end }}
         {{- if eq .Values.containerMode.type "dind" }}
           {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
           {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}

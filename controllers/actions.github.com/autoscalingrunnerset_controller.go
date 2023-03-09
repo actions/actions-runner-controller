@@ -541,7 +541,23 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		return nil, fmt.Errorf("failed to find GitHub config secret: %w", err)
 	}
 
-	var opts []actions.ClientOption
+	opts, err := r.actionsClientOptionsFor(ctx, autoscalingRunnerSet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get actions client options: %w", err)
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		autoscalingRunnerSet.Spec.GitHubConfigUrl,
+		autoscalingRunnerSet.Namespace,
+		configSecret.Data,
+		opts...,
+	)
+}
+
+func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
+	var options []actions.ClientOption
+
 	if autoscalingRunnerSet.Spec.Proxy != nil {
 		proxyFunc, err := autoscalingRunnerSet.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
 			var secret corev1.Secret
@@ -556,16 +572,35 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 			return nil, fmt.Errorf("failed to get proxy func: %w", err)
 		}
 
-		opts = append(opts, actions.WithProxy(proxyFunc))
+		options = append(options, actions.WithProxy(proxyFunc))
 	}
 
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		autoscalingRunnerSet.Spec.GitHubConfigUrl,
-		autoscalingRunnerSet.Namespace,
-		configSecret.Data,
-		opts...,
-	)
+	tlsConfig := autoscalingRunnerSet.Spec.GitHubServerTLS
+	if tlsConfig != nil {
+		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
+			var configmap corev1.ConfigMap
+			err := r.Get(
+				ctx,
+				types.NamespacedName{
+					Namespace: autoscalingRunnerSet.Namespace,
+					Name:      name,
+				},
+				&configmap,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
+			}
+
+			return []byte(configmap.Data[key]), nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tls config: %w", err)
+		}
+
+		options = append(options, actions.WithRootCAs(pool))
+	}
+
+	return options, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -44,6 +45,7 @@ type RunnerScaleSetListenerConfig struct {
 	MaxRunners                  int    `split_words:"true"`
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
+	ServerRootCA                string `split_words:"true"`
 }
 
 func main() {
@@ -90,8 +92,8 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 	actionsServiceClient, err := newActionsClientFromConfig(
 		rc,
 		creds,
-		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
 		actions.WithLogger(logger),
+		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create an Actions Service client: %w", err)
@@ -160,6 +162,20 @@ func validateConfig(config *RunnerScaleSetListenerConfig) error {
 }
 
 func newActionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
+	if config.ServerRootCA != "" {
+		systemPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load system cert pool: %w", err)
+		}
+		pool := systemPool.Clone()
+		ok := pool.AppendCertsFromPEM([]byte(config.ServerRootCA))
+		if !ok {
+			return nil, fmt.Errorf("failed to parse root certificate")
+		}
+
+		options = append(options, actions.WithRootCAs(pool))
+	}
+
 	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
 	options = append(options, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
 		return proxyFunc(req.URL)

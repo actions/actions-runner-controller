@@ -2,10 +2,13 @@ package actionsgithubcom
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/actions/actions-runner-controller/github/actions/fake"
+	"github.com/actions/actions-runner-controller/github/actions/testserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -839,6 +843,102 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			}))
+		})
+	})
+
+	Describe("TLS config", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoScalingNS *corev1.Namespace
+		var configSecret *corev1.Secret
+		var controller *EphemeralRunnerReconciler
+		var rootCAConfigMap *corev1.ConfigMap
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoScalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoScalingNS.Name)
+
+			cert, err := os.ReadFile(filepath.Join(
+				"../../",
+				"github",
+				"actions",
+				"testdata",
+				"rootCA.crt",
+			))
+			Expect(err).NotTo(HaveOccurred(), "failed to read root CA cert")
+			rootCAConfigMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "root-ca-configmap",
+					Namespace: autoScalingNS.Name,
+				},
+				Data: map[string]string{
+					"rootCA.crt": string(cert),
+				},
+			}
+			err = k8sClient.Create(ctx, rootCAConfigMap)
+			Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
+
+			controller = &EphemeralRunnerReconciler{
+				Client:        mgr.GetClient(),
+				Scheme:        mgr.GetScheme(),
+				Log:           logf.Log,
+				ActionsClient: fake.NewMultiClient(),
+			}
+
+			err = controller.SetupWithManager(mgr)
+			Expect(err).To(BeNil(), "failed to setup controller")
+
+			startManagers(GinkgoT(), mgr)
+		})
+
+		It("should be able to make requests to a server using root CAs", func() {
+			certsFolder := filepath.Join(
+				"../../",
+				"github",
+				"actions",
+				"testdata",
+			)
+			certPath := filepath.Join(certsFolder, "server.crt")
+			keyPath := filepath.Join(certsFolder, "server.key")
+
+			serverSuccessfullyCalled := false
+			server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				serverSuccessfullyCalled = true
+				w.WriteHeader(http.StatusOK)
+			}))
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			Expect(err).NotTo(HaveOccurred(), "failed to load server cert")
+
+			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+			server.StartTLS()
+
+			// Use an actual client
+			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+
+			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
+			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
+			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.GitHubServerTLSConfig{
+				CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: rootCAConfigMap.Name,
+						},
+						Key: "rootCA.crt",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			Eventually(
+				func() bool {
+					return serverSuccessfullyCalled
+				},
+				2*time.Second,
+				interval,
+			).Should(BeTrue(), "failed to contact server")
 		})
 	})
 })

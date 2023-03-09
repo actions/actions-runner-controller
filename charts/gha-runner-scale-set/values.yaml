@@ -4,7 +4,7 @@ githubConfigUrl: ""
 
 ## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
 ## You can choose to use GitHub App or a PAT token
-githubConfigSecret: 
+githubConfigSecret:
   ### GitHub Apps Configuration
   ## NOTE: IDs MUST be strings, use quotes
   #github_app_id: ""
@@ -46,6 +46,27 @@ githubConfigSecret:
 
 ## name of the runner scale set to create.  Defaults to the helm release name
 # runnerScaleSetName: ""
+
+## A self-signed CA certificate for communication with the GitHub server can be
+## provided using a config map key selector. If `runnerMountPath` is set, for
+## each runner pod ARC will:
+## - create a `github-server-tls-cert` volume containing the certificate
+##   specified in `certificateFrom`
+## - mount that volume on path `runnerMountPath`/{certificate name}
+## - set NODE_EXTRA_CA_CERTS environment variable to that same path
+## - set RUNNER_UPDATE_CA_CERTS environment variable to "1" (as of version
+##   2.303.0 this will instruct the runner to reload certificates on the host)
+##
+## If any of the above had already been set by the user in the runner pod
+## template, ARC will observe those and not overwrite them.
+## Example configuration:
+#
+# githubServerTLS:
+#   certificateFrom:
+#     configMapKeyRef:
+#       name: config-map-name
+#       key: ca.pem
+#   runnerMountPath: /usr/local/share/ca-certificates/
 
 ## template is the PodSpec for each runner Pod
 template:

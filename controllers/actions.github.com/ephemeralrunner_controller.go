@@ -680,6 +680,21 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 
+	opts, err := r.actionsClientOptionsFor(ctx, runner)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get actions client options: %w", err)
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		runner.Spec.GitHubConfigUrl,
+		runner.Namespace,
+		secret.Data,
+		opts...,
+	)
+}
+
+func (r *EphemeralRunnerReconciler) actionsClientOptionsFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) ([]actions.ClientOption, error) {
 	var opts []actions.ClientOption
 	if runner.Spec.Proxy != nil {
 		proxyFunc, err := runner.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
@@ -698,13 +713,32 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 		opts = append(opts, actions.WithProxy(proxyFunc))
 	}
 
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		runner.Spec.GitHubConfigUrl,
-		runner.Namespace,
-		secret.Data,
-		opts...,
-	)
+	tlsConfig := runner.Spec.GitHubServerTLS
+	if tlsConfig != nil {
+		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
+			var configmap corev1.ConfigMap
+			err := r.Get(
+				ctx,
+				types.NamespacedName{
+					Namespace: runner.Namespace,
+					Name:      name,
+				},
+				&configmap,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
+			}
+
+			return []byte(configmap.Data[key]), nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tls config: %w", err)
+		}
+
+		opts = append(opts, actions.WithRootCAs(pool))
+	}
+
+	return opts, nil
 }
 
 // runnerRegisteredWithService checks if the runner is still registered with the service

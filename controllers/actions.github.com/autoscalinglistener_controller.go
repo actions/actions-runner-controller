@@ -423,6 +423,15 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 	}
 
+	if autoscalingListener.Spec.GitHubServerTLS != nil {
+		env, err := r.certificateEnvVarForListener(ctx, autoscalingRunnerSet, autoscalingListener)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %v", err)
+		}
+
+		envs = append(envs, env)
+	}
+
 	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
 
 	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
@@ -437,6 +446,47 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 
 	logger.Info("Created listener pod", "namespace", newPod.Namespace, "name", newPod.Name)
 	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingListenerReconciler) certificateEnvVarForListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener) (corev1.EnvVar, error) {
+	if autoscalingListener.Spec.GitHubServerTLS.CertificateFrom == nil {
+		return corev1.EnvVar{}, fmt.Errorf("githubServerTLS.certificateFrom is not specified")
+	}
+
+	if autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef == nil {
+		return corev1.EnvVar{}, fmt.Errorf("githubServerTLS.certificateFrom.configMapKeyRef is not specified")
+	}
+
+	var configmap corev1.ConfigMap
+	err := r.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: autoscalingRunnerSet.Namespace,
+			Name:      autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Name,
+		},
+		&configmap,
+	)
+	if err != nil {
+		return corev1.EnvVar{}, fmt.Errorf(
+			"failed to get configmap %s: %w",
+			autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Name,
+			err,
+		)
+	}
+
+	certificate, ok := configmap.Data[autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Key]
+	if !ok {
+		return corev1.EnvVar{}, fmt.Errorf(
+			"key %s is not found in configmap %s",
+			autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Key,
+			autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Name,
+		)
+	}
+
+	return corev1.EnvVar{
+		Name:  "GITHUB_SERVER_ROOT_CA",
+		Value: certificate,
+	}, nil
 }
 
 func (r *AutoscalingListenerReconciler) createSecretsForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {

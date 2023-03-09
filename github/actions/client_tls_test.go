@@ -95,8 +95,8 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		cert, err := os.ReadFile(filepath.Join("testdata", "rootCA.crt"))
 		require.NoError(t, err)
 
-		pool, err := actions.RootCAsFromConfigMap(map[string][]byte{"cert": cert})
-		require.NoError(t, err)
+		pool := x509.NewCertPool()
+		require.True(t, pool.AppendCertsFromPEM(cert))
 
 		client, err := actions.NewClient(configURL, auth, actions.WithRootCAs(pool))
 		require.NoError(t, err)
@@ -123,8 +123,8 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		cert, err := os.ReadFile(filepath.Join("testdata", "intermediate.pem"))
 		require.NoError(t, err)
 
-		pool, err := actions.RootCAsFromConfigMap(map[string][]byte{"cert": cert})
-		require.NoError(t, err)
+		pool := x509.NewCertPool()
+		require.True(t, pool.AppendCertsFromPEM(cert))
 
 		client, err := actions.NewClient(configURL, auth, actions.WithRootCAs(pool), actions.WithRetryMax(0))
 		require.NoError(t, err)

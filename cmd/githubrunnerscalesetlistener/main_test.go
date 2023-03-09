@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/github/actions/testserver"
 )
 
 func TestConfigValidationMinMax(t *testing.T) {
@@ -95,6 +99,54 @@ func TestConfigValidationConfigUrl(t *testing.T) {
 	err := validateConfig(config)
 
 	assert.ErrorContains(t, err, "GitHubConfigUrl is not provided", "Expected error about missing ConfigureUrl")
+}
+
+func TestCustomerServerRootCA(t *testing.T) {
+	ctx := context.Background()
+	certsFolder := filepath.Join(
+		"../../",
+		"github",
+		"actions",
+		"testdata",
+	)
+	certPath := filepath.Join(certsFolder, "server.crt")
+	keyPath := filepath.Join(certsFolder, "server.key")
+
+	serverCalledSuccessfully := false
+
+	server := testserver.NewUnstarted(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalledSuccessfully = true
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"count": 0}`))
+	}))
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	require.NoError(t, err)
+
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+	server.StartTLS()
+
+	var certsString string
+	rootCA, err := os.ReadFile(filepath.Join(certsFolder, "rootCA.crt"))
+	require.NoError(t, err)
+	certsString = string(rootCA)
+
+	intermediate, err := os.ReadFile(filepath.Join(certsFolder, "intermediate.pem"))
+	require.NoError(t, err)
+	certsString = certsString + string(intermediate)
+
+	config := RunnerScaleSetListenerConfig{
+		ConfigureUrl: server.ConfigURLForOrg("myorg"),
+		ServerRootCA: certsString,
+	}
+	creds := &actions.ActionsAuth{
+		Token: "token",
+	}
+
+	client, err := newActionsClientFromConfig(config, creds)
+	require.NoError(t, err)
+	_, err = client.GetRunnerScaleSet(ctx, "test")
+	require.NoError(t, err)
+	assert.True(t, serverCalledSuccessfully)
 }
 
 func TestProxySettings(t *testing.T) {

@@ -2,10 +2,13 @@ package actionsgithubcom
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -785,6 +788,244 @@ var _ = Describe("Test Client optional configuration", func() {
 				autoscalingRunnerSetTestTimeout,
 				1*time.Nanosecond,
 			).Should(BeTrue(), "server was not called")
+		})
+	})
+
+	Context("When specifying a configmap for root CAs", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var configSecret *corev1.Secret
+		var rootCAConfigMap *corev1.ConfigMap
+		var controller *AutoscalingRunnerSetReconciler
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+			cert, err := os.ReadFile(filepath.Join(
+				"../../",
+				"github",
+				"actions",
+				"testdata",
+				"rootCA.crt",
+			))
+			Expect(err).NotTo(HaveOccurred(), "failed to read root CA cert")
+			rootCAConfigMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "root-ca-configmap",
+					Namespace: autoscalingNS.Name,
+				},
+				Data: map[string]string{
+					"rootCA.crt": string(cert),
+				},
+			}
+			err = k8sClient.Create(ctx, rootCAConfigMap)
+			Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
+
+			controller = &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ActionsClient:                      fake.NewMultiClient(),
+			}
+			err = controller.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			startManagers(GinkgoT(), mgr)
+		})
+
+		It("should be able to make requests to a server using root CAs", func() {
+			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+
+			certsFolder := filepath.Join(
+				"../../",
+				"github",
+				"actions",
+				"testdata",
+			)
+			certPath := filepath.Join(certsFolder, "server.crt")
+			keyPath := filepath.Join(certsFolder, "server.key")
+
+			serverSuccessfullyCalled := false
+			server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				serverSuccessfullyCalled = true
+				w.WriteHeader(http.StatusOK)
+			}))
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			Expect(err).NotTo(HaveOccurred(), "failed to load server cert")
+
+			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+			server.StartTLS()
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigSecret: configSecret.Name,
+					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
+					},
+					MaxRunners:  &max,
+					MinRunners:  &min,
+					RunnerGroup: "testgroup",
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			// wait for server to be called
+			Eventually(
+				func() (bool, error) {
+					return serverSuccessfullyCalled, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				1*time.Nanosecond,
+			).Should(BeTrue(), "server was not called")
+		})
+
+		It("it creates a listener referencing the right configmap for TLS", func() {
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
+					},
+					MaxRunners:  &max,
+					MinRunners:  &min,
+					RunnerGroup: "testgroup",
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerName(autoscalingRunnerSet),
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						listener,
+					)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get listener")
+
+					g.Expect(listener.Spec.GitHubServerTLS).NotTo(BeNil(), "listener does not have TLS config")
+					g.Expect(listener.Spec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "listener does not have TLS config")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "tls config is incorrect")
+		})
+
+		It("it creates an ephemeral runner set referencing the right configmap for TLS", func() {
+			min := 1
+			max := 10
+			autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+						CertificateFrom: &v1alpha1.TLSCertificateSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: rootCAConfigMap.Name,
+								},
+								Key: "rootCA.crt",
+							},
+						},
+					},
+					MaxRunners:  &max,
+					MinRunners:  &min,
+					RunnerGroup: "testgroup",
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func(g Gomega) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+					g.Expect(runnerSetList.Items).To(HaveLen(1), "expected 1 EphemeralRunnerSet to be created")
+
+					runnerSet := &runnerSetList.Items[0]
+
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).NotTo(BeNil(), "expected EphemeralRunnerSpec.GitHubServerTLS to be set")
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "EphemeralRunnerSpec does not have TLS config")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
 		})
 	})
 })

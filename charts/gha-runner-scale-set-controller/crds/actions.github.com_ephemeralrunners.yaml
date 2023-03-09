@@ -64,9 +64,25 @@ spec:
                   type: string
                 githubServerTLS:
                   properties:
-                    certConfigMapRef:
+                    certificateFrom:
                       description: Required
-                      type: string
+                      properties:
+                        configMapKeyRef:
+                          description: Required
+                          properties:
+                            key:
+                              description: The key to select.
+                              type: string
+                            name:
+                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
+                              type: string
+                            optional:
+                              description: Specify whether the ConfigMap or its key must be defined
+                              type: boolean
+                          required:
+                            - key
+                          type: object
+                      type: object
                   type: object
                 metadata:
                   description: 'Standard object''s metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata'

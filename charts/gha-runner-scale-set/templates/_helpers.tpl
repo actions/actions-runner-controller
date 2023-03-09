@@ -111,6 +111,15 @@ volumeMounts:
   emptyDir: {}
 {{- end }}
 
+{{- define "gha-runner-scale-set.tls-volume" -}}
+- name: github-server-tls-cert
+  configMap:
+    name: {{ .certificateFrom.configMapKeyRef.name }}
+    items:
+      - key: {{ .certificateFrom.configMapKeyRef.key }}
+        path: {{ .certificateFrom.configMapKeyRef.key }}
+{{- end }}
+
 {{- define "gha-runner-scale-set.dind-work-volume" -}}
 {{- $createWorkVolume := 1 }}
   {{- range $i, $volume := .Values.template.spec.volumes }}
@@ -155,12 +164,7 @@ volumeMounts:
 {{- define "gha-runner-scale-set.non-work-volumes" -}}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if ne $volume.name "work" }}
-- name: {{ $volume.name }}
-      {{- range $key, $val := $volume }}
-        {{- if ne $key "name" }}
-  {{ $key }}: {{ $val }}
-        {{- end }}
-      {{- end }}
+- {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -179,6 +183,7 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-runner-container" -}}
+{{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
 {{- range $i, $container := .Values.template.spec.containers -}}
   {{- if eq $container.name "runner" -}}
     {{- range $key, $val := $container }}
@@ -190,6 +195,12 @@ volumeMounts:
     {{- $setDockerTlsVerify := 1 }}
     {{- $setDockerCertPath := 1 }}
     {{- $setRunnerWaitDocker := 1 }}
+    {{- $setNodeExtraCaCerts := 0 }}
+    {{- $setRunnerUpdateCaCerts := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $setNodeExtraCaCerts = 1 }}
+      {{- $setRunnerUpdateCaCerts = 1 }}
+    {{- end }}
 env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -204,6 +215,12 @@ env:
         {{- end }}
         {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
           {{- $setRunnerWaitDocker = 0 -}}
+        {{- end }}
+        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+          {{- $setNodeExtraCaCerts = 0 -}}
+        {{- end }}
+        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+          {{- $setRunnerUpdateCaCerts = 0 -}}
         {{- end }}
   - name: {{ $env.name }}
         {{- range $envKey, $envVal := $env }}
@@ -229,8 +246,20 @@ env:
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
     value: "120"
     {{- end }}
+    {{- if $setNodeExtraCaCerts }}
+  - name: NODE_EXTRA_CA_CERTS
+    value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    {{- end }}
+    {{- if $setRunnerUpdateCaCerts }}
+  - name: RUNNER_UPDATE_CA_CERTS
+    value: "1"
+    {{- end }}
     {{- $mountWork := 1 }}
     {{- $mountDindCert := 1 }}
+    {{- $mountGitHubServerTLS := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $mountGitHubServerTLS = 1 }}
+    {{- end }}
 volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
@@ -239,6 +268,9 @@ volumeMounts:
         {{- end }}
         {{- if eq $volMount.name "dind-cert" }}
           {{- $mountDindCert = 0 -}}
+        {{- end }}
+        {{- if eq $volMount.name "github-server-tls-cert" }}
+          {{- $mountGitHubServerTLS = 0 -}}
         {{- end }}
   - name: {{ $volMount.name }}
         {{- range $mountKey, $mountVal := $volMount }}
@@ -257,11 +289,17 @@ volumeMounts:
     mountPath: /certs/client
     readOnly: true
     {{- end }}
+    {{- if $mountGitHubServerTLS }}
+  - name: github-server-tls-cert
+    mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubernetes-mode-runner-container" -}}
+{{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
 {{- range $i, $container := .Values.template.spec.containers -}}
   {{- if eq $container.name "runner" -}}
     {{- range $key, $val := $container }}
@@ -272,6 +310,12 @@ volumeMounts:
     {{- $setContainerHooks := 1 }}
     {{- $setPodName := 1 }}
     {{- $setRequireJobContainer := 1 }}
+    {{- $setNodeExtraCaCerts := 0 }}
+    {{- $setRunnerUpdateCaCerts := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $setNodeExtraCaCerts = 1 }}
+      {{- $setRunnerUpdateCaCerts = 1 }}
+    {{- end }}
 env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -283,6 +327,12 @@ env:
         {{- end }}
         {{- if eq $env.name "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER" }}
           {{- $setRequireJobContainer = 0 -}}
+        {{- end }}
+        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+          {{- $setNodeExtraCaCerts = 0 -}}
+        {{- end }}
+        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+          {{- $setRunnerUpdateCaCerts = 0 -}}
         {{- end }}
   - name: {{ $env.name }}
         {{- range $envKey, $envVal := $env }}
@@ -306,12 +356,27 @@ env:
   - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
     value: "true"
     {{- end }}
+    {{- if $setNodeExtraCaCerts }}
+  - name: NODE_EXTRA_CA_CERTS
+    value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    {{- end }}
+    {{- if $setRunnerUpdateCaCerts }}
+  - name: RUNNER_UPDATE_CA_CERTS
+    value: "1"
+    {{- end }}
     {{- $mountWork := 1 }}
+    {{- $mountGitHubServerTLS := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $mountGitHubServerTLS = 1 }}
+    {{- end }}
 volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
         {{- if eq $volMount.name "work" }}
           {{- $mountWork = 0 -}}
+        {{- end }}
+        {{- if eq $volMount.name "github-server-tls-cert" }}
+          {{- $mountGitHubServerTLS = 0 -}}
         {{- end }}
   - name: {{ $volMount.name }}
         {{- range $mountKey, $mountVal := $volMount }}
@@ -325,6 +390,81 @@ volumeMounts:
   - name: work
     mountPath: /actions-runner/_work
     {{- end }}
+    {{- if $mountGitHubServerTLS }}
+  - name: github-server-tls-cert
+    mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
   {{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "gha-runner-scale-set.default-mode-runner-containers" -}}
+{{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
+{{- range $i, $container := .Values.template.spec.containers -}}
+{{- if ne $container.name "runner" -}}
+- {{ $container | toYaml | nindent 2 }}
+{{- else }}
+- name: {{ $container.name }}
+  {{- range $key, $val := $container }}
+    {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
+  {{ $key }}: {{ $val }}
+    {{- end }}
+  {{- end }}
+  {{- $setNodeExtraCaCerts := 0 }}
+  {{- $setRunnerUpdateCaCerts := 0 }}
+  {{- if $tlsConfig.runnerMountPath }}
+    {{- $setNodeExtraCaCerts = 1 }}
+    {{- $setRunnerUpdateCaCerts = 1 }}
+  {{- end }}
+  env:
+    {{- with $container.env }}
+      {{- range $i, $env := . }}
+        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+          {{- $setNodeExtraCaCerts = 0 -}}
+        {{- end }}
+        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+          {{- $setRunnerUpdateCaCerts = 0 -}}
+        {{- end }}
+    - name: {{ $env.name }}
+        {{- range $envKey, $envVal := $env }}
+          {{- if ne $envKey "name" }}
+      {{ $envKey }}: {{ $envVal | toYaml | nindent 10 }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if $setNodeExtraCaCerts }}
+    - name: NODE_EXTRA_CA_CERTS
+      value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    {{- end }}
+    {{- if $setRunnerUpdateCaCerts }}
+    - name: RUNNER_UPDATE_CA_CERTS
+      value: "1"
+    {{- end }}
+    {{- $mountGitHubServerTLS := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $mountGitHubServerTLS = 1 }}
+    {{- end }}
+  volumeMounts:
+    {{- with $container.volumeMounts }}
+      {{- range $i, $volMount := . }}
+        {{- if eq $volMount.name "github-server-tls-cert" }}
+          {{- $mountGitHubServerTLS = 0 -}}
+        {{- end }}
+    - name: {{ $volMount.name }}
+        {{- range $mountKey, $mountVal := $volMount }}
+          {{- if ne $mountKey "name" }}
+      {{ $mountKey }}: {{ $mountVal | toYaml | nindent 10 }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if $mountGitHubServerTLS }}
+    - name: github-server-tls-cert
+      mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+      subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

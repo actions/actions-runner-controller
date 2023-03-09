@@ -3,6 +3,8 @@ package actionsgithubcom
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -552,5 +554,167 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 			},
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval).Should(Succeed(), "failed to delete secret with proxy details")
+	})
+})
+
+var _ = Describe("Test GitHub Server TLS configuration", func() {
+	var ctx context.Context
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var autoscalingRunnerSet *actionsv1alpha1.AutoscalingRunnerSet
+	var configSecret *corev1.Secret
+	var autoscalingListener *actionsv1alpha1.AutoscalingListener
+	var rootCAConfigMap *corev1.ConfigMap
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		cert, err := os.ReadFile(filepath.Join(
+			"../../",
+			"github",
+			"actions",
+			"testdata",
+			"rootCA.crt",
+		))
+		Expect(err).NotTo(HaveOccurred(), "failed to read root CA cert")
+		rootCAConfigMap = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "root-ca-configmap",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string]string{
+				"rootCA.crt": string(cert),
+			},
+		}
+		err = k8sClient.Create(ctx, rootCAConfigMap)
+		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
+
+		controller := &AutoscalingListenerReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+		}
+		err = controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet = &actionsv1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
+					CertificateFrom: &actionsv1alpha1.TLSCertificateSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: rootCAConfigMap.Name,
+							},
+							Key: "rootCA.crt",
+						},
+					},
+				},
+				MaxRunners: &max,
+				MinRunners: &min,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+		autoscalingListener = &actionsv1alpha1.AutoscalingListener{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asl",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.AutoscalingListenerSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				GitHubServerTLS: &actionsv1alpha1.GitHubServerTLSConfig{
+					CertificateFrom: &actionsv1alpha1.TLSCertificateSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: rootCAConfigMap.Name,
+							},
+							Key: "rootCA.crt",
+						},
+					},
+				},
+				RunnerScaleSetId:              1,
+				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
+				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
+				EphemeralRunnerSetName:        "test-ers",
+				MaxRunners:                    10,
+				MinRunners:                    1,
+				Image:                         "ghcr.io/owner/repo",
+			},
+		}
+
+		err = k8sClient.Create(ctx, autoscalingListener)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingListener")
+
+		startManagers(GinkgoT(), mgr)
+	})
+
+	Context("When creating a new AutoScalingListener", func() {
+		It("It should set the certificates as an environment variable on the pod", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingListener.Name,
+							Namespace: autoscalingListener.Namespace,
+						},
+						pod,
+					)
+
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get pod")
+					g.Expect(pod.Spec.Containers).NotTo(BeEmpty(), "pod should have containers")
+					g.Expect(pod.Spec.Containers[0].Env).NotTo(BeEmpty(), "pod should have env variables")
+
+					var env *corev1.EnvVar
+					for _, e := range pod.Spec.Containers[0].Env {
+						if e.Name == "GITHUB_SERVER_ROOT_CA" {
+							env = &e
+							break
+						}
+					}
+					g.Expect(env).NotTo(BeNil(), "pod should have an env variable named GITHUB_SERVER_ROOT_CA_PATH")
+
+					cert, err := os.ReadFile(filepath.Join(
+						"../../",
+						"github",
+						"actions",
+						"testdata",
+						"rootCA.crt",
+					))
+					g.Expect(err).NotTo(HaveOccurred(), "failed to read rootCA.crt")
+
+					g.Expect(env.Value).To(
+						BeEquivalentTo(string(cert)),
+						"GITHUB_SERVER_ROOT_CA should be the rootCA.crt",
+					)
+				}).
+				WithTimeout(autoscalingRunnerSetTestTimeout).
+				WithPolling(autoscalingListenerTestInterval).
+				Should(Succeed(), "failed to create pod with volume and env variable")
+		})
 	})
 })
