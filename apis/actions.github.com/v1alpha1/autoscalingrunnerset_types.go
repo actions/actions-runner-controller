@@ -103,7 +103,12 @@ func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]
 		)
 	}
 
-	pool := x509.NewCertPool()
+	systemPool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system cert pool: %w", err)
+	}
+
+	pool := systemPool.Clone()
 	if !pool.AppendCertsFromPEM(cert) {
 		return nil, fmt.Errorf("failed to parse certificate")
 	}

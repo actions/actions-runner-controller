@@ -163,7 +163,11 @@ func validateConfig(config *RunnerScaleSetListenerConfig) error {
 
 func newActionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
 	if config.ServerRootCA != "" {
-		pool := x509.NewCertPool()
+		systemPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load system cert pool: %w", err)
+		}
+		pool := systemPool.Clone()
 		ok := pool.AppendCertsFromPEM([]byte(config.ServerRootCA))
 		if !ok {
 			return nil, fmt.Errorf("failed to parse root certificate")
