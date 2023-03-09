@@ -450,6 +450,22 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
+
+	opts, err := r.actionsClientOptionsFor(ctx, rs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get actions client options: %w", err)
+	}
+
+	return r.ActionsClient.GetClientFromSecret(
+		ctx,
+		rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl,
+		rs.Namespace,
+		secret.Data,
+		opts...,
+	)
+}
+
+func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) ([]actions.ClientOption, error) {
 	var opts []actions.ClientOption
 	if rs.Spec.EphemeralRunnerSpec.Proxy != nil {
 		proxyFunc, err := rs.Spec.EphemeralRunnerSpec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
@@ -493,13 +509,7 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 		opts = append(opts, actions.WithRootCAs(pool))
 	}
 
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl,
-		rs.Namespace,
-		secret.Data,
-		opts...,
-	)
+	return opts, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
