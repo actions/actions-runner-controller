@@ -29,7 +29,7 @@ type GitHubConfig struct {
 }
 
 func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
-	u, err := url.Parse(in)
+	u, err := url.Parse(strings.Trim(in, "/"))
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
 
 	invalidURLError := fmt.Errorf("%q: %w", u.String(), ErrInvalidGitHubConfigURL)
 
-	pathParts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
 
 	switch len(pathParts) {
 	case 1: // Organization

@@ -3,6 +3,7 @@ package actions_test
 import (
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -18,6 +19,16 @@ func TestGitHubConfig(t *testing.T) {
 		}{
 			{
 				configURL: "https://github.com/org/repo",
+				expected: &actions.GitHubConfig{
+					Scope:        actions.GitHubScopeRepository,
+					Enterprise:   "",
+					Organization: "org",
+					Repository:   "repo",
+					IsHosted:     true,
+				},
+			},
+			{
+				configURL: "https://github.com/org/repo/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeRepository,
 					Enterprise:   "",
@@ -47,7 +58,27 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				configURL: "https://github.com/enterprises/my-enterprise/",
+				expected: &actions.GitHubConfig{
+					Scope:        actions.GitHubScopeEnterprise,
+					Enterprise:   "my-enterprise",
+					Organization: "",
+					Repository:   "",
+					IsHosted:     true,
+				},
+			},
+			{
 				configURL: "https://www.github.com/org",
+				expected: &actions.GitHubConfig{
+					Scope:        actions.GitHubScopeOrganization,
+					Enterprise:   "",
+					Organization: "org",
+					Repository:   "",
+					IsHosted:     true,
+				},
+			},
+			{
+				configURL: "https://www.github.com/org/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
 					Enterprise:   "",
@@ -76,11 +107,21 @@ func TestGitHubConfig(t *testing.T) {
 					IsHosted:     false,
 				},
 			},
+			{
+				configURL: "https://my-ghes.com/org/",
+				expected: &actions.GitHubConfig{
+					Scope:        actions.GitHubScopeOrganization,
+					Enterprise:   "",
+					Organization: "org",
+					Repository:   "",
+					IsHosted:     false,
+				},
+			},
 		}
 
 		for _, test := range tests {
 			t.Run(test.configURL, func(t *testing.T) {
-				parsedURL, err := url.Parse(test.configURL)
+				parsedURL, err := url.Parse(strings.Trim(test.configURL, "/"))
 				require.NoError(t, err)
 				test.expected.ConfigURL = parsedURL
 

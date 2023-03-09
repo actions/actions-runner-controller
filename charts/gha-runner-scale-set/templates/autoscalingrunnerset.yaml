@@ -12,7 +12,7 @@ metadata:
   labels:
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
 spec:
-  githubConfigUrl: {{ required ".Values.githubConfigUrl is required" .Values.githubConfigUrl }}
+  githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
   githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}
   {{- with .Values.runnerGroup }}
   runnerGroup: {{ . }}
