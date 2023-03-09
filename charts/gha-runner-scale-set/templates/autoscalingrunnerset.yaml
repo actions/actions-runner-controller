@@ -23,15 +23,13 @@ spec:
 
   {{- if .Values.githubServerTLS }}
   githubServerTLS:
-    {{- if .Values.githubServerTLS.certificateFrom }}
     {{- with .Values.githubServerTLS.certificateFrom }}
     certificateFrom:
       configMapKeyRef:
         name: {{ .configMapKeyRef.name }}
         key: {{ .configMapKeyRef.key }}
-    {{ end }}
-    {{ end }}
-  {{ end }}
+    {{- end }}
+  {{- end }}
 
   {{- if .Values.proxy }}
   proxy:
@@ -122,7 +120,7 @@ spec:
       volumes:
         {{- if $tlsConfig.runnerMountPath }}
           {{- include "gha-runner-scale-set.tls-volume" $tlsConfig | nindent 6 }}
-        {{ end }}
+        {{- end }}
         {{- if eq .Values.containerMode.type "dind" }}
           {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
           {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}
