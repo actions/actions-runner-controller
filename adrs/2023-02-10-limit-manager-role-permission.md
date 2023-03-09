@@ -126,7 +126,7 @@ You will install `actions-runner-controller` with something like `helm install a
 
 You will deploy the `AutoScalingRunnerSet` with something like `helm install demo --namespace TestNamespace oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set`
 
-In this mode, you will end up with a manager `Role` that has all Get/List/Create/Delete/Update/Patch/Watch permissions on resources we need, and a `RoleBinding` to bind the `Role` with the controller `ServiceAccount` in the watched single namespace and the controller namespace, ex: `TestNamespace` and `arc-system` in the above example.
+In this mode, you will end up with a manager `Role` that has all Get/List/Create/Delete/Update/Patch/Watch permissions on resources we need, and a `RoleBinding` to bind the `Role` with the controller `ServiceAccount` in the watched single namespace and the controller namespace, ex: `test-namespace` and `arc-system` in the above example.
 
 The downside of this mode:
 - When you have multiple controllers deployed, they will still use the same version of the CRD. So you will need to make sure every controller you deployed has to be the same version as each other.
