@@ -641,14 +641,15 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if failedOriginal == nil { // if NO failed
 						refetch = true
 						failedOriginal = empty[0]
-						empty = empty[1:]
 
 						failed := pendingOriginal.DeepCopy()
 						failed.Status.RunnerId = 103
 						failed.Status.Phase = corev1.PodFailed
 
 						err = k8sClient.Status().Patch(ctx, failed, client.MergeFrom(failedOriginal))
-						return false, err
+						if err != nil {
+							return false, err
+						}
 					}
 
 					return !refetch, nil
