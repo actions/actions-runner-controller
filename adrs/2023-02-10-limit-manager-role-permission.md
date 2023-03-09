@@ -122,7 +122,7 @@ In this mode, the `actions-runner-controller` will only be able to watch the `Au
 
 If you want to deploy multiple `AutoScalingRunnerSet` into different namespaces, you will need to install `actions-runner-controller` in this mode multiple times as well and have each installation watch the namespace you want to deploy an `AutoScalingRunnerSet`
 
-You will install `actions-runner-controller` with something like `helm install arc --namespace arc-system --set watchSingleNamespace=TestNamespace oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller` (the `TestNamespace` namespace needs to be created first).
+You will install `actions-runner-controller` with something like `helm install arc --namespace arc-system --set watchSingleNamespace=test-namespace oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller` (the `test-namespace` namespace needs to be created first).
 
 You will deploy the `AutoScalingRunnerSet` with something like `helm install demo --namespace TestNamespace oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set`
 
