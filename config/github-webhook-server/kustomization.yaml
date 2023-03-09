@@ -3,7 +3,7 @@ kind: Kustomization
 
 images:
 - name: controller
-  newName: summerwind/actions-runner-controller
+  newName: ghcr.io/actions/actions-runner-controller/actions-runner-controller
   newTag: latest
 
 resources:
