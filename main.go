@@ -43,7 +43,7 @@ import (
 )
 
 const (
-	defaultRunnerImage = "summerwind/actions-runner:latest"
+	defaultRunnerImage = "ghcr.io/actions/actions-runner-controller/actions-runner:ubuntu-22.04"
 	defaultDockerImage = "docker:dind"
 )
 
