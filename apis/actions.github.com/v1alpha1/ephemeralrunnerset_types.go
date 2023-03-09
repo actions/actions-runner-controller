@@ -31,13 +31,27 @@ type EphemeralRunnerSetSpec struct {
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
 	// CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
-	CurrentReplicas int `json:"currentReplicas,omitempty"`
+	CurrentReplicas int `json:"currentReplicas"`
+
+	// EphemeralRunner counts separated by the stage ephemeral runners are in
+
+	// +optional
+	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
+	// +optional
+	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
+	// +optional
+	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name="DesiredReplicas",type="integer"
 // +kubebuilder:printcolumn:JSONPath=".status.currentReplicas", name="CurrentReplicas",type="integer"
+//+kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
+
 // EphemeralRunnerSet is the Schema for the ephemeralrunnersets API
 type EphemeralRunnerSet struct {
 	metav1.TypeMeta   `json:",inline"`

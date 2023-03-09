@@ -238,6 +238,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if latestRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners {
 		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
 			obj.Status.CurrentRunners = latestRunnerSet.Status.CurrentReplicas
+			obj.Status.PendingEphemeralRunners = latestRunnerSet.Status.PendingEphemeralRunners
+			obj.Status.RunningEphemeralRunners = latestRunnerSet.Status.RunningEphemeralRunners
+			obj.Status.FailedEphemeralRunners = latestRunnerSet.Status.FailedEphemeralRunners
 		}); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set status with current runner count")
 			return ctrl.Result{}, err

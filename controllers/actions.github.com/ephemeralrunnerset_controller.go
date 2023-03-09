@@ -200,11 +200,18 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
+	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
+		CurrentReplicas:         total,
+		PendingEphemeralRunners: len(pendingEphemeralRunners),
+		RunningEphemeralRunners: len(runningEphemeralRunners),
+		FailedEphemeralRunners:  len(failedEphemeralRunners),
+	}
+
 	// Update the status if needed.
-	if ephemeralRunnerSet.Status.CurrentReplicas != total {
+	if ephemeralRunnerSet.Status != desiredStatus {
 		log.Info("Updating status with current runners count", "count", total)
 		if err := patchSubResource(ctx, r.Status(), ephemeralRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
-			obj.Status.CurrentReplicas = total
+			obj.Status = desiredStatus
 		}); err != nil {
 			log.Error(err, "Failed to update status with current runners count")
 			return ctrl.Result{}, err
