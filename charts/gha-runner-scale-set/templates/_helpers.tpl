@@ -402,19 +402,21 @@ volumeMounts:
 {{- define "gha-runner-scale-set.default-mode-runner-containers" -}}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
 {{- range $i, $container := .Values.template.spec.containers -}}
+{{- if ne $container.name "runner" -}}
+- {{ $container | toYaml | nindent 2 }}
+{{- else }}
 - name: {{ $container.name }}
-  {{- if eq $container.name "runner" -}}
-    {{- range $key, $val := $container }}
-      {{- if and (ne $key "env") (ne $key "volumeMounts") }}
+  {{- range $key, $val := $container }}
+    {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
   {{ $key }}: {{ $val }}
-      {{- end }}
     {{- end }}
-    {{- $setNodeExtraCaCerts := 0 }}
-    {{- $setRunnerUpdateCaCerts := 0 }}
-    {{- if $tlsConfig.runnerMountPath }}
-      {{- $setNodeExtraCaCerts = 1 }}
-      {{- $setRunnerUpdateCaCerts = 1 }}
-    {{- end }}
+  {{- end }}
+  {{- $setNodeExtraCaCerts := 0 }}
+  {{- $setRunnerUpdateCaCerts := 0 }}
+  {{- if $tlsConfig.runnerMountPath }}
+    {{- $setNodeExtraCaCerts = 1 }}
+    {{- $setRunnerUpdateCaCerts = 1 }}
+  {{- end }}
   env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -463,10 +465,6 @@ volumeMounts:
       mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
       subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
     {{- end }}
-  {{- else }}
-    {{- range $key, $val := $container }}
-  {{ $key }}: {{ $val }}
-    {{- end }}
-  {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
