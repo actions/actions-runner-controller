@@ -68,7 +68,7 @@ To help these customers and improve security for `actions-runner-controller` in 
 
 > We will change the default cache-based client to bypass cache on reading `Secrets` and `ConfigMaps`(ConfigMap is used when you configure `githubServerTLS`), so we can eliminate the need for `List` and `Watch` `Secrets` permission in cluster scope.
 
-Introduce a new `Role` for the controller and `RoleBinding` the `Role` with the controller's service account in the namespace the controller is deployed, this role will grant the controller service account required permission to work with `AutoScalingListeners` in the controller namespace.
+Introduce a new `Role` for the controller and `RoleBinding` the `Role` with the controller's `ServiceAccount` in the namespace the controller is deployed. This role will grant the controller's service account required permission to work with `AutoScalingListeners` in the controller namespace.
 
 - Get/Create/Delete on `Pods`
 - Get on `Pods/status`
