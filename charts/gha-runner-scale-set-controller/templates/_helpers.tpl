@@ -72,12 +72,20 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
-{{- define "gha-runner-scale-set-controller.managerRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-role
+{{- define "gha-runner-scale-set-controller.managerClusterRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-role
 {{- end }}
 
-{{- define "gha-runner-scale-set-controller.managerRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-rolebinding
+{{- define "gha-runner-scale-set-controller.managerClusterRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-rolebinding
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.managerListenerRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-role
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.managerListenerRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-rolebinding
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleName" -}}
