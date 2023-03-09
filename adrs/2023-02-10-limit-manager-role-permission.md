@@ -84,7 +84,7 @@ Ex:
     actions.github.com/controller-service-account-name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
 ```
 
-Introduce a new `Role` per `AutoScalingRunnerSet` installation and `RoleBinding` the `Role` with the controller's service account in the namespace that each `AutoScalingRunnerSet` deployed with the following permission.
+Introduce a new `Role` per `AutoScalingRunnerSet` installation and `RoleBinding` the `Role` with the controller's `ServiceAccount` in the namespace that each `AutoScalingRunnerSet` deployed with the following permission.
 
 - Get/Create/Delete/Update/Patch/List on `Secrets`
 - Create/Delete on `Pods`
