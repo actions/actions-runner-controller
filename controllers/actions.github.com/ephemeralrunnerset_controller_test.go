@@ -315,13 +315,6 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
 
-			Eventually(
-				func() {
-				},
-				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
-
 			// Mark one of the EphemeralRunner as finished
 			finishedRunner := runnerList.Items[4].DeepCopy()
 			finishedRunner.Status.Phase = corev1.PodSucceeded
