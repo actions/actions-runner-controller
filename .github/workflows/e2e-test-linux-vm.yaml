@@ -48,4 +48,4 @@ jobs:
           github-token: ${{ steps.get_workflow_token.outputs.token }}
           config-url: "https://github.com/actions-runner-controller/arc_e2e_test_dummy"
           docker-image-repo: $IMAGE_REPO
-          docker-image-tag: $IMAGE_TAG
+          docker-image-tag: $TAG
