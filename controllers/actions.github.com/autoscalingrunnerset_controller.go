@@ -47,7 +47,6 @@ const (
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdKey               = "runner-scale-set-id"
 	runnerScaleSetNameKey             = "runner-scale-set-name"
-	runnerScaleSetRunnerGroupNameKey  = "runner-scale-set-runner-group-name"
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
@@ -154,7 +153,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Make sure the runner group of the scale set is up to date
-	currentRunnerGroupName, ok := autoscalingRunnerSet.Annotations[runnerScaleSetRunnerGroupNameKey]
+	currentRunnerGroupName, ok := autoscalingRunnerSet.Annotations[LabelKeyGithubRunnerGroupName]
 	if !ok || (len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 && !strings.EqualFold(currentRunnerGroupName, autoscalingRunnerSet.Spec.RunnerGroup)) {
 		log.Info("AutoScalingRunnerSet runner group changed. Updating the runner scale set.")
 		return r.updateRunnerScaleSetRunnerGroup(ctx, autoscalingRunnerSet, log)
@@ -370,7 +369,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 	if err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
 		obj.Annotations[runnerScaleSetNameKey] = runnerScaleSet.Name
 		obj.Annotations[runnerScaleSetIdKey] = strconv.Itoa(runnerScaleSet.Id)
-		obj.Annotations[runnerScaleSetRunnerGroupNameKey] = runnerScaleSet.RunnerGroupName
+		obj.Annotations[LabelKeyGithubRunnerGroupName] = runnerScaleSet.RunnerGroupName
 	}); err != nil {
 		logger.Error(err, "Failed to add runner scale set ID, name and runner group name as an annotation")
 		return ctrl.Result{}, err
@@ -415,7 +414,7 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx con
 
 	logger.Info("Updating runner scale set runner group name as an annotation")
 	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-		obj.Annotations[runnerScaleSetRunnerGroupNameKey] = updatedRunnerScaleSet.RunnerGroupName
+		obj.Annotations[LabelKeyGithubRunnerGroupName] = updatedRunnerScaleSet.RunnerGroupName
 	}); err != nil {
 		logger.Error(err, "Failed to update runner group name annotation")
 		return ctrl.Result{}, err
