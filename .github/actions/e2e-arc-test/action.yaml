@@ -8,12 +8,18 @@ inputs:
   config-url:
     description: "URL of the repo, org or enterprise where the runner scale sets will be registered"
     required: true
+  docker-image-repo:
+    description: "Local docker image repo for testing"
+    required: true
+  docker-image-tag:
+    description: "Tag of ARC Docker image for testing"
+    required: true
 
 runs:
   using: "composite"
   steps:
     - name: Install ARC
-      run: helm install arc --namespace "arc-systems" --create-namespace ./charts/gha-runner-scale-set-controller
+      run: helm install arc --namespace "arc-systems" --create-namespace --set image.tag=${{ inputs.docker-image-tag }}  --set image.repository=${{ inputs.docker-image-repo }} ./charts/gha-runner-scale-set-controller
       shell: bash
     - name: Get datetime
       # We are using this value further in the runner installation to avoid runner name collision that are a risk with hard coded values.
