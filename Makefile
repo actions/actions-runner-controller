@@ -92,9 +92,14 @@ manager: generate fmt vet
 run: generate fmt vet manifests
 	go run ./main.go
 
+run-scaleset: generate fmt vet
+	CONTROLLER_MANAGER_POD_NAMESPACE=default \
+	CONTROLLER_MANAGER_CONTAINER_IMAGE="${DOCKER_IMAGE_NAME}:${VERSION}" \
+	go run ./main.go --auto-scaling-runner-set-only
+
 # Install CRDs into a cluster
 install: manifests
-	kustomize build config/crd | kubectl apply -f -
+	kustomize build config/crd | kubectl apply --server-side -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests
@@ -103,7 +108,7 @@ uninstall: manifests
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
 	cd config/manager && kustomize edit set image controller=${DOCKER_IMAGE_NAME}:${VERSION}
-	kustomize build config/default | kubectl apply -f -
+	kustomize build config/default | kubectl apply --server-side -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: manifests-gen-crds chart-crds

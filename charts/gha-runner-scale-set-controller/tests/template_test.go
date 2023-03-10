@@ -261,9 +261,11 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
 	assert.Len(t, deployment.Spec.Template.Spec.Tolerations, 0)
 
+	managerImage := "ghcr.io/actions/gha-runner-scale-set-controller:dev"
+
 	assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	assert.Equal(t, "manager", deployment.Spec.Template.Spec.Containers[0].Name)
-	assert.Equal(t, "ghcr.io/actions/gha-runner-scale-set-controller:dev", deployment.Spec.Template.Spec.Containers[0].Image)
+	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Image)
 	assert.Equal(t, corev1.PullIfNotPresent, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
@@ -274,8 +276,8 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
-	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAME", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
-	assert.Equal(t, "metadata.name", deployment.Spec.Template.Spec.Containers[0].Env[0].ValueFrom.FieldRef.FieldPath)
+	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
+	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
@@ -375,9 +377,11 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Tolerations, 1)
 	assert.Equal(t, "foo", deployment.Spec.Template.Spec.Tolerations[0].Key)
 
+	managerImage := "ghcr.io/actions/gha-runner-scale-set-controller:dev"
+
 	assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	assert.Equal(t, "manager", deployment.Spec.Template.Spec.Containers[0].Name)
-	assert.Equal(t, "ghcr.io/actions/gha-runner-scale-set-controller:dev", deployment.Spec.Template.Spec.Containers[0].Image)
+	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Image)
 	assert.Equal(t, corev1.PullAlways, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
@@ -389,8 +393,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
-	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAME", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
-	assert.Equal(t, "metadata.name", deployment.Spec.Template.Spec.Containers[0].Env[0].ValueFrom.FieldRef.FieldPath)
+	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
+	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
