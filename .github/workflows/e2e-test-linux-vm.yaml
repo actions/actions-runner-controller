@@ -29,7 +29,7 @@ jobs:
           version: latest
       - name: Docker Build Test Image
         run: |
-            docker buildx build --build-arg RUNNER_VERSION=$RUNNER_VERSION --build-arg TAG=$TAG -t $IMAGE . --load
+            DOCKER_CLI_EXPERIMENTAL=enabled DOCKER_BUILDKIT=1 docker buildx build --build-arg RUNNER_VERSION=$RUNNER_VERSION --build-arg TAG=$TAG -t $IMAGE . --load
       - name: Create Kind cluster
         run: |
           PATH=$(go env GOPATH)/bin:$PATH
