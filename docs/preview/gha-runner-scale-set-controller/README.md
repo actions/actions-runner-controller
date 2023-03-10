@@ -143,7 +143,7 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
     ```bash
     helm pull oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
         --version 0.3.0 \
-        --untar &&\
+        --untar && \
         kubectl replace -f <PATH>/gha-runner-scale-set-controller/crds/
     ```
 
