@@ -4,4 +4,6 @@ chart-repos:
   - jetstack=https://charts.jetstack.io
 check-version-increment: false # Disable checking that the chart version has been bumped
 charts:
-- charts/actions-runner-controller
+- charts/gha-runner-scale-set-controller
+- charts/gha-runner-scale-set
+skip-clean-up: true
