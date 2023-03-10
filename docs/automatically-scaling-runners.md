@@ -567,8 +567,8 @@ spec:
               runner-deployment-name: actions-runner
 
       repository: mumoshu/actions-runner-controller-ci
-      # The default "summerwind/actions-runner" images are available at DockerHub:
-      # https://hub.docker.com/r/summerwind/actions-runner
+      # The default "ghcr.io/actions/actions-runner-controller/actions-runner" images are available on the Github Container Registry (GHCR):
+      # https://ghcr.io/actions/actions-runner-controller/actions-runner
       # You can also build your own and specify it like the below:
       image: custom-image/actions-runner:latest
       imagePullPolicy: Always
@@ -607,7 +607,7 @@ spec:
       # - https://cloud.google.com/container-registry/docs/pulling-cached-images
       dockerRegistryMirror: https://mirror.gcr.io/
       # false (default) = Docker support is provided by a sidecar container deployed in the runner pod.
-      # true = No docker sidecar container is deployed in the runner pod but docker can be used within the runner container instead. The image summerwind/actions-runner-dind is used by default.
+      # true = No docker sidecar container is deployed in the runner pod but docker can be used within the runner container instead. The image ghcr.io/actions/actions-runner-controller/actions-runner-dind:ubuntu-22.04 is used by default.
       dockerdWithinRunnerContainer: true
       #Optional environment variables for docker container
       # Valid only when dockerdWithinRunnerContainer=false

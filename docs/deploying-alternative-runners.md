@@ -18,7 +18,7 @@ spec:
   replicas: 1
   template:
     spec:
-      image: summerwind/actions-runner-dind
+      image: ghcr.io/actions/actions-runner-controller/actions-runner-dind:ubuntu-22.04
       dockerdWithinRunnerContainer: true
       repository: mumoshu/actions-runner-controller-ci
       env: []

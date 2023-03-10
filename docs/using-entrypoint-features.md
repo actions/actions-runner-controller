@@ -57,7 +57,7 @@ spec:
   template:
     spec:
       dockerdWithinRunnerContainer: true
-      image: summerwind/actions-runner-dind
+      image: ghcr.io/actions/actions-runner-controller/actions-runner-dind:ubuntu-22.04
       env:
         # Sets the respective default-address-pools fields within dockerd daemon.json
         # See https://github.com/actions/actions-runner-controller/pull/1971 for more information.

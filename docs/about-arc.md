@@ -166,10 +166,10 @@ This solution maintains a few Ubuntu based runner images, these images do not co
 
 The virtual environments from GitHub contain a lot more software packages (different versions of Java, Node.js, Golang, .NET, etc) which are not provided in the runner image. Most of these have dedicated setup actions which allow the tools to be installed on-demand in a workflow, for example: `actions/setup-java` or `actions/setup-node`
 
-If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and then install the extra dependencies directly in the docker image:
+If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `ghcr.io/actions/actions-runner-controller/actions-runner` image and then install the extra dependencies directly in the docker image:
 
 ```shell
-FROM summerwind/actions-runner:latest
+FROM ghcr.io/actions/actions-runner-controller/actions-runner:ubuntu-22.04
 
 RUN sudo apt-get update -y \
   && sudo apt-get install $YOUR_PACKAGES
