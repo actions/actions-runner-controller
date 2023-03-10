@@ -166,7 +166,64 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !autoScalingRunnerSetOnly {
+	if autoScalingRunnerSetOnly {
+		managerImage := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE")
+		if managerImage == "" {
+			log.Error(err, "unable to obtain listener image")
+			os.Exit(1)
+		}
+		managerNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
+		if managerNamespace == "" {
+			log.Error(err, "unable to obtain manager pod namespace")
+			os.Exit(1)
+		}
+
+		actionsMultiClient := actions.NewMultiClient(
+			"actions-runner-controller/"+build.Version,
+			log.WithName("actions-clients"),
+		)
+
+		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Log:                                log.WithName("AutoscalingRunnerSet"),
+			Scheme:                             mgr.GetScheme(),
+			ControllerNamespace:                managerNamespace,
+			DefaultRunnerScaleSetListenerImage: managerImage,
+			ActionsClient:                      actionsMultiClient,
+			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
+		}).SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+			os.Exit(1)
+		}
+
+		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
+			Client:        mgr.GetClient(),
+			Log:           log.WithName("EphemeralRunner"),
+			Scheme:        mgr.GetScheme(),
+			ActionsClient: actionsMultiClient,
+		}).SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
+			os.Exit(1)
+		}
+
+		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
+			Client:        mgr.GetClient(),
+			Log:           log.WithName("EphemeralRunnerSet"),
+			Scheme:        mgr.GetScheme(),
+			ActionsClient: actionsMultiClient,
+		}).SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
+			os.Exit(1)
+		}
+		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
+			Client: mgr.GetClient(),
+			Log:    log.WithName("AutoscalingListener"),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
+			os.Exit(1)
+		}
+	} else {
 		multiClient := actionssummerwindnet.NewMultiGitHubClient(
 			mgr.GetClient(),
 			ghClient,
@@ -315,63 +372,6 @@ func main() {
 				os.Exit(1)
 			}
 		}
-	}
-
-	managerImage := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE")
-	if managerImage == "" {
-		log.Error(err, "unable to obtain listener image")
-		os.Exit(1)
-	}
-	managerNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
-	if managerNamespace == "" {
-		log.Error(err, "unable to obtain manager pod namespace")
-		os.Exit(1)
-	}
-
-	actionsMultiClient := actions.NewMultiClient(
-		"actions-runner-controller/"+build.Version,
-		log.WithName("actions-clients"),
-	)
-
-	if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
-		Client:                             mgr.GetClient(),
-		Log:                                log.WithName("AutoscalingRunnerSet"),
-		Scheme:                             mgr.GetScheme(),
-		ControllerNamespace:                managerNamespace,
-		DefaultRunnerScaleSetListenerImage: managerImage,
-		ActionsClient:                      actionsMultiClient,
-		DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
-	}).SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
-		os.Exit(1)
-	}
-
-	if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-		Client:        mgr.GetClient(),
-		Log:           log.WithName("EphemeralRunner"),
-		Scheme:        mgr.GetScheme(),
-		ActionsClient: actionsMultiClient,
-	}).SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
-		os.Exit(1)
-	}
-
-	if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-		Client:        mgr.GetClient(),
-		Log:           log.WithName("EphemeralRunnerSet"),
-		Scheme:        mgr.GetScheme(),
-		ActionsClient: actionsMultiClient,
-	}).SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
-		os.Exit(1)
-	}
-	if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-		Client: mgr.GetClient(),
-		Log:    log.WithName("AutoscalingListener"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
-		os.Exit(1)
 	}
 
 	log.Info("starting manager")
