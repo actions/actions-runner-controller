@@ -162,13 +162,13 @@ Verify that the secret you provided is correct and that the `githubConfigUrl` yo
 
 #### Major changes
 
-1. Runner pods are more similar to hosted runners (#2348)
+1. Runner pods are more similar to hosted runners [#2348](https://github.com/actions/actions-runner-controller/pull/2348)
 1. Add support for self-signed CA certificates (#2268)
-1. Trailing slashes in config URLs don't break installations (#2381)
-1. Fix a bug where the listener pod would ignore proxy settings from env (#2366)
-1. Runner set name is now configurable (#2279)
+1. Fixed trailing slashes in config URLs breaking installations [#2381](https://github.com/actions/actions-runner-controller/pull/2381)
+1. Fixed a bug where the listener pod would ignore proxy settings from env [#2366](https://github.com/actions/actions-runner-controller/pull/2366)
+1. Added runner set name field making it optionally configurable [#2279](https://github.com/actions/actions-runner-controller/pull/2279)
 1. Name and namespace labels of listener pod have been split (#2341)
-1. Chart naming validation on AutoscalingRunnerSet install (#2347)
+1. Added chart name constraints validation on AutoscalingRunnerSet install [#2347](https://github.com/actions/actions-runner-controller/pull/2347)
 
 ### v0.2.0
 
