@@ -124,6 +124,31 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     arc-runners   arc-runner-set-rmrgw-runner-p9p5n                     1/1     Running   0             21s
     ```
 
+### Upgrade to newer versions
+
+Upgrading actions-runner-controller requires a few extra steps because CRDs will not be automatically upgraded (this is a helm limitation).
+
+1. Uninstall the autoscaling runner set first
+
+    ```bash
+    INSTALLATION_NAME="arc-runner-set"
+    NAMESPACE="arc-runners"
+    helm uninstall "${INSTALLATION_NAME}" --namespace "${NAMESPACE}"
+    ```
+
+1. Wait for all the pods to drain
+
+1. Pull the new helm chart, unpack it and update the CRDs. When applying this step, don't forget to replace `<PATH>` with the path of the `gha-runner-scale-set-controller` helm chart:
+
+    ```bash
+    helm pull oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
+        --version 0.3.0 \
+        --untar && \
+        kubectl replace -f <PATH>/gha-runner-scale-set-controller/crds/
+    ```
+
+1. Reinstall actions-runner-controller using the steps from the previous section
+
 ## Troubleshooting
 
 ### Check the logs
