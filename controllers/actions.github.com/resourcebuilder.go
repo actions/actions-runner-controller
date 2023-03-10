@@ -28,7 +28,7 @@ const (
 	LabelKeyKubernetesVersion   = "app.kubernetes.io/version"
 
 	// Github labels
-	LabelKeyGithubScaleSetName      = "actions.github.com/scale-set-name" //"auto-scaling-runner-set-name"
+	LabelKeyGithubScaleSetName      = "actions.github.com/scale-set-name"
 	LabelKeyGithubScaleSetNamespace = "actions.github.com/scale-set-namespace"
 	LabelKeyGithubEnterprise        = "actions.github.com/enterprise"
 	LabelKeyGithubOrganization      = "actions.github.com/organization"
