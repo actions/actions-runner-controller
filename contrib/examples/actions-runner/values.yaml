@@ -1,5 +1,5 @@
 image:
-  repository: summerwind/actions-runner
+  repository: ghcr.io/actions/actions-runner-controller/actions-runner
   tag: v2.290.1-ubuntu-20.04
   pullPolicy: IfNotPresent
 
