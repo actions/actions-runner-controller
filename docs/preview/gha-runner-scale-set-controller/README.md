@@ -38,7 +38,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --namespace "${NAMESPACE}" \
         --create-namespace \
         oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.2.0
+        --version 0.3.0
     ```
 
 1. Generate a Personal Access Token (PAT) or create and install a GitHub App. See [Creating a personal access token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) and [Creating a GitHub App](https://docs.github.com/en/developers/apps/creating-a-github-app).
@@ -59,7 +59,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
         --set githubConfigSecret.github_token="${GITHUB_PAT}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.2.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.3.0
     ```
 
     ```bash
@@ -77,7 +77,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --set githubConfigSecret.github_app_id="${GITHUB_APP_ID}" \
         --set githubConfigSecret.github_app_installation_id="${GITHUB_APP_INSTALLATION_ID}" \
         --set githubConfigSecret.github_app_private_key="${GITHUB_APP_PRIVATE_KEY}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.2.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.3.0
     ```
 
 1. Check your installation. If everything went well, you should see the following:
@@ -86,8 +86,8 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     $ helm list -n "${NAMESPACE}"
 
     NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                                    APP VERSION
-    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.2.0        preview
-    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.2.0            0.2.0
+    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.3.0        preview
+    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.3.0            0.3.0
     ```
 
     ```bash
@@ -157,6 +157,18 @@ Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/a
 Verify that the secret you provided is correct and that the `githubConfigUrl` you provided is accurate.
 
 ## Changelog
+
+### v0.3.0
+
+#### Major changes
+
+1. Runner pods are more similar to hosted runners [#2348](https://github.com/actions/actions-runner-controller/pull/2348)
+1. Add support for self-signed CA certificates [#2268](https://github.com/actions/actions-runner-controller/pull/2268)
+1. Fixed trailing slashes in config URLs breaking installations [#2381](https://github.com/actions/actions-runner-controller/pull/2381)
+1. Fixed a bug where the listener pod would ignore proxy settings from env [#2366](https://github.com/actions/actions-runner-controller/pull/2366)
+1. Added runner set name field making it optionally configurable [#2279](https://github.com/actions/actions-runner-controller/pull/2279)
+1. Name and namespace labels of listener pod have been split [#2341](https://github.com/actions/actions-runner-controller/pull/2341)
+1. Added chart name constraints validation on AutoscalingRunnerSet install [#2347](https://github.com/actions/actions-runner-controller/pull/2347)
 
 ### v0.2.0
 
