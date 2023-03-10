@@ -476,25 +476,46 @@ volumeMounts:
   {{- end }}
 {{- end }}
 {{- if eq $searchControllerDeployment 1 }}
-  {{- $counter := 0 }}
+  {{- $multiNamespacesCounter := 0 }}
+  {{- $singleNamespaceCounter := 0 }}
   {{- $controllerDeployment := dict }}
+  {{- $singleNamespaceControllerDeployments := dict }}
   {{- $managerServiceAccountName := "" }}
   {{- range $index, $deployment := (lookup "apps/v1" "Deployment" "" "").items }}
-    {{- range $key, $val := $deployment.metadata.labels }}
-      {{- if and (eq $key "app.kubernetes.io/part-of") (eq $val "gha-runner-scale-set-controller") }}
-        {{- $counter = add $counter 1 }}
-        {{- $controllerDeployment = $deployment }}
+    {{- if kindIs "map" $deployment.metadata.labels }}
+      {{- if eq (get $deployment.metadata.labels "app.kubernetes.io/part-of") "gha-runner-scale-set-controller" }}
+        {{- if hasKey $deployment.metadata.labels "actions.github.com/controller-watch-single-namespace" }}
+          {{- $singleNamespaceCounter = add $singleNamespaceCounter 1 }}
+          {{- $_ := set $singleNamespaceControllerDeployments (get $deployment.metadata.labels "actions.github.com/controller-watch-single-namespace") $deployment}}
+        {{- else }}
+          {{- $multiNamespacesCounter = add $multiNamespacesCounter 1 }}
+          {{- $controllerDeployment = $deployment }}
+        {{- end }}
       {{- end }}
     {{- end }}
   {{- end }}
-  {{- if lt $counter 1 }}
-    {{- fail "No gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller), consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
+  {{- if and (eq $multiNamespacesCounter 0) (eq $singleNamespaceCounter 0) }}
+    {{- fail "No gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller). Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
   {{- end }}
-  {{- if gt $counter 1 }}
-    {{- fail "More than one gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller), consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
+  {{- if and (gt $multiNamespacesCounter 0) (gt $singleNamespaceCounter 0) }}
+    {{- fail "Found both gha-runner-scale-set-controller installed with flags.watchSingleNamespace set and unset in cluster, this is not supported. Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
   {{- end }}
-  {{- with $controllerDeployment.metadata }}
-    {{- $managerServiceAccountName = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-name") }}
+  {{- if gt $multiNamespacesCounter 1 }}
+    {{- fail "More than one gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller). Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
+  {{- end }}
+  {{- if eq $multiNamespacesCounter 1 }}
+    {{- with $controllerDeployment.metadata }}
+      {{- $managerServiceAccountName = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-name") }}
+    {{- end }}
+  {{- else if gt $singleNamespaceCounter 0 }}
+    {{- if hasKey $singleNamespaceControllerDeployments .Release.Namespace }}
+      {{- $controllerDeployment = get $singleNamespaceControllerDeployments .Release.Namespace }}
+      {{- with $controllerDeployment.metadata }}
+        {{- $managerServiceAccountName = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-name") }}
+      {{- end }}
+    {{- else }}
+      {{- fail "No gha-runner-scale-set-controller deployment that watch this namespace found using label (actions.github.com/controller-watch-single-namespace). Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
+    {{- end }}
   {{- end }}
   {{- if eq $managerServiceAccountName "" }}
     {{- fail "No service account name found for gha-runner-scale-set-controller deployment using label (actions.github.com/controller-service-account-name), consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
@@ -512,28 +533,49 @@ volumeMounts:
   {{- end }}
 {{- end }}
 {{- if eq $searchControllerDeployment 1 }}
-  {{- $counter := 0 }}
+  {{- $multiNamespacesCounter := 0 }}
+  {{- $singleNamespaceCounter := 0 }}
   {{- $controllerDeployment := dict }}
+  {{- $singleNamespaceControllerDeployments := dict }}
   {{- $managerServiceAccountNamespace := "" }}
   {{- range $index, $deployment := (lookup "apps/v1" "Deployment" "" "").items }}
-    {{- range $key, $val := $deployment.metadata.labels }}
-      {{- if and (eq $key "app.kubernetes.io/part-of") (eq $val "gha-runner-scale-set-controller") }}
-        {{- $counter = add $counter 1 }}
-        {{- $controllerDeployment = $deployment }}
+    {{- if kindIs "map" $deployment.metadata.labels }}
+      {{- if eq (get $deployment.metadata.labels "app.kubernetes.io/part-of") "gha-runner-scale-set-controller" }}
+        {{- if hasKey $deployment.metadata.labels "actions.github.com/controller-watch-single-namespace" }}
+          {{- $singleNamespaceCounter = add $singleNamespaceCounter 1 }}
+          {{- $_ := set $singleNamespaceControllerDeployments (get $deployment.metadata.labels "actions.github.com/controller-watch-single-namespace") $deployment}}
+        {{- else }}
+          {{- $multiNamespacesCounter = add $multiNamespacesCounter 1 }}
+          {{- $controllerDeployment = $deployment }}
+        {{- end }}
       {{- end }}
     {{- end }}
   {{- end }}
-  {{- if lt $counter 1 }}
-    {{- fail "No gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller), consider setting controllerServiceAccount.name to be explicit if you think the discovery is wrong." }}
+  {{- if and (eq $multiNamespacesCounter 0) (eq $singleNamespaceCounter 0) }}
+    {{- fail "No gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller). Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
   {{- end }}
-  {{- if gt $counter 1 }}
-    {{- fail "More than one gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller), consider setting controllerServiceAccount.name to be explicit if you think the discovery is wrong." }}
+  {{- if and (gt $multiNamespacesCounter 0) (gt $singleNamespaceCounter 0) }}
+    {{- fail "Found both gha-runner-scale-set-controller installed with flags.watchSingleNamespace set and unset in cluster, this is not supported. Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
   {{- end }}
-  {{- with $controllerDeployment.metadata }}
-    {{- $managerServiceAccountNamespace = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-namespace") }}
+  {{- if gt $multiNamespacesCounter 1 }}
+    {{- fail "More than one gha-runner-scale-set-controller deployment found using label (app.kubernetes.io/part-of=gha-runner-scale-set-controller). Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
+  {{- end }}
+  {{- if eq $multiNamespacesCounter 1 }}
+    {{- with $controllerDeployment.metadata }}
+      {{- $managerServiceAccountNamespace = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-namespace") }}
+    {{- end }}
+  {{- else if gt $singleNamespaceCounter 0 }}
+    {{- if hasKey $singleNamespaceControllerDeployments .Release.Namespace }}
+      {{- $controllerDeployment = get $singleNamespaceControllerDeployments .Release.Namespace }}
+      {{- with $controllerDeployment.metadata }}
+        {{- $managerServiceAccountNamespace = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-namespace") }}
+      {{- end }}
+    {{- else }}
+      {{- fail "No gha-runner-scale-set-controller deployment that watch this namespace found using label (actions.github.com/controller-watch-single-namespace). Consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
+    {{- end }}
   {{- end }}
   {{- if eq $managerServiceAccountNamespace "" }}
-    {{- fail "No service account namespace found for gha-runner-scale-set-controller deployment using label (actions.github.com/controller-service-account-namespace), consider setting controllerServiceAccount.name to be explicit if you think the discovery is wrong." }}
+    {{- fail "No service account namespace found for gha-runner-scale-set-controller deployment using label (actions.github.com/controller-service-account-namespace), consider setting controllerServiceAccount.name in values.yaml to be explicit if you think the discovery is wrong." }}
   {{- end }}
 {{- $managerServiceAccountNamespace }}
 {{- end }}

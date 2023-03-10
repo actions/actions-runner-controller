@@ -155,7 +155,7 @@ containerMode:
   ## the following is required when containerMode.type=kubernetes
   kubernetesModeWorkVolumeClaim:
     accessModes: ["ReadWriteOnce"]
-    # For testing, use https://github.com/rancher/local-path-provisioner to provide dynamic provision volume
+    # For local testing, use https://github.com/openebs/dynamic-localpv-provisioner/blob/develop/docs/quickstart.md to provide dynamic provision volume with storageClassName: openebs-hostpath
     # TODO: remove before release
     storageClassName: "dynamic-blob-storage"
     resources:
