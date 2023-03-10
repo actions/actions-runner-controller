@@ -74,7 +74,7 @@ template:
     containers:
     - name: runner
       image: ghcr.io/actions/actions-runner:latest
-      command: ["/actions-runner/run.sh"]
+      command: ["/home/runner/run.sh"]
 
 containerMode:
   type: ""  ## type can be set to dind or kubernetes
@@ -84,10 +84,10 @@ containerMode:
   ##     initContainers:
   ##     - name: initExternalsInternalVolume
   ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["cp", "-r", "-v", "/actions-runner/externals/.", "/actions-runner/tmpDir/"]
+  ##       command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
   ##       volumeMounts:
   ##         - name: externalsInternal
-  ##           mountPath: /actions-runner/tmpDir
+  ##           mountPath: /home/runner/tmpDir
   ##     containers:
   ##     - name: runner
   ##       image: ghcr.io/actions/actions-runner:latest
@@ -100,7 +100,7 @@ containerMode:
   ##           value: /certs/client
   ##       volumeMounts:
   ##         - name: workingDirectoryInternal
-  ##           mountPath: /actions-runner/_work
+  ##           mountPath: /home/runner/_work
   ##         - name: dinDInternal
   ##           mountPath: /certs/client
   ##           readOnly: true
@@ -111,9 +111,9 @@ containerMode:
   ##       volumeMounts:
   ##         - mountPath: /certs/client
   ##           name: dinDInternal
-  ##         - mountPath: /actions-runner/_work
+  ##         - mountPath: /home/runner/_work
   ##           name: workingDirectoryInternal
-  ##         - mountPath: /actions-runner/externals
+  ##         - mountPath: /home/runner/externals
   ##           name: externalsInternal
   ##     volumes:
   ##     - name: dinDInternal
@@ -131,7 +131,7 @@ containerMode:
   ##       image: ghcr.io/actions/actions-runner:latest
   ##       env:
   ##         - name: ACTIONS_RUNNER_CONTAINER_HOOKS
-  ##           value: /actions-runner/k8s/index.js
+  ##           value: /home/runner/k8s/index.js
   ##         - name: ACTIONS_RUNNER_POD_NAME
   ##           valueFrom:
   ##             fieldRef:
@@ -140,7 +140,7 @@ containerMode:
   ##           value: "true"
   ##       volumeMounts:
   ##         - name: work
-  ##           mountPath: /actions-runner/_work
+  ##           mountPath: /home/runner/_work
   ##     volumes:
   ##       - name: work
   ##         ephemeral:

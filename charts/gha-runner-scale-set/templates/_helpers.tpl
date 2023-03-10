@@ -83,10 +83,10 @@ imagePullSecrets:
   {{ $val.imagePullSecrets | toYaml -}}
 {{- end }}
 command: ["cp"]
-args: ["-r", "-v", "/actions-runner/externals/.", "/actions-runner/tmpDir/"]
+args: ["-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
   - name: dind-externals
-    mountPath: /actions-runner/tmpDir
+    mountPath: /home/runner/tmpDir
 {{- end }}
 {{- end }}
 {{- end }}
@@ -97,11 +97,11 @@ securityContext:
   privileged: true
 volumeMounts:
   - name: work
-    mountPath: /actions-runner/_work
+    mountPath: /home/runner/_work
   - name: dind-cert
     mountPath: /certs/client
   - name: dind-externals
-    mountPath: /actions-runner/externals
+    mountPath: /home/runner/externals
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
@@ -125,12 +125,7 @@ volumeMounts:
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if eq $volume.name "work" }}
       {{- $createWorkVolume = 0 -}}
-- name: work
-      {{- range $key, $val := $volume }}
-        {{- if ne $key "name" }}
-  {{ $key }}: {{ $val }}
-        {{- end }}
-      {{- end }}
+- {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
   {{- if eq $createWorkVolume 1 }}
@@ -144,12 +139,7 @@ volumeMounts:
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if eq $volume.name "work" }}
       {{- $createWorkVolume = 0 -}}
-- name: work
-      {{- range $key, $val := $volume }}
-        {{- if ne $key "name" }}
-  {{ $key }}: {{ $val }}
-        {{- end }}
-      {{- end }}
+- {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
   {{- if eq $createWorkVolume 1 }}
@@ -282,7 +272,7 @@ volumeMounts:
     {{- end }}
     {{- if $mountWork }}
   - name: work
-    mountPath: /actions-runner/_work
+    mountPath: /home/runner/_work
     {{- end }}
     {{- if $mountDindCert }}
   - name: dind-cert
@@ -344,7 +334,7 @@ env:
     {{- end }}
     {{- if $setContainerHooks }}
   - name: ACTIONS_RUNNER_CONTAINER_HOOKS
-    value: /actions-runner/k8s/index.js
+    value: /home/runner/k8s/index.js
     {{- end }}
     {{- if $setPodName }}
   - name: ACTIONS_RUNNER_POD_NAME
@@ -388,7 +378,7 @@ volumeMounts:
     {{- end }}
     {{- if $mountWork }}
   - name: work
-    mountPath: /actions-runner/_work
+    mountPath: /home/runner/_work
     {{- end }}
     {{- if $mountGitHubServerTLS }}
   - name: github-server-tls-cert

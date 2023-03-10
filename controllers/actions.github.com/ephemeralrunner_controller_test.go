@@ -63,7 +63,7 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 						{
 							Name:    "setup",
 							Image:   runnerImage,
-							Command: []string{"sh", "-c", "cp -r /actions-runner/* /runner/"},
+							Command: []string{"sh", "-c", "cp -r /home/runner/* /runner/"},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "runner",

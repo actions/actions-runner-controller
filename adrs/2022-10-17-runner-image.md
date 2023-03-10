@@ -3,6 +3,19 @@
 
 **Status**: Done
 
+# Breaking Changes
+
+We aim to provide an similar experience (as close as possible) between self-hosted and GitHub-hosted runners. To achieve this, we are making the following changes to align our self-hosted runner container image with the Ubuntu runners managed by GitHub.
+Here are the changes:
+- We created a USER `runner(1001)` and a GROUP `docker(123)`
+- `sudo` has been on the image and the `runner` will be a passwordless sudoer.
+- The runner binary was placed placed under `/home/runner/` and launched using `/home/runner/run.sh`
+- The runner's work directory is `/home/runner/_work`
+- `$HOME` will point to `/home/runner`
+- The container image user will be the `runner(1001)`
+
+The latest Dockerfile can be found at: https://github.com/actions/runner/blob/main/images/Dockerfile
+
 # Context
 
 user can bring their own runner images, the contract we have are:
