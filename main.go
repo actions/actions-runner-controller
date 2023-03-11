@@ -32,10 +32,12 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -160,6 +162,10 @@ func main() {
 		Port:               port,
 		SyncPeriod:         &syncPeriod,
 		Namespace:          namespace,
+		ClientDisableCacheFor: []client.Object{
+			&corev1.Secret{},
+			&corev1.ConfigMap{},
+		},
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
