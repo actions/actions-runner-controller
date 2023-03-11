@@ -93,7 +93,7 @@ jobs:
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/Makefile
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" Makefile
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" test/e2e/e2e_test.go
-          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" .github/workflows/e2e_test_linux_vm.yaml
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" .github/workflows/e2e-test-linux-vm.yaml
 
       - name: Commit changes
         run: |
