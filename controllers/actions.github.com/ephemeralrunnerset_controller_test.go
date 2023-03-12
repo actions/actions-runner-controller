@@ -1141,12 +1141,13 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
 		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
 
-		updatedRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
-		err = k8sClient.Get(ctx, client.ObjectKey{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}, updatedRunnerSet)
+		currentRunnerSet := new(actionsv1alpha1.EphemeralRunnerSet)
+		err = k8sClient.Get(ctx, client.ObjectKey{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}, currentRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 
+		updatedRunnerSet := currentRunnerSet.DeepCopy()
 		updatedRunnerSet.Spec.Replicas = 0
-		err = k8sClient.Update(ctx, updatedRunnerSet)
+		err = k8sClient.Patch(ctx, updatedRunnerSet, client.MergeFrom(currentRunnerSet))
 		Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 		// wait for server to be called

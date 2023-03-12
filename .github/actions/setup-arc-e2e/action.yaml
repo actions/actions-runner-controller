@@ -1,0 +1,65 @@
+name: 'Setup ARC E2E Test Action'
+description: 'Build controller image, create kind cluster, load the image, and exchange ARC configure token.'
+
+inputs:
+  github-app-id:
+    description: 'GitHub App Id for exchange access token'
+    required: true
+  github-app-pk:
+    description: "GitHub App private key for exchange access token"
+    required: true
+  github-app-org:
+    description: 'The organization the GitHub App has installed on'
+    required: true
+  docker-image-name:
+    description: "Local docker image name for building"
+    required: true
+  docker-image-tag:
+    description: "Tag of ARC Docker image for building"
+    required: true
+
+outputs:
+  token:
+    description: 'Token to use for configure ARC'
+    value: ${{steps.config-token.outputs.token}}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      with:
+          # Pinning v0.9.1 for Buildx and BuildKit v0.10.6
+          # BuildKit v0.11 which has a bug causing intermittent 
+          # failures pushing images to GHCR
+          version: v0.9.1
+          driver-opts: image=moby/buildkit:v0.10.6
+
+    - name: Build controller image
+      uses: docker/build-push-action@v3
+      with:
+        file: Dockerfile
+        platforms: linux/amd64
+        load: true
+        build-args: |
+          DOCKER_IMAGE_NAME=${{inputs.docker-image-name}}
+          VERSION=${{inputs.docker-image-tag}} 
+        tags: |
+          ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Create Kind cluster and load image
+      shell: bash
+      run: |
+        PATH=$(go env GOPATH)/bin:$PATH
+        kind create cluster --name arc-e2e
+        kind load docker-image ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}} --name arc-e2e
+
+    - name: Get configure token
+      id: config-token
+      uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
+      with:
+        application_id: ${{ inputs.github-app-id }}
+        application_private_key: ${{ inputs.github-app-pk }}
+        organization: ${{ inputs.github-app-org }}
