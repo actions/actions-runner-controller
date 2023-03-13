@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v47/github"
+	gogithub "github.com/google/go-github/v50/github"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/actions/actions-runner-controller/github"

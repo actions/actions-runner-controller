@@ -71,14 +71,19 @@ var (
 	}
 )
 
+func metricLabels(extras ...string) []string {
+	return append(append([]string{}, commonLabels...), extras...)
+}
+
 var (
+	commonLabels                          = []string{"runs_on", "job_name", "organization", "repository", "repository_full_name", "owner", "workflow_name"}
 	githubWorkflowJobQueueDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "github_workflow_job_queue_duration_seconds",
 			Help:    "Queue times for workflow jobs in seconds",
 			Buckets: runtimeBuckets,
 		},
-		[]string{"runs_on", "job_name"},
+		metricLabels(),
 	)
 	githubWorkflowJobRunDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -86,41 +91,41 @@ var (
 			Help:    "Run times for workflow jobs in seconds",
 			Buckets: runtimeBuckets,
 		},
-		[]string{"runs_on", "job_name", "job_conclusion"},
+		metricLabels("job_conclusion"),
 	)
 	githubWorkflowJobConclusionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "github_workflow_job_conclusions_total",
 			Help: "Conclusions for tracked workflow jobs",
 		},
-		[]string{"runs_on", "job_name", "job_conclusion"},
+		metricLabels("job_conclusion"),
 	)
 	githubWorkflowJobsQueuedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "github_workflow_jobs_queued_total",
 			Help: "Total count of workflow jobs queued (events where job_status=queued)",
 		},
-		[]string{"runs_on", "job_name"},
+		metricLabels(),
 	)
 	githubWorkflowJobsStartedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "github_workflow_jobs_started_total",
 			Help: "Total count of workflow jobs started (events where job_status=in_progress)",
 		},
-		[]string{"runs_on", "job_name"},
+		metricLabels(),
 	)
 	githubWorkflowJobsCompletedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "github_workflow_jobs_completed_total",
 			Help: "Total count of workflow jobs completed (events where job_status=completed)",
 		},
-		[]string{"runs_on", "job_name"},
+		metricLabels(),
 	)
 	githubWorkflowJobFailuresTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "github_workflow_job_failures_total",
 			Help: "Conclusions for tracked workflow runs",
 		},
-		[]string{"runs_on", "job_name", "failed_step", "exit_code"},
+		metricLabels("failed_step", "exit_code"),
 	)
 )

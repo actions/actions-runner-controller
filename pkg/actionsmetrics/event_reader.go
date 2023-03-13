@@ -79,14 +79,34 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			labels["repository_full_name"] = *n
 			keysAndValues = append(keysAndValues, "repository_full_name", *n)
 		}
+
+		if e.Repo.Owner != nil {
+			if l := e.Repo.Owner.Login; l != nil {
+				labels["owner"] = *l
+				keysAndValues = append(keysAndValues, "owner", *l)
+			}
+		}
 	}
 
+	var org string
 	if e.Org != nil {
 		if n := e.Org.Name; n != nil {
-			labels["organization"] = *e.Org.Name
+			org = *n
 			keysAndValues = append(keysAndValues, "organization", *n)
 		}
 	}
+	labels["organization"] = org
+
+	var wn string
+	if e.WorkflowJob != nil {
+		if n := e.WorkflowJob.WorkflowName; n != nil {
+			wn = *n
+			keysAndValues = append(keysAndValues, "workflow_name", *n)
+		}
+	}
+	labels["workflow_name"] = wn
+
+	log := reader.Log.WithValues(keysAndValues...)
 
 	// switch on job status
 	switch action := e.GetAction(); action {
@@ -102,14 +122,10 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 
 		parseResult, err := reader.fetchAndParseWorkflowJobLogs(ctx, e)
 		if err != nil {
-			reader.Log.Error(err, "reading workflow job log")
+			log.Error(err, "reading workflow job log")
 			return
 		} else {
-			reader.Log.WithValues("job_name", *e.WorkflowJob.Name, "job_id", fmt.Sprint(*e.WorkflowJob.ID), "repository", *e.Repo.Name, "repository_full_name", *e.Repo.FullName)
-			if len(*e.Org.Name) > 0 {
-				reader.Log.WithValues("organization", *e.Org.Name)
-			}
-			reader.Log.Info("reading workflow_job logs")
+			log.Info("reading workflow_job logs")
 		}
 
 		githubWorkflowJobQueueDurationSeconds.With(labels).Observe(parseResult.QueueTime.Seconds())
@@ -122,10 +138,10 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 
 		parseResult, err := reader.fetchAndParseWorkflowJobLogs(ctx, e)
 		if err != nil {
-			reader.Log.Error(err, "reading workflow job log")
+			log.Error(err, "reading workflow job log")
 			return
 		} else {
-			reader.Log.Info("reading workflow_job logs", keysAndValues...)
+			log.Info("reading workflow_job logs", keysAndValues...)
 		}
 
 		if *e.WorkflowJob.Conclusion == "failure" {
