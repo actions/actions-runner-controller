@@ -44,6 +44,7 @@ webhooks:
     resources:
     - runners
   sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 - admissionReviewVersions:
   - v1beta1
   {{- if .Values.scope.singleNamespace }}
@@ -74,6 +75,7 @@ webhooks:
     resources:
     - runnerdeployments
   sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 - admissionReviewVersions:
   - v1beta1
   {{- if .Values.scope.singleNamespace }}
@@ -104,6 +106,7 @@ webhooks:
     resources:
     - runnerreplicasets
   sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 - admissionReviewVersions:
   - v1beta1
   {{- if .Values.scope.singleNamespace }}
@@ -136,6 +139,7 @@ webhooks:
   objectSelector:
     matchLabels:
       "actions-runner-controller/inject-registration-token": "true"
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -177,6 +181,7 @@ webhooks:
     resources:
     - runners
   sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 - admissionReviewVersions:
   - v1beta1
   {{- if .Values.scope.singleNamespace }}
@@ -207,6 +212,7 @@ webhooks:
     resources:
     - runnerdeployments
   sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 - admissionReviewVersions:
   - v1beta1
   {{- if .Values.scope.singleNamespace }}
@@ -238,6 +244,7 @@ webhooks:
     - runnerreplicasets
   sideEffects: None
 {{ if not (or (hasKey .Values.admissionWebHooks "caBundle") .Values.certManagerEnabled) }}
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
 ---
 apiVersion: v1
 kind: Secret
