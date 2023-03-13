@@ -92,24 +92,26 @@ jobs:
         run: |
           ct lint --config charts/.ci/ct-config-gha.yaml
 
-      - name: Set up Docker Buildx
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.4.0
+        if: steps.list-changed.outputs.changed == 'true'
+        with:
+          cluster_name: chart-testing
+
+      - name: Set up docker buildx
         uses: docker/setup-buildx-action@v2
         if: steps.list-changed.outputs.changed == 'true'
         with:
           version: latest
 
-      - name: Docker Build Test Image
+      - name: Build docker image and load into cluster
         if: steps.list-changed.outputs.changed == 'true'
         run: |
-            DOCKER_CLI_EXPERIMENTAL=enabled DOCKER_BUILDKIT=1 docker buildx build --build-arg TAG=dev -t test-arc:dev . --load
-
-      - name: Create kind cluster
-        uses: helm/kind-action@v1.4.0
-        if: steps.list-changed.outputs.changed == 'true'
-
-      - name: Load Image to Kind Cluster
-        if: steps.list-changed.outputs.changed == 'true'
-        run: kind load docker-image test-arc:dev --name chart-testing
+            export DOCKER_IMAGE_NAME=test-arc
+            export VERSION=dev
+            export IMG_RESULT=load
+            make docker-buildx
+            kind load docker-image test-arc:dev --name chart-testing
 
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
