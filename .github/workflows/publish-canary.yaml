@@ -124,6 +124,6 @@ jobs:
           push: ${{ env.PUSH_TO_REGISTRIES }}
           tags: |
             ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:canary
-            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:canary-"${{ steps.resolve_parameters.outputs.short_sha }}"
+            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:canary-${{ steps.resolve_parameters.outputs.short_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
