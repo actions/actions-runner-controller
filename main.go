@@ -37,6 +37,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	// +kubebuilder:scaffold:imports
 )
@@ -90,6 +91,7 @@ func main() {
 		namespace            string
 		logLevel             string
 		logFormat            string
+		watchSingleNamespace string
 
 		autoScalerImagePullSecrets stringSlice
 
@@ -126,6 +128,7 @@ func main() {
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
+	flag.StringVar(&watchSingleNamespace, "watch-single-namespace", "", "Restrict to watch for custom resources in a single namespace.")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
@@ -149,13 +152,27 @@ func main() {
 
 	ctrl.SetLogger(log)
 
+	managerNamespace := ""
+	var newCache cache.NewCacheFunc
+
 	if autoScalingRunnerSetOnly {
 		// We don't support metrics for AutoRunnerScaleSet for now
 		metricsAddr = "0"
+
+		managerNamespace = os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
+		if managerNamespace == "" {
+			log.Error(err, "unable to obtain manager pod namespace")
+			os.Exit(1)
+		}
+
+		if len(watchSingleNamespace) > 0 {
+			newCache = cache.MultiNamespacedCacheBuilder([]string{managerNamespace, watchSingleNamespace})
+		}
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
+		NewCache:           newCache,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
@@ -176,11 +193,6 @@ func main() {
 		managerImage := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE")
 		if managerImage == "" {
 			log.Error(err, "unable to obtain listener image")
-			os.Exit(1)
-		}
-		managerNamespace := os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
-		if managerNamespace == "" {
-			log.Error(err, "unable to obtain manager pod namespace")
 			os.Exit(1)
 		}
 

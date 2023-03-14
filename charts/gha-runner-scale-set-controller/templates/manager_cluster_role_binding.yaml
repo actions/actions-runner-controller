@@ -1,3 +1,4 @@
+{{- if empty .Values.flags.watchSingleNamespace }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -10,3 +11,4 @@ subjects:
 - kind: ServiceAccount
   name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
+{{- end }}

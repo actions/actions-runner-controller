@@ -80,6 +80,14 @@ Create the name of the service account to use
 {{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-rolebinding
 {{- end }}
 
+{{- define "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-role
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.managerSingleNamespaceRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-rolebinding
+{{- end }}
+
 {{- define "gha-runner-scale-set-controller.managerListenerRoleName" -}}
 {{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-role
 {{- end }}

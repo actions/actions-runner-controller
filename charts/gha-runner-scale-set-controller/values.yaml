@@ -68,3 +68,7 @@ flags:
   # Log level can be set here with one of the following values: "debug", "info", "warn", "error".
   # Defaults to "debug".
   logLevel: "debug"
+
+  # Restricts the controller to only watch resources in the desired namespace.
+  # Defaults to watch all namespaces when unset.
+  # watchSingleNamespace: ""
