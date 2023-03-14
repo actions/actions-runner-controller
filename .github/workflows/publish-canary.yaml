@@ -104,6 +104,14 @@ jobs:
           echo "short_sha=$(git rev-parse --short ${{ github.ref }})" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: latest
 
       # Unstable builds - run at your own risk
       - name: Build and Push
