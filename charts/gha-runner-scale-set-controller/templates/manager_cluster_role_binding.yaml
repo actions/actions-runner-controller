@@ -1,11 +1,11 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "gha-runner-scale-set-controller.managerRoleBinding" . }}
+  name: {{ include "gha-runner-scale-set-controller.managerClusterRoleBinding" . }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "gha-runner-scale-set-controller.managerRoleName" . }}
+  name: {{ include "gha-runner-scale-set-controller.managerClusterRoleName" . }}
 subjects:
 - kind: ServiceAccount
   name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}

@@ -147,7 +147,7 @@ func TestTemplate_NotCreateServiceAccount_ServiceAccountNotSet(t *testing.T) {
 	assert.ErrorContains(t, err, "serviceAccount.name must be set if serviceAccount.create is false", "We should get an error because the default service account cannot be used")
 }
 
-func TestTemplate_CreateManagerRole(t *testing.T) {
+func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
@@ -162,17 +162,17 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_role.yaml"})
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_cluster_role.yaml"})
 
-	var managerRole rbacv1.ClusterRole
-	helm.UnmarshalK8SYaml(t, output, &managerRole)
+	var managerClusterRole rbacv1.ClusterRole
+	helm.UnmarshalK8SYaml(t, output, &managerClusterRole)
 
-	assert.Empty(t, managerRole.Namespace, "ClusterRole should not have a namespace")
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-role", managerRole.Name)
-	assert.Equal(t, 18, len(managerRole.Rules))
+	assert.Empty(t, managerClusterRole.Namespace, "ClusterRole should not have a namespace")
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-cluster-role", managerClusterRole.Name)
+	assert.Equal(t, 15, len(managerClusterRole.Rules))
 }
 
-func TestTemplate_ManagerRoleBinding(t *testing.T) {
+func TestTemplate_ManagerClusterRoleBinding(t *testing.T) {
 	t.Parallel()
 
 	// Path to the helm chart we will test
@@ -189,16 +189,74 @@ func TestTemplate_ManagerRoleBinding(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_role_binding.yaml"})
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_cluster_role_binding.yaml"})
 
-	var managerRoleBinding rbacv1.ClusterRoleBinding
-	helm.UnmarshalK8SYaml(t, output, &managerRoleBinding)
+	var managerClusterRoleBinding rbacv1.ClusterRoleBinding
+	helm.UnmarshalK8SYaml(t, output, &managerClusterRoleBinding)
 
-	assert.Empty(t, managerRoleBinding.Namespace, "ClusterRoleBinding should not have a namespace")
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-rolebinding", managerRoleBinding.Name)
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-role", managerRoleBinding.RoleRef.Name)
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerRoleBinding.Subjects[0].Name)
-	assert.Equal(t, namespaceName, managerRoleBinding.Subjects[0].Namespace)
+	assert.Empty(t, managerClusterRoleBinding.Namespace, "ClusterRoleBinding should not have a namespace")
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-cluster-rolebinding", managerClusterRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-cluster-role", managerClusterRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerClusterRoleBinding.Subjects[0].Name)
+	assert.Equal(t, namespaceName, managerClusterRoleBinding.Subjects[0].Namespace)
+}
+
+func TestTemplate_CreateManagerListenerRole(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues:      map[string]string{},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_listener_role.yaml"})
+
+	var managerListenerRole rbacv1.Role
+	helm.UnmarshalK8SYaml(t, output, &managerListenerRole)
+
+	assert.Equal(t, namespaceName, managerListenerRole.Namespace, "Role should have a namespace")
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-listener-role", managerListenerRole.Name)
+	assert.Equal(t, 4, len(managerListenerRole.Rules))
+	assert.Equal(t, "pods", managerListenerRole.Rules[0].Resources[0])
+	assert.Equal(t, "pods/status", managerListenerRole.Rules[1].Resources[0])
+	assert.Equal(t, "secrets", managerListenerRole.Rules[2].Resources[0])
+	assert.Equal(t, "serviceaccounts", managerListenerRole.Rules[3].Resources[0])
+}
+
+func TestTemplate_ManagerListenerRoleBinding(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"serviceAccount.create": "true",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_listener_role_binding.yaml"})
+
+	var managerListenerRoleBinding rbacv1.RoleBinding
+	helm.UnmarshalK8SYaml(t, output, &managerListenerRoleBinding)
+
+	assert.Equal(t, namespaceName, managerListenerRoleBinding.Namespace, "RoleBinding should have a namespace")
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-listener-rolebinding", managerListenerRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-listener-role", managerListenerRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerListenerRoleBinding.Subjects[0].Name)
+	assert.Equal(t, namespaceName, managerListenerRoleBinding.Subjects[0].Namespace)
 }
 
 func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
@@ -237,6 +295,8 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, chart.AppVersion, deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
+	assert.Equal(t, namespaceName, deployment.Labels["actions.github.com/controller-service-account-namespace"])
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Labels["actions.github.com/controller-service-account-name"])
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
 

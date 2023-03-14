@@ -161,3 +161,13 @@ containerMode:
     resources:
       requests:
         storage: 1Gi
+
+## Optional controller service account that needs to have required Role and RoleBinding 
+## to operate this gha-runner-scale-set installation.
+## The helm chart will try to find the controller deployment and its service account at installation time.
+## In case the helm chart can't find the right service account, you can explicitly pass in the following value
+## to help it finish RoleBinding with the right service account.
+## Note: if your controller is installed to only watch a single namespace, you have to pass these values explicitly.
+# controllerServiceAccount:
+#   namespace: arc-system
+#   name: test-arc-gha-runner-scale-set-controller
