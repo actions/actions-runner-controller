@@ -2,7 +2,7 @@
 
 **Date**: 2023-04-14
 
-**Status**: Done[^1]
+**Status**: Done [^1]
 
 ## Context
 
