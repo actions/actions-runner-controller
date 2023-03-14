@@ -133,8 +133,6 @@ rules:
   - create
   - delete
   - get
-  - list
-  - watch
   - update
 - apiGroups:
   - ""

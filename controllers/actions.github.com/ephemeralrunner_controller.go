@@ -107,7 +107,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		if !done {
 			log.Info("Waiting for ephemeral runner owned resources to be deleted")
-			return ctrl.Result{}, nil
+			return ctrl.Result{Requeue: true}, nil
 		}
 
 		done, err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
@@ -643,7 +643,7 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 	}
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: true}, nil
 }
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
@@ -792,7 +792,6 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).
-		Owns(&corev1.Secret{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		Named("ephemeral-runner-controller").
 		Complete(r)
