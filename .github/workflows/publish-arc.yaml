@@ -29,6 +29,10 @@ jobs:
   release-controller:
     name: Release
     runs-on: ubuntu-latest
+    # gha-runner-scale-set has its own release workflow.
+    # We don't want to publish a new actions-runner-controller image 
+    # we release gha-runner-scale-set.
+    if: ${{ !startsWith(github.event.inputs.release_tag_name, 'gha-runner-scale-set-') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
