@@ -29,6 +29,7 @@ jobs:
   release-controller:
     name: Release
     runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.event.inputs.release_tag_name, 'gha-runner-scale-set-') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
