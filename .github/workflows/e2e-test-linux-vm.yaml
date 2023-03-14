@@ -5,47 +5,122 @@ on:
     branches:
       - master
   pull_request:
+      branches:
+      - master
   workflow_dispatch:
+    inputs:
+      target_org:
+        description: The org of the test repository.
+        required: true
+        default: actions-runner-controller
+      target_repo:
+        description: The repository to install the ARC.
+        required: true
+        default: arc_e2e_test_dummy
 
 env:
   TARGET_ORG: actions-runner-controller
-  CLUSTER_NAME: e2e-test
-  RUNNER_VERSION: 2.302.1
-  IMAGE_REPO: "test/test-image"
+  TARGET_REPO: arc_e2e_test_dummy
+  IMAGE_NAME: "arc-test-image"
+  IMAGE_VERSION: "dev"
   
 jobs:
-  setup-steps:
-    runs-on: [ubuntu-latest]
+  default-setup:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Add env variables
+
+      - name: Resolve inputs
+        id: resolved_inputs
         run: |
-            TAG=$(echo "0.0.$GITHUB_SHA")
-            echo "TAG=$TAG" >> $GITHUB_ENV
-            echo "IMAGE=$IMAGE_REPO:$TAG" >> $GITHUB_ENV
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+          TARGET_ORG="${{env.TARGET_ORG}}"
+          TARGET_REPO="${{env.TARGET_REPO}}"
+          if [ ! -z "${{inputs.target_org}}" ]; then
+            TARGET_ORG="${{inputs.target_org}}"
+          fi
+          if [ ! -z "${{inputs.target_repo}}" ]; then
+            TARGET_REPO="${{inputs.target_repo}}"
+          fi
+          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
+          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+
+      - uses: ./.github/actions/setup-arc-e2e
+        id: setup
         with:
-          version: latest
-      - name: Docker Build Test Image
+          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
+          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
+          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
+          docker-image-name: ${{env.IMAGE_NAME}}
+          docker-image-tag: ${{env.IMAGE_VERSION}}
+
+      - name: Install gha-runner-scale-set-controller
+        id: install_arc_controller
         run: |
-            DOCKER_CLI_EXPERIMENTAL=enabled DOCKER_BUILDKIT=1 docker buildx build --build-arg RUNNER_VERSION=$RUNNER_VERSION --build-arg TAG=$TAG -t $IMAGE . --load
-      - name: Create Kind cluster
+          helm install arc \
+          --namespace "arc-systems" \
+          --create-namespace \
+          --set image.repository=${{ env.IMAGE_NAME }} \
+          --set image.tag=${{ env.IMAGE_VERSION }} \
+          ./charts/gha-runner-scale-set-controller \
+          --debug
+          count=0
+          while true; do
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            if [ -n "$POD_NAME" ]; then
+              echo "Pod found: $POD_NAME"
+              break
+            fi
+            if [ "$count" -ge 10 ]; then
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              exit 1
+            fi
+            sleep 1
+          done
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl get pod -n arc-systems
+          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+
+      - name: Install gha-runner-scale-set
+        id: install_arc
         run: |
-          PATH=$(go env GOPATH)/bin:$PATH
-          kind create cluster --name $CLUSTER_NAME
-      - name: Load Image to Kind Cluster
-        run: kind load docker-image $IMAGE --name $CLUSTER_NAME
-      - name: Get Token
-        id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
-        with:
-          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
-          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
-          organization: ${{ env.TARGET_ORG }}
-      - uses: ./.github/actions/e2e-arc-test
-        with:
-          github-token: ${{ steps.get_workflow_token.outputs.token }}
-          config-url: "https://github.com/actions-runner-controller/arc_e2e_test_dummy"
-          docker-image-repo: $IMAGE_REPO
-          docker-image-tag: $TAG
+          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          helm install "$ARC_NAME" \
+          --namespace "arc-runners" \
+          --create-namespace \
+          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
+          ./charts/gha-runner-scale-set \
+          --debug
+          echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
+          count=0
+          while true; do
+            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            if [ -n "$POD_NAME" ]; then
+              echo "Pod found: $POD_NAME"
+              break
+            fi
+            if [ "$count" -ge 10 ]; then
+              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              exit 1
+            fi
+            sleep 1
+          done
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl get pod -n arc-systems
+
+      - name: Test ARC scales pods up and down
+        run: |
+          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
+          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
+          go test ./test_e2e_arc -v
+
+      - name: Uninstall gha-runner-scale-set
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
+          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
+
+      - name: Dump gha-runner-scale-set-controller logs
+        if: always() && steps.install_arc_controller.outcome == 'success'
+        run: |
+          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
