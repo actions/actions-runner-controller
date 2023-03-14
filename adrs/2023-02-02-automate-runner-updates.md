@@ -1,4 +1,5 @@
-# Automate updating runner version
+# ADR 2023-02-02: Automate updating runner version
+**Date**: 2023-02-02
 
 **Status**: Proposed
 

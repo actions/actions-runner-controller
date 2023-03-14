@@ -1,4 +1,4 @@
-# ADR 0001: Produce the runner image for the scaleset client
+# ADR 2022-10-17: Produce the runner image for the scaleset client
 **Date**: 2022-10-17
 
 **Status**: Done
@@ -92,7 +92,7 @@ spec:
       mountPath: /runner
   initContainers:
   - name: setup
-    image: <image> 
+    image: <image>
     command: ["sh", "-c", "cp -r /actions-runner/* /runner/"]
     volumeMounts:
     - name: runner

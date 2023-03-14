@@ -1,4 +1,4 @@
-# ADR 0007: Limit Permissions for Service Accounts in Actions-Runner-Controller
+# ADR 2023-02-10: Limit Permissions for Service Accounts in Actions-Runner-Controller
 **Date**: 2023-02-10
 
 **Status**: Pending
@@ -7,7 +7,7 @@
 
 - `actions-runner-controller` is a Kubernetes CRD (with controller) built using https://github.com/kubernetes-sigs/controller-runtime
 
-- [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) has a default cache based k8s API client.Reader to make query k8s API server more efficiency. 
+- [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) has a default cache based k8s API client.Reader to make query k8s API server more efficiency.
 
 - The cache-based API client requires cluster scope `list` and `watch` permission for any resource the controller may query.
 
@@ -52,7 +52,7 @@ The current `ClusterRole` has the following permissions:
 
 ## Limit cluster role permission on Secrets
 
-The cluster scope `List` `Secrets` permission might be a blocker for adopting `actions-runner-controller` for certain customers as they may have certain restriction in their cluster that simply doesn't allow any service account to have cluster scope `List Secrets` permission. 
+The cluster scope `List` `Secrets` permission might be a blocker for adopting `actions-runner-controller` for certain customers as they may have certain restriction in their cluster that simply doesn't allow any service account to have cluster scope `List Secrets` permission.
 
 To help these customers and improve security for `actions-runner-controller` in general, we will try to limit the `ClusterRole` permission of the controller manager's service account down to the following:
 
@@ -103,7 +103,7 @@ The `gha-runner-scale-set` helm chart will also allow customers to explicitly pr
 
 New sections in `values.yaml` of `gha-runner-scale-set`:
 ```yaml
-## Optional controller service account that needs to have required Role and RoleBinding 
+## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.
 ## In case the helm chart can't find the right service account, you can explicitly pass in the following value

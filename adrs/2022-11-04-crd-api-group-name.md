@@ -1,4 +1,4 @@
-# ADR 0004: Technical detail about actions-runner-controller repository transfer
+# ADR 2022-11-04: Technical detail about actions-runner-controller repository transfer
 **Date**: 2022-11-04
 
 **Status**: Done
@@ -10,11 +10,11 @@ As part of ARC Private Beta: Repository Migration & Open Sourcing Process, we ha
 **Goals:**
 - A clear signal that GitHub will start taking over ARC and provide support.
 - Since we are going to deprecate the existing auto-scale mode in ARC at some point, we want to have a clear separation between the legacy mode (not supported) and the new mode (supported).
-- Avoid disrupting users as much as we can, existing ARC users will not notice any difference after the repository transfer, they can keep upgrading to the newer version of ARC and keep using the legacy mode. 
+- Avoid disrupting users as much as we can, existing ARC users will not notice any difference after the repository transfer, they can keep upgrading to the newer version of ARC and keep using the legacy mode.
 
 **Challenges**
 - The original creator's name (`summerwind`) is all over the place, including some critical parts of ARC:
-    - The k8s user resource API's full name is `actions.summerwind.dev/v1alpha1/RunnerDeployment`, renaming it to `actions.github.com` is a breaking change and will force the user to rebuild their entire k8s cluster. 
+    - The k8s user resource API's full name is `actions.summerwind.dev/v1alpha1/RunnerDeployment`, renaming it to `actions.github.com` is a breaking change and will force the user to rebuild their entire k8s cluster.
     - All docker images around ARC (controller + default runner) is published to [dockerhub/summerwind](https://hub.docker.com/u/summerwind)
 - The helm chart for ARC is currently hosted on [GitHub pages](https://actions-runner-controller.github.io/actions-runner-controller) for https://github.com/actions-runner-controller/actions-runner-controller, moving the repository means we will break users who install ARC via the helm chart
 

@@ -1,4 +1,4 @@
-# ADR 0008: Pick the right runner to scale down
+# ADR 2022-12-27: Pick the right runner to scale down
 **Date**: 2022-12-27
 
 **Status**: Done
@@ -12,12 +12,12 @@
  the current amount of `EphemeralRunners`.
  - This also means the `EphemeralRunnerSet_controller` will scale down the `EphemeralRunnerSet` by finding some existing `EphemeralRunner` to delete in the case of
   the `Spec.Replicas` is less than the current amount of `EphemeralRunners`.
- 
+
  This ADR is about how can we find the right existing `EphemeralRunner` to delete when we need to scale down.
- 
- 
+
+
  ## Current approach
- 
+
 1. `EphemeralRunnerSet_controller` figure out how many `EphemeralRunner` it needs to delete, ex: need to scale down from 10 to 2 means we need to delete 8 `EphemeralRunner`
 
 2. `EphemeralRunnerSet_controller` find all `EphemeralRunner` that is in the `Running` or `Pending` phase.
@@ -27,14 +27,14 @@
 
 3. `EphemeralRunnerSet_controller` make an HTTP DELETE request to the Actions service for each `EphemeralRunner` from the previous step and ask the Actions service to delete the runner via `RunnerId`.
 (The `RunnerId` is generated after the runner registered with the Actions service, and stored on the `EphemeralRunner.Status.RunnerId`)
-  > - The HTTP DELETE request looks like the following:  
+  > - The HTTP DELETE request looks like the following:
   > `DELETE https://pipelines.actions.githubusercontent.com/WoxlUxJHrKEzIp4Nz3YmrmLlZBonrmj9xCJ1lrzcJ9ZsD1Tnw7/_apis/distributedtask/pools/0/agents/1024`
   > The Actions service will return 2 types of responses:
   >  1. 204 (No Content): The runner with Id 1024 has been successfully removed from the service or the runner with Id 1024 doesn't exist.
   >  2. 400 (Bad Request) with JSON body that contains an error message like `JobStillRunningException`: The service can't remove this runner at this point since it has been
   >  assigned to a job request, the client won't be able to remove the runner until the runner finishes its current assigned job request.
 
-4. `EphemeralRunnerSet_controller` will ignore any deletion error from runners that are still running a job, and keep trying deletion until the amount of `204` equals the amount of 
+4. `EphemeralRunnerSet_controller` will ignore any deletion error from runners that are still running a job, and keep trying deletion until the amount of `204` equals the amount of
 `EphemeralRunner` needs to delete.
 
 ## The problem with the current approach
