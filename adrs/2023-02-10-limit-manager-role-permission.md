@@ -1,4 +1,5 @@
 # ADR 2023-02-10: Limit Permissions for Service Accounts in Actions-Runner-Controller
+
 **Date**: 2023-02-10
 
 **Status**: Pending
@@ -22,6 +23,7 @@ There are 3 service accounts involved for a working `AutoscalingRunnerSet` based
 This should have the lowest privilege (not any `RoleBinding` nor `ClusterRoleBinding`) by default, in the case of `containerMode=kubernetes`, it will get certain write permission with `RoleBinding` to limit the permission to a single namespace.
 
 > References:
+>
 > - ./charts/gha-runner-scale-set/templates/no_permission_serviceaccount.yaml
 > - ./charts/gha-runner-scale-set/templates/kube_mode_role.yaml
 > - ./charts/gha-runner-scale-set/templates/kube_mode_role_binding.yaml
@@ -79,9 +81,12 @@ The `Role` and `RoleBinding` creation will happen during the `helm install demo 
 
 During `helm install demo oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller`, we will store the controller's service account info as labels on the controller `Deployment`.
 Ex:
+
 ```yaml
-    actions.github.com/controller-service-account-namespace: {{ .Release.Namespace }}
-    actions.github.com/controller-service-account-name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+actions.github.com/controller-service-account-namespace:
+  { { .Release.Namespace } }
+actions.github.com/controller-service-account-name:
+  { { include "gha-runner-scale-set-controller.serviceAccountName" . } }
 ```
 
 Introduce a new `Role` per `AutoScalingRunnerSet` installation and `RoleBinding` the `Role` with the controller's `ServiceAccount` in the namespace that each `AutoScalingRunnerSet` deployed with the following permission.
@@ -102,6 +107,7 @@ The `gha-runner-scale-set` helm chart will use this service account to properly 
 The `gha-runner-scale-set` helm chart will also allow customers to explicitly provide the controller service account info, in case the `helm lookup` couldn't locate the right controller `Deployment`.
 
 New sections in `values.yaml` of `gha-runner-scale-set`:
+
 ```yaml
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
@@ -129,5 +135,6 @@ You will deploy the `AutoScalingRunnerSet` with something like `helm install dem
 In this mode, you will end up with a manager `Role` that has all Get/List/Create/Delete/Update/Patch/Watch permissions on resources we need, and a `RoleBinding` to bind the `Role` with the controller `ServiceAccount` in the watched single namespace and the controller namespace, ex: `test-namespace` and `arc-system` in the above example.
 
 The downside of this mode:
+
 - When you have multiple controllers deployed, they will still use the same version of the CRD. So you will need to make sure every controller you deployed has to be the same version as each other.
 - You can't mismatch install both `actions-runner-controller` in this mode (watchSingleNamespace) with the regular installation mode (watchAllClusterNamespaces) in your cluster.

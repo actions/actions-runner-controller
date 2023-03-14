@@ -1,4 +1,5 @@
 # ADR 2022-10-17: Produce the runner image for the scaleset client
+
 **Date**: 2022-10-17
 
 **Status**: Done
@@ -7,6 +8,7 @@
 
 We aim to provide an similar experience (as close as possible) between self-hosted and GitHub-hosted runners. To achieve this, we are making the following changes to align our self-hosted runner container image with the Ubuntu runners managed by GitHub.
 Here are the changes:
+
 - We created a USER `runner(1001)` and a GROUP `docker(123)`
 - `sudo` has been on the image and the `runner` will be a passwordless sudoer.
 - The runner binary was placed placed under `/home/runner/` and launched using `/home/runner/run.sh`
@@ -19,6 +21,7 @@ The latest Dockerfile can be found at: https://github.com/actions/runner/blob/ma
 # Context
 
 user can bring their own runner images, the contract we have are:
+
 - It must have a runner binary under /actions-runner (/actions-runner/run.sh exists)
 - The WORKDIR is set to /actions-runner
 - If the user inside the container is root, the ENV RUNNER_ALLOW_RUNASROOT should be set to 1
@@ -36,6 +39,7 @@ However, since we expose the raw runner Pod spec to our user, advanced user can 
 - Build image is separated in two stages.
 
 ## The first stage (build)
+
 - Reuses the same base image, so it is faster to build.
 - Installs utilities needed to download assets (runner and runner-container-hooks).
 - Downloads the runner and stores it into `/actions-runner` directory.
@@ -64,6 +68,7 @@ RUN curl -f -L -o runner-container-hooks.zip https://github.com/actions/runner-c
 ```
 
 ## The main image:
+
 - Copies assets from the build stage to `/actions-runner`
 - Does not provide an entrypoint. The entrypoint should be set within the container definition.
 
@@ -77,6 +82,7 @@ COPY --from=build /actions-runner .
 ```
 
 ## Example of pod spec with the init container copying assets
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -84,20 +90,20 @@ metadata:
   name: <name>
 spec:
   containers:
-  - name: runner
-    image: <image>
-    command: ["/runner/run.sh"]
-    volumeMounts:
     - name: runner
-      mountPath: /runner
+      image: <image>
+      command: ["/runner/run.sh"]
+      volumeMounts:
+        - name: runner
+          mountPath: /runner
   initContainers:
-  - name: setup
-    image: <image>
-    command: ["sh", "-c", "cp -r /actions-runner/* /runner/"]
-    volumeMounts:
-    - name: runner
-      mountPath: /runner
+    - name: setup
+      image: <image>
+      command: ["sh", "-c", "cp -r /actions-runner/* /runner/"]
+      volumeMounts:
+        - name: runner
+          mountPath: /runner
   volumes:
-  - name: runner
-    emptyDir: {}
+    - name: runner
+      emptyDir: {}
 ```

@@ -1,4 +1,5 @@
 # ADR 2023-02-02: Automate updating runner version
+
 **Date**: 2023-02-02
 
 **Status**: Proposed
@@ -17,6 +18,7 @@ version is updated (and this is currently done manually).
 
 We can have another workflow running on a cadence (hourly seems sensible) and checking for new runner
 releases, creating a PR updating `RUNNER_VERSION` in:
+
 - `.github/workflows/release-runners.yaml`
 - `Makefile`
 - `runner/Makefile`
