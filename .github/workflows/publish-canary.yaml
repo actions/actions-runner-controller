@@ -8,12 +8,24 @@ on:
       - master
     paths-ignore:
       - '**.md'
+      - '.github/actions/**'
       - '.github/ISSUE_TEMPLATE/**'
-      - '.github/workflows/validate-chart.yaml'
-      - '.github/workflows/publish-chart.yaml'
+      - '.github/workflows/e2e-test-dispatch-workflow.yaml'
+      - '.github/workflows/e2e-test-linux-vm.yaml'
       - '.github/workflows/publish-arc.yaml'
-      - '.github/workflows/runners.yaml'
-      - '.github/workflows/validate-entrypoint.yaml'
+      - '.github/workflows/publish-chart.yaml'
+      - '.github/workflows/publish-runner-scale-set.yaml'
+      - '.github/workflows/release-runners.yaml'
+      - '.github/workflows/run-codeql.yaml'
+      - '.github/workflows/run-first-interaction.yaml'
+      - '.github/workflows/run-stale.yaml'
+      - '.github/workflows/update-runners.yaml'
+      - '.github/workflows/validate-arc.yaml'
+      - '.github/workflows/validate-chart.yaml'
+      - '.github/workflows/validate-gha-chart.yaml'
+      - '.github/workflows/validate-runners.yaml'
+      - '.github/dependabot.yml'
+      - '.github/RELEASE_NOTE_TEMPLATE.md'
       - 'runner/**'
       - '.gitignore'
       - 'PROJECT'
@@ -83,6 +95,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Normalization is needed because upper case characters are not allowed in the repository name
+      # and the short sha is needed for image tagging
       - name: Resolve parameters 
         id: resolve_parameters
         run: |
