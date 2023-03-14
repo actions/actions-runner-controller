@@ -31,6 +31,12 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.release.name, 'gha-runner-scale-set-') }}
     steps:
+      - name: Debug
+        run: |
+          echo "${{ github.event.release.name }}"
+          echo "${{ github.event.release.tag_name }}"
+          echo "${{ github.event }}"
+
       - name: Checkout
         uses: actions/checkout@v3
 
