@@ -144,7 +144,7 @@ func TestCustomerServerRootCA(t *testing.T) {
 
 	client, err := newActionsClientFromConfig(config, creds)
 	require.NoError(t, err)
-	_, err = client.GetRunnerScaleSet(ctx, "test")
+	_, err = client.GetRunnerScaleSet(ctx, 1, "test")
 	require.NoError(t, err)
 	assert.True(t, serverCalledSuccessfully)
 }

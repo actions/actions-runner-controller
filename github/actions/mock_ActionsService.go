@@ -263,13 +263,13 @@ func (_m *MockActionsService) GetRunnerGroupByName(ctx context.Context, runnerGr
 	return r0, r1
 }
 
-// GetRunnerScaleSet provides a mock function with given fields: ctx, runnerScaleSetName
-func (_m *MockActionsService) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*RunnerScaleSet, error) {
-	ret := _m.Called(ctx, runnerScaleSetName)
+// GetRunnerScaleSet provides a mock function with given fields: ctx, runnerGroupId, runnerScaleSetName
+func (_m *MockActionsService) GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*RunnerScaleSet, error) {
+	ret := _m.Called(ctx, runnerGroupId, runnerScaleSetName)
 
 	var r0 *RunnerScaleSet
-	if rf, ok := ret.Get(0).(func(context.Context, string) *RunnerScaleSet); ok {
-		r0 = rf(ctx, runnerScaleSetName)
+	if rf, ok := ret.Get(0).(func(context.Context, int, string) *RunnerScaleSet); ok {
+		r0 = rf(ctx, runnerGroupId, runnerScaleSetName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*RunnerScaleSet)
@@ -277,8 +277,8 @@ func (_m *MockActionsService) GetRunnerScaleSet(ctx context.Context, runnerScale
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, runnerScaleSetName)
+	if rf, ok := ret.Get(1).(func(context.Context, int, string) error); ok {
+		r1 = rf(ctx, runnerGroupId, runnerScaleSetName)
 	} else {
 		r1 = ret.Error(1)
 	}
