@@ -21,6 +21,18 @@ spec:
         - jsonPath: .status.currentReplicas
           name: CurrentReplicas
           type: integer
+        - jsonPath: .status.pendingEphemeralRunners
+          name: Pending Runners
+          type: integer
+        - jsonPath: .status.runningEphemeralRunners
+          name: Running Runners
+          type: integer
+        - jsonPath: .status.finishedEphemeralRunners
+          name: Finished Runners
+          type: integer
+        - jsonPath: .status.deletingEphemeralRunners
+          name: Deleting Runners
+          type: integer
       name: v1alpha1
       schema:
         openAPIV3Schema:
@@ -4296,6 +4308,14 @@ spec:
                 currentReplicas:
                   description: CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
                   type: integer
+                failedEphemeralRunners:
+                  type: integer
+                pendingEphemeralRunners:
+                  type: integer
+                runningEphemeralRunners:
+                  type: integer
+              required:
+                - currentReplicas
               type: object
           type: object
       served: true

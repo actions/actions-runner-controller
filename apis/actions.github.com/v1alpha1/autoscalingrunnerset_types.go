@@ -33,10 +33,14 @@ import (
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=number
-//+kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=number
-//+kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=number
+//+kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
 //+kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
+//+kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+//+kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
@@ -228,10 +232,19 @@ type ProxyServerConfig struct {
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
-	CurrentRunners int `json:"currentRunners,omitempty"`
+	CurrentRunners int `json:"currentRunners"`
 
 	// +optional
-	State string `json:"state,omitempty"`
+	State string `json:"state"`
+
+	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
+
+	//+optional
+	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
+	// +optional
+	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
+	// +optional
+	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 }
 
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {

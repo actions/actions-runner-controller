@@ -157,23 +157,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
 			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
 			Expect(len(runnerSetList.Items)).To(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
-			runnerSet := runnerSetList.Items[0]
-			statusUpdate := runnerSet.DeepCopy()
-			statusUpdate.Status.CurrentReplicas = 100
-			err = k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
-			Expect(err).NotTo(HaveOccurred(), "failed to patch EphemeralRunnerSet status")
-
-			Eventually(
-				func() (int, error) {
-					updated := new(v1alpha1.AutoscalingRunnerSet)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
-					if err != nil {
-						return 0, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
-					}
-					return updated.Status.CurrentRunners, nil
-				},
-				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(100), "AutoScalingRunnerSet status should be updated")
 		})
 	})
 
@@ -398,8 +381,74 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
 		})
+	})
+
+	It("Should update Status on EphemeralRunnerSet status Update", func() {
+		ars := new(v1alpha1.AutoscalingRunnerSet)
+		Eventually(
+			func() (bool, error) {
+				err := k8sClient.Get(
+					ctx,
+					client.ObjectKey{
+						Name:      autoscalingRunnerSet.Name,
+						Namespace: autoscalingRunnerSet.Namespace,
+					},
+					ars,
+				)
+				if err != nil {
+					return false, err
+				}
+				return true, nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "AutoscalingRunnerSet should be created")
+
+		runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+		Eventually(func() (int, error) {
+			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(ars.Namespace))
+			if err != nil {
+				return 0, err
+			}
+			return len(runnerSetList.Items), nil
+		},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeEquivalentTo(1), "Failed to fetch runner set list")
+
+		runnerSet := runnerSetList.Items[0]
+		statusUpdate := runnerSet.DeepCopy()
+		statusUpdate.Status.CurrentReplicas = 6
+		statusUpdate.Status.FailedEphemeralRunners = 1
+		statusUpdate.Status.RunningEphemeralRunners = 2
+		statusUpdate.Status.PendingEphemeralRunners = 3
+
+		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
+			CurrentRunners:          statusUpdate.Status.CurrentReplicas,
+			State:                   "",
+			PendingEphemeralRunners: statusUpdate.Status.PendingEphemeralRunners,
+			RunningEphemeralRunners: statusUpdate.Status.RunningEphemeralRunners,
+			FailedEphemeralRunners:  statusUpdate.Status.FailedEphemeralRunners,
+		}
+
+		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
+		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
+
+		Eventually(
+			func() (v1alpha1.AutoscalingRunnerSetStatus, error) {
+				updated := new(v1alpha1.AutoscalingRunnerSet)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+				if err != nil {
+					return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
+				}
+				return updated.Status, nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
 	})
 })
 

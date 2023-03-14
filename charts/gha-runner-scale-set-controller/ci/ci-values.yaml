@@ -1,0 +1,5 @@
+# Set the following to dummy values.
+# This is only useful in CI
+image:
+  repository: test-arc
+  tag: dev
