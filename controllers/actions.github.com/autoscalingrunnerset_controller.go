@@ -330,7 +330,11 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 
 	runnerScaleSet, err := actionsClient.GetRunnerScaleSet(ctx, runnerGroupId, autoscalingRunnerSet.Spec.RunnerScaleSetName)
 	if err != nil {
-		logger.Error(err, "Failed to get runner scale set from Actions service")
+		logger.Error(err, "Failed to get runner scale set from Actions service",
+			"runnerGroupId",
+			strconv.Itoa(runnerGroupId),
+			"runnerScaleSetName",
+			autoscalingRunnerSet.Spec.RunnerScaleSetName)
 		return ctrl.Result{}, err
 	}
 
