@@ -27,6 +27,8 @@ env:
 jobs:
   default-setup:
     runs-on: ubuntu-latest
+    env:
+      WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
 
@@ -109,10 +111,11 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Test ARC scales pods up and down
+        id: test
         run: |
           export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
           export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="arc-test-workflow.yaml"
+          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
           go test ./test_e2e_arc -v
 
       - name: Uninstall gha-runner-scale-set
@@ -126,8 +129,19 @@ jobs:
         run: |
           kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
 
+      - name: Job summary
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          cat <<-EOF > $GITHUB_STEP_SUMMARY
+          | **Outcome**    | ${{ steps.test.outcome }}  |
+          |----------------|--------------------------------------------- |
+          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
+          EOF
+
   single-namespace-setup:
     runs-on: ubuntu-latest
+    env:
+      WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
 
@@ -212,10 +226,11 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Test ARC scales pods up and down
+        id: test
         run: |
           export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
           export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="arc-test-workflow.yaml"
+          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
           go test ./test_e2e_arc -v
 
       - name: Uninstall gha-runner-scale-set
@@ -229,8 +244,19 @@ jobs:
         run: |
           kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
 
+      - name: Job summary
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          cat <<-EOF > $GITHUB_STEP_SUMMARY
+          | **Outcome**    | ${{ steps.test.outcome }}  |
+          |----------------|--------------------------------------------- |
+          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
+          EOF
+
   dind-mode-setup:
     runs-on: ubuntu-latest
+    env:
+      WORKFLOW_FILE: arc-test-dind-workflow.yaml
     steps:
       - uses: actions/checkout@v3
 
@@ -314,10 +340,11 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Test ARC scales pods up and down
+        id: test
         run: |
           export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
           export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="arc-test-dind-workflow.yaml"
+          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
           go test ./test_e2e_arc -v
 
       - name: Uninstall gha-runner-scale-set
@@ -331,8 +358,19 @@ jobs:
         run: |
           kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
 
+      - name: Job summary
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          cat <<-EOF > $GITHUB_STEP_SUMMARY
+          | **Outcome**    | ${{ steps.test.outcome }}  |
+          |----------------|--------------------------------------------- |
+          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
+          EOF
+
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
+    env:
+      WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
 
@@ -422,10 +460,11 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Test ARC scales pods up and down
+        id: test
         run: |
           export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
           export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="arc-test-kubernetes-workflow.yaml"
+          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
           go test ./test_e2e_arc -v
 
       - name: Uninstall gha-runner-scale-set
@@ -439,8 +478,19 @@ jobs:
         run: |
           kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
 
+      - name: Job summary
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          cat <<-EOF > $GITHUB_STEP_SUMMARY
+          | **Outcome**    | ${{ steps.test.outcome }}  |
+          |----------------|--------------------------------------------- |
+          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
+          EOF
+
   auth-proxy-setup:
     runs-on: ubuntu-latest
+    env:
+      WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
 
@@ -535,10 +585,11 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Test ARC scales pods up and down
+        id: test
         run: |
           export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
           export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="arc-test-workflow.yaml"
+          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
           go test ./test_e2e_arc -v
 
       - name: Uninstall gha-runner-scale-set
@@ -552,8 +603,19 @@ jobs:
         run: |
           kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
 
+      - name: Job summary
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          cat <<-EOF > $GITHUB_STEP_SUMMARY
+          | **Outcome**    | ${{ steps.test.outcome }}  |
+          |----------------|--------------------------------------------- |
+          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
+          EOF
+
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
+    env:
+      WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
 
@@ -642,10 +704,11 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Test ARC scales pods up and down
+        id: test
         run: |
           export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
           export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="arc-test-workflow.yaml"
+          export WORKFLOW_FILE="${{ env.WORKFLOW_FILE }}"
           go test ./test_e2e_arc -v
 
       - name: Uninstall gha-runner-scale-set
@@ -658,3 +721,12 @@ jobs:
         if: always() && steps.install_arc_controller.outcome == 'success'
         run: |
           kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
+
+      - name: Job summary
+        if: always() && steps.install_arc.outcome == 'success'
+        run: |
+          cat <<-EOF > $GITHUB_STEP_SUMMARY
+          | **Outcome**    | ${{ steps.test.outcome }}  |
+          |----------------|--------------------------------------------- |
+          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
+          EOF
