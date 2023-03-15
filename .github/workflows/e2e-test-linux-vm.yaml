@@ -506,7 +506,7 @@ jobs:
             --namespace=arc-runners \
             --from-literal=username=github \
             --from-literal=password='actions'
-          MINIKUBE_HOST_ADDRESS=$(minikube -p actions-dev ssh cat /etc/hosts | grep host.minikube.internal | awk '{ print $1 }')
+          MINIKUBE_HOST_ADDRESS=$(minikube ssh cat /etc/hosts | grep host.minikube.internal | awk '{ print $1 }')
           ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
@@ -617,7 +617,7 @@ jobs:
             --name squid \
             --publish 3128:3128 \
             ubuntu/squid:latest
-          MINIKUBE_HOST_ADDRESS=$(minikube -p actions-dev ssh cat /etc/hosts | grep host.minikube.internal | awk '{ print $1 }')
+          MINIKUBE_HOST_ADDRESS=$(minikube ssh cat /etc/hosts | grep host.minikube.internal | awk '{ print $1 }')
           ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
