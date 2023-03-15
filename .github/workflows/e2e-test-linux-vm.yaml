@@ -506,6 +506,7 @@ jobs:
             --namespace=arc-runners \
             --from-literal=username=github \
             --from-literal=password='actions'
+          MINIKUBE_HOST_ADDRESS=$(minikube -p actions-dev ssh cat /etc/hosts | grep host.minikube.internal | awk '{ print $1 }')
           ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
@@ -514,7 +515,7 @@ jobs:
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set template.spec.dnsPolicy="None" \
           --set "template.spec.dnsConfig.nameservers[0]=127.1.1.1" \
-          --set proxy.https.url="http://host.minikube.internal:3128" \
+          --set proxy.https.url="http://$MINIKUBE_HOST_ADDRESS:3128" \
           --set proxy.https.credentialSecretRef="proxy-auth" \
           --set "proxy.noProxy[0]=10.96.0.1:443" \
           ./charts/gha-runner-scale-set \
@@ -616,6 +617,7 @@ jobs:
             --name squid \
             --publish 3128:3128 \
             ubuntu/squid:latest
+          MINIKUBE_HOST_ADDRESS=$(minikube -p actions-dev ssh cat /etc/hosts | grep host.minikube.internal | awk '{ print $1 }')
           ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
@@ -624,7 +626,7 @@ jobs:
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set template.spec.dnsPolicy="None" \
           --set "template.spec.dnsConfig.nameservers[0]=127.1.1.1" \
-          --set proxy.https.url="http://host.minikube.internal:3128" \
+          --set proxy.https.url="http://$MINIKUBE_HOST_ADDRESS:3128" \
           --set "proxy.noProxy[0]=10.96.0.1:443" \
           ./charts/gha-runner-scale-set \
           --debug
