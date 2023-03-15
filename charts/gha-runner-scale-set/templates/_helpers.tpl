@@ -75,19 +75,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
-{{- range $i, $val := .Values.template.spec.containers -}}
-{{- if eq $val.name "runner" -}}
+{{- range $i, $val := .Values.template.spec.containers }}
+  {{- if eq $val.name "runner" }}
 image: {{ $val.image }}
-{{- if $val.imagePullSecrets }}
-imagePullSecrets:
-  {{ $val.imagePullSecrets | toYaml -}}
-{{- end }}
 command: ["cp"]
 args: ["-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
   - name: dind-externals
     mountPath: /home/runner/tmpDir
-{{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}
 
@@ -124,7 +120,7 @@ volumeMounts:
 {{- $createWorkVolume := 1 }}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if eq $volume.name "work" }}
-      {{- $createWorkVolume = 0 -}}
+      {{- $createWorkVolume = 0 }}
 - {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
@@ -138,7 +134,7 @@ volumeMounts:
 {{- $createWorkVolume := 1 }}
   {{- range $i, $volume := .Values.template.spec.volumes }}
     {{- if eq $volume.name "work" }}
-      {{- $createWorkVolume = 0 -}}
+      {{- $createWorkVolume = 0 }}
 - {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
@@ -160,25 +156,20 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.non-runner-containers" -}}
-  {{- range $i, $container := .Values.template.spec.containers -}}
-    {{- if ne $container.name "runner" -}}
-- name: {{ $container.name }}
-      {{- range $key, $val := $container }}
-        {{- if ne $key "name" }}
-  {{ $key }}: {{ $val }}
-        {{- end }}
-      {{- end }}
+  {{- range $i, $container := .Values.template.spec.containers }}
+    {{- if ne $container.name "runner" }}
+- {{ $container | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-runner-container" -}}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-{{- range $i, $container := .Values.template.spec.containers -}}
-  {{- if eq $container.name "runner" -}}
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "runner" }}
     {{- range $key, $val := $container }}
       {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
-{{ $key }}: {{ $val }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
       {{- end }}
     {{- end }}
     {{- $setDockerHost := 1 }}
@@ -195,29 +186,24 @@ env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
         {{- if eq $env.name "DOCKER_HOST" }}
-          {{- $setDockerHost = 0 -}}
+          {{- $setDockerHost = 0 }}
         {{- end }}
         {{- if eq $env.name "DOCKER_TLS_VERIFY" }}
-          {{- $setDockerTlsVerify = 0 -}}
+          {{- $setDockerTlsVerify = 0 }}
         {{- end }}
         {{- if eq $env.name "DOCKER_CERT_PATH" }}
-          {{- $setDockerCertPath = 0 -}}
+          {{- $setDockerCertPath = 0 }}
         {{- end }}
         {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
-          {{- $setRunnerWaitDocker = 0 -}}
+          {{- $setRunnerWaitDocker = 0 }}
         {{- end }}
         {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
-          {{- $setNodeExtraCaCerts = 0 -}}
+          {{- $setNodeExtraCaCerts = 0 }}
         {{- end }}
         {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
-          {{- $setRunnerUpdateCaCerts = 0 -}}
+          {{- $setRunnerUpdateCaCerts = 0 }}
         {{- end }}
-  - name: {{ $env.name }}
-        {{- range $envKey, $envVal := $env }}
-          {{- if ne $envKey "name" }}
-    {{ $envKey }}: {{ $envVal | toYaml | nindent 8 }}
-          {{- end }}
-        {{- end }}
+  - {{ $env | toYaml | nindent 4 }}
       {{- end }}
     {{- end }}
     {{- if $setDockerHost }}
@@ -254,20 +240,15 @@ volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
         {{- if eq $volMount.name "work" }}
-          {{- $mountWork = 0 -}}
+          {{- $mountWork = 0 }}
         {{- end }}
         {{- if eq $volMount.name "dind-cert" }}
-          {{- $mountDindCert = 0 -}}
+          {{- $mountDindCert = 0 }}
         {{- end }}
         {{- if eq $volMount.name "github-server-tls-cert" }}
-          {{- $mountGitHubServerTLS = 0 -}}
+          {{- $mountGitHubServerTLS = 0 }}
         {{- end }}
-  - name: {{ $volMount.name }}
-        {{- range $mountKey, $mountVal := $volMount }}
-          {{- if ne $mountKey "name" }}
-    {{ $mountKey }}: {{ $mountVal | toYaml | nindent 8 }}
-          {{- end }}
-        {{- end }}
+  - {{ $volMount | toYaml | nindent 4 }}
       {{- end }}
     {{- end }}
     {{- if $mountWork }}
@@ -290,11 +271,11 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.kubernetes-mode-runner-container" -}}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-{{- range $i, $container := .Values.template.spec.containers -}}
-  {{- if eq $container.name "runner" -}}
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "runner" }}
     {{- range $key, $val := $container }}
       {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
-{{ $key }}: {{ $val }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
       {{- end }}
     {{- end }}
     {{- $setContainerHooks := 1 }}
@@ -310,26 +291,21 @@ env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
         {{- if eq $env.name "ACTIONS_RUNNER_CONTAINER_HOOKS" }}
-          {{- $setContainerHooks = 0 -}}
+          {{- $setContainerHooks = 0 }}
         {{- end }}
         {{- if eq $env.name "ACTIONS_RUNNER_POD_NAME" }}
-          {{- $setPodName = 0 -}}
+          {{- $setPodName = 0 }}
         {{- end }}
         {{- if eq $env.name "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER" }}
-          {{- $setRequireJobContainer = 0 -}}
+          {{- $setRequireJobContainer = 0 }}
         {{- end }}
         {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
-          {{- $setNodeExtraCaCerts = 0 -}}
+          {{- $setNodeExtraCaCerts = 0 }}
         {{- end }}
         {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
-          {{- $setRunnerUpdateCaCerts = 0 -}}
+          {{- $setRunnerUpdateCaCerts = 0 }}
         {{- end }}
-  - name: {{ $env.name }}
-        {{- range $envKey, $envVal := $env }}
-          {{- if ne $envKey "name" }}
-    {{ $envKey }}: {{ $envVal | toYaml | nindent 8 }}
-          {{- end }}
-        {{- end }}
+  - {{ $env | toYaml | nindent 4 }}
       {{- end }}
     {{- end }}
     {{- if $setContainerHooks }}
@@ -363,17 +339,12 @@ volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
         {{- if eq $volMount.name "work" }}
-          {{- $mountWork = 0 -}}
+          {{- $mountWork = 0 }}
         {{- end }}
         {{- if eq $volMount.name "github-server-tls-cert" }}
-          {{- $mountGitHubServerTLS = 0 -}}
+          {{- $mountGitHubServerTLS = 0 }}
         {{- end }}
-  - name: {{ $volMount.name }}
-        {{- range $mountKey, $mountVal := $volMount }}
-          {{- if ne $mountKey "name" }}
-    {{ $mountKey }}: {{ $mountVal | toYaml | nindent 8 }}
-          {{- end }}
-        {{- end }}
+  - {{ $volMount | toYaml | nindent 4 }}
       {{- end }}
     {{- end }}
     {{- if $mountWork }}
@@ -391,14 +362,14 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.default-mode-runner-containers" -}}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-{{- range $i, $container := .Values.template.spec.containers -}}
-{{- if ne $container.name "runner" -}}
+{{- range $i, $container := .Values.template.spec.containers }}
+{{- if ne $container.name "runner" }}
 - {{ $container | toYaml | nindent 2 }}
 {{- else }}
 - name: {{ $container.name }}
   {{- range $key, $val := $container }}
     {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
-  {{ $key }}: {{ $val }}
+  {{ $key }}: {{ $val | toYaml | nindent 4 }}
     {{- end }}
   {{- end }}
   {{- $setNodeExtraCaCerts := 0 }}
@@ -411,17 +382,12 @@ volumeMounts:
     {{- with $container.env }}
       {{- range $i, $env := . }}
         {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
-          {{- $setNodeExtraCaCerts = 0 -}}
+          {{- $setNodeExtraCaCerts = 0 }}
         {{- end }}
         {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
-          {{- $setRunnerUpdateCaCerts = 0 -}}
+          {{- $setRunnerUpdateCaCerts = 0 }}
         {{- end }}
-    - name: {{ $env.name }}
-        {{- range $envKey, $envVal := $env }}
-          {{- if ne $envKey "name" }}
-      {{ $envKey }}: {{ $envVal | toYaml | nindent 10 }}
-          {{- end }}
-        {{- end }}
+    - {{ $env | toYaml | nindent 6 }}
       {{- end }}
     {{- end }}
     {{- if $setNodeExtraCaCerts }}
@@ -440,14 +406,9 @@ volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
         {{- if eq $volMount.name "github-server-tls-cert" }}
-          {{- $mountGitHubServerTLS = 0 -}}
+          {{- $mountGitHubServerTLS = 0 }}
         {{- end }}
-    - name: {{ $volMount.name }}
-        {{- range $mountKey, $mountVal := $volMount }}
-          {{- if ne $mountKey "name" }}
-      {{ $mountKey }}: {{ $mountVal | toYaml | nindent 10 }}
-          {{- end }}
-        {{- end }}
+    - {{ $volMount | toYaml | nindent 6 }}
       {{- end }}
     {{- end }}
     {{- if $mountGitHubServerTLS }}

@@ -59,16 +59,16 @@ Create the name of the service account to use
 */}}
 {{- define "gha-runner-scale-set-controller.serviceAccountName" -}}
 {{- if eq .Values.serviceAccount.name "default"}}
-{{- fail "serviceAccount.name cannot be set to 'default'" }}
+  {{- fail "serviceAccount.name cannot be set to 'default'" }}
 {{- end }}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "gha-runner-scale-set-controller.fullname" .) .Values.serviceAccount.name }}
+  {{- default (include "gha-runner-scale-set-controller.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
-    {{- if not .Values.serviceAccount.name }}
-{{- fail "serviceAccount.name must be set if serviceAccount.create is false" }}
-    {{- else }}
-{{- .Values.serviceAccount.name }}
-    {{- end }}
+  {{- if not .Values.serviceAccount.name }}
+    {{- fail "serviceAccount.name must be set if serviceAccount.create is false" }}
+  {{- else }}
+    {{- .Values.serviceAccount.name }}
+  {{- end }}
 {{- end }}
 {{- end }}
 
@@ -107,7 +107,7 @@ Create the name of the service account to use
 {{- define "gha-runner-scale-set-controller.imagePullSecretsNames" -}}
 {{- $names := list }}
 {{- range $k, $v := . }}
-{{- $names = append $names $v.name }}
+  {{- $names = append $names $v.name }}
 {{- end }}
 {{- $names | join ","}}
 {{- end }}
