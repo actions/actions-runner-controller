@@ -49,12 +49,11 @@ runs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Create Kind cluster and load image
+    - name: Create minikube cluster and load image
       shell: bash
       run: |
-        PATH=$(go env GOPATH)/bin:$PATH
-        kind create cluster --name arc-e2e
-        kind load docker-image ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}} --name arc-e2e
+        minikube start
+        minikube image load ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}}
 
     - name: Get configure token
       id: config-token
