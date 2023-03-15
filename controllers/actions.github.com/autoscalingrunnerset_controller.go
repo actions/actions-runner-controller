@@ -316,24 +316,29 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		logger.Error(err, "Failed to initialize Actions service client for creating a new runner scale set")
 		return ctrl.Result{}, err
 	}
-	runnerScaleSet, err := actionsClient.GetRunnerScaleSet(ctx, autoscalingRunnerSet.Spec.RunnerScaleSetName)
+
+	runnerGroupId := 1
+	if len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 {
+		runnerGroup, err := actionsClient.GetRunnerGroupByName(ctx, autoscalingRunnerSet.Spec.RunnerGroup)
+		if err != nil {
+			logger.Error(err, "Failed to get runner group by name", "runnerGroup", autoscalingRunnerSet.Spec.RunnerGroup)
+			return ctrl.Result{}, err
+		}
+
+		runnerGroupId = int(runnerGroup.ID)
+	}
+
+	runnerScaleSet, err := actionsClient.GetRunnerScaleSet(ctx, runnerGroupId, autoscalingRunnerSet.Spec.RunnerScaleSetName)
 	if err != nil {
-		logger.Error(err, "Failed to get runner scale set from Actions service")
+		logger.Error(err, "Failed to get runner scale set from Actions service",
+			"runnerGroupId",
+			strconv.Itoa(runnerGroupId),
+			"runnerScaleSetName",
+			autoscalingRunnerSet.Spec.RunnerScaleSetName)
 		return ctrl.Result{}, err
 	}
 
-	runnerGroupId := 1
 	if runnerScaleSet == nil {
-		if len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 {
-			runnerGroup, err := actionsClient.GetRunnerGroupByName(ctx, autoscalingRunnerSet.Spec.RunnerGroup)
-			if err != nil {
-				logger.Error(err, "Failed to get runner group by name", "runnerGroup", autoscalingRunnerSet.Spec.RunnerGroup)
-				return ctrl.Result{}, err
-			}
-
-			runnerGroupId = int(runnerGroup.ID)
-		}
-
 		runnerScaleSet, err = actionsClient.CreateRunnerScaleSet(
 			ctx,
 			&actions.RunnerScaleSet{

@@ -215,7 +215,7 @@ func (f *FakeClient) applyDefaults() {
 	f.getRunnerByNameResult.RunnerReference = defaultRunnerReference
 }
 
-func (f *FakeClient) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*actions.RunnerScaleSet, error) {
+func (f *FakeClient) GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*actions.RunnerScaleSet, error) {
 	return f.getRunnerScaleSetResult.RunnerScaleSet, f.getRunnerScaleSetResult.err
 }
 

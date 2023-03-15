@@ -34,7 +34,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		got, err := client.GetRunnerScaleSet(ctx, scaleSetName)
+		got, err := client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -50,7 +50,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
+		_, err = client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		require.NoError(t, err)
 
 		expectedPath := "/tenant/123/_apis/runtime/runnerscalesets"
@@ -67,7 +67,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
+		_, err = client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		assert.NotNil(t, err)
 	})
 
@@ -80,7 +80,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
+		_, err = client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		assert.NotNil(t, err)
 	})
 
@@ -102,7 +102,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
+		_, err = client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		assert.NotNil(t, err)
 		expectedRetry := retryMax + 1
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
@@ -118,7 +118,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		got, err := client.GetRunnerScaleSet(ctx, scaleSetName)
+		got, err := client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -133,7 +133,7 @@ func TestGetRunnerScaleSet(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetRunnerScaleSet(ctx, scaleSetName)
+		_, err = client.GetRunnerScaleSet(ctx, 1, scaleSetName)
 		require.NotNil(t, err)
 		assert.Equal(t, wantErr.Error(), err.Error())
 	})

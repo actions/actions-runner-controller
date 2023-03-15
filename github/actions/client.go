@@ -31,7 +31,7 @@ const (
 
 //go:generate mockery --inpackage --name=ActionsService
 type ActionsService interface {
-	GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*RunnerScaleSet, error)
+	GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*RunnerScaleSet, error)
 	GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int) (*RunnerScaleSet, error)
 	GetRunnerGroupByName(ctx context.Context, runnerGroup string) (*RunnerGroup, error)
 	CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error)
@@ -285,8 +285,8 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 	return req, nil
 }
 
-func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerScaleSetName string) (*RunnerScaleSet, error) {
-	path := fmt.Sprintf("/%s?name=%s", scaleSetEndpoint, runnerScaleSetName)
+func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*RunnerScaleSet, error) {
+	path := fmt.Sprintf("/%s?runnerGroupId=%d&name=%s", scaleSetEndpoint, runnerGroupId, runnerScaleSetName)
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
