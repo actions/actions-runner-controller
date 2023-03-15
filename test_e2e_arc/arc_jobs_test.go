@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -93,16 +94,23 @@ func TestARCJobs(t *testing.T) {
 	t.Run("Get available pods during job run", func(t *testing.T) {
 		c := http.Client{}
 		targetArcName := os.Getenv("ARC_NAME")
+		require.NotEmpty(t, targetArcName, "ARC_NAME environment variable is required for this test to run. (e.g. arc-e2e-test)")
+
+		targetWorkflow := os.Getenv("WORKFLOW_FILE")
+		require.NotEmpty(t, targetWorkflow, "WORKFLOW_FILE environment variable is required for this test to run. (e.g. e2e_test.yml)")
+
+		ght := os.Getenv("GITHUB_TOKEN")
+		require.NotEmpty(t, ght, "GITHUB_TOKEN environment variable is required for this test to run.")
+
 		// We are triggering manually a workflow that already exists in the repo.
 		// This workflow is expected to spin up a number of runner pods matching the runners value set in podCountsByType.
-		url := "https://api.github.com/repos/actions-runner-controller/arc_e2e_test_dummy/actions/workflows/arc-test-workflow.yaml/dispatches"
+		url := "https://api.github.com/repos/actions-runner-controller/arc_e2e_test_dummy/actions/workflows/" + targetWorkflow + "/dispatches"
 		jsonStr := []byte(fmt.Sprintf(`{"ref":"main", "inputs":{"arc_name":"%s"}}`, targetArcName))
 
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 		if err != nil {
 			t.Fatal(err)
 		}
-		ght := os.Getenv("GITHUB_TOKEN")
 		req.Header.Add("Accept", "application/vnd.github+json")
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", ght))
 		req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
