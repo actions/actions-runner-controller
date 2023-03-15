@@ -441,12 +441,6 @@ jobs:
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
-    services:
-      squidProxy:
-        image: huangtingluo/squid-proxy:latest
-        ports:
-        - 3128:3128
-        options: '--health-cmd "sleep 5"'
     steps:
       - uses: actions/checkout@v3
 
@@ -503,6 +497,10 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
+          docker run -d \
+            --name squid \
+            --publish 3128:3128 \
+            huangtingluo/squid-proxy:latest
           kubectl create namespace arc-runners
           kubectl create secret generic proxy-auth \
             --namespace=arc-runners \
@@ -558,12 +556,6 @@ jobs:
 
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
-    services:
-      squidProxy:
-        image: ubuntu/squid:latest
-        ports:
-        - 3128:3128
-        options: '--health-cmd "sleep 5"'
     steps:
       - uses: actions/checkout@v3
 
@@ -620,6 +612,10 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
+          docker run -d \
+            --name squid \
+            --publish 3128:3128 \
+            ubuntu/squid:latest
           ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
