@@ -11,7 +11,7 @@ to understand why this ADR was written?_
 
 ## Decision
 
-**What** is the change being proposed? / **How** will it be implemented?\*
+_**What** is the change being proposed? **How** will it be implemented?_
 
 ## Consequences
 
