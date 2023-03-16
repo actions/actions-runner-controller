@@ -6,13 +6,13 @@
 
 ## Context
 
-*What is the issue or background knowledge necessary for future readers
-to understand why this ADR was written?*
+_What is the issue or background knowledge necessary for future readers
+to understand why this ADR was written?_
 
 ## Decision
 
-**What** is the change being proposed? / **How** will it be implemented?*
+_**What** is the change being proposed? **How** will it be implemented?_
 
 ## Consequences
 
-*What becomes easier or more difficult to do because of this change?*
+_What becomes easier or more difficult to do because of this change?_

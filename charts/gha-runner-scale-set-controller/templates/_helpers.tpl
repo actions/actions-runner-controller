@@ -39,7 +39,7 @@ helm.sh/chart: {{ include "gha-runner-scale-set-controller.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
-app.kubernetes.io/part-of: {{ .Chart.Name }}
+app.kubernetes.io/part-of: gha-runner-scale-set-controller
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- range $k, $v := .Values.labels }}
 {{ $k }}: {{ $v }}

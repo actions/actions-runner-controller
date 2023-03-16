@@ -310,6 +310,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, namespaceName, deployment.Labels["actions.github.com/controller-service-account-namespace"])
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Labels["actions.github.com/controller-service-account-name"])
 	assert.NotContains(t, deployment.Labels, "actions.github.com/controller-watch-single-namespace")
+	assert.Equal(t, "gha-runner-scale-set-controller", deployment.Labels["app.kubernetes.io/part-of"])
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
 
@@ -416,6 +417,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "test-arc", deployment.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, chart.AppVersion, deployment.Labels["app.kubernetes.io/version"])
 	assert.Equal(t, "Helm", deployment.Labels["app.kubernetes.io/managed-by"])
+	assert.Equal(t, "gha-runner-scale-set-controller", deployment.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "bar", deployment.Labels["foo"])
 	assert.Equal(t, "actions", deployment.Labels["github"])
 
