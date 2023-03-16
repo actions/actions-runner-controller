@@ -12,7 +12,7 @@ The `RunnerScaleSet` object will represent a set of homogeneous self-hosted runn
 
 A `RunnerScaleSet` client (ARC) needs to communicate with the Actions service via HTTP long-poll in a certain protocol to get a workflow job successfully landed on one of its homogeneous self-hosted runners.
 
-In this ADR, I want to discuss the following within the context of actions-runner-controller's new scaling mode:
+In this ADR, we discuss the following within the context of actions-runner-controller's new scaling mode:
 
 - Who and how to create a RunnerScaleSet on the service?
 - Who and how to delete a RunnerScaleSet on the service?
