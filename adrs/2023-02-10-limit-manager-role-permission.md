@@ -83,10 +83,8 @@ During `helm install demo oci://ghcr.io/actions/actions-runner-controller-charts
 Ex:
 
 ```yaml
-actions.github.com/controller-service-account-namespace:
-  { { .Release.Namespace } }
-actions.github.com/controller-service-account-name:
-  { { include "gha-runner-scale-set-controller.serviceAccountName" . } }
+actions.github.com/controller-service-account-namespace: {{ .Release.Namespace }}
+actions.github.com/controller-service-account-name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
 ```
 
 Introduce a new `Role` per `AutoScalingRunnerSet` installation and `RoleBinding` the `Role` with the controller's `ServiceAccount` in the namespace that each `AutoScalingRunnerSet` deployed with the following permission.
