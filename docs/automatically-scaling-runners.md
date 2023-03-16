@@ -47,11 +47,11 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   metrics:
-  - type: PercentageRunnersBusy
-    scaleUpThreshold: '0.75'
-    scaleDownThreshold: '0.25'
-    scaleUpFactor: '2'
-    scaleDownFactor: '0.5'
+    - type: PercentageRunnersBusy
+      scaleUpThreshold: '0.75'
+      scaleDownThreshold: '0.25'
+      scaleUpFactor: '2'
+      scaleDownFactor: '0.5'
 ```
 
 ## Pull Driven Scaling
@@ -120,10 +120,10 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   metrics:
-  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
-    repositoryNames:
-    # A repository name is the REPO part of `github.com/OWNER/REPO`
-    - myrepo
+    - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+      repositoryNames:
+      # A repository name is the REPO part of `github.com/OWNER/REPO`
+      - myrepo
 ```
 
 **PercentageRunnersBusy**
@@ -157,11 +157,11 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   metrics:
-  - type: PercentageRunnersBusy
-    scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
-    scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
-    scaleUpFactor: '1.4'        # The scale up multiplier factor applied to desired count
-    scaleDownFactor: '0.7'      # The scale down multiplier factor applied to desired count
+    - type: PercentageRunnersBusy
+      scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
+      scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
+      scaleUpFactor: '1.4'        # The scale up multiplier factor applied to desired count
+      scaleDownFactor: '0.7'      # The scale down multiplier factor applied to desired count
 ```
 
 ```yaml
@@ -179,11 +179,11 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   metrics:
-  - type: PercentageRunnersBusy
-    scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
-    scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
-    scaleUpAdjustment: 2        # The scale up runner count added to desired count
-    scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
+    - type: PercentageRunnersBusy
+      scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
+      scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
+      scaleUpAdjustment: 2        # The scale up runner count added to desired count
+      scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
 ```
 
 ## Webhook Driven Scaling
