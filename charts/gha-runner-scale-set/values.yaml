@@ -68,16 +68,20 @@ githubConfigSecret:
 #       key: ca.pem
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
-## template is the PodSpec for each runner Pod
-template:
-  spec:
-    containers:
-    - name: runner
-      image: ghcr.io/actions/actions-runner:latest
-      command: ["/home/runner/run.sh"]
-
 containerMode:
   type: ""  ## type can be set to dind or kubernetes
+  ## the following is required when containerMode.type=kubernetes
+  # kubernetesModeWorkVolumeClaim:
+  #   accessModes: ["ReadWriteOnce"]
+  #   # For local testing, use https://github.com/openebs/dynamic-localpv-provisioner/blob/develop/docs/quickstart.md to provide dynamic provision volume with storageClassName: openebs-hostpath
+  #   storageClassName: "dynamic-blob-storage"
+  #   resources:
+  #     requests:
+  #       storage: 1Gi
+
+## template is the PodSpec for each runner Pod
+template:
+  ## template.spec will be modified if you change the container mode
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
   ## template:
   ##   spec:
@@ -151,16 +155,11 @@ containerMode:
   ##               resources:
   ##                 requests:
   ##                   storage: 1Gi
-
-  ## the following is required when containerMode.type=kubernetes
-  kubernetesModeWorkVolumeClaim:
-    accessModes: ["ReadWriteOnce"]
-    # For local testing, use https://github.com/openebs/dynamic-localpv-provisioner/blob/develop/docs/quickstart.md to provide dynamic provision volume with storageClassName: openebs-hostpath
-    # TODO: remove before release
-    storageClassName: "dynamic-blob-storage"
-    resources:
-      requests:
-        storage: 1Gi
+  spec:
+    containers:
+    - name: runner
+      image: ghcr.io/actions/actions-runner:latest
+      command: ["/home/runner/run.sh"]
 
 ## Optional controller service account that needs to have required Role and RoleBinding 
 ## to operate this gha-runner-scale-set installation.
