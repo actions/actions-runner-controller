@@ -1,0 +1,31 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    containers:
+    - name: runner
+      image: runner-image:latest
+      env:
+      - name: ACTIONS_RUNNER_CONTAINER_HOOKS
+        value: /k8s/index.js
+      - name: MY_NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      volumeMounts:
+      - name: work
+        mountPath: /work
+      - name: others
+        mountPath: /others
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+    volumes:
+    - name: work
+      hostPath:
+        path: /data
+        type: Directory
+containerMode:
+  type: kubernetes

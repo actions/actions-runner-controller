@@ -36,17 +36,21 @@ spec:
     {{- if .Values.proxy.http }}
     http:
       url: {{ .Values.proxy.http.url }}
+      {{- if .Values.proxy.http.credentialSecretRef }}
       credentialSecretRef: {{ .Values.proxy.http.credentialSecretRef }}
-    {{ end }}
+      {{- end }}
+    {{- end }}
     {{- if .Values.proxy.https }}
     https:
       url: {{ .Values.proxy.https.url }}
+      {{- if .Values.proxy.https.credentialSecretRef }}
       credentialSecretRef: {{ .Values.proxy.https.credentialSecretRef }}
-    {{ end }}
+      {{- end }}
+    {{- end }}
     {{- if and .Values.proxy.noProxy (kindIs "slice" .Values.proxy.noProxy) }}
     noProxy: {{ .Values.proxy.noProxy | toYaml | nindent 6}}
-    {{ end }}
-  {{ end }}
+    {{- end }}
+  {{- end }}
 
   {{- if and (or (kindIs "int64" .Values.minRunners) (kindIs "float64" .Values.minRunners)) (or (kindIs "int64" .Values.maxRunners) (kindIs "float64" .Values.maxRunners)) }}
     {{- if gt .Values.minRunners .Values.maxRunners }}

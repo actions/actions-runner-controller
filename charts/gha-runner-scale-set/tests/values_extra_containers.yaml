@@ -1,0 +1,46 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    containers:
+    - name: runner
+      image: runner-image:latest
+      env:
+      - name: SOME_ENV
+        value: SOME_VALUE
+      - name: MY_NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      volumeMounts:
+      - name: work
+        mountPath: /work
+      - name: others
+        mountPath: /others
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+    - name: other
+      image: other-image:latest
+      volumeMounts:
+      - name: work
+        mountPath: /work
+      - name: others
+        mountPath: /others
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+    volumes:
+    - name: work
+      hostPath:
+        path: /data
+        type: Directory
+    dnsPolicy: "None"
+    dnsConfig:
+      nameservers:
+        - 192.0.2.1
+containerMode:
+  type: none

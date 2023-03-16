@@ -1520,3 +1520,171 @@ func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
 	assert.Equal(t, "arc", managerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, "arc-system", managerRoleBinding.Subjects[0].Namespace)
 }
+
+func TestTemplateRenderedAutoScalingRunnerSet_ExtraContainers(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_extra_containers.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "There should be 2 containers")
+	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
+	assert.Equal(t, "other", ars.Spec.Template.Spec.Containers[1].Name, "Container name should be other")
+	assert.Equal(t, "250m", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String(), "CPU Limit should be set")
+	assert.Equal(t, "64Mi", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String(), "Memory Limit should be set")
+	assert.Equal(t, "250m", ars.Spec.Template.Spec.Containers[1].Resources.Limits.Cpu().String(), "CPU Limit should be set")
+	assert.Equal(t, "64Mi", ars.Spec.Template.Spec.Containers[1].Resources.Limits.Memory().String(), "Memory Limit should be set")
+	assert.Equal(t, "SOME_ENV", ars.Spec.Template.Spec.Containers[0].Env[0].Name, "SOME_ENV should be set")
+	assert.Equal(t, "SOME_VALUE", ars.Spec.Template.Spec.Containers[0].Env[0].Value, "SOME_ENV should be set to `SOME_VALUE`")
+	assert.Equal(t, "MY_NODE_NAME", ars.Spec.Template.Spec.Containers[0].Env[1].Name, "MY_NODE_NAME should be set")
+	assert.Equal(t, "spec.nodeName", ars.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath, "MY_NODE_NAME should be set to `spec.nodeName`")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name, "VolumeMount name should be work")
+	assert.Equal(t, "/work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /work")
+	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name, "VolumeMount name should be others")
+	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /others")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be work")
+	assert.Equal(t, corev1.DNSNone, ars.Spec.Template.Spec.DNSPolicy, "DNS Policy should be None")
+	assert.Equal(t, "192.0.2.1", ars.Spec.Template.Spec.DNSConfig.Nameservers[0], "DNS Nameserver should be set")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ExtraPodSpec(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_extra_pod_spec.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "There should be 1 containers")
+	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
+	assert.Equal(t, corev1.DNSNone, ars.Spec.Template.Spec.DNSPolicy, "DNS Policy should be None")
+	assert.Equal(t, "192.0.2.1", ars.Spec.Template.Spec.DNSConfig.Nameservers[0], "DNS Nameserver should be set")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_merge_spec.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "There should be 2 containers")
+	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
+	assert.Equal(t, "250m", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String(), "CPU Limit should be set")
+	assert.Equal(t, "64Mi", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String(), "Memory Limit should be set")
+	assert.Equal(t, "DOCKER_HOST", ars.Spec.Template.Spec.Containers[0].Env[0].Name, "DOCKER_HOST should be set")
+	assert.Equal(t, "tcp://localhost:9999", ars.Spec.Template.Spec.Containers[0].Env[0].Value, "DOCKER_HOST should be set to `tcp://localhost:9999`")
+	assert.Equal(t, "MY_NODE_NAME", ars.Spec.Template.Spec.Containers[0].Env[1].Name, "MY_NODE_NAME should be set")
+	assert.Equal(t, "spec.nodeName", ars.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath, "MY_NODE_NAME should be set to `spec.nodeName`")
+	assert.Equal(t, "DOCKER_TLS_VERIFY", ars.Spec.Template.Spec.Containers[0].Env[2].Name, "DOCKER_TLS_VERIFY should be set")
+	assert.Equal(t, "1", ars.Spec.Template.Spec.Containers[0].Env[2].Value, "DOCKER_TLS_VERIFY should be set to `1`")
+	assert.Equal(t, "DOCKER_CERT_PATH", ars.Spec.Template.Spec.Containers[0].Env[3].Name, "DOCKER_CERT_PATH should be set")
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].Env[3].Value, "DOCKER_CERT_PATH should be set to `/certs/client`")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name, "VolumeMount name should be work")
+	assert.Equal(t, "/work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /work")
+	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name, "VolumeMount name should be others")
+	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /others")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_KubeModeMergePodSpec(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_k8s_merge_spec.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "There should be 1 containers")
+	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
+	assert.Equal(t, "250m", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String(), "CPU Limit should be set")
+	assert.Equal(t, "64Mi", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String(), "Memory Limit should be set")
+	assert.Equal(t, "ACTIONS_RUNNER_CONTAINER_HOOKS", ars.Spec.Template.Spec.Containers[0].Env[0].Name, "ACTIONS_RUNNER_CONTAINER_HOOKS should be set")
+	assert.Equal(t, "/k8s/index.js", ars.Spec.Template.Spec.Containers[0].Env[0].Value, "ACTIONS_RUNNER_CONTAINER_HOOKS should be set to `/k8s/index.js`")
+	assert.Equal(t, "MY_NODE_NAME", ars.Spec.Template.Spec.Containers[0].Env[1].Name, "MY_NODE_NAME should be set")
+	assert.Equal(t, "spec.nodeName", ars.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath, "MY_NODE_NAME should be set to `spec.nodeName`")
+	assert.Equal(t, "ACTIONS_RUNNER_POD_NAME", ars.Spec.Template.Spec.Containers[0].Env[2].Name, "ACTIONS_RUNNER_POD_NAME should be set")
+	assert.Equal(t, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER", ars.Spec.Template.Spec.Containers[0].Env[3].Name, "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER should be set")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name, "VolumeMount name should be work")
+	assert.Equal(t, "/work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /work")
+	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name, "VolumeMount name should be others")
+	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /others")
+}
