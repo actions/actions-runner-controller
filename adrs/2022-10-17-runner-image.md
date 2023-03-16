@@ -20,19 +20,19 @@ The latest Dockerfile can be found at: https://github.com/actions/runner/blob/ma
 
 # Context
 
-user can bring their own runner images, the contract we have are:
+users can bring their own runner images, the contract we require is:
 
-- It must have a runner binary under /actions-runner (/actions-runner/run.sh exists)
-- The WORKDIR is set to /actions-runner
-- If the user inside the container is root, the ENV RUNNER_ALLOW_RUNASROOT should be set to 1
+- It must have a runner binary under `/actions-runner` i.e. `/actions-runner/run.sh` exists
+- The `WORKDIR` is set to `/actions-runner`
+- If the user inside the container is root, the environment variable `RUNNER_ALLOW_RUNASROOT` should be set to `1`
 
-The existing ARC runner images will not work with the new ARC mode out-of-box for the following reason:
+The existing [ARC runner images](https://github.com/orgs/actions-runner-controller/packages?tab=packages&q=actions-runner) will not work with the new ARC mode out-of-box for the following reason:
 
-- The current runner image requires caller to pass runner configure info, ex: URL and Config Token
-- The current runner image has the runner binary under /runner
+- The current runner image requires the caller to pass runner configuration info, ex: URL and Config Token
+- The current runner image has the runner binary under `/runner` which violates the contract described above
 - The current runner image requires a special entrypoint script in order to work around some volume mount limitation for setting up DinD.
 
-However, since we expose the raw runner Pod spec to our user, advanced user can modify the helm values.yaml to make everything lines up properly.
+Since we expose the raw runner PodSpec to our end users, they can modify the helm `values.yaml` to adjust the runner container to their needs.
 
 # Guiding Principles
 
@@ -41,12 +41,12 @@ However, since we expose the raw runner Pod spec to our user, advanced user can 
 ## The first stage (build)
 
 - Reuses the same base image, so it is faster to build.
-- Installs utilities needed to download assets (runner and runner-container-hooks).
+- Installs utilities needed to download assets (`runner` and `runner-container-hooks`).
 - Downloads the runner and stores it into `/actions-runner` directory.
 - Downloads the runner-container-hooks and stores it into `/actions-runner/k8s` directory.
 - You can use build arguments to control the runner version, the target platform and runner container hooks version.
 
-Preview:
+Preview (the published runner image might vary):
 
 ```Dockerfile
 FROM mcr.microsoft.com/dotnet/runtime-deps:6.0 as build
