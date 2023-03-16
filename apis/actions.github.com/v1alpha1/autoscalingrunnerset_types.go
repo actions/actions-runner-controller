@@ -248,7 +248,6 @@ type AutoscalingRunnerSetStatus struct {
 }
 
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
-	type listenerSpec = AutoscalingRunnerSetSpec
 	arsSpec := ars.Spec.DeepCopy()
 	spec := arsSpec
 	return hash.ComputeTemplateHash(&spec)
