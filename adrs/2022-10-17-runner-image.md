@@ -20,11 +20,11 @@ The latest Dockerfile can be found at: https://github.com/actions/runner/blob/ma
 
 # Context
 
-user can bring their own runner images, the contract we have are:
+users can build their own runner images, the contract we require is:
 
-- It must have a runner binary under /actions-runner (/actions-runner/run.sh exists)
-- The WORKDIR is set to /actions-runner
-- If the user inside the container is root, the ENV RUNNER_ALLOW_RUNASROOT should be set to 1
+- It must have a runner binary under `/actions-runner` i.e. `/actions-runner/run.sh` exists
+- The WORKDIR is set to `/actions-runner`
+- If the user inside the container is root, the environment variable `RUNNER_ALLOW_RUNASROOT` should be set to 1
 
 The existing ARC runner images will not work with the new ARC mode out-of-box for the following reason:
 
