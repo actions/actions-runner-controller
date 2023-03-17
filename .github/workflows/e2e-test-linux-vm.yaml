@@ -432,6 +432,9 @@ jobs:
           helm repo update
           helm install openebs openebs/openebs -n openebs --create-namespace
 
+          kubectl wait --timeout=30s --for=condition=ready pod -n openebs -l app=openebs
+          kubectl get pods -n openebs
+
           ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
