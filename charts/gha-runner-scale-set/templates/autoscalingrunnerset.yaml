@@ -111,7 +111,7 @@ spec:
         {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
       - name: dind
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
-      {{- include "gha-runner-scale-set.non-runner-containers" . | nindent 6 }}
+      {{- include "gha-runner-scale-set.non-runner-non-dind-containers" . | nindent 6 }}
       {{- else if eq .Values.containerMode.type "kubernetes" }}
       - name: runner
         {{- include "gha-runner-scale-set.kubernetes-mode-runner-container" . | nindent 8 }}
