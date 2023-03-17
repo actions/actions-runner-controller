@@ -25,6 +25,7 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+          cache: false
       - name: fmt
         run: go fmt ./...
       - name: Check diff
@@ -37,6 +38,7 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+          cache: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
@@ -50,6 +52,7 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+          cache: false
       - name: Generate
         run: make generate
       - name: Check diff
@@ -62,6 +65,7 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+          cache: false
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Check vulnerabilities
