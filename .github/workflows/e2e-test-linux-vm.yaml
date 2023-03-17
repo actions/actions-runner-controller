@@ -134,7 +134,8 @@ jobs:
         run: |
           cat <<-EOF > $GITHUB_STEP_SUMMARY
           | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
+          |----------------|-----------------------------------------------|
+          | **Run Name**   | ${{steps.install_arc.outputs.ARC_NAME}} |
           | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
           EOF
 
@@ -250,6 +251,7 @@ jobs:
           cat <<-EOF > $GITHUB_STEP_SUMMARY
           | **Outcome**    | ${{ steps.test.outcome }}  |
           |----------------|--------------------------------------------- |
+          | **Run Name**   | ${{steps.install_arc.outputs.ARC_NAME}} |
           | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
           EOF
 
@@ -364,6 +366,7 @@ jobs:
           cat <<-EOF > $GITHUB_STEP_SUMMARY
           | **Outcome**    | ${{ steps.test.outcome }}  |
           |----------------|--------------------------------------------- |
+          | **Run Name**   | ${{steps.install_arc.outputs.ARC_NAME}} |
           | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
           EOF
 
@@ -489,6 +492,7 @@ jobs:
           cat <<-EOF > $GITHUB_STEP_SUMMARY
           | **Outcome**    | ${{ steps.test.outcome }}  |
           |----------------|--------------------------------------------- |
+          | **Run Name**   | ${{steps.install_arc.outputs.ARC_NAME}} |
           | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
           EOF
 
@@ -614,6 +618,7 @@ jobs:
           cat <<-EOF > $GITHUB_STEP_SUMMARY
           | **Outcome**    | ${{ steps.test.outcome }}  |
           |----------------|--------------------------------------------- |
+          | **Run Name**   | ${{steps.install_arc.outputs.ARC_NAME}} |
           | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
           EOF
 
@@ -733,5 +738,6 @@ jobs:
           cat <<-EOF > $GITHUB_STEP_SUMMARY
           | **Outcome**    | ${{ steps.test.outcome }}  |
           |----------------|--------------------------------------------- |
+          | **Run Name**   | ${{steps.install_arc.outputs.ARC_NAME}} |
           | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
           EOF
