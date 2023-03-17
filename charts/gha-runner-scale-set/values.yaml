@@ -86,11 +86,11 @@ template:
   ## template:
   ##   spec:
   ##     initContainers:
-  ##     - name: initExternalsInternalVolume
+  ##     - name: init-dind-externals
   ##       image: ghcr.io/actions/actions-runner:latest
   ##       command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
   ##       volumeMounts:
-  ##         - name: externalsInternal
+  ##         - name: dind-externals
   ##           mountPath: /home/runner/tmpDir
   ##     containers:
   ##     - name: runner
@@ -103,9 +103,9 @@ template:
   ##         - name: DOCKER_CERT_PATH
   ##           value: /certs/client
   ##       volumeMounts:
-  ##         - name: workingDirectoryInternal
+  ##         - name: work
   ##           mountPath: /home/runner/_work
-  ##         - name: dinDInternal
+  ##         - name: dind-cert
   ##           mountPath: /certs/client
   ##           readOnly: true
   ##     - name: dind
@@ -113,18 +113,18 @@ template:
   ##       securityContext:
   ##         privileged: true
   ##       volumeMounts:
-  ##         - mountPath: /certs/client
-  ##           name: dinDInternal
-  ##         - mountPath: /home/runner/_work
-  ##           name: workingDirectoryInternal
-  ##         - mountPath: /home/runner/externals
-  ##           name: externalsInternal
+  ##         - name: work
+  ##           mountPath: /home/runner/_work
+  ##         - name: dind-cert
+  ##           mountPath: /certs/client
+  ##         - name: dind-externals
+  ##           mountPath: /home/runner/externals
   ##     volumes:
-  ##     - name: dinDInternal
+  ##     - name: work
   ##       emptyDir: {}
-  ##     - name: workingDirectoryInternal
+  ##     - name: dind-cert
   ##       emptyDir: {}
-  ##     - name: externalsInternal
+  ##     - name: dind-externals
   ##       emptyDir: {}
   ######################################################################################################
   ## with containerMode.type=kubernetes, we will populate the template.spec with following pod spec

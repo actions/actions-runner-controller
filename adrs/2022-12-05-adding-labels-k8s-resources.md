@@ -2,7 +2,7 @@
 
 **Date**: 2022-12-05
 
-**Status**: Deprecated [^1]
+**Status**: Superceded [^1]
 
 ## Context
 

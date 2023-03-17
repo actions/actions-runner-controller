@@ -439,7 +439,9 @@ jobs:
           --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set containerMode.type="kubernetes" \
+          --set containerMode.kubernetesModeWorkVolumeClaim.accessModes={"ReadWriteOnce"} \
           --set containerMode.kubernetesModeWorkVolumeClaim.storageClassName="openebs-hostpath" \
+          --set containerMode.kubernetesModeWorkVolumeClaim.resources.requests.storage="1Gi" \
           ./charts/gha-runner-scale-set \
           --debug
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT

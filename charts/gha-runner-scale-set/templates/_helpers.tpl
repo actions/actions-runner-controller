@@ -163,6 +163,14 @@ volumeMounts:
   {{- end }}
 {{- end }}
 
+{{- define "gha-runner-scale-set.non-runner-non-dind-containers" -}}
+  {{- range $i, $container := .Values.template.spec.containers }}
+    {{- if and (ne $container.name "runner") (ne $container.name "dind") }}
+- {{ $container | toYaml | nindent 2 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
 {{- define "gha-runner-scale-set.dind-runner-container" -}}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
 {{- range $i, $container := .Values.template.spec.containers }}
