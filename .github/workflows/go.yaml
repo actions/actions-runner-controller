@@ -79,4 +79,4 @@ jobs:
         run: git diff --exit-code
       - name: Run go tests
         run: |
-          go test $(GO_TEST_ARGS) `go list ./... | grep -v ./test_e2e_arc`
+          go test -short `go list ./... | grep -v ./test_e2e_arc`
