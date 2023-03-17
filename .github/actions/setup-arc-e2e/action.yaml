@@ -52,7 +52,7 @@ runs:
     - name: Create minikube cluster and load image
       shell: bash
       run: |
-        minikube start
+        minikube start --mount-string="/run/udev:/run/udev" --mount
         minikube image load ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}}
 
     - name: Get configure token
