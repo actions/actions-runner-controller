@@ -1,0 +1,82 @@
+name: Go
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+      - name: fmt
+        run: go fmt ./...
+      - name: Check diff
+        run: git diff --exit-code
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          only-new-issues: true
+          version: v1.51.1
+
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+      - name: Generate
+        run: make generate
+      - name: Check diff
+        run: git diff --exit-code
+
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Check vulnerabilities
+        run: govulncheck ./...
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+      - run: make manifests
+      - name: Check diff
+        run: git diff --exit-code
+      - name: Run go tests
+        run: |
+          go test $(GO_TEST_ARGS) `go list ./... | grep -v ./test_e2e_arc`
