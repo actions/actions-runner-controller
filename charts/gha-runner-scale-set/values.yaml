@@ -69,7 +69,7 @@ githubConfigSecret:
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
 containerMode:
-  type: ""  ## type can be set to dind or kubernetes
+  type: ""  ## type can be set to none, dind, or kubernetes (defaults to "none")
   ## the following is required when containerMode.type=kubernetes
   # kubernetesModeWorkVolumeClaim:
   #   accessModes: ["ReadWriteOnce"]
