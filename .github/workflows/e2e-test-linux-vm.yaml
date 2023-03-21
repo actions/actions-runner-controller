@@ -21,7 +21,7 @@ env:
 jobs:
   default-setup:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    # if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
