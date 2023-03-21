@@ -27,6 +27,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -111,6 +112,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		if err != nil {
 			log.Error(err, "Failed to delete runner scale set")
 			return ctrl.Result{}, err
+		}
+
+		requeue, err := r.cleanupPermissions(ctx, autoscalingRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up permissions")
+			return ctrl.Result{}, nil
+		}
+
+		if requeue {
+			return ctrl.Result{Requeue: true}, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -303,6 +314,55 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 		logger.Info("Deleted ephemeral runner set", "name", rs.Name)
 	}
 	return nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
+	logger.Info("Cleaning up manager role binding")
+	roleBinding := new(rbacv1.RoleBinding)
+	err = r.Get(ctx, types.NamespacedName{Name: managerRoleBindingName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, roleBinding)
+	switch {
+	case err == nil:
+		if roleBinding.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, roleBinding)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(roleBinding, cleanupFinalizer) {
+			break
+		}
+		err = patch(ctx, r.Client, roleBinding, func(obj *rbacv1.RoleBinding) {
+			controllerutil.RemoveFinalizer(obj, cleanupFinalizer)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+
+	logger.Info("Cleaning up manager role")
+	role := new(rbacv1.Role)
+	err = r.Get(ctx, types.NamespacedName{Name: managerRoleName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, role)
+	switch {
+	case err == nil:
+		if role.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, role)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(role, cleanupFinalizer) {
+			break
+		}
+		err = patch(ctx, r.Client, role, func(obj *rbacv1.Role) {
+			controllerutil.RemoveFinalizer(obj, cleanupFinalizer)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+	return false, nil
 }
 
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {

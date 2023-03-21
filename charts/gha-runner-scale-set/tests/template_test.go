@@ -43,7 +43,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
 	assert.Equal(t, namespaceName, githubSecret.Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", githubSecret.Name)
 	assert.Equal(t, "gh_token12345", string(githubSecret.Data["github_token"]))
-	assert.Equal(t, "actions.github.com/secret-protection", githubSecret.Finalizers[0])
+	assert.Equal(t, "actions.github.com/cleanup-protection", githubSecret.Finalizers[0])
 }
 
 func TestTemplateRenderedGitHubSecretWithGitHubApp(t *testing.T) {
@@ -217,6 +217,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", serviceAccount.Name)
+	assert.Equal(t, "actions.github.com/cleanup-protection", serviceAccount.Finalizers[0])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role.yaml"})
 	var role rbacv1.Role
@@ -224,6 +225,9 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 
 	assert.Equal(t, namespaceName, role.Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", role.Name)
+
+	assert.Equal(t, "actions.github.com/cleanup-protection", role.Finalizers[0])
+
 	assert.Len(t, role.Rules, 5, "kube mode role should have 5 rules")
 	assert.Equal(t, "pods", role.Rules[0].Resources[0])
 	assert.Equal(t, "pods/exec", role.Rules[1].Resources[0])
@@ -242,6 +246,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	assert.Equal(t, namespaceName, roleBinding.Subjects[0].Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.RoleRef.Name)
 	assert.Equal(t, "Role", roleBinding.RoleRef.Kind)
+	assert.Equal(t, "actions.github.com/cleanup-protection", serviceAccount.Finalizers[0])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
 	var ars v1alpha1.AutoscalingRunnerSet
@@ -1458,6 +1463,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
+	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 5, len(managerRole.Rules))
 }
 
@@ -1489,6 +1495,7 @@ func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
+	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 6, len(managerRole.Rules))
 	assert.Equal(t, "configmaps", managerRole.Rules[5].Resources[0])
 }
@@ -1521,6 +1528,7 @@ func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
 	assert.Equal(t, namespaceName, managerRoleBinding.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role-binding", managerRoleBinding.Name)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRoleBinding.RoleRef.Name)
+	assert.Equal(t, "actions.github.com/cleanup-protection", managerRoleBinding.Finalizers[0])
 	assert.Equal(t, "arc", managerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, "arc-system", managerRoleBinding.Subjects[0].Namespace)
 }
