@@ -1,5 +1,5 @@
 run:
-  timeout: 3m
+  timeout: 10m
 output:
   format: github-actions
 linters-settings:
