@@ -3,6 +3,8 @@ kind: RoleBinding
 metadata:
   name: {{ include "gha-runner-scale-set.managerRoleBinding" . }}
   namespace: {{ .Release.Namespace }}
+  finalizers:
+    - actions.github.com/cleanup-protection
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

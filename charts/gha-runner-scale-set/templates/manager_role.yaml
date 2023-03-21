@@ -3,6 +3,8 @@ kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.managerRoleName" . }}
   namespace: {{ .Release.Namespace }}
+  finalizers:
+    - actions.github.com/cleanup-protection
 rules:
 - apiGroups:
   - ""
