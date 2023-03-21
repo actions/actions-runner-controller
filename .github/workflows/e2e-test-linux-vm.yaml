@@ -21,7 +21,7 @@ env:
 jobs:
   default-setup:
     runs-on: ubuntu-latest
-    # if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
@@ -107,7 +107,7 @@ jobs:
 
   single-namespace-setup:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
@@ -195,7 +195,7 @@ jobs:
 
   dind-mode-setup:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: arc-test-dind-workflow.yaml
     steps:
@@ -282,7 +282,7 @@ jobs:
 
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
     steps:
@@ -378,7 +378,7 @@ jobs:
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
@@ -476,7 +476,7 @@ jobs:
 
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id != github.repository_id
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
