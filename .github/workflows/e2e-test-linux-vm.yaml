@@ -8,52 +8,35 @@ on:
       branches:
       - master
   workflow_dispatch:
-    inputs:
-      target_org:
-        description: The org of the test repository.
-        required: true
-        default: actions-runner-controller
-      target_repo:
-        description: The repository to install the ARC.
-        required: true
-        default: arc_e2e_test_dummy
+
+permissions:
+  contents: read
 
 env:
   TARGET_ORG: actions-runner-controller
   TARGET_REPO: arc_e2e_test_dummy
   IMAGE_NAME: "arc-test-image"
   IMAGE_VERSION: "dev"
-  
+
 jobs:
   default-setup:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
-
-      - name: Resolve inputs
-        id: resolved_inputs
-        run: |
-          TARGET_ORG="${{env.TARGET_ORG}}"
-          TARGET_REPO="${{env.TARGET_REPO}}"
-          if [ ! -z "${{inputs.target_org}}" ]; then
-            TARGET_ORG="${{inputs.target_org}}"
-          fi
-          if [ ! -z "${{inputs.target_repo}}" ]; then
-            TARGET_REPO="${{inputs.target_repo}}"
-          fi
-          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
-          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{github.head_ref}}
 
       - uses: ./.github/actions/setup-arc-e2e
         id: setup
         with:
-          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
-          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
-          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
-          docker-image-name: ${{env.IMAGE_NAME}}
-          docker-image-tag: ${{env.IMAGE_VERSION}}
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
 
       - name: Install gha-runner-scale-set-controller
         id: install_arc_controller
@@ -85,11 +68,11 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
-          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           ./charts/gha-runner-scale-set \
           --debug
@@ -109,64 +92,37 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
-
-      - name: Test ARC scales pods up and down
-        id: test
-        run: |
-          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
-          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
-          go test ./test_e2e_arc -v
-
-      - name: Uninstall gha-runner-scale-set
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
-          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
-
-      - name: Dump gha-runner-scale-set-controller logs
-        if: always() && steps.install_arc_controller.outcome == 'success'
-        run: |
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
-
-      - name: Job summary
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          cat <<-EOF > $GITHUB_STEP_SUMMARY
-          | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
-          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
-          EOF
+      
+      - name: Test ARC E2E
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"
 
   single-namespace-setup:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
-
-      - name: Resolve inputs
-        id: resolved_inputs
-        run: |
-          TARGET_ORG="${{env.TARGET_ORG}}"
-          TARGET_REPO="${{env.TARGET_REPO}}"
-          if [ ! -z "${{inputs.target_org}}" ]; then
-            TARGET_ORG="${{inputs.target_org}}"
-          fi
-          if [ ! -z "${{inputs.target_repo}}" ]; then
-            TARGET_REPO="${{inputs.target_repo}}"
-          fi
-          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
-          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{github.head_ref}}
 
       - uses: ./.github/actions/setup-arc-e2e
         id: setup
         with:
-          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
-          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
-          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
-          docker-image-name: ${{env.IMAGE_NAME}}
-          docker-image-tag: ${{env.IMAGE_VERSION}}
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
 
       - name: Install gha-runner-scale-set-controller
         id: install_arc_controller
@@ -200,11 +156,11 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
-          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           ./charts/gha-runner-scale-set \
           --debug
@@ -225,63 +181,36 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-      - name: Test ARC scales pods up and down
-        id: test
-        run: |
-          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
-          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
-          go test ./test_e2e_arc -v
-
-      - name: Uninstall gha-runner-scale-set
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
-          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
-
-      - name: Dump gha-runner-scale-set-controller logs
-        if: always() && steps.install_arc_controller.outcome == 'success'
-        run: |
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
-
-      - name: Job summary
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          cat <<-EOF > $GITHUB_STEP_SUMMARY
-          | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
-          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
-          EOF
+      - name: Test ARC E2E
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"
 
   dind-mode-setup:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: arc-test-dind-workflow.yaml
     steps:
       - uses: actions/checkout@v3
-
-      - name: Resolve inputs
-        id: resolved_inputs
-        run: |
-          TARGET_ORG="${{env.TARGET_ORG}}"
-          TARGET_REPO="${{env.TARGET_REPO}}"
-          if [ ! -z "${{inputs.target_org}}" ]; then
-            TARGET_ORG="${{inputs.target_org}}"
-          fi
-          if [ ! -z "${{inputs.target_repo}}" ]; then
-            TARGET_REPO="${{inputs.target_repo}}"
-          fi
-          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
-          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{github.head_ref}}
 
       - uses: ./.github/actions/setup-arc-e2e
         id: setup
         with:
-          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
-          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
-          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
-          docker-image-name: ${{env.IMAGE_NAME}}
-          docker-image-tag: ${{env.IMAGE_VERSION}}
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
 
       - name: Install gha-runner-scale-set-controller
         id: install_arc_controller
@@ -313,11 +242,11 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
-          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set containerMode.type="dind" \
           ./charts/gha-runner-scale-set \
@@ -339,67 +268,45 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-      - name: Test ARC scales pods up and down
-        id: test
-        run: |
-          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
-          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
-          go test ./test_e2e_arc -v
-
-      - name: Uninstall gha-runner-scale-set
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
-          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
-
-      - name: Dump gha-runner-scale-set-controller logs
-        if: always() && steps.install_arc_controller.outcome == 'success'
-        run: |
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
-
-      - name: Job summary
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          cat <<-EOF > $GITHUB_STEP_SUMMARY
-          | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
-          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
-          EOF
+      - name: Test ARC E2E
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"
 
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
-
-      - name: Resolve inputs
-        id: resolved_inputs
-        run: |
-          TARGET_ORG="${{env.TARGET_ORG}}"
-          TARGET_REPO="${{env.TARGET_REPO}}"
-          if [ ! -z "${{inputs.target_org}}" ]; then
-            TARGET_ORG="${{inputs.target_org}}"
-          fi
-          if [ ! -z "${{inputs.target_repo}}" ]; then
-            TARGET_REPO="${{inputs.target_repo}}"
-          fi
-          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
-          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{github.head_ref}}
 
       - uses: ./.github/actions/setup-arc-e2e
         id: setup
         with:
-          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
-          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
-          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
-          docker-image-name: ${{env.IMAGE_NAME}}
-          docker-image-tag: ${{env.IMAGE_VERSION}}
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
 
       - name: Install gha-runner-scale-set-controller
         id: install_arc_controller
         run: |
+          echo "Install openebs/dynamic-localpv-provisioner"
+          helm repo add openebs https://openebs.github.io/charts
+          helm repo update
+          helm install openebs openebs/openebs -n openebs --create-namespace
+
           helm install arc \
           --namespace "arc-systems" \
           --create-namespace \
@@ -423,20 +330,16 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n openebs -l name=openebs-localpv-provisioner
 
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
-          echo "Install openebs/dynamic-localpv-provisioner"
-          helm repo add openebs https://openebs.github.io/charts
-          helm repo update
-          helm install openebs openebs/openebs -n openebs --create-namespace
-
-          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set containerMode.type="kubernetes" \
           --set containerMode.kubernetesModeWorkVolumeClaim.accessModes={"ReadWriteOnce"} \
@@ -461,63 +364,36 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-      - name: Test ARC scales pods up and down
-        id: test
-        run: |
-          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
-          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
-          go test ./test_e2e_arc -v
-
-      - name: Uninstall gha-runner-scale-set
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
-          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
-
-      - name: Dump gha-runner-scale-set-controller logs
-        if: always() && steps.install_arc_controller.outcome == 'success'
-        run: |
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
-
-      - name: Job summary
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          cat <<-EOF > $GITHUB_STEP_SUMMARY
-          | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
-          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
-          EOF
+      - name: Test ARC E2E
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
-
-      - name: Resolve inputs
-        id: resolved_inputs
-        run: |
-          TARGET_ORG="${{env.TARGET_ORG}}"
-          TARGET_REPO="${{env.TARGET_REPO}}"
-          if [ ! -z "${{inputs.target_org}}" ]; then
-            TARGET_ORG="${{inputs.target_org}}"
-          fi
-          if [ ! -z "${{inputs.target_repo}}" ]; then
-            TARGET_REPO="${{inputs.target_repo}}"
-          fi
-          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
-          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{github.head_ref}}
 
       - uses: ./.github/actions/setup-arc-e2e
         id: setup
         with:
-          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
-          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
-          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
-          docker-image-name: ${{env.IMAGE_NAME}}
-          docker-image-tag: ${{env.IMAGE_VERSION}}
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
 
       - name: Install gha-runner-scale-set-controller
         id: install_arc_controller
@@ -558,11 +434,11 @@ jobs:
             --namespace=arc-runners \
             --from-literal=username=github \
             --from-literal=password='actions'
-          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set proxy.https.url="http://host.minikube.internal:3128" \
           --set proxy.https.credentialSecretRef="proxy-auth" \
@@ -586,63 +462,36 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-      - name: Test ARC scales pods up and down
-        id: test
-        run: |
-          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
-          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="${{env.WORKFLOW_FILE}}"
-          go test ./test_e2e_arc -v
-
-      - name: Uninstall gha-runner-scale-set
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
-          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
-
-      - name: Dump gha-runner-scale-set-controller logs
-        if: always() && steps.install_arc_controller.outcome == 'success'
-        run: |
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
-
-      - name: Job summary
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          cat <<-EOF > $GITHUB_STEP_SUMMARY
-          | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
-          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
-          EOF
+      - name: Test ARC E2E
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"
 
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
       - uses: actions/checkout@v3
-
-      - name: Resolve inputs
-        id: resolved_inputs
-        run: |
-          TARGET_ORG="${{env.TARGET_ORG}}"
-          TARGET_REPO="${{env.TARGET_REPO}}"
-          if [ ! -z "${{inputs.target_org}}" ]; then
-            TARGET_ORG="${{inputs.target_org}}"
-          fi
-          if [ ! -z "${{inputs.target_repo}}" ]; then
-            TARGET_REPO="${{inputs.target_repo}}"
-          fi
-          echo "TARGET_ORG=$TARGET_ORG" >> $GITHUB_OUTPUT
-          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_OUTPUT
+        with:
+          ref: ${{github.head_ref}}
 
       - uses: ./.github/actions/setup-arc-e2e
         id: setup
         with:
-          github-app-id: ${{secrets.ACTIONS_ACCESS_APP_ID}}
-          github-app-pk: ${{secrets.ACTIONS_ACCESS_PK}}
-          github-app-org: ${{steps.resolved_inputs.outputs.TARGET_ORG}}
-          docker-image-name: ${{env.IMAGE_NAME}}
-          docker-image-tag: ${{env.IMAGE_VERSION}}
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
 
       - name: Install gha-runner-scale-set-controller
         id: install_arc_controller
@@ -678,11 +527,11 @@ jobs:
             --name squid \
             --publish 3128:3128 \
             ubuntu/squid:latest
-          ARC_NAME=arc-runner-${{github.job}}-$(date +'%M-%S')-$(($RANDOM % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
-          --set githubConfigUrl="https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}" \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
           --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
           --set proxy.https.url="http://host.minikube.internal:3128" \
           --set "proxy.noProxy[0]=10.96.0.1:443" \
@@ -705,30 +554,14 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-      - name: Test ARC scales pods up and down
-        id: test
-        run: |
-          export GITHUB_TOKEN="${{ steps.setup.outputs.token }}"
-          export ARC_NAME="${{ steps.install_arc.outputs.ARC_NAME }}"
-          export WORKFLOW_FILE="${{ env.WORKFLOW_FILE }}"
-          go test ./test_e2e_arc -v
-
-      - name: Uninstall gha-runner-scale-set
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          helm uninstall ${{ steps.install_arc.outputs.ARC_NAME }} --namespace arc-runners
-          kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n demo -l app.kubernetes.io/instance=${{ steps.install_arc.outputs.ARC_NAME }}
-
-      - name: Dump gha-runner-scale-set-controller logs
-        if: always() && steps.install_arc_controller.outcome == 'success'
-        run: |
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n arc-systems
-
-      - name: Job summary
-        if: always() && steps.install_arc.outcome == 'success'
-        run: |
-          cat <<-EOF > $GITHUB_STEP_SUMMARY
-          | **Outcome**    | ${{ steps.test.outcome }}  |
-          |----------------|--------------------------------------------- |
-          | **References** | [Test workflow runs](https://github.com/${{ steps.resolved_inputs.outputs.TARGET_ORG }}/${{steps.resolved_inputs.outputs.TARGET_REPO}}/actions/workflows/${{ env.WORKFLOW_FILE }}) |
-          EOF
+      - name: Test ARC E2E
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"

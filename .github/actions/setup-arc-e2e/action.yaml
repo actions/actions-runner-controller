@@ -2,20 +2,20 @@ name: 'Setup ARC E2E Test Action'
 description: 'Build controller image, create kind cluster, load the image, and exchange ARC configure token.'
 
 inputs:
-  github-app-id:
+  app-id:
     description: 'GitHub App Id for exchange access token'
     required: true
-  github-app-pk:
+  app-pk:
     description: "GitHub App private key for exchange access token"
     required: true
-  github-app-org:
-    description: 'The organization the GitHub App has installed on'
-    required: true
-  docker-image-name:
+  image-name:
     description: "Local docker image name for building"
     required: true
-  docker-image-tag:
+  image-tag:
     description: "Tag of ARC Docker image for building"
+    required: true
+  target-org:
+    description: "The test organization for ARC e2e test"
     required: true
 
 outputs:
@@ -42,23 +42,22 @@ runs:
         platforms: linux/amd64
         load: true
         build-args: |
-          DOCKER_IMAGE_NAME=${{inputs.docker-image-name}}
-          VERSION=${{inputs.docker-image-tag}} 
+          DOCKER_IMAGE_NAME=${{inputs.image-name}}
+          VERSION=${{inputs.image-tag}} 
         tags: |
-          ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+          ${{inputs.image-name}}:${{inputs.image-tag}}
+        no-cache: true
 
     - name: Create minikube cluster and load image
       shell: bash
       run: |
         minikube start
-        minikube image load ${{inputs.docker-image-name}}:${{inputs.docker-image-tag}}
+        minikube image load ${{inputs.image-name}}:${{inputs.image-tag}}
 
     - name: Get configure token
       id: config-token
       uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
       with:
-        application_id: ${{ inputs.github-app-id }}
-        application_private_key: ${{ inputs.github-app-pk }}
-        organization: ${{ inputs.github-app-org }}
+        application_id: ${{ inputs.app-id }}
+        application_private_key: ${{ inputs.app-pk }}
+        organization: ${{ inputs.target-org}}
