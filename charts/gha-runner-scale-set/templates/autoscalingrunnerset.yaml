@@ -10,6 +10,7 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/component: "autoscaling-runner-set"
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
