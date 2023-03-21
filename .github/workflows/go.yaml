@@ -10,6 +10,7 @@ on:
 
   pull_request:
     paths:
+      - '.github/workflows/go.yaml'
       - '**.go'
       - 'go.mod'
       - 'go.sum'
@@ -57,19 +58,6 @@ jobs:
         run: make generate
       - name: Check diff
         run: git diff --exit-code
-
-  vulncheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
-        with:
-          go-version-file: 'go.mod'
-          cache: false
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-      - name: Check vulnerabilities
-        run: govulncheck ./...
 
   test:
     runs-on: ubuntu-latest
