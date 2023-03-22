@@ -1254,8 +1254,6 @@ var _ = Describe("Test external roles cleanup", func() {
 		ctx := context.Background()
 		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
 
-		configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
-
 		controller := &AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
 			Scheme:                             mgr.GetScheme(),
@@ -1280,11 +1278,10 @@ var _ = Describe("Test external roles cleanup", func() {
 				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
-				GitHubConfigSecret: configSecret.Name,
-				MaxRunners:         &max,
-				MinRunners:         &min,
-				RunnerGroup:        "testgroup",
+				GitHubConfigUrl: "https://github.com/owner/repo",
+				MaxRunners:      &max,
+				MinRunners:      &min,
+				RunnerGroup:     "testgroup",
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
@@ -1297,6 +1294,21 @@ var _ = Describe("Test external roles cleanup", func() {
 				},
 			},
 		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      githubSecretName(autoscalingRunnerSet),
+				Namespace: autoscalingRunnerSet.Namespace,
+			},
+			Data: map[string][]byte{
+				"github_token": []byte(defaultGitHubToken),
+			},
+		}
+
+		err = k8sClient.Create(context.Background(), secret)
+		Expect(err).NotTo(HaveOccurred(), "failed to create github secret")
+
+		autoscalingRunnerSet.Spec.GitHubConfigSecret = secret.Name
 
 		role := &rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1348,10 +1360,10 @@ var _ = Describe("Test external roles cleanup", func() {
 
 		Eventually(
 			func() bool {
-				r := new(rbacv1.RoleBinding)
+				r := new(corev1.Secret)
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      roleBinding.Name,
-					Namespace: roleBinding.Namespace,
+					Name:      secret.Name,
+					Namespace: secret.Namespace,
 				}, r)
 
 				return errors.IsNotFound(err)
@@ -1373,5 +1385,19 @@ var _ = Describe("Test external roles cleanup", func() {
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue(), "Expected role to be cleaned up")
+
+		Eventually(
+			func() bool {
+				r := new(rbacv1.RoleBinding)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      roleBinding.Name,
+					Namespace: roleBinding.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(BeTrue(), "Expected role binding to be cleaned up")
 	})
 })

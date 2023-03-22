@@ -331,6 +331,29 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 			return true, nil
 		}
 	}
+
+	secret := new(corev1.Secret)
+	err = r.Get(ctx, types.NamespacedName{Name: githubSecretName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, secret)
+	switch {
+	case err == nil:
+		if secret.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, secret)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(secret, autoscalingRunnerSetCleanupFinalizerLabel) {
+			break
+		}
+		err = patch(ctx, r.Client, secret, func(obj *corev1.Secret) {
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+
 	logger.Info("Cleaning up manager role")
 	role := new(rbacv1.Role)
 	err = r.Get(ctx, types.NamespacedName{Name: managerRoleName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, role)

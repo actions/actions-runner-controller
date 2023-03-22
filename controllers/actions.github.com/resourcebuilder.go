@@ -589,3 +589,7 @@ func kubernetesModeRoleBindingName(autoscalingRunnerSet *v1alpha1.AutoscalingRun
 func kubernetesModeServiceAccountName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
 	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-service-account"
 }
+
+func githubSecretName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-github-secret"
+}
