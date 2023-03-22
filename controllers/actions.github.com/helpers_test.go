@@ -3,18 +3,45 @@ package actionsgithubcom
 import (
 	"context"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 const defaultGitHubToken = "gh_token"
+
+func newAutoscalingRunnerSet(namespace, secretName string) *v1alpha1.AutoscalingRunnerSet {
+	min := 1
+	max := 10
+	return &v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-asrs",
+			Namespace: namespace,
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl:    "https://github.com/owner/repo",
+			GitHubConfigSecret: secretName,
+			MaxRunners:         &max,
+			MinRunners:         &min,
+			RunnerGroup:        "testgroup",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "runner",
+							Image: "ghcr.io/actions/runner",
+						},
+					},
+				},
+			},
+		},
+	}
+}
 
 func startManagers(t ginkgo.GinkgoTInterface, first manager.Manager, others ...manager.Manager) {
 	for _, mgr := range append([]manager.Manager{first}, others...) {
@@ -32,16 +59,16 @@ func startManagers(t ginkgo.GinkgoTInterface, first manager.Manager, others ...m
 	}
 }
 
-func createNamespace(t ginkgo.GinkgoTInterface, client client.Client, cfg *rest.Config) (*corev1.Namespace, manager.Manager) {
+func createNamespace(t ginkgo.GinkgoTInterface) (*corev1.Namespace, manager.Manager) {
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
 	}
 
-	err := client.Create(context.Background(), ns)
+	err := k8sClient.Create(context.Background(), ns)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		err := client.Delete(context.Background(), ns)
+		err := k8sClient.Delete(context.Background(), ns)
 		require.NoError(t, err)
 	})
 
@@ -54,7 +81,7 @@ func createNamespace(t ginkgo.GinkgoTInterface, client client.Client, cfg *rest.
 	return ns, mgr
 }
 
-func createDefaultSecret(t ginkgo.GinkgoTInterface, client client.Client, namespace string) *corev1.Secret {
+func createDefaultSecret(t ginkgo.GinkgoTInterface, namespace string) *corev1.Secret {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "github-config-secret",
@@ -65,7 +92,7 @@ func createDefaultSecret(t ginkgo.GinkgoTInterface, client client.Client, namesp
 		},
 	}
 
-	err := client.Create(context.Background(), secret)
+	err := k8sClient.Create(context.Background(), secret)
 	require.NoError(t, err)
 
 	return secret

@@ -2,25 +2,17 @@ package actionsgithubcom
 
 import (
 	"context"
-	"io"
-	"path/filepath"
 	"testing"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	// . "github.com/onsi/ginkgo/v2"
 	// . "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions/fake"
 	"github.com/rentziass/eventually"
 	"github.com/stretchr/testify/assert"
@@ -33,50 +25,11 @@ const (
 	autoscalingRunnerSetTestGitHubToken = "gh_token"
 )
 
-func setupK8s(t *testing.T) (client.Client, *rest.Config) {
-	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(io.Discard)))
-
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("../..", "config", "crd", "bases")},
-	}
-
-	// Avoids the following error:
-	// 2021-03-19T15:14:11.673+0900    ERROR   controller-runtime.controller
-	// Reconciler error      {"controller": "testns-tvjzjrunner", "request":
-	// "testns-gdnyx/example-runnerdeploy-zps4z-j5562", "error": "Pod
-	// \"example-runnerdeploy-zps4z-j5562\" is invalid:
-	// [spec.containers[1].image: Required value,
-	// spec.containers[1].securityContext.privileged: Forbidden: disallowed by
-	// cluster policy]"}
-	testEnv.ControlPlane.GetAPIServer().Configure().
-		Append("allow-privileged", "true")
-
-	cfg, err := testEnv.Start()
-	require.NoError(t, err)
-	require.NotNil(t, cfg)
-
-	err = actionsv1alpha1.AddToScheme(scheme.Scheme)
-	require.NoError(t, err)
-
-	// +kubebuilder:scaffold:scheme
-
-	k8sClient, err := client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	require.NoError(t, err)
-	require.NotNil(t, k8sClient)
-
-	t.Cleanup(func() {
-		err := testEnv.Stop()
-		require.NoError(t, err)
-	})
-
-	return k8sClient, cfg
-}
-
 func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
-	k8sClient, cfg := setupK8s(t)
+	t.Parallel()
 	ctx := context.Background()
-	autoscalingNS, mgr := createNamespace(t, k8sClient, cfg)
-	configSecret := createDefaultSecret(t, k8sClient, autoscalingNS.Name)
+	autoscalingNS, mgr := createNamespace(t)
+	configSecret := createDefaultSecret(t, autoscalingNS.Name)
 
 	controller := &AutoscalingRunnerSetReconciler{
 		Client:                             mgr.GetClient(),
@@ -89,32 +42,7 @@ func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 	err := controller.SetupWithManager(mgr)
 	require.NoError(t, err, "failed to setup controller")
 
-	min := 1
-	max := 10
-	autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-asrs",
-			Namespace: autoscalingNS.Name,
-		},
-		Spec: v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl:    "https://github.com/owner/repo",
-			GitHubConfigSecret: configSecret.Name,
-			MaxRunners:         &max,
-			MinRunners:         &min,
-			RunnerGroup:        "testgroup",
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "runner",
-							Image: "ghcr.io/actions/runner",
-						},
-					},
-				},
-			},
-		},
-	}
-
+	autoscalingRunnerSet := newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name)
 	err = k8sClient.Create(ctx, autoscalingRunnerSet)
 	require.NoError(t, err, "failed to create AutoScalingRunnerSet")
 
@@ -168,6 +96,77 @@ func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 	err = k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
 	require.NoError(t, err)
 	assert.Len(t, runnerSetList.Items, 1, "Only one EphemeralRunnerSet should be created")
+}
+
+func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	autoscalingNS, mgr := createNamespace(t)
+	configSecret := createDefaultSecret(t, autoscalingNS.Name)
+
+	controller := &AutoscalingRunnerSetReconciler{
+		Client:                             mgr.GetClient(),
+		Scheme:                             mgr.GetScheme(),
+		Log:                                logf.Log,
+		ControllerNamespace:                autoscalingNS.Name,
+		DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+		ActionsClient:                      fake.NewMultiClient(),
+	}
+	err := controller.SetupWithManager(mgr)
+	require.NoError(t, err, "failed to setup controller")
+
+	autoscalingRunnerSet := newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name)
+	err = k8sClient.Create(ctx, autoscalingRunnerSet)
+	require.NoError(t, err, "failed to create AutoScalingRunnerSet")
+
+	startManagers(t, mgr)
+
+	// Wait till the listener is created
+	eventually.Must(t, func(t testing.TB) {
+		err := k8sClient.Get(
+			ctx,
+			client.ObjectKey{
+				Name:      scaleSetListenerName(autoscalingRunnerSet),
+				Namespace: autoscalingRunnerSet.Namespace,
+			},
+			new(v1alpha1.AutoscalingListener),
+		)
+		require.NoError(t, err)
+	},
+		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+
+	// Delete the AutoScalingRunnerSet
+	err = k8sClient.Delete(ctx, autoscalingRunnerSet)
+	require.NoError(t, err, "failed to delete AutoScalingRunnerSet")
+
+	// Check if the listener is deleted
+	eventually.Must(t, func(t testing.TB) {
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
+		require.NotNil(t, err)
+		assert.True(t, errors.IsNotFound(err))
+	},
+		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+
+	// Check if all the EphemeralRunnerSet is deleted
+	eventually.Must(t, func(t testing.TB) {
+		runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+		err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+		require.NoError(t, err)
+		assert.Len(t, runnerSetList.Items, 0, "All EphemeralRunnerSet should be deleted")
+	},
+		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+
+	// Check if the AutoScalingRunnerSet is deleted
+	eventually.Must(t, func(t testing.TB) {
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingRunnerSet))
+		require.NotNil(t, err)
+		assert.True(t, errors.IsNotFound(err))
+	},
+		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+		eventually.WithInterval(autoscalingRunnerSetTestInterval))
 }
 
 // var _ = Describe("Test AutoScalingRunnerSet controller", func() {
