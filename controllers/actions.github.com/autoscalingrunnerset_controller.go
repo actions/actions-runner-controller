@@ -43,11 +43,15 @@ import (
 
 const (
 	// TODO: Replace with shared image.
-	autoscalingRunnerSetOwnerKey      = ".metadata.controller"
-	LabelKeyRunnerSpecHash            = "runner-spec-hash"
-	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
-	runnerScaleSetIdAnnotationKey     = "runner-scale-set-id"
-	runnerScaleSetNameAnnotationKey   = "runner-scale-set-name"
+
+	autoscalingRunnerSetOwnerKey              = ".metadata.controller"
+	LabelKeyRunnerSpecHash                    = "runner-spec-hash"
+	autoscalingRunnerSetFinalizerName         = "autoscalingrunnerset.actions.github.com/finalizer"
+	runnerScaleSetIdAnnotationKey             = "runner-scale-set-id"
+	runnerScaleSetNameAnnotationKey           = "runner-scale-set-name"
+	runnerScaleSetRunnerGroupNameKey          = "runner-scale-set-runner-group-name"
+	autoscalingRunnerSetCleanupFinalizerLabel = "actions.github.com/cleanup-protection"
+	autoscalingRunnerSetModeAnnotationKey     = "actions.github.com/mode"
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
@@ -70,6 +74,7 @@ type AutoscalingRunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -317,29 +322,15 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
-	logger.Info("Cleaning up manager role binding")
-	roleBinding := new(rbacv1.RoleBinding)
-	err = r.Get(ctx, types.NamespacedName{Name: managerRoleBindingName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, roleBinding)
-	switch {
-	case err == nil:
-		if roleBinding.DeletionTimestamp.IsZero() {
-			err := r.Delete(ctx, roleBinding)
-			if err != nil && !kerrors.IsNotFound(err) {
-				return true, err
-			}
+	if autoscalingRunnerSet.Annotations[autoscalingRunnerSetModeAnnotationKey] == "kubernetes" {
+		requeue, err := r.cleanupContainerModeKubernetesPermissions(ctx, autoscalingRunnerSet, logger)
+		if err != nil {
+			return true, err
+		}
+		if requeue {
 			return true, nil
 		}
-		if !controllerutil.ContainsFinalizer(roleBinding, cleanupFinalizer) {
-			break
-		}
-		err = patch(ctx, r.Client, roleBinding, func(obj *rbacv1.RoleBinding) {
-			controllerutil.RemoveFinalizer(obj, cleanupFinalizer)
-		})
-		return true, err
-	case err != nil && !kerrors.IsNotFound(err):
-		return true, err
 	}
-
 	logger.Info("Cleaning up manager role")
 	role := new(rbacv1.Role)
 	err = r.Get(ctx, types.NamespacedName{Name: managerRoleName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, role)
@@ -352,11 +343,107 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 			}
 			return true, nil
 		}
-		if !controllerutil.ContainsFinalizer(role, cleanupFinalizer) {
+		if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerLabel) {
 			break
 		}
 		err = patch(ctx, r.Client, role, func(obj *rbacv1.Role) {
-			controllerutil.RemoveFinalizer(obj, cleanupFinalizer)
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+
+	logger.Info("Cleaning up manager role binding")
+	roleBinding := new(rbacv1.RoleBinding)
+	err = r.Get(ctx, types.NamespacedName{Name: managerRoleBindingName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, roleBinding)
+	switch {
+	case err == nil:
+		if roleBinding.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, roleBinding)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerLabel) {
+			break
+		}
+		err = patch(ctx, r.Client, roleBinding, func(obj *rbacv1.RoleBinding) {
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+
+	return false, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
+	logger.Info("Cleaning up container mode kubernetes role binding")
+	roleBinding := new(rbacv1.RoleBinding)
+	err = r.Get(ctx, types.NamespacedName{Name: kubernetesModeRoleBindingName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, roleBinding)
+	switch {
+	case err == nil:
+		if roleBinding.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, roleBinding)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerLabel) {
+			break
+		}
+		err = patch(ctx, r.Client, roleBinding, func(obj *rbacv1.RoleBinding) {
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+
+	logger.Info("Cleaning up container mode kubernetes role")
+	role := new(rbacv1.Role)
+	err = r.Get(ctx, types.NamespacedName{Name: kubernetesModeRoleName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, role)
+	switch {
+	case err == nil:
+		if role.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, role)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerLabel) {
+			break
+		}
+		err = patch(ctx, r.Client, role, func(obj *rbacv1.Role) {
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+		})
+		return true, err
+	case err != nil && !kerrors.IsNotFound(err):
+		return true, err
+	}
+
+	logger.Info("Cleaning up container mode kubernetes service account")
+	serviceAccount := new(corev1.ServiceAccount)
+	err = r.Get(ctx, types.NamespacedName{Name: kubernetesModeServiceAccountName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, serviceAccount)
+	switch {
+	case err == nil:
+		if serviceAccount.DeletionTimestamp.IsZero() {
+			err := r.Delete(ctx, serviceAccount)
+			if err != nil && !kerrors.IsNotFound(err) {
+				return true, err
+			}
+			return true, nil
+		}
+		if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerLabel) {
+			break
+		}
+		err = patch(ctx, r.Client, serviceAccount, func(obj *corev1.ServiceAccount) {
+			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
 		})
 		return true, err
 	case err != nil && !kerrors.IsNotFound(err):
@@ -527,8 +614,12 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 }
 
 func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
+	scaleSetId, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey]
+	if !ok {
+		return nil
+	}
 	logger.Info("Deleting the runner scale set from Actions service")
-	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
+	runnerScaleSetId, err := strconv.Atoi(scaleSetId)
 	if err != nil {
 		// If the annotation is not set correctly, or if it does not exist, we are going to get stuck in a loop trying to parse the scale set id.
 		// If the configuration is invalid (secret does not exist for example), we never get to the point to create runner set. But then, manual cleanup
@@ -546,6 +637,13 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 	err = actionsClient.DeleteRunnerScaleSet(ctx, runnerScaleSetId)
 	if err != nil {
 		logger.Error(err, "Failed to delete runner scale set", "runnerScaleSetId", runnerScaleSetId)
+		return err
+	}
+
+	err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+		delete(obj.Annotations, runnerScaleSetIdAnnotationKey)
+	})
+	if err != nil {
 		return err
 	}
 

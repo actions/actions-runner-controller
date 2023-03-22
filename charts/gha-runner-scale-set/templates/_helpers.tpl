@@ -63,6 +63,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- include "gha-runner-scale-set.fullname" . }}-kube-mode-role
 {{- end }}
 
+{{- define "gha-runner-scale-set.kubeModeRoleBindingName" -}}
+{{- include "gha-runner-scale-set.fullname" . }}-kube-mode-role-binding
+{{- end }}
+
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
 {{- include "gha-runner-scale-set.fullname" . }}-kube-mode-service-account
 {{- end }}

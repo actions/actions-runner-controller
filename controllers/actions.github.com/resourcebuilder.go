@@ -566,12 +566,30 @@ func applyGitHubURLLabels(url string, labels map[string]string) error {
 	return nil
 }
 
+func autoscalingRunnerSetFullName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return autoscalingRunnerSet.Name + "-" + autoscalingRunnerSet.Labels["app.kubernetes.io/name"]
+}
+
 func managerRoleBindingName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	kubeName := autoscalingRunnerSet.Labels["app.kubernetes.io/name"]
-	return fmt.Sprintf("%s-%s-manager-role-binding", autoscalingRunnerSet.Name, kubeName)
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-manager-role-binding"
 }
 
 func managerRoleName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	kubeName := autoscalingRunnerSet.Labels["app.kubernetes.io/name"]
-	return fmt.Sprintf("%s-%s-manager-role", autoscalingRunnerSet.Name, kubeName)
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-manager-role"
+}
+
+func kubernetesModeRoleName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-role"
+}
+
+func kubernetesModeRoleBindingName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-role-binding"
+}
+
+func kubernetesModeServiceAccountName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-service-account"
+}
+
+func noPermissionServiceAccountName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-no-permission-service-account"
 }
