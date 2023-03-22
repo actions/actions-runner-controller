@@ -74,6 +74,7 @@ type AutoscalingRunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -353,7 +354,6 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 	case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
 		return true, err
 	}
-
 	logger.Info("Cleaning up manager role")
 	role := new(rbacv1.Role)
 	err = r.Get(ctx, types.NamespacedName{Name: managerRoleName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, role)
@@ -626,7 +626,7 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 
 	logger.Info("Updating runner scale set name as an annotation")
 	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-		obj.Annotations[runnerScaleSetNameAnnotationKey] = updatedRunnerScaleSet.Name
+		obj.Annotations[runnerScaleSetIdAnnotationKey] = updatedRunnerScaleSet.Name
 	}); err != nil {
 		logger.Error(err, "Failed to update runner scale set name annotation")
 		return ctrl.Result{}, err
