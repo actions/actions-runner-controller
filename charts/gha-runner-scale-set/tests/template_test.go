@@ -240,7 +240,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &roleBinding)
 
 	assert.Equal(t, namespaceName, roleBinding.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role-binding", roleBinding.Name)
 	assert.Len(t, roleBinding.Subjects, 1)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", roleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, roleBinding.Subjects[0].Namespace)
