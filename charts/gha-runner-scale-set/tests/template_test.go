@@ -311,7 +311,7 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 
 	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "gha-runner-scale-set-controller", ars.Labels["app.kubernetes.io/part-of"])
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "autoscaling-runner-set", ars.Labels["app.kubernetes.io/component"])
 	assert.NotEmpty(t, ars.Labels["app.kubernetes.io/version"])
 
