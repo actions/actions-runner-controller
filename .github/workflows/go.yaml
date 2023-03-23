@@ -1,0 +1,80 @@
+name: Go
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/go.yaml'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+  pull_request:
+    paths:
+      - '.github/workflows/go.yaml'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: fmt
+        run: go fmt ./...
+      - name: Check diff
+        run: git diff --exit-code
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          only-new-issues: true
+          version: v1.51.1
+
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: Generate
+        run: make generate
+      - name: Check diff
+        run: git diff --exit-code
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+      - run: make manifests
+      - name: Check diff
+        run: git diff --exit-code
+      - name: Install kubebuilder
+        run: |
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_linux_amd64.tar.gz
+          tar zxvf kubebuilder_2.3.2_linux_amd64.tar.gz
+          sudo mv kubebuilder_2.3.2_linux_amd64 /usr/local/kubebuilder
+      - name: Run go tests
+        run: |
+          go test -short `go list ./... | grep -v ./test_e2e_arc`
