@@ -28,6 +28,10 @@ const (
 func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+	eventually := eventually.New(
+		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+		eventually.WithInterval(autoscalingRunnerSetTestInterval),
+	)
 	autoscalingNS, mgr := createNamespace(t)
 	configSecret := createDefaultSecret(t, autoscalingNS.Name)
 
@@ -55,9 +59,7 @@ func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, created.Finalizers, 1)
 		assert.Equal(t, created.Finalizers[0], autoscalingRunnerSetFinalizerName)
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Check if runner scale set is created on service
 	eventually.Must(t, func(t testing.TB) {
@@ -69,9 +71,7 @@ func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 
 		require.Contains(t, created.Annotations, runnerScaleSetRunnerGroupNameKey)
 		assert.Equal(t, "testgroup", created.Annotations[runnerScaleSetRunnerGroupNameKey])
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Check if ephemeral runner set is created
 	eventually.Must(t, func(t testing.TB) {
@@ -79,17 +79,13 @@ func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 		err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
 		require.NoError(t, err)
 		require.Len(t, runnerSetList.Items, 1)
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Check if listener is created
 	eventually.Must(t, func(t testing.TB) {
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
 		require.NoError(t, err)
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Check if status is updated
 	runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
@@ -101,6 +97,10 @@ func TestAutoscalitRunnerSetReconciler_CreateRunnerScaleSet(t *testing.T) {
 func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+	eventually := eventually.New(
+		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+		eventually.WithInterval(autoscalingRunnerSetTestInterval),
+	)
 	autoscalingNS, mgr := createNamespace(t)
 	configSecret := createDefaultSecret(t, autoscalingNS.Name)
 
@@ -132,9 +132,7 @@ func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
 			new(v1alpha1.AutoscalingListener),
 		)
 		require.NoError(t, err)
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Delete the AutoScalingRunnerSet
 	err = k8sClient.Delete(ctx, autoscalingRunnerSet)
@@ -145,9 +143,7 @@ func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
 		require.NotNil(t, err)
 		assert.True(t, errors.IsNotFound(err))
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Check if all the EphemeralRunnerSet is deleted
 	eventually.Must(t, func(t testing.TB) {
@@ -155,18 +151,14 @@ func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
 		err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
 		require.NoError(t, err)
 		assert.Len(t, runnerSetList.Items, 0, "All EphemeralRunnerSet should be deleted")
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 
 	// Check if the AutoScalingRunnerSet is deleted
 	eventually.Must(t, func(t testing.TB) {
 		err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingRunnerSet))
 		require.NotNil(t, err)
 		assert.True(t, errors.IsNotFound(err))
-	},
-		eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
-		eventually.WithInterval(autoscalingRunnerSetTestInterval))
+	})
 }
 
 // var _ = Describe("Test AutoScalingRunnerSet controller", func() {

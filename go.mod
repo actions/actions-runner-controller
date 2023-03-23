@@ -22,7 +22,7 @@ require (
 	github.com/onsi/gomega v1.27.2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
-	github.com/rentziass/eventually v0.0.0-20230322104408-065f0b6d63a2
+	github.com/rentziass/eventually v0.2.0
 	github.com/stretchr/testify v1.8.2
 	github.com/teambition/rrule-go v1.8.2
 	go.uber.org/multierr v1.7.0
