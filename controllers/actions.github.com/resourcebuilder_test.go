@@ -19,7 +19,7 @@ func TestLabelPropagation(t *testing.T) {
 			Labels: map[string]string{
 				LabelKeyKubernetesPartOf:      labelValueKubernetesPartOf,
 				LabelKeyKubernetesVersion:     "0.2.0",
-				LabelKeyGithubRunnerGroupName: "test-group",
+				LabelKeyGitHubRunnerGroupName: "test-group",
 			},
 			Annotations: map[string]string{
 				runnerScaleSetIdKey: "1",
@@ -37,12 +37,12 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
 	assert.NotEmpty(t, ephemeralRunnerSet.Labels[LabelKeyRunnerSpecHash])
-	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGithubScaleSetName])
-	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGithubScaleSetNamespace])
-	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGithubEnterprise])
-	assert.Equal(t, "org", ephemeralRunnerSet.Labels[LabelKeyGithubOrganization])
-	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGithubRepository])
-	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyGithubRunnerGroupName], ephemeralRunnerSet.Labels[LabelKeyGithubRunnerGroupName])
+	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
+	assert.Equal(t, "org", ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization])
+	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
+	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyGitHubRunnerGroupName], ephemeralRunnerSet.Labels[LabelKeyGitHubRunnerGroupName])
 
 	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
@@ -50,11 +50,11 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
 	assert.NotEmpty(t, ephemeralRunnerSet.Labels[LabelKeyRunnerSpecHash])
-	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGithubScaleSetName])
-	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGithubScaleSetNamespace])
-	assert.Equal(t, "", listener.Labels[LabelKeyGithubEnterprise])
-	assert.Equal(t, "org", listener.Labels[LabelKeyGithubOrganization])
-	assert.Equal(t, "repo", listener.Labels[LabelKeyGithubRepository])
+	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
+	assert.Equal(t, "org", listener.Labels[LabelKeyGitHubOrganization])
+	assert.Equal(t, "repo", listener.Labels[LabelKeyGitHubRepository])
 
 	listenerServiceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -72,7 +72,7 @@ func TestLabelPropagation(t *testing.T) {
 	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
 
-	for _, key := range append(commonLabelKeys[:], LabelKeyGithubRunnerGroupName) {
+	for _, key := range append(commonLabelKeys[:], LabelKeyGitHubRunnerGroupName) {
 		if key == LabelKeyKubernetesComponent {
 			continue
 		}
