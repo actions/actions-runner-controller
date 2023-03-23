@@ -187,7 +187,7 @@ You might see this error if you're using kubernetes mode with persistent volumes
 
 To fix this, you can either:
 
-1. Use a volume type that supports `securityContext.fsGroup`. Update the `fsGroup` of your runner pod to match the GID of the runner. You can do that by updating the `gha-runner-scale-set` helm chart values to include the following:
+1. Use a volume type that supports `securityContext.fsGroup` (`hostPath` volumes don't support it, `local` volumes do as well as other types). Update the `fsGroup` of your runner pod to match the GID of the runner. You can do that by updating the `gha-runner-scale-set` helm chart values to include the following:
 
     ```yaml
     spec:
