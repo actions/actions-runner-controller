@@ -1,7 +1,5 @@
 # Autoscaling Runner Scale Sets mode
 
-**⚠️ This mode is currently only available for a limited number of organizations.**
-
 This new autoscaling mode brings numerous enhancements (described in the following sections) that will make your experience more reliable and secure.
 
 ## How it works
@@ -157,8 +155,10 @@ You can check the logs of the controller pod using the following command:
 
 ```bash
 # Controller logs
-$ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-controller
+kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-controller
+```
 
+```bash
 # Runner set listener logs
 kubectl logs -n "${NAMESPACE}" -l auto-scaling-runner-set-namespace=arc-systems -l auto-scaling-runner-set-name=arc-runner-set
 ```
@@ -180,6 +180,42 @@ Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/a
 ### If you installed the autoscaling runner set, but the listener pod is not created
 
 Verify that the secret you provided is correct and that the `githubConfigUrl` you provided is accurate.
+
+### Access to the path `/home/runner/_work/_tool` is denied error
+
+You might see this error if you're using kubernetes mode with persistent volumes. This is because the runner container is running with a non-root user and is causing a permissions mismatch with the mounted volume.
+
+To fix this, you can either:
+
+1. Use a volume type that supports `securityContext.fsGroup` (`hostPath` volumes don't support it, `local` volumes do as well as other types). Update the `fsGroup` of your runner pod to match the GID of the runner. You can do that by updating the `gha-runner-scale-set` helm chart values to include the following:
+
+    ```yaml
+    spec:
+        securityContext:
+            fsGroup: 123
+        containers:
+        - name: runner
+        image: ghcr.io/actions/actions-runner:<VERSION> # Replace <VERSION> with the version you want to use
+        command: ["/home/runner/run.sh"]
+    ```
+
+1. If updating the `securityContext` of your runner pod is not a viable solution, you can workaround the issue by using `initContainers` to change the mounted volume's ownership, as follows:
+
+    ```yaml
+    template:
+    spec:
+        initContainers:
+        - name: kube-init
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["sudo", "chown", "-R", "1001:123", "/home/runner/_work"]
+        volumeMounts:
+            - name: work
+            mountPath: /home/runner/_work
+        containers:
+        - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
+    ```
 
 ## Changelog
 
@@ -207,56 +243,3 @@ Verify that the secret you provided is correct and that the `githubConfigUrl` yo
 1. Fixed a bug that was preventing runner scale from being removed from the backend when they were deleted from the cluster [#2255](https://github.com/actions/actions-runner-controller/pull/2255) [#2223](https://github.com/actions/actions-runner-controller/pull/2223)
 1. Fixed bugs with the helm chart definitions preventing certain values from being set [#2222](https://github.com/actions/actions-runner-controller/pull/2222)
 1. Fixed a bug that prevented the configuration of a runner group for a runner scale set [#2216](https://github.com/actions/actions-runner-controller/pull/2216)
-
-#### Log
-
-- [1c7b7f4](https://github.com/actions/actions-runner-controller/commit/1c7b7f4) Bump arc-2 chart version and prepare 0.2.0 release [#2313](https://github.com/actions/actions-runner-controller/pull/2313)
-- [73e22a1](https://github.com/actions/actions-runner-controller/commit/73e22a1) Disable metrics serving in proxy tests [#2307](https://github.com/actions/actions-runner-controller/pull/2307)
-- [9b44f00](https://github.com/actions/actions-runner-controller/commit/9b44f00) Documentation corrections [#2116](https://github.com/actions/actions-runner-controller/pull/2116)
-- [6b4250c](https://github.com/actions/actions-runner-controller/commit/6b4250c) Add support for proxy [#2286](https://github.com/actions/actions-runner-controller/pull/2286)
-- [ced8822](https://github.com/actions/actions-runner-controller/commit/ced8822) Resolves the erroneous webhook scale down due to check runs [#2119](https://github.com/actions/actions-runner-controller/pull/2119)
-- [44c06c2](https://github.com/actions/actions-runner-controller/commit/44c06c2) fix: case-insensitive webhook label matching [#2302](https://github.com/actions/actions-runner-controller/pull/2302)
-- [4103fe3](https://github.com/actions/actions-runner-controller/commit/4103fe3) Use DOCKER_IMAGE_NAME instead of NAME to avoid conflict. [#2303](https://github.com/actions/actions-runner-controller/pull/2303)
-- [a44fe04](https://github.com/actions/actions-runner-controller/commit/a44fe04) Fix manager crashloopback for ARC deployments without scaleset-related controllers [#2293](https://github.com/actions/actions-runner-controller/pull/2293)
-- [274d0c8](https://github.com/actions/actions-runner-controller/commit/274d0c8) Added ability to configure log level from chart values [#2252](https://github.com/actions/actions-runner-controller/pull/2252)
-- [256e08e](https://github.com/actions/actions-runner-controller/commit/256e08e) Ask runner to wait for docker daemon from DinD. [#2292](https://github.com/actions/actions-runner-controller/pull/2292)
-- [f677fd5](https://github.com/actions/actions-runner-controller/commit/f677fd5) doc: Fix chart name for helm commands in docs [#2287](https://github.com/actions/actions-runner-controller/pull/2287)
-- [d962714](https://github.com/actions/actions-runner-controller/commit/d962714) Fix helm chart when containerMode.type=dind. [#2291](https://github.com/actions/actions-runner-controller/pull/2291)
-- [3886f28](https://github.com/actions/actions-runner-controller/commit/3886f28) Add EKS test environment Terraform templates [#2290](https://github.com/actions/actions-runner-controller/pull/2290)
-- [dab9004](https://github.com/actions/actions-runner-controller/commit/dab9004) Added workflow to be triggered via rest api dispatch in e2e test [#2283](https://github.com/actions/actions-runner-controller/pull/2283)
-- [dd8ec1a](https://github.com/actions/actions-runner-controller/commit/dd8ec1a) Add testserver package [#2281](https://github.com/actions/actions-runner-controller/pull/2281)
-- [8e52a6d](https://github.com/actions/actions-runner-controller/commit/8e52a6d) EphemeralRunner: On cleanup, if pod is pending, delete from service [#2255](https://github.com/actions/actions-runner-controller/pull/2255)
-- [9990243](https://github.com/actions/actions-runner-controller/commit/9990243) Early return if finalizer does not exist to make it more readable [#2262](https://github.com/actions/actions-runner-controller/pull/2262)
-- [0891981](https://github.com/actions/actions-runner-controller/commit/0891981) Port ADRs from internal repo [#2267](https://github.com/actions/actions-runner-controller/pull/2267)
-- [facae69](https://github.com/actions/actions-runner-controller/commit/facae69) Remove un-required permissions for the manager-role of the new `AutoScalingRunnerSet` [#2260](https://github.com/actions/actions-runner-controller/pull/2260)
-- [8f62e35](https://github.com/actions/actions-runner-controller/commit/8f62e35) Add options to multi client [#2257](https://github.com/actions/actions-runner-controller/pull/2257)
-- [55951c2](https://github.com/actions/actions-runner-controller/commit/55951c2) Add new workflow to automate runner updates [#2247](https://github.com/actions/actions-runner-controller/pull/2247)
-- [c4297d2](https://github.com/actions/actions-runner-controller/commit/c4297d2) Avoid deleting scale set if annotation is not parsable or if it does not exist [#2239](https://github.com/actions/actions-runner-controller/pull/2239)
-- [0774f06](https://github.com/actions/actions-runner-controller/commit/0774f06) ADR: automate runner updates [#2244](https://github.com/actions/actions-runner-controller/pull/2244)
-- [92ab11b](https://github.com/actions/actions-runner-controller/commit/92ab11b) Use UUID v5 for client identifiers [#2241](https://github.com/actions/actions-runner-controller/pull/2241)
-- [7414dc6](https://github.com/actions/actions-runner-controller/commit/7414dc6) Add Identifier to actions.Client [#2237](https://github.com/actions/actions-runner-controller/pull/2237)
-- [34efb9d](https://github.com/actions/actions-runner-controller/commit/34efb9d) Add documentation to update ARC with prometheus CRDs needed by actions metrics server [#2209](https://github.com/actions/actions-runner-controller/pull/2209)
-- [fbad561](https://github.com/actions/actions-runner-controller/commit/fbad561) Allow provide pre-defined kubernetes secret when helm-install AutoScalingRunnerSet [#2234](https://github.com/actions/actions-runner-controller/pull/2234)
-- [a5cef7e](https://github.com/actions/actions-runner-controller/commit/a5cef7e) Resolve CI break due to bad merge. [#2236](https://github.com/actions/actions-runner-controller/pull/2236)
-- [1f4fe46](https://github.com/actions/actions-runner-controller/commit/1f4fe46) Delete RunnerScaleSet on service when AutoScalingRunnerSet is deleted. [#2223](https://github.com/actions/actions-runner-controller/pull/2223)
-- [067686c](https://github.com/actions/actions-runner-controller/commit/067686c) Fix typos and markdown structure in troubleshooting guide [#2148](https://github.com/actions/actions-runner-controller/pull/2148)
-- [df12e00](https://github.com/actions/actions-runner-controller/commit/df12e00) Remove network requests from actions.NewClient [#2219](https://github.com/actions/actions-runner-controller/pull/2219)
-- [cc26593](https://github.com/actions/actions-runner-controller/commit/cc26593) Skip CT when list-changed=false. [#2228](https://github.com/actions/actions-runner-controller/pull/2228)
-- [835eac7](https://github.com/actions/actions-runner-controller/commit/835eac7) Fix helm charts when pass values file.  [#2222](https://github.com/actions/actions-runner-controller/pull/2222)
-- [01e9dd3](https://github.com/actions/actions-runner-controller/commit/01e9dd3) Update Validate ARC workflow to go 1.19 [#2220](https://github.com/actions/actions-runner-controller/pull/2220)
-- [8038181](https://github.com/actions/actions-runner-controller/commit/8038181) Allow update runner group for AutoScalingRunnerSet [#2216](https://github.com/actions/actions-runner-controller/pull/2216)
-- [219ba5b](https://github.com/actions/actions-runner-controller/commit/219ba5b) chore(deps): bump sigs.k8s.io/controller-runtime from 0.13.1 to 0.14.1 [#2132](https://github.com/actions/actions-runner-controller/pull/2132)
-- [b09e3a2](https://github.com/actions/actions-runner-controller/commit/b09e3a2) Return error for non-existing runner group. [#2215](https://github.com/actions/actions-runner-controller/pull/2215)
-- [7ea60e4](https://github.com/actions/actions-runner-controller/commit/7ea60e4) Fix intermittent image push failures to GHCR [#2214](https://github.com/actions/actions-runner-controller/pull/2214)
-- [c8918f5](https://github.com/actions/actions-runner-controller/commit/c8918f5) Fix URL for authenticating using a GitHub app [#2206](https://github.com/actions/actions-runner-controller/pull/2206)
-- [d57d17f](https://github.com/actions/actions-runner-controller/commit/d57d17f) Add support for custom CA in actions.Client [#2199](https://github.com/actions/actions-runner-controller/pull/2199)
-- [6e69c75](https://github.com/actions/actions-runner-controller/commit/6e69c75) chore(deps): bump github.com/hashicorp/go-retryablehttp from 0.7.1 to 0.7.2 [#2203](https://github.com/actions/actions-runner-controller/pull/2203)
-- [882bfab](https://github.com/actions/actions-runner-controller/commit/882bfab) Renaming autoScaling to autoscaling in tests matching the convention [#2201](https://github.com/actions/actions-runner-controller/pull/2201)
-- [3327f62](https://github.com/actions/actions-runner-controller/commit/3327f62) Refactor actions.Client with options to help extensibility [#2193](https://github.com/actions/actions-runner-controller/pull/2193)
-- [282f2dd](https://github.com/actions/actions-runner-controller/commit/282f2dd) chore(deps): bump github.com/onsi/gomega from 1.20.2 to 1.25.0 [#2169](https://github.com/actions/actions-runner-controller/pull/2169)
-- [d67f808](https://github.com/actions/actions-runner-controller/commit/d67f808) Include nikola-jokic in CODEOWNERS file [#2184](https://github.com/actions/actions-runner-controller/pull/2184)
-- [4932412](https://github.com/actions/actions-runner-controller/commit/4932412) Fix L0 test to make it more reliable. [#2178](https://github.com/actions/actions-runner-controller/pull/2178)
-- [6da1cde](https://github.com/actions/actions-runner-controller/commit/6da1cde) Update runner version to 2.301.1 [#2182](https://github.com/actions/actions-runner-controller/pull/2182)
-- [f9bae70](https://github.com/actions/actions-runner-controller/commit/f9bae70) Add distinct namespace best practice note [#2181](https://github.com/actions/actions-runner-controller/pull/2181)
-- [05a3908](https://github.com/actions/actions-runner-controller/commit/05a3908) Add arc-2 quickstart guide [#2180](https://github.com/actions/actions-runner-controller/pull/2180)
-- [606ed1b](https://github.com/actions/actions-runner-controller/commit/606ed1b) Add Repository information to Runner Status [#2093](https://github.com/actions/actions-runner-controller/pull/2093)
