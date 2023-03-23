@@ -181,6 +181,42 @@ Error: INSTALLATION FAILED: execution error at (gha-runner-scale-set/templates/a
 
 Verify that the secret you provided is correct and that the `githubConfigUrl` you provided is accurate.
 
+### Access to the path `/home/runner/_work/_tool` is denied error
+
+You might see this error if you're using kubernetes mode with persistent volumes. This is because the runner container is running with a non-root user and is causing a permissions mismatch with the mounted volume.
+
+To fix this, you can either:
+
+1. Use a volume type that supports `securityContext.fsGroup`. Update the `fsGroup` of your runner pod to match the GID of the runner. You can do that by updating the `gha-runner-scale-set` helm chart values to include the following:
+
+    ```yaml
+    spec:
+        securityContext:
+            fsGroup: 123
+        containers:
+        - name: runner
+        image: ghcr.io/actions/actions-runner:<VERSION> # Replace <VERSION> with the version you want to use
+        command: ["/home/runner/run.sh"]
+    ```
+
+1. If updating the `securityContext` of your runner pod is not a viable solution, you can workaround the issue by using `initContainers` to change the mounted volume's ownership, as follows:
+
+    ```yaml
+    template:
+    spec:
+        initContainers:
+        - name: kube-init
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["sudo", "chown", "-R", "1001:123", "/home/runner/_work"]
+        volumeMounts:
+            - name: work
+            mountPath: /home/runner/_work
+        containers:
+        - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
+    ```
+
 ## Changelog
 
 ### v0.3.0
