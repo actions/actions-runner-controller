@@ -79,20 +79,20 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 10 ]; then
-              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
-      
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -167,18 +167,18 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 10 ]; then
-              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
       - name: Test ARC E2E
@@ -254,18 +254,18 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 10 ]; then
-              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
       - name: Test ARC E2E
@@ -350,18 +350,18 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 10 ]; then
-              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
       - name: Test ARC E2E
@@ -448,18 +448,18 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 10 ]; then
-              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
       - name: Test ARC E2E
@@ -540,18 +540,18 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 10 ]; then
-              echo "Timeout waiting for listener pod with label auto-scaling-runner-set-name=$ARC_NAME"
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l auto-scaling-runner-set-name=$ARC_NAME
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
       - name: Test ARC E2E

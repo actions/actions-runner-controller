@@ -22,7 +22,7 @@ func TestLabelPropagation(t *testing.T) {
 				LabelKeyGitHubRunnerGroupName: "test-group",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdKey: "1",
+				runnerScaleSetIdAnnotationKey: "1",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{

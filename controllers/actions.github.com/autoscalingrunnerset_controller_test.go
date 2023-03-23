@@ -117,7 +117,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", err
 					}
 
-					if _, ok := created.Annotations[runnerScaleSetIdKey]; !ok {
+					if _, ok := created.Annotations[runnerScaleSetIdAnnotationKey]; !ok {
 						return "", nil
 					}
 
@@ -125,7 +125,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", nil
 					}
 
-					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdKey], created.Annotations[LabelKeyGitHubRunnerGroupName]), nil
+					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdAnnotationKey], created.Annotations[LabelKeyGitHubRunnerGroupName]), nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
@@ -539,7 +539,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 						return "", err
 					}
 
-					if val, ok := ars.Annotations[runnerScaleSetNameKey]; ok {
+					if val, ok := ars.Annotations[runnerScaleSetNameAnnotationKey]; ok {
 						return val, nil
 					}
 
@@ -562,7 +562,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 						return "", err
 					}
 
-					if val, ok := ars.Annotations[runnerScaleSetNameKey]; ok {
+					if val, ok := ars.Annotations[runnerScaleSetNameAnnotationKey]; ok {
 						return val, nil
 					}
 
