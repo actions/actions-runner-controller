@@ -17,12 +17,12 @@ func TestLabelPropagation(t *testing.T) {
 			Name:      "test-scale-set",
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				LabelKeyKubernetesPartOf:      labelValueKubernetesPartOf,
-				LabelKeyKubernetesVersion:     "0.2.0",
-				LabelKeyGitHubRunnerGroupName: "test-group",
+				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion: "0.2.0",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey: "1",
+				runnerScaleSetIdAnnotationKey:      "1",
+				AnnotationKeyGitHubRunnerGroupName: "test-group",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -42,7 +42,7 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
 	assert.Equal(t, "org", ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization])
 	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
-	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyGitHubRunnerGroupName], ephemeralRunnerSet.Labels[LabelKeyGitHubRunnerGroupName])
+	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 
 	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
@@ -72,13 +72,14 @@ func TestLabelPropagation(t *testing.T) {
 	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
 
-	for _, key := range append(commonLabelKeys[:], LabelKeyGitHubRunnerGroupName) {
+	for _, key := range commonLabelKeys {
 		if key == LabelKeyKubernetesComponent {
 			continue
 		}
 		assert.Equal(t, ephemeralRunnerSet.Labels[key], ephemeralRunner.Labels[key])
 	}
 	assert.Equal(t, "runner", ephemeralRunner.Labels[LabelKeyKubernetesComponent])
+	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunner.Annotations[AnnotationKeyGitHubRunnerGroupName])
 
 	runnerSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

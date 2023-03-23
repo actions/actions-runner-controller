@@ -121,11 +121,11 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", nil
 					}
 
-					if _, ok := created.Annotations[LabelKeyGitHubRunnerGroupName]; !ok {
+					if _, ok := created.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
 						return "", nil
 					}
 
-					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdAnnotationKey], created.Annotations[LabelKeyGitHubRunnerGroupName]), nil
+					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdAnnotationKey], created.Annotations[AnnotationKeyGitHubRunnerGroupName]), nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
@@ -351,18 +351,18 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", err
 					}
 
-					if _, ok := updated.Annotations[LabelKeyGitHubRunnerGroupName]; !ok {
+					if _, ok := updated.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
 						return "", nil
 					}
 
-					return updated.Annotations[LabelKeyGitHubRunnerGroupName], nil
+					return updated.Annotations[AnnotationKeyGitHubRunnerGroupName], nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
 
 			// delete the annotation and it should be re-added
 			patched = autoscalingRunnerSet.DeepCopy()
-			delete(patched.Annotations, LabelKeyGitHubRunnerGroupName)
+			delete(patched.Annotations, AnnotationKeyGitHubRunnerGroupName)
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 
@@ -374,11 +374,11 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", err
 					}
 
-					if _, ok := updated.Annotations[LabelKeyGitHubRunnerGroupName]; !ok {
+					if _, ok := updated.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
 						return "", nil
 					}
 
-					return updated.Annotations[LabelKeyGitHubRunnerGroupName], nil
+					return updated.Annotations[AnnotationKeyGitHubRunnerGroupName], nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,

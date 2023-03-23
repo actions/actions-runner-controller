@@ -33,8 +33,9 @@ const (
 	LabelKeyGitHubEnterprise        = "actions.github.com/enterprise"
 	LabelKeyGitHubOrganization      = "actions.github.com/organization"
 	LabelKeyGitHubRepository        = "actions.github.com/repository"
-	LabelKeyGitHubRunnerGroupName   = "actions.github.com/runner-group-name"
 )
+
+const AnnotationKeyGitHubRunnerGroupName = "actions.github.com/runner-group-name"
 
 // Labels applied to listener roles
 const (
@@ -202,7 +203,10 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		LabelKeyGitHubEnterprise:        githubConfig.Enterprise,
 		LabelKeyGitHubOrganization:      githubConfig.Organization,
 		LabelKeyGitHubRepository:        githubConfig.Repository,
-		LabelKeyGitHubRunnerGroupName:   autoscalingRunnerSet.Labels[LabelKeyGitHubRunnerGroupName],
+	}
+
+	newAnnotations := map[string]string{
+		AnnotationKeyGitHubRunnerGroupName: autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
 	}
 
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
@@ -211,6 +215,7 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			GenerateName: autoscalingRunnerSet.ObjectMeta.Name + "-",
 			Namespace:    autoscalingRunnerSet.ObjectMeta.Namespace,
 			Labels:       newLabels,
+			Annotations:  newAnnotations,
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
@@ -374,7 +379,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 
 func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) *v1alpha1.EphemeralRunner {
 	labels := make(map[string]string)
-	for _, key := range append(commonLabelKeys[:], LabelKeyGitHubRunnerGroupName) {
+	for _, key := range commonLabelKeys {
 		switch key {
 		case LabelKeyKubernetesComponent:
 			labels[key] = "runner"
@@ -382,12 +387,17 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			labels[key] = ephemeralRunnerSet.Labels[key]
 		}
 	}
+	annotations := make(map[string]string)
+	for key, val := range ephemeralRunnerSet.Annotations {
+		annotations[key] = val
+	}
 	return &v1alpha1.EphemeralRunner{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: ephemeralRunnerSet.Name + "-runner-",
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
+			Annotations:  annotations,
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}
