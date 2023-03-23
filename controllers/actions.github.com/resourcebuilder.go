@@ -36,6 +36,12 @@ const (
 	LabelKeyGitHubRunnerGroupName   = "actions.github.com/runner-group-name"
 )
 
+// Labels applied to listener roles
+const (
+	labelKeyListenerName      = "auto-scaling-listener-name"
+	labelKeyListenerNamespace = "auto-scaling-listener-namespace"
+)
+
 var commonLabelKeys = [...]string{
 	LabelKeyKubernetesPartOf,
 	LabelKeyKubernetesComponent,
@@ -243,11 +249,11 @@ func (b *resourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 			Name:      scaleSetListenerRoleName(autoscalingListener),
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			Labels: map[string]string{
-				LabelKeyGitHubScaleSetNamespace:   autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:        autoscalingListener.Spec.AutoscalingRunnerSetName,
-				"auto-scaling-listener-namespace": autoscalingListener.Namespace,
-				"auto-scaling-listener-name":      autoscalingListener.Name,
-				"role-policy-rules-hash":          rulesHash,
+				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+				labelKeyListenerNamespace:       autoscalingListener.Namespace,
+				labelKeyListenerName:            autoscalingListener.Name,
+				"role-policy-rules-hash":        rulesHash,
 			},
 		},
 		Rules: rules,
@@ -277,12 +283,12 @@ func (b *resourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 			Name:      scaleSetListenerRoleName(autoscalingListener),
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			Labels: map[string]string{
-				LabelKeyGitHubScaleSetNamespace:   autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:        autoscalingListener.Spec.AutoscalingRunnerSetName,
-				"auto-scaling-listener-namespace": autoscalingListener.Namespace,
-				"auto-scaling-listener-name":      autoscalingListener.Name,
-				"role-binding-role-ref-hash":      roleRefHash,
-				"role-binding-subject-hash":       subjectHash,
+				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+				labelKeyListenerNamespace:       autoscalingListener.Namespace,
+				labelKeyListenerName:            autoscalingListener.Name,
+				"role-binding-role-ref-hash":    roleRefHash,
+				"role-binding-subject-hash":     subjectHash,
 			},
 		},
 		RoleRef:  roleRef,
