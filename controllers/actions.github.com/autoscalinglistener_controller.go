@@ -523,8 +523,8 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 			Name:      proxyListenerSecretName(autoscalingListener),
 			Namespace: autoscalingListener.Namespace,
 			Labels: map[string]string{
-				LabelKeyGithubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				LabelKeyGithubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+				LabelKeyGithubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 			},
 		},
 		Data: data,
