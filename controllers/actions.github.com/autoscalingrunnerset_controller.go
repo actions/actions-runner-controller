@@ -373,7 +373,9 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		obj.Annotations[runnerScaleSetNameAnnotationKey] = runnerScaleSet.Name
 		obj.Annotations[runnerScaleSetIdAnnotationKey] = strconv.Itoa(runnerScaleSet.Id)
 		obj.Annotations[AnnotationKeyGitHubRunnerGroupName] = runnerScaleSet.RunnerGroupName
-		applyGitHubURLLabels(obj.Spec.GitHubConfigUrl, obj.Labels)
+		if err := applyGitHubURLLabels(obj.Spec.GitHubConfigUrl, obj.Labels); err != nil { // should never happen
+			logger.Error(err, "Failed to apply GitHub URL labels")
+		}
 	}); err != nil {
 		logger.Error(err, "Failed to add runner scale set ID, name and runner group name as an annotation")
 		return ctrl.Result{}, err
