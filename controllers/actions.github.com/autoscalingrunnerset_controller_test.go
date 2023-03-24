@@ -130,6 +130,26 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
 
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+					if err != nil {
+						return "", err
+					}
+
+					if _, ok := created.Labels[LabelKeyGitHubOrganization]; !ok {
+						return "", nil
+					}
+
+					if _, ok := created.Labels[LabelKeyGitHubRepository]; !ok {
+						return "", nil
+					}
+
+					return fmt.Sprintf("%s/%s", created.Labels[LabelKeyGitHubOrganization], created.Labels[LabelKeyGitHubRepository]), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("owner/repo"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's label")
+
 			// Check if ephemeral runner set is created
 			Eventually(
 				func() (int, error) {

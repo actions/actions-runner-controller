@@ -188,11 +188,6 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	}
 	runnerSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 
-	githubConfig, err := actions.ParseGitHubConfigFromURL(autoscalingRunnerSet.Spec.GitHubConfigUrl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse github config from url: %v", err)
-	}
-
 	newLabels := map[string]string{
 		LabelKeyRunnerSpecHash:          runnerSpecHash,
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
@@ -200,9 +195,10 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
 		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
-		LabelKeyGitHubEnterprise:        githubConfig.Enterprise,
-		LabelKeyGitHubOrganization:      githubConfig.Organization,
-		LabelKeyGitHubRepository:        githubConfig.Repository,
+	}
+
+	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, newLabels); err != nil {
+		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
 	newAnnotations := map[string]string{
@@ -384,7 +380,11 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 		case LabelKeyKubernetesComponent:
 			labels[key] = "runner"
 		default:
-			labels[key] = ephemeralRunnerSet.Labels[key]
+			v, ok := ephemeralRunnerSet.Labels[key]
+			if !ok {
+				continue
+			}
+			labels[key] = v
 		}
 	}
 	annotations := make(map[string]string)
@@ -545,4 +545,23 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 			Verbs:     []string{"patch"},
 		},
 	}
+}
+
+func applyGitHubURLLabels(url string, labels map[string]string) error {
+	githubConfig, err := actions.ParseGitHubConfigFromURL(url)
+	if err != nil {
+		return fmt.Errorf("failed to parse github config from url: %v", err)
+	}
+
+	if len(githubConfig.Enterprise) > 0 {
+		labels[LabelKeyGitHubEnterprise] = githubConfig.Enterprise
+	}
+	if len(githubConfig.Organization) > 0 {
+		labels[LabelKeyGitHubOrganization] = githubConfig.Organization
+	}
+	if len(githubConfig.Repository) > 0 {
+		labels[LabelKeyGitHubRepository] = githubConfig.Repository
+	}
+
+	return nil
 }
