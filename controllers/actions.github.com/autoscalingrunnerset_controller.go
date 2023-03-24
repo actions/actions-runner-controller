@@ -331,6 +331,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		}
 	}
 
+	logger.Info("Cleaning up github secret")
 	secret := new(corev1.Secret)
 	err = r.Get(ctx, types.NamespacedName{Name: githubSecretName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, secret)
 	switch {
@@ -349,7 +350,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
 		})
 		return true, err
-	case err != nil && !kerrors.IsNotFound(err):
+	case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
 		return true, err
 	}
 
