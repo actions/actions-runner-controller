@@ -13,7 +13,10 @@ metadata:
     app.kubernetes.io/component: "autoscaling-runner-set"
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
   annotations:
-    actions.github.com/mode: {{ .Values.containerMode.type }}
+    {{- $containerMode := .Values.containerMode }}
+    {{- if $containerMode.type }}
+    actions.github.com/mode: {{ $containerMode.type }}
+    {{- end }}
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
   githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}
