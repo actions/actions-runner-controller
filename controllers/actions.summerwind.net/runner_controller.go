@@ -1015,7 +1015,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
 			dockerdContainer.Env = append(dockerdContainer.Env,
 				corev1.EnvVar{
-					Name: "DOCKER_GROUP_GID",
+					Name:  "DOCKER_GROUP_GID",
 					Value: "121",
 				})
 		}
@@ -1026,7 +1026,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		// when the container starts, so can't use subPath on the volume mount
 		runnerContainer.Env = append(runnerContainer.Env,
 			corev1.EnvVar{
-				Name: "DOCKER_HOST",
+				Name:  "DOCKER_HOST",
 				Value: "unix:///run/docker/docker.sock",
 			},
 		)
@@ -1047,7 +1047,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				Name: "docker-sock",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
-						Medium: corev1.StorageMediumMemory,
+						Medium:    corev1.StorageMediumMemory,
 						SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
 					},
 				},
