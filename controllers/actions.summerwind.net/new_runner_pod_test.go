@@ -70,6 +70,12 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 				{
+					Name: "work",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
 					Name: "docker-sock",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{
@@ -389,31 +395,7 @@ func TestNewRunnerPod(t *testing.T) {
 			description: "it should have unprivileged runner and privileged sidecar docker container",
 			template:    corev1.Pod{},
 			config:      arcv1alpha1.RunnerConfig{},
-			want: newTestPod(base, func(p *corev1.Pod) {
-				p.Spec.Volumes = []corev1.Volume{
-					{
-						Name: "runner",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
-						},
-					},
-					{
-						Name: "work",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
-						},
-					},
-					{
-						Name: "docker-sock",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{
-								Medium:    corev1.StorageMediumMemory,
-								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
-							},
-						},
-					},
-				}
-			}),
+			want:        newTestPod(base, nil),
 		},
 		{
 			description: "dockerdWithinRunnerContainer=true should set privileged=true and omit the dind sidecar container",
