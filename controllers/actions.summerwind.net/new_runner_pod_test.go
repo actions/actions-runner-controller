@@ -1119,7 +1119,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						Name:      "work",
 						MountPath: "/runner/_work",
 					},
-					// ?
 					{
 						Name:      "docker-sock",
 						MountPath: "/run/docker",
@@ -1127,10 +1126,6 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					{
 						Name:      "runner",
 						MountPath: "/runner",
-					},
-					{
-						Name:      "docker-sock",
-						MountPath: "/run/docker",
 					},
 				}
 			}),

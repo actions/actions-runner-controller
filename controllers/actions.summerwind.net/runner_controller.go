@@ -1063,12 +1063,14 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
-		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "docker-sock",
-				MountPath: "/run/docker",
-			},
-		)
+		if ok, _ := volumeMountPresent("docker-sock", runnerContainer.VolumeMounts); !ok {
+			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "docker-sock",
+					MountPath: "/run/docker",
+				},
+			)
+		}
 
 		// Determine the volume mounts assigned to the docker sidecar. In case extra mounts are included in the RunnerSpec, append them to the standard
 		// set of mounts. See https://github.com/actions/actions-runner-controller/issues/435 for context.
@@ -1077,14 +1079,16 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				Name:      runnerVolumeName,
 				MountPath: runnerVolumeMountPath,
 			},
-			{
-				Name:      "docker-sock",
-				MountPath: "/run/docker",
-			},
 		}
 
-		mountPresent, _ := workVolumeMountPresent(dockerdContainer.VolumeMounts)
-		if !mountPresent {
+		if p, _ := volumeMountPresent("docker-sock", dockerdContainer.VolumeMounts); !p {
+			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
+				Name:      "docker-sock",
+				MountPath: "/run/docker",
+			})
+		}
+
+		if p, _ := workVolumeMountPresent(dockerdContainer.VolumeMounts); !p {
 			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
 				Name:      "work",
 				MountPath: workDir,
@@ -1304,12 +1308,16 @@ func workVolumePresent(items []corev1.Volume) (bool, int) {
 }
 
 func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
+	return volumeMountPresent("work", items)
+}
+
+func volumeMountPresent(name string, items []corev1.VolumeMount) (bool, int) {
 	for index, item := range items {
-		if item.Name == "work" {
+		if item.Name == name {
 			return true, index
 		}
 	}
-	return false, 0
+	return false, -1
 }
 
 func applyWorkVolumeClaimTemplateToPod(pod *corev1.Pod, workVolumeClaimTemplate *v1alpha1.WorkVolumeClaimTemplate, workDir string) error {
