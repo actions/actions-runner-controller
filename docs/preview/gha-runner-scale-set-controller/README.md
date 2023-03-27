@@ -160,7 +160,7 @@ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-co
 
 ```bash
 # Runner set listener logs
-kubectl logs -n "${NAMESPACE}" -l auto-scaling-runner-set-namespace=arc-systems -l auto-scaling-runner-set-name=arc-runner-set
+kubectl logs -n "${NAMESPACE}" -l actions.github.com/scale-set-namespace=arc-systems -l actions.github.com/scale-set-name=arc-runner-set
 ```
 
 ### Naming error: `Name must have up to characters`

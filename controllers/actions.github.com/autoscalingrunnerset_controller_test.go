@@ -117,18 +117,38 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", err
 					}
 
-					if _, ok := created.Annotations[runnerScaleSetIdKey]; !ok {
+					if _, ok := created.Annotations[runnerScaleSetIdAnnotationKey]; !ok {
 						return "", nil
 					}
 
-					if _, ok := created.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+					if _, ok := created.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
 						return "", nil
 					}
 
-					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdKey], created.Annotations[runnerScaleSetRunnerGroupNameKey]), nil
+					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdAnnotationKey], created.Annotations[AnnotationKeyGitHubRunnerGroupName]), nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
+
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+					if err != nil {
+						return "", err
+					}
+
+					if _, ok := created.Labels[LabelKeyGitHubOrganization]; !ok {
+						return "", nil
+					}
+
+					if _, ok := created.Labels[LabelKeyGitHubRepository]; !ok {
+						return "", nil
+					}
+
+					return fmt.Sprintf("%s/%s", created.Labels[LabelKeyGitHubOrganization], created.Labels[LabelKeyGitHubRepository]), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("owner/repo"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's label")
 
 			// Check if ephemeral runner set is created
 			Eventually(
@@ -351,18 +371,18 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", err
 					}
 
-					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+					if _, ok := updated.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
 						return "", nil
 					}
 
-					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
+					return updated.Annotations[AnnotationKeyGitHubRunnerGroupName], nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
 
 			// delete the annotation and it should be re-added
 			patched = autoscalingRunnerSet.DeepCopy()
-			delete(patched.Annotations, runnerScaleSetRunnerGroupNameKey)
+			delete(patched.Annotations, AnnotationKeyGitHubRunnerGroupName)
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 
@@ -374,11 +394,11 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", err
 					}
 
-					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
+					if _, ok := updated.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
 						return "", nil
 					}
 
-					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
+					return updated.Annotations[AnnotationKeyGitHubRunnerGroupName], nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -539,7 +559,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 						return "", err
 					}
 
-					if val, ok := ars.Annotations[runnerScaleSetNameKey]; ok {
+					if val, ok := ars.Annotations[runnerScaleSetNameAnnotationKey]; ok {
 						return val, nil
 					}
 
@@ -562,7 +582,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 						return "", err
 					}
 
-					if val, ok := ars.Annotations[runnerScaleSetNameKey]; ok {
+					if val, ok := ars.Annotations[runnerScaleSetNameAnnotationKey]; ok {
 						return val, nil
 					}
 
