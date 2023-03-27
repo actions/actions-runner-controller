@@ -61,6 +61,9 @@ if [ "${tool}" == "helm" ]; then
     flags+=( --set githubWebhookServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
     flags+=( --set actionsMetricsServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
   fi
+  if [ "${WATCH_NAMESPACE}" != "" ]; then
+    flags+=( --set watchNamespace=${WATCH_NAMESPACE} --set singleNamespace=true)
+  fi
   if [ "${CHART_VERSION}" != "" ]; then
     flags+=( --version ${CHART_VERSION})
   fi

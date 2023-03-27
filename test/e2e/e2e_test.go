@@ -416,6 +416,7 @@ type env struct {
 	admissionWebhooksTimeout                    string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
+	watchNamespace                              string
 
 	vars          vars
 	VerifyTimeout time.Duration
@@ -557,6 +558,8 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	} else {
 		e.imagePullPolicy = "IfNotPresent"
 	}
+
+	e.watchNamespace = testing.Getenv(t, "TEST_WATCH_NAMESPACE", "")
 
 	if e.remoteKubeconfig == "" {
 		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
@@ -729,6 +732,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 		"ADMISSION_WEBHOOKS_TIMEOUT=" + e.admissionWebhooksTimeout,
 		"IMAGE_PULL_SECRET=" + e.imagePullSecretName,
 		"IMAGE_PULL_POLICY=" + e.imagePullPolicy,
+		"WATCH_NAMESPACE=" + e.watchNamespace,
 	}
 
 	if e.useApp {
