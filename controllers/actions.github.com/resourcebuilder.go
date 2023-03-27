@@ -593,3 +593,22 @@ func kubernetesModeServiceAccountName(autoscalingRunnerSet *v1alpha1.Autoscaling
 func githubSecretName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
 	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-github-secret"
 }
+
+func applyGitHubURLLabels(url string, labels map[string]string) error {
+	githubConfig, err := actions.ParseGitHubConfigFromURL(url)
+	if err != nil {
+		return fmt.Errorf("failed to parse github config from url: %v", err)
+	}
+
+	if len(githubConfig.Enterprise) > 0 {
+		labels[LabelKeyGitHubEnterprise] = githubConfig.Enterprise
+	}
+	if len(githubConfig.Organization) > 0 {
+		labels[LabelKeyGitHubOrganization] = githubConfig.Organization
+	}
+	if len(githubConfig.Repository) > 0 {
+		labels[LabelKeyGitHubRepository] = githubConfig.Repository
+	}
+
+	return nil
+}
