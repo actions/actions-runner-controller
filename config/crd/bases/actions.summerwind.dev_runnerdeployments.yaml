@@ -17,6 +17,21 @@ spec:
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
+        - jsonPath: .spec.template.spec.enterprise
+          name: Enterprise
+          type: string
+        - jsonPath: .spec.template.spec.organization
+          name: Organization
+          type: string
+        - jsonPath: .spec.template.spec.repository
+          name: Repository
+          type: string
+        - jsonPath: .spec.template.spec.group
+          name: Group
+          type: string
+        - jsonPath: .spec.template.spec.labels
+          name: Labels
+          type: string
         - jsonPath: .spec.replicas
           name: Desired
           type: number

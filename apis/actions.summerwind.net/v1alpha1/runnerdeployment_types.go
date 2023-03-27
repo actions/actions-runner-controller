@@ -77,6 +77,11 @@ type RunnerDeploymentStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=rdeploy
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.template.spec.enterprise",name=Enterprise,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.template.spec.organization",name=Organization,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.template.spec.repository",name=Repository,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.template.spec.group",name=Group,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.template.spec.labels",name=Labels,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name=Desired,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.replicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.updatedReplicas",name=Up-To-Date,type=number
