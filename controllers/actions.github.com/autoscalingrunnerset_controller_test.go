@@ -573,6 +573,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 
 			update := autoscalingRunnerSet.DeepCopy()
 			update.Spec.RunnerScaleSetName = "testset_update"
+
 			err = k8sClient.Patch(ctx, update, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to update AutoScalingRunnerSet")
 

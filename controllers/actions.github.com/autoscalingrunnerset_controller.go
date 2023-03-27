@@ -43,13 +43,11 @@ import (
 
 const (
 	// TODO: Replace with shared image.
-
 	autoscalingRunnerSetOwnerKey              = ".metadata.controller"
 	LabelKeyRunnerSpecHash                    = "runner-spec-hash"
 	autoscalingRunnerSetFinalizerName         = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdAnnotationKey             = "runner-scale-set-id"
 	runnerScaleSetNameAnnotationKey           = "runner-scale-set-name"
-	runnerScaleSetRunnerGroupNameKey          = "runner-scale-set-runner-group-name"
 	autoscalingRunnerSetCleanupFinalizerLabel = "actions.github.com/cleanup-protection"
 	autoscalingRunnerSetModeAnnotationKey     = "actions.github.com/mode"
 )
@@ -74,7 +72,6 @@ type AutoscalingRunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -626,7 +623,7 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 
 	logger.Info("Updating runner scale set name as an annotation")
 	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-		obj.Annotations[runnerScaleSetIdAnnotationKey] = updatedRunnerScaleSet.Name
+		obj.Annotations[runnerScaleSetNameAnnotationKey] = updatedRunnerScaleSet.Name
 	}); err != nil {
 		logger.Error(err, "Failed to update runner scale set name annotation")
 		return ctrl.Result{}, err
