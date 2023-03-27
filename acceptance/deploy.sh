@@ -69,6 +69,9 @@ if [ "${tool}" == "helm" ]; then
     flags+=( --set githubWebhookServer.logFormat=${LOG_FORMAT})
     flags+=( --set actionsMetricsServer.logFormat=${LOG_FORMAT})
   fi
+  if [ "${ADMISSION_WEBHOOKS_TIMEOUT}" != "" ]; then
+    flags+=( --set admissionWebHooks.timeoutSeconds=${ADMISSION_WEBHOOKS_TIMEOUT})
+  fi
   if [ -n "${CREATE_SECRETS_USING_HELM}" ]; then
     if [ -z "${WEBHOOK_GITHUB_TOKEN}" ]; then
       echo 'Failed deploying secret "actions-metrics-server" using helm. Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2

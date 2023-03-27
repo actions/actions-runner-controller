@@ -413,6 +413,7 @@ type env struct {
 	runnerNamespace                             string
 	logFormat                                   string
 	remoteKubeconfig                            string
+	admissionWebhooksTimeout                    string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
 
@@ -547,6 +548,7 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.runnerNamespace = testing.Getenv(t, "TEST_RUNNER_NAMESPACE", "default")
 	e.logFormat = testing.Getenv(t, "ARC_E2E_LOG_FORMAT", "")
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
+	e.admissionWebhooksTimeout = testing.Getenv(t, "ARC_E2E_ADMISSION_WEBHOOKS_TIMEOUT", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
 	e.vars = vars
 
@@ -724,6 +726,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 		"TEST_ID=" + testID,
 		"NAME=" + repo,
 		"VERSION=" + tag,
+		"ADMISSION_WEBHOOKS_TIMEOUT=" + e.admissionWebhooksTimeout,
 		"IMAGE_PULL_SECRET=" + e.imagePullSecretName,
 		"IMAGE_PULL_POLICY=" + e.imagePullPolicy,
 	}
