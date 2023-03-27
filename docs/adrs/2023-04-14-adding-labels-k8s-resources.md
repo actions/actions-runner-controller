@@ -86,4 +86,4 @@ Or for example if they're having problems specifically with runners:
 This way users don't have to understand ARC moving parts but we still have a
 way to target them specifically if we need to.
 
-[^1]: [ADR 2022-12-05](2022-12-05-adding-labels-k8s-resources.md)
+[^1]: Supersedes [ADR 2022-12-05](2022-12-05-adding-labels-k8s-resources.md)
