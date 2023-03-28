@@ -101,6 +101,7 @@ func TestE2E(t *testing.T) {
 		label                     string
 		controller, controllerVer string
 		chart, chartVer           string
+		opt                       []InstallARCOption
 	}{
 		{
 			label:         "stable",
@@ -117,6 +118,12 @@ func TestE2E(t *testing.T) {
 			controllerVer: vars.controllerImageTag,
 			chart:         "",
 			chartVer:      "",
+			opt: []InstallARCOption{
+				func(ia *InstallARCConfig) {
+					ia.GithubWebhookServerEnvName = "FOO"
+					ia.GithubWebhookServerEnvValue = "foo"
+				},
+			},
 		},
 	}
 
@@ -186,7 +193,7 @@ func TestE2E(t *testing.T) {
 		for i, v := range testedVersions {
 			t.Run("install actions-runner-controller "+v.label, func(t *testing.T) {
 				t.Logf("Using controller %s:%s and chart %s:%s", v.controller, v.controllerVer, v.chart, v.chartVer)
-				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer)
+				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer, v.opt...)
 			})
 
 			if t.Failed() {
@@ -300,7 +307,7 @@ func TestE2E(t *testing.T) {
 		for i, v := range testedVersions {
 			t.Run("install actions-runner-controller "+v.label, func(t *testing.T) {
 				t.Logf("Using controller %s:%s and chart %s:%s", v.controller, v.controllerVer, v.chart, v.chartVer)
-				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer)
+				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer, v.opt...)
 			})
 
 			if t.Failed() {
@@ -711,8 +718,19 @@ func (e *env) installCertManager(t *testing.T) {
 	e.KubectlWaitUntilDeployAvailable(t, "cert-manager", waitCfg.WithTimeout(60*time.Second))
 }
 
-func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, chart, chartVer string) {
+type InstallARCConfig struct {
+	GithubWebhookServerEnvName, GithubWebhookServerEnvValue string
+}
+
+type InstallARCOption func(*InstallARCConfig)
+
+func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, chart, chartVer string, opts ...InstallARCOption) {
 	t.Helper()
+
+	var c InstallARCConfig
+	for _, opt := range opts {
+		opt(&c)
+	}
 
 	e.createControllerNamespaceAndServiceAccount(t)
 
@@ -754,6 +772,11 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 			"LOG_FORMAT="+e.logFormat,
 		)
 	}
+
+	varEnv = append(varEnv,
+		"GITHUB_WEBHOOK_SERVER_ENV_NAME="+c.GithubWebhookServerEnvName,
+		"GITHUB_WEBHOOK_SERVER_ENV_VALUE="+c.GithubWebhookServerEnvValue,
+	)
 
 	scriptEnv = append(scriptEnv, varEnv...)
 	scriptEnv = append(scriptEnv, e.vars.commonScriptEnv...)
