@@ -17,6 +17,24 @@ metadata:
     {{- if $containerMode.type }}
     actions.github.com/mode: {{ $containerMode.type }}
     {{- end }}
+    {{- if not (kindIs "string" .Values.githubConfigSecret) }}
+    actions.github.com/cleanup-github-secret-name: {{ include "gha-runner-scale-set.githubsecret" . }}
+    {{- end }}
+    {{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    actions.github.com/cleanup-manager-role-binding: {{ include "gha-runner-scale-set.managerRoleBindingName" . }}
+    {{- end }}
+    {{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    actions.github.com/cleanup-manager-role-name: {{ include "gha-runner-scale-set.managerRoleName" . }}
+    {{- end }}
+    {{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    actions.github.com/cleanup-kubernetes-mode-role-binding-name: {{ include "gha-runner-scale-set.kubeModeRoleBindingName" . }}
+    {{- end }}
+    {{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    actions.github.com/cleanup-kubernetes-mode-role-name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
+    {{- end }}
+    {{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    actions.github.com/cleanup-kubernetes-mode-service-account-name: {{ include "gha-runner-scale-set.kubeModeServiceAccountName" . }}
+    {{- end }}
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
   githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}

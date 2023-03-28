@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "gha-runner-scale-set.managerRoleBinding" . }}
+  name: {{ include "gha-runner-scale-set.managerRoleBindingName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/part-of: gha-runner-scale-set-controller

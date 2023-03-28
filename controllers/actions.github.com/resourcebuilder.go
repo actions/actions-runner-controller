@@ -43,6 +43,16 @@ const (
 	labelKeyListenerNamespace = "auto-scaling-listener-namespace"
 )
 
+// Annotations applied for later cleanup of resources
+const (
+	AnnotationKeyManagerRoleBindingName           = "actions.github.com/cleanup-manager-role-binding"
+	AnnotationKeyManagerRoleName                  = "actions.github.com/cleanup-manager-role-name"
+	AnnotationKeyKubernetesModeRoleName           = "actions.github.com/cleanup-kubernetes-mode-role-name"
+	AnnotationKeyKubernetesModeRoleBindingName    = "actions.github.com/cleanup-kubernetes-mode-role-binding-name"
+	AnnotationKeyKubernetesModeServiceAccountName = "actions.github.com/cleanup-kubernetes-mode-service-account-name"
+	AnnotationKeyGitHubSecretName                 = "actions.github.com/cleanup-github-secret-name"
+)
+
 var commonLabelKeys = [...]string{
 	LabelKeyKubernetesPartOf,
 	LabelKeyKubernetesComponent,
@@ -545,34 +555,6 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 			Verbs:     []string{"patch"},
 		},
 	}
-}
-
-func autoscalingRunnerSetFullName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSet.Name + "-" + autoscalingRunnerSet.Labels["app.kubernetes.io/name"]
-}
-
-func managerRoleBindingName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-manager-role-binding"
-}
-
-func managerRoleName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-manager-role"
-}
-
-func kubernetesModeRoleName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-role"
-}
-
-func kubernetesModeRoleBindingName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-role-binding"
-}
-
-func kubernetesModeServiceAccountName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-kube-mode-service-account"
-}
-
-func githubSecretName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	return autoscalingRunnerSetFullName(autoscalingRunnerSet) + "-github-secret"
 }
 
 func applyGitHubURLLabels(url string, labels map[string]string) error {

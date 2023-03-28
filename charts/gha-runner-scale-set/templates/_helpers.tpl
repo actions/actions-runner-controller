@@ -429,7 +429,7 @@ volumeMounts:
 {{- include "gha-runner-scale-set.fullname" . }}-manager-role
 {{- end }}
 
-{{- define "gha-runner-scale-set.managerRoleBinding" -}}
+{{- define "gha-runner-scale-set.managerRoleBindingName" -}}
 {{- include "gha-runner-scale-set.fullname" . }}-manager-role-binding
 {{- end }}
 
