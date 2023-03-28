@@ -1181,7 +1181,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 
 		roleBinding := &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName],
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
 				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
 			},

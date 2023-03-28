@@ -461,7 +461,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissio
 		)
 	}
 
-	if roleName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName]; ok {
+	if roleName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName]; ok {
 		logger.Info("Cleaning up container mode kubernetes role")
 
 		role := new(rbacv1.Role)
