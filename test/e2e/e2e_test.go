@@ -1096,7 +1096,6 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			if !kubernetesContainerMode {
 				setupBuildXActionWith := &testing.With{
 					BuildkitdFlags: "--debug",
-					Endpoint:       "mycontext",
 					// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
 					// so we need to use `docker buildx build` in the next step
 					Install: false,
@@ -1122,16 +1121,24 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					setupBuildXActionWith.Driver = "docker"
 					dockerfile = "Dockerfile.nocache"
 				}
-				steps = append(steps,
-					testing.Step{
+
+				useCustomDockerContext := os.Getenv("ARC_E2E_USE_CUSTOM_DOCKER_CONTEXT") != ""
+				if useCustomDockerContext {
+					setupBuildXActionWith.Endpoint = "mycontext"
+
+					steps = append(steps, testing.Step{
 						// https://github.com/docker/buildx/issues/413#issuecomment-710660155
 						// To prevent setup-buildx-action from failing with:
 						//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
 						Run: "docker context create mycontext",
 					},
-					testing.Step{
-						Run: "docker context use mycontext",
-					},
+						testing.Step{
+							Run: "docker context use mycontext",
+						},
+					)
+				}
+
+				steps = append(steps,
 					testing.Step{
 						Name: "Set up Docker Buildx",
 						Uses: "docker/setup-buildx-action@v1",
