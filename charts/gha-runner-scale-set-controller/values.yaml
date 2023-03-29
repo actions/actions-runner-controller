@@ -18,6 +18,11 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+## Define environment variables for the controller pod
+env: {}
+# - name: ""
+#   value: ""
+
 serviceAccount:
   # Specifies whether a service account should be created for running the controller pod
   create: true
