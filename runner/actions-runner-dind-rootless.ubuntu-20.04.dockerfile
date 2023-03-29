@@ -139,8 +139,12 @@ RUN export SKIP_IPTABLES=1 \
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
-    && chmod +x /home/runner/bin/docker-compose
+    && mkdir -p /home/runner/.docker/cli-plugins \
+    && curl -fLo /home/runner/.docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /home/runner/.docker/cli-plugins/docker-compose \
+    && ln -s /home/runner/.docker/cli-plugins/docker-compose /home/runner/bin/docker-compose \
+    && which docker-compose \
+    && docker compose version
 
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["entrypoint-dind-rootless.sh"]
