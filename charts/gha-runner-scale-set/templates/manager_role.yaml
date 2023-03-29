@@ -30,7 +30,7 @@ rules:
   - ""
   resources:
   - secrets
-{{- if (and .Values.containerMode (eq .Values.containerMode.type "kubernetes")) }}
+{{- if and .Values.containerMode (eq .Values.containerMode.type "kubernetes") }}
   - serviceaccounts
 {{- end }}
   verbs:
