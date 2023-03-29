@@ -1081,6 +1081,17 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					},
 				},
 			)
+
+			// Ensure both the alias and the full command work after
+			// https://github.com/actions/actions-runner-controller/pull/2326
+			steps = append(steps,
+				testing.Step{
+					Run: "docker-compose version",
+				},
+				testing.Step{
+					Run: "docker compose version",
+				},
+			)
 		}
 
 		steps = append(steps,
