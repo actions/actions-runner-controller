@@ -69,13 +69,8 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         {{- with .Values.env }}
-          {{- if kindIs "slice" .Values.env }}
-        {{- toYaml .Values.env | nindent 8 }}
-          {{- else }}
-            {{- range $key, $val := .Values.env }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
-            {{- end }}
+          {{- if kindIs "slice" . }}
+            {{- toYaml . | nindent 8 }}
           {{- end }}
         {{- end }}
         {{- with .Values.resources }}

@@ -390,6 +390,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"imagePullSecrets[0].name":     "dockerhub",
 			"nameOverride":                 "gha-runner-scale-set-controller-override",
 			"fullnameOverride":             "gha-runner-scale-set-controller-fullname-override",
+			"env[0].name":                  "ENV_VAR_NAME_1",
+			"env[0].value":                 "ENV_VAR_VALUE_1",
 			"serviceAccount.name":          "gha-runner-scale-set-controller-sa",
 			"podAnnotations.foo":           "bar",
 			"podSecurityContext.fsGroup":   "1000",
@@ -432,6 +434,9 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "bar", deployment.Spec.Template.Annotations["foo"])
 	assert.Equal(t, "manager", deployment.Spec.Template.Annotations["kubectl.kubernetes.io/default-container"])
 
+	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+
 	assert.Len(t, deployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	assert.Equal(t, "dockerhub", deployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
 	assert.Equal(t, "gha-runner-scale-set-controller-sa", deployment.Spec.Template.Spec.ServiceAccountName)
@@ -467,9 +472,12 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "--auto-scaler-image-pull-secrets=dockerhub", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
+
+	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
@@ -702,6 +710,52 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
 	assert.Equal(t, "/tmp", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
+}
+
+func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"env[0].Name":                            "ENV_VAR_NAME_1",
+			"env[0].Value":                           "ENV_VAR_VALUE_1",
+			"env[1].Name":                            "ENV_VAR_NAME_2",
+			"env[1].ValueFrom.SecretKeyRef.Key":      "ENV_VAR_NAME_2",
+			"env[1].ValueFrom.SecretKeyRef.Name":     "secret-name",
+			"env[1].ValueFrom.SecretKeyRef.Optional": "true",
+			"env[2].Name":                            "ENV_VAR_NAME_3",
+			"env[2].Value":                           "",
+			"env[3].Name":                            "ENV_VAR_NAME_4",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+	var deployment appsv1.Deployment
+	helm.UnmarshalK8SYaml(t, output, &deployment)
+
+	assert.Equal(t, namespaceName, deployment.Namespace)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Name)
+
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 6)
+	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
+	assert.Equal(t, "secret-name", deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Name)
+	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Key)
+	assert.True(t, *deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Optional)
+	assert.Equal(t, "ENV_VAR_NAME_3", deployment.Spec.Template.Spec.Containers[0].Env[4].Name)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[4].Value)
+	assert.Equal(t, "ENV_VAR_NAME_4", deployment.Spec.Template.Spec.Containers[0].Env[5].Name)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[5].ValueFrom)
 }
 
 func TestTemplate_WatchSingleNamespace_NotCreateManagerClusterRole(t *testing.T) {
