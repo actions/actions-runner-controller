@@ -65,7 +65,7 @@ githubConfigSecret:
 #   certificateFrom:
 #     configMapKeyRef:
 #       name: config-map-name
-#       key: ca.pem
+#       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
 # containerMode:
