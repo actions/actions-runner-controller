@@ -181,7 +181,7 @@ jobs:
       # See below for more context:
       # - https://github.com/actions-runner-controller/actions-runner-controller.github.io/pull/2
       # - https://github.com/actions/actions-runner-controller/pull/2452
-      - name: Commit and push
+      - name: Commit and push to actions/actions-runner-controller
         run: |
           git checkout gh-pages
           git config user.name "$GITHUB_ACTOR"
