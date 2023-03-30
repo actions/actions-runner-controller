@@ -71,11 +71,6 @@ spec:
         {{- with .Values.env }}
           {{- if kindIs "slice" . }}
             {{- toYaml . | nindent 8 }}
-          {{- else }}
-            {{- range $key, $val := . }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
-            {{- end }}
           {{- end }}
         {{- end }}
         {{- with .Values.resources }}

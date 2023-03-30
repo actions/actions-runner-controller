@@ -18,23 +18,16 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# Define environment variables for the controller pod
-# There are 2 ways you could use this field:
-#
-# Option 1:
-#   env:
-#   - name: "ENV_VAR_NAME_1"
-#   value: "ENV_VAR_VALUE_1"
-#   - name: "ENV_VAR_NAME_2"
-#   valueFrom:
-#     secretKeyRef:
-#       key: ENV_VAR_NAME_2
-#       name: secret-name
-#       optional: true
-#
-# Option 2:
-#   env: {"ENV_VAR_NAME_1": "ENV_VAR_VALUE_1", "ENV_VAR_NAME_2": "ENV_VAR_VALUE_2}
 env:
+## Define environment variables for the controller pod
+#  - name: "ENV_VAR_NAME_1"
+#    value: "ENV_VAR_VALUE_1"
+#  - name: "ENV_VAR_NAME_2"
+#    valueFrom:
+#      secretKeyRef:
+#        key: ENV_VAR_NAME_2
+#        name: secret-name
+#        optional: true
 
 serviceAccount:
   # Specifies whether a service account should be created for running the controller pod
