@@ -730,6 +730,9 @@ func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 			"env[1].ValueFrom.SecretKeyRef.Key":      "ENV_VAR_NAME_2",
 			"env[1].ValueFrom.SecretKeyRef.Name":     "secret-name",
 			"env[1].ValueFrom.SecretKeyRef.Optional": "true",
+			"env[2].Name":                            "ENV_VAR_NAME_3",
+			"env[2].Value":                           "",
+			"env[3].Name":                            "ENV_VAR_NAME_4",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -742,13 +745,17 @@ func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, namespaceName, deployment.Namespace)
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Name)
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 4)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 6)
 	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
 	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
 	assert.Equal(t, "secret-name", deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Name)
 	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Key)
 	assert.True(t, *deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Optional)
+	assert.Equal(t, "ENV_VAR_NAME_3", deployment.Spec.Template.Spec.Containers[0].Env[4].Name)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[4].Value)
+	assert.Equal(t, "ENV_VAR_NAME_4", deployment.Spec.Template.Spec.Containers[0].Env[5].Name)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[5].ValueFrom)
 }
 
 func TestTemplate_WatchSingleNamespace_NotCreateManagerClusterRole(t *testing.T) {
