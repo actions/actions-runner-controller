@@ -20,7 +20,7 @@ env:
   HELM_VERSION: v3.8.0
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   lint-chart:
@@ -173,10 +173,28 @@ jobs:
             --pages-branch 'gh-pages' \
             --pages-index-path 'index.yaml'
 
+      # This step is required to not throw away changes made to the index.yaml on every new chart release.
+      #
+      # We update the index.yaml in the actions-runner-controller.github.io repo
+      # by appending the new chart version to the index.yaml saved in actions-runner-controller repo
+      # and copying and commiting the updated index.yaml to the github.io one.
+      # See below for more context:
+      # - https://github.com/actions-runner-controller/actions-runner-controller.github.io/pull/2
+      # - https://github.com/actions/actions-runner-controller/pull/2452
+      - name: Commit and push to actions/actions-runner-controller
+        run: |
+          git checkout gh-pages
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git add .
+          git commit -m "Update index.yaml"
+          git push
+        working-directory: ${{ github.workspace }}
+
       # Chart Release was never intended to publish to a different repo
       # this workaround is intended to move the index.yaml to the target repo
       # where the github pages are hosted
-      - name: Checkout pages repository
+      - name: Checkout target repository
         uses: actions/checkout@v3
         with:
           repository: ${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}
@@ -188,7 +206,7 @@ jobs:
         run: |
           cp ${{ github.workspace }}/index.yaml ${{ env.CHART_TARGET_REPO }}/actions-runner-controller/index.yaml
       
-      - name: Commit and push
+      - name: Commit and push to target repository
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
