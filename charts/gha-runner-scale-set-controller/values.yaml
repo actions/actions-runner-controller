@@ -18,22 +18,22 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-## Define environment variables for the controller pod
-## There are 2 ways you could use this field:
-##
-## Option 1:
-##   env:
-##   - name: "ENV_VAR_NAME_1"
-##   value: "ENV_VAR_VALUE_1"
-##   - name: "ENV_VAR_NAME_2"
-##   valueFrom:
-##     secretKeyRef:
-##       key: ENV_VAR_NAME_2
-##       name: secret-name
-##       optional: true
-##
-## Option 2:
-##   env: {"ENV_VAR_NAME_1": "ENV_VAR_VALUE_1", "ENV_VAR_NAME_2": "ENV_VAR_VALUE_2}
+# Define environment variables for the controller pod
+# There are 2 ways you could use this field:
+#
+# Option 1:
+#   env:
+#   - name: "ENV_VAR_NAME_1"
+#   value: "ENV_VAR_VALUE_1"
+#   - name: "ENV_VAR_NAME_2"
+#   valueFrom:
+#     secretKeyRef:
+#       key: ENV_VAR_NAME_2
+#       name: secret-name
+#       optional: true
+#
+# Option 2:
+#   env: {"ENV_VAR_NAME_1": "ENV_VAR_VALUE_1", "ENV_VAR_NAME_2": "ENV_VAR_VALUE_2}
 env:
 
 serviceAccount:
@@ -60,10 +60,10 @@ securityContext: {}
 # runAsUser: 1000
 
 resources: {}
-# We usually recommend not to specify default resources and to leave this as a conscious
-# choice for the user. This also increases chances charts run on environments with little
-# resources, such as Minikube. If you do want to specify resources, uncomment the following
-# lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+## We usually recommend not to specify default resources and to leave this as a conscious
+## choice for the user. This also increases chances charts run on environments with little
+## resources, such as Minikube. If you do want to specify resources, uncomment the following
+## lines, adjust them as necessary, and remove the curly braces after 'resources:'.
 # limits:
 #   cpu: 100m
 #   memory: 128Mi
@@ -87,6 +87,6 @@ flags:
   # Defaults to "debug".
   logLevel: "debug"
 
-  # Restricts the controller to only watch resources in the desired namespace.
-  # Defaults to watch all namespaces when unset.
+  ## Restricts the controller to only watch resources in the desired namespace.
+  ## Defaults to watch all namespaces when unset.
   # watchSingleNamespace: ""
