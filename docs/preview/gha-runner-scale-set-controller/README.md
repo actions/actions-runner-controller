@@ -161,7 +161,7 @@ kubectl logs <controller_pod_name> -c manager
 2023-03-15T17:35:29Z    INFO    starting manager
 ```
 
-If you have a proxy configured or you're using a sidecar proxy that's automatically injected, you need to make sure it's configured appropriately to allow traffic from the controller to the Kubernetes API server.
+If you have a proxy configured or you're using a sidecar proxy that's automatically injected (think [Istio](https://istio.io/)), you need to make sure it's configured appropriately to allow traffic from the controller container (manager) to the Kubernetes API server.
 
 ### Check the logs
 
