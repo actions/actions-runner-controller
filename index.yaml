@@ -2,6 +2,40 @@ apiVersion: v1
 entries:
   actions-runner-controller:
   - apiVersion: v2
+    appVersion: 0.27.1
+    created: "2023-03-30T01:11:23.81745003Z"
+    description: A Kubernetes controller that operates self-hosted runners for GitHub
+      Actions on your Kubernetes cluster.
+    digest: 88914dc2b375520bfa3febc6f4e8e50955d33922487907fcce6f9767e2e82862
+    home: https://github.com/actions/actions-runner-controller
+    maintainers:
+    - name: actions-runner-controller
+      url: https://github.com/actions-runner-controller
+    name: actions-runner-controller
+    sources:
+    - https://github.com/actions/actions-runner-controller
+    type: application
+    urls:
+    - https://github.com/actions/actions-runner-controller/releases/download/actions-runner-controller-0.23.0/actions-runner-controller-0.23.0.tgz
+    version: 0.23.0
+  - apiVersion: v2
+    appVersion: 0.27.0
+    created: "2023-01-16T09:38:49.246894956Z"
+    description: A Kubernetes controller that operates self-hosted runners for GitHub
+      Actions on your Kubernetes cluster.
+    digest: 40f9e67d28a6aa5498c77bfc16339ab75df1e7dae42a438bb153f83348dd41ea
+    home: https://github.com/actions/actions-runner-controller
+    maintainers:
+    - name: actions-runner-controller
+      url: https://github.com/actions-runner-controller
+    name: actions-runner-controller
+    sources:
+    - https://github.com/actions/actions-runner-controller
+    type: application
+    urls:
+    - https://github.com/actions/actions-runner-controller/releases/download/actions-runner-controller-0.22.0/actions-runner-controller-0.22.0.tgz
+    version: 0.22.0
+  - apiVersion: v2
     appVersion: 0.26.0
     created: "2022-10-25T19:13:34.478190277Z"
     description: A Kubernetes controller that operates self-hosted runners for GitHub
@@ -933,4 +967,4 @@ entries:
     urls:
     - https://github.com/summerwind/actions-runner-controller/releases/download/actions-runner-controller-0.1.2/actions-runner-controller-0.1.2.tgz
     version: 0.1.2
-generated: "2022-10-25T19:13:34.478437778Z"
+generated: "2023-03-30T01:11:23.817631636Z"
