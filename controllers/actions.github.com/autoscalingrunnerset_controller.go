@@ -319,7 +319,8 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
-	if autoscalingRunnerSet.Annotations[autoscalingRunnerSetModeAnnotationKey] == "kubernetes" {
+	switch autoscalingRunnerSet.Annotations[autoscalingRunnerSetModeAnnotationKey] {
+	case "kubernetes":
 		requeue, err := r.cleanupContainerModeKubernetesPermissions(ctx, autoscalingRunnerSet, logger)
 		if err != nil {
 			return true, err
@@ -327,6 +328,38 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		if requeue {
 			return true, nil
 		}
+	default:
+		if serviceAccountName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName]; ok {
+			logger.Info("Cleaning up no permission service account")
+			serviceAccount := new(corev1.ServiceAccount)
+			err = r.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: autoscalingRunnerSet.Namespace}, serviceAccount)
+			switch {
+			case err == nil:
+				if serviceAccount.DeletionTimestamp.IsZero() {
+					err := r.Delete(ctx, serviceAccount)
+					if err != nil && !kerrors.IsNotFound(err) {
+						return true, err
+					}
+					return true, nil
+				}
+				if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerLabel) {
+					break
+				}
+				err = patch(ctx, r.Client, serviceAccount, func(obj *corev1.ServiceAccount) {
+					controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+				})
+				return true, err
+			case err != nil && !kerrors.IsNotFound(err):
+				return true, err
+			}
+		} else {
+			logger.Info(
+				"Skipping cleaning up no permission service account",
+				"reason",
+				fmt.Sprintf("annotation key %q not present", AnnotationKeyGitHubSecretName),
+			)
+		}
+
 	}
 
 	if githubSecretName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName]; ok {

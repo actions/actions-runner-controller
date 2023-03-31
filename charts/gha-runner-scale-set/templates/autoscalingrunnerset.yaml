@@ -27,6 +27,9 @@ metadata:
     actions.github.com/cleanup-kubernetes-mode-role-name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
     actions.github.com/cleanup-kubernetes-mode-service-account-name: {{ include "gha-runner-scale-set.kubeModeServiceAccountName" . }}
     {{- end }}
+    {{- if and (ne $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    actions.github.com/cleanup-no-permission-service-account-name: {{ include "gha-runner-scale-set.noPermissionServiceAccountName" . }}
+    {{- end }}
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
   githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}

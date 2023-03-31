@@ -1039,7 +1039,7 @@ var _ = Describe("Test Client optional configuration", func() {
 					g.Expect(listener.Spec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "listener does not have TLS config")
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingListenerTestInterval,
+				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "tls config is incorrect")
 		})
 
@@ -1096,7 +1096,7 @@ var _ = Describe("Test Client optional configuration", func() {
 					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "EphemeralRunnerSpec does not have TLS config")
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingListenerTestInterval,
+				autoscalingRunnerSetTestInterval,
 			).Should(Succeed())
 		})
 	})
@@ -1236,7 +1236,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 				return errors.IsNotFound(err)
 			},
 			autoscalingRunnerSetTestTimeout,
-			autoscalingListenerTestInterval,
+			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue(), "Expected role binding to be cleaned up")
 
 		Eventually(
@@ -1250,11 +1250,11 @@ var _ = Describe("Test external permissions cleanup", func() {
 				return errors.IsNotFound(err)
 			},
 			autoscalingRunnerSetTestTimeout,
-			autoscalingListenerTestInterval,
+			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue(), "Expected role to be cleaned up")
 	})
 
-	It("Should clean up manager permissions", func() {
+	It("Should clean up manager permissions and no-permission service account", func() {
 		ctx := context.Background()
 		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
 
@@ -1281,10 +1281,10 @@ var _ = Describe("Test external permissions cleanup", func() {
 					"app.kubernetes.io/name": "gha-runner-scale-set",
 				},
 				Annotations: map[string]string{
-					"actions.github.com/mode":           "kubernetes",
-					AnnotationKeyManagerRoleName:        "manager-role",
-					AnnotationKeyManagerRoleBindingName: "manager-role-binding",
-					AnnotationKeyGitHubSecretName:       "gh-secret-name",
+					AnnotationKeyManagerRoleName:                "manager-role",
+					AnnotationKeyManagerRoleBindingName:         "manager-role-binding",
+					AnnotationKeyGitHubSecretName:               "gh-secret-name",
+					AnnotationKeyNoPermissionServiceAccountName: "no-permission-sa",
 				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -1329,7 +1329,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 		}
 
 		err = k8sClient.Create(ctx, role)
-		Expect(err).NotTo(HaveOccurred(), "failed to create kubernetes mode role")
+		Expect(err).NotTo(HaveOccurred(), "failed to create manager role")
 
 		roleBinding := &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1345,7 +1345,18 @@ var _ = Describe("Test external permissions cleanup", func() {
 		}
 
 		err = k8sClient.Create(ctx, roleBinding)
-		Expect(err).NotTo(HaveOccurred(), "failed to create kubernetes mode role binding")
+		Expect(err).NotTo(HaveOccurred(), "failed to create manager role binding")
+
+		noPermissionServiceAccount := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+			},
+		}
+
+		err = k8sClient.Create(ctx, noPermissionServiceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to create no permission service account")
 
 		err = k8sClient.Create(ctx, autoscalingRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
@@ -1371,6 +1382,20 @@ var _ = Describe("Test external permissions cleanup", func() {
 
 		Eventually(
 			func() bool {
+				r := new(corev1.ServiceAccount)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      noPermissionServiceAccount.Name,
+					Namespace: noPermissionServiceAccount.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected no permission service account to be cleaned up")
+
+		Eventually(
+			func() bool {
 				r := new(corev1.Secret)
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name:      secret.Name,
@@ -1380,7 +1405,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 				return errors.IsNotFound(err)
 			},
 			autoscalingRunnerSetTestTimeout,
-			autoscalingListenerTestInterval,
+			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue(), "Expected role binding to be cleaned up")
 
 		Eventually(

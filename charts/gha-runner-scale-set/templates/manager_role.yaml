@@ -30,10 +30,7 @@ rules:
   - ""
   resources:
   - secrets
-  {{ $containerMode := .Values.containerMode }}
-{{- if and $containerMode (eq $containerMode.type "kubernetes") }}
   - serviceaccounts
-{{- end }}
   verbs:
   - create
   - delete
