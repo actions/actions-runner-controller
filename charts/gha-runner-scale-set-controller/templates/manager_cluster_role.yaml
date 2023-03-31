@@ -126,9 +126,6 @@ rules:
   verbs:
   - list
   - watch
-  - get
-  - delete
-  - patch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -136,4 +133,5 @@ rules:
   verbs:
   - list
   - watch
+  - patch
 {{- end }}

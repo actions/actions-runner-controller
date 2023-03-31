@@ -123,6 +123,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		if requeue {
+			log.Info("Waiting for role/rolebinding/serviceaccount to be deleted")
 			return ctrl.Result{Requeue: true}, nil
 		}
 
@@ -338,6 +339,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 				if serviceAccount.DeletionTimestamp.IsZero() {
 					err := r.Delete(ctx, serviceAccount)
 					if err != nil && !kerrors.IsNotFound(err) {
+						logger.Error(err, "Failed to delete no permission service account", "name", serviceAccountName)
 						return true, err
 					}
 					return true, nil
@@ -352,6 +354,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 			case err != nil && !kerrors.IsNotFound(err):
 				return true, err
 			}
+			logger.Info("Deleted no permission service account", "name", serviceAccountName)
 		} else {
 			logger.Info(
 				"Skipping cleaning up no permission service account",
@@ -359,7 +362,6 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 				fmt.Sprintf("annotation key %q not present", AnnotationKeyGitHubSecretName),
 			)
 		}
-
 	}
 
 	if githubSecretName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName]; ok {
@@ -372,6 +374,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 			if secret.DeletionTimestamp.IsZero() {
 				err := r.Delete(ctx, secret)
 				if err != nil && !kerrors.IsNotFound(err) {
+					logger.Error(err, "Failed to delete GitHub secret", "name", githubSecretName)
 					return true, err
 				}
 				return true, nil
@@ -386,43 +389,12 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
 			return true, err
 		}
+		logger.Info("Deleted GitHub secret", "name", githubSecretName)
 	} else {
 		logger.Info(
 			"Skipping cleaning up GitHub secret",
 			"reason",
 			fmt.Sprintf("annotation key %q not present", AnnotationKeyGitHubSecretName),
-		)
-	}
-
-	if managerRoleName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName]; ok {
-		logger.Info("Cleaning up manager role")
-
-		role := new(rbacv1.Role)
-		err = r.Get(ctx, types.NamespacedName{Name: managerRoleName, Namespace: autoscalingRunnerSet.Namespace}, role)
-		switch {
-		case err == nil:
-			if role.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, role)
-				if err != nil && !kerrors.IsNotFound(err) {
-					return true, err
-				}
-				return true, nil
-			}
-			if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerLabel) {
-				break
-			}
-			err = patch(ctx, r.Client, role, func(obj *rbacv1.Role) {
-				controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
-			})
-			return true, err
-		case err != nil && !kerrors.IsNotFound(err):
-			return true, err
-		}
-	} else {
-		logger.Info(
-			"Skipping cleaning up manager role",
-			"reason",
-			fmt.Sprintf("annotation key %q not present", AnnotationKeyManagerRoleName),
 		)
 	}
 
@@ -436,6 +408,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 			if roleBinding.DeletionTimestamp.IsZero() {
 				err := r.Delete(ctx, roleBinding)
 				if err != nil && !kerrors.IsNotFound(err) {
+					logger.Error(err, "Failed to delete manager role binding", "name", managerRoleBindingName)
 					return true, err
 				}
 				return true, nil
@@ -450,11 +423,46 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
+		logger.Info("Deleted manager role binding", "name", managerRoleBindingName)
 	} else {
 		logger.Info(
 			"Skipping cleaning up manager role binding",
 			"reason",
 			fmt.Sprintf("annotation key %q not present", AnnotationKeyManagerRoleBindingName),
+		)
+	}
+
+	if managerRoleName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName]; ok {
+		logger.Info("Cleaning up manager role")
+
+		role := new(rbacv1.Role)
+		err = r.Get(ctx, types.NamespacedName{Name: managerRoleName, Namespace: autoscalingRunnerSet.Namespace}, role)
+		switch {
+		case err == nil:
+			if role.DeletionTimestamp.IsZero() {
+				err := r.Delete(ctx, role)
+				if err != nil && !kerrors.IsNotFound(err) {
+					logger.Error(err, "Failed to delete manager role", "name", managerRoleName)
+					return true, err
+				}
+				return true, nil
+			}
+			if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerLabel) {
+				break
+			}
+			err = patch(ctx, r.Client, role, func(obj *rbacv1.Role) {
+				controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+			})
+			return true, err
+		case err != nil && !kerrors.IsNotFound(err):
+			return true, err
+		}
+		logger.Info("Deleted manager role", "name", managerRoleName)
+	} else {
+		logger.Info(
+			"Skipping cleaning up manager role",
+			"reason",
+			fmt.Sprintf("annotation key %q not present", AnnotationKeyManagerRoleName),
 		)
 	}
 
@@ -725,14 +733,26 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
 	scaleSetId, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey]
 	if !ok {
+		// Annotation not being present can occur in 3 scenarios
+		// 1. Scale set is never created.
+		//    In this case, we don't need to fetch the actions client to delete the scale set that does not exist
+		//
+		// 2. The scale set has been deleted by the controller.
+		//    In that case, the controller will clean up annotation because the scale set does not exist anymore.
+		//    Removal of the scale set id is also useful because permission cleanup will eventually lose permission
+		//    assigned to it on a GitHub secret, causing actions client from secret to result in permission denied
+		//
+		// 3. Annotation is removed manually.
+		//    In this case, the controller will treat this as if the scale set is being removed from the actions service
+		//    Then, manual deletion of the scale set is required.
 		return nil
 	}
 	logger.Info("Deleting the runner scale set from Actions service")
 	runnerScaleSetId, err := strconv.Atoi(scaleSetId)
 	if err != nil {
-		// If the annotation is not set correctly, or if it does not exist, we are going to get stuck in a loop trying to parse the scale set id.
-		// If the configuration is invalid (secret does not exist for example), we never get to the point to create runner set. But then, manual cleanup
-		// would get stuck finalizing the resource trying to parse annotation indefinitely
+		// If the annotation is not set correctly, we are going to get stuck in a loop trying to parse the scale set id.
+		// If the configuration is invalid (secret does not exist for example), we never got to the point to create runner set.
+		// But then, manual cleanup would get stuck finalizing the resource trying to parse annotation indefinitely
 		logger.Info("autoscaling runner set does not have annotation describing scale set id. Skip deletion", "err", err.Error())
 		return nil
 	}
@@ -753,6 +773,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		delete(obj.Annotations, runnerScaleSetIdAnnotationKey)
 	})
 	if err != nil {
+		logger.Error(err, "Failed to patch autoscaling runner set with annotation removed", "annotation", runnerScaleSetIdAnnotationKey)
 		return err
 	}
 
