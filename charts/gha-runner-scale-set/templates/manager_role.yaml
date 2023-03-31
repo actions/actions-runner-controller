@@ -38,6 +38,8 @@ rules:
   - patch
   - update
 - apiGroups:
+  - ""
+  resources:
   - serviceaccounts
   verbs:
   - create
