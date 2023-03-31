@@ -1,0 +1,20 @@
+{{- if .Values.metrics.createExporterService }}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/part-of: gha-runner-scale-set
+    app.kubernetes.io/component: runner-scale-set-metrics-exporter
+    {{- with .Values.metrics.exporterServiceLabels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  name: {{ include "gha-runner-scale-set.metricsExporterServiceName" . | nindent 4 }}
+  namespace: {{ include "gha-runner-scale-set.managerServiceAccountNamespace" . | nindent 4 }}
+spec:
+  ports:
+  - name: metrics
+    port: 8888
+  selector:
+    app.kubernetes.io/part-of: gha-runner-scale-set
+    app.kubernetes.io/component: runner-scale-set-listener
+{{- end }}

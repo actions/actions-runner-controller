@@ -9,6 +9,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type ScaleSettings struct {
@@ -25,6 +26,7 @@ type Service struct {
 	kubeManager        KubernetesManager
 	settings           *ScaleSettings
 	currentRunnerCount int
+	prometheusLabels   prometheus.Labels
 }
 
 func NewService(
@@ -74,6 +76,108 @@ func (s *Service) Start() error {
 	}
 }
 
+func (s *Service) exportStatisticsMetrics(statistics *actions.RunnerScaleSetStatistic) {
+	// Export metrics
+	if len(s.prometheusLabels) > 0 {
+		githubRunnerScaleSetAvailableJobs.With(s.prometheusLabels).Set(float64(statistics.TotalAvailableJobs))
+		githubRunnerScaleSetAcquiredJobs.With(s.prometheusLabels).Set(float64(statistics.TotalAcquiredJobs))
+		githubRunnerScaleSetAssignedJobs.With(s.prometheusLabels).Set(float64(statistics.TotalAssignedJobs))
+		githubRunnerScaleSetRunningJobs.With(s.prometheusLabels).Set(float64(statistics.TotalRunningJobs))
+		githubRunnerScaleSetRegisteredRunners.With(s.prometheusLabels).Set(float64(statistics.TotalRegisteredRunners))
+		githubRunnerScaleSetBusyRunners.With(s.prometheusLabels).Set(float64(statistics.TotalBusyRunners))
+		githubRunnerScaleSetIdleRunners.With(s.prometheusLabels).Set(float64(statistics.TotalIdleRunners))
+	}
+}
+
+func (s *Service) exportJobAvailableMetrics(jobAvailableMessage *actions.JobAvailable, labels *prometheus.Labels) {
+	// Export metrics
+	if len(s.prometheusLabels) > 0 {
+		// increase total available jobs counter
+		githubRunnerScaleSetJobAvailableTotal.With(*labels).Inc()
+	}
+}
+
+func (s *Service) exportJobAssignedMetrics(jobAssignedMessage *actions.JobAssigned, labels *prometheus.Labels) {
+	// Export metrics
+	if len(s.prometheusLabels) > 0 {
+		// increase total assigned jobs counter
+		githubRunnerScaleSetJobAssignedTotal.With(*labels).Inc()
+
+		// observe total queue duration
+		// githubRunnerScaleSetJobQueueDurationSeconds.With(*labels).Observe(((*jobAssignedMessage.ScaleSetAssignTime).Sub(*jobAssignedMessage.QueueTime).Seconds()))
+	}
+}
+
+func (s *Service) exportJobStartedMetrics(jobStartedMessage *actions.JobStarted, labels *prometheus.Labels) {
+	// Export metrics
+	if len(s.prometheusLabels) > 0 {
+		// increase total running jobs counter
+		githubRunnerScaleSetJobStartedTotal.With(*labels).Inc()
+
+		// observe total start duration
+		// githubRunnerScaleSetJobStartDurationSeconds.With(*labels).Observe(((*jobStartedMessage.RunnerAssignTime).Sub(*jobStartedMessage.ScaleSetAssignTime).Seconds()))
+	}
+}
+
+func (s *Service) exportJobCompletedMetrics(jobCompletedMessage *actions.JobCompleted, labels *prometheus.Labels) {
+	// Export metrics
+	if len(s.prometheusLabels) > 0 {
+		// increase total completed jobs counter
+		githubRunnerScaleSetJobCompletedTotal.With(*labels).Inc()
+
+		// observe total job duration
+		// githubRunnerScaleSetJobRunDurationSeconds.With(*labels).Observe(((*jobCompletedMessage.FinishTime).Sub(*jobCompletedMessage.RunnerAssignTime).Seconds()))
+	}
+}
+
+func getPrometheusLabelsFromJobAvailableMessage(jobAvailableMessage *actions.JobAvailable) *prometheus.Labels {
+	return getPrometheusLabelsFromJobMessage(&jobAvailableMessage.JobMessageBase)
+}
+
+func getPrometheusLabelsFromJobAssignedMessage(jobAssignedMessage *actions.JobAssigned) *prometheus.Labels {
+	return getPrometheusLabelsFromJobMessage(&jobAssignedMessage.JobMessageBase)
+}
+
+func getPrometheusLabelsFromJobStartedMessage(jobStartedMessage *actions.JobStarted) *prometheus.Labels {
+	labels := getPrometheusLabelsFromJobMessage(&jobStartedMessage.JobMessageBase)
+	(*labels)["runner_id"] = fmt.Sprintf("%d", jobStartedMessage.RunnerId)
+	(*labels)["runner_name"] = jobStartedMessage.RunnerName
+	return labels
+}
+
+func getPrometheusLabelsFromJobCompletedMessage(jobCompletedMessage *actions.JobCompleted) *prometheus.Labels {
+	labels := getPrometheusLabelsFromJobMessage(&jobCompletedMessage.JobMessageBase)
+	(*labels)["runner_id"] = fmt.Sprintf("%d", jobCompletedMessage.RunnerId)
+	(*labels)["runner_name"] = jobCompletedMessage.RunnerName
+	(*labels)["job_result"] = jobCompletedMessage.Result
+	return labels
+}
+
+func getPrometheusLabelsFromJobMessage(jobMessage *actions.JobMessageBase) *prometheus.Labels {
+	labels := make(prometheus.Labels)
+	// labels["request_id"] = fmt.Sprintf("%d", jobMessage.RunnerRequestId)
+	labels["owner_name"] = jobMessage.OwnerName
+	labels["repository_name"] = jobMessage.RepositoryName
+	// labels["workflow_run_id"] = fmt.Sprintf("%d", jobMessage.WorkflowRunId)
+	labels["job_name"] = jobMessage.JobDisplayName
+	labels["job_workflow_ref"] = jobMessage.JobWorkflowRef
+	labels["event_name"] = jobMessage.EventName
+	// if jobMessage.QueueTime != nil {
+	// 	labels["queue_time"] = jobMessage.QueueTime.UTC().Format(time.RFC3339)
+	// }
+	// if jobMessage.ScaleSetAssignTime != nil {
+	// 	labels["scale_set_assign_time"] = jobMessage.ScaleSetAssignTime.UTC().Format(time.RFC3339)
+	// }
+	// if jobMessage.RunnerAssignTime != nil {
+	// 	labels["runner_assign_time"] = jobMessage.RunnerAssignTime.UTC().Format(time.RFC3339)
+	// }
+	// if jobMessage.FinishTime != nil {
+	// 	labels["finish_time"] = jobMessage.FinishTime.UTC().Format(time.RFC3339)
+	// }
+
+	return &labels
+}
+
 func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 	s.logger.Info("process message.", "messageId", message.MessageId, "messageType", message.MessageType)
 	if message.Statistics == nil {
@@ -88,6 +192,8 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 		"registered runners", message.Statistics.TotalRegisteredRunners,
 		"busy runners", message.Statistics.TotalBusyRunners,
 		"idle runners", message.Statistics.TotalIdleRunners)
+
+	s.exportStatisticsMetrics(message.Statistics)
 
 	if message.MessageType != "RunnerScaleSetJobMessages" {
 		s.logger.Info("skip message with unknown message type.", "messageType", message.MessageType)
@@ -108,6 +214,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 			return fmt.Errorf("could not decode job message type. %w", err)
 		}
 
+		// jobLabels := new(prometheus.Labels)
 		switch messageType.MessageType {
 		case "JobAvailable":
 			var jobAvailable actions.JobAvailable
@@ -115,6 +222,8 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				return fmt.Errorf("could not decode job available message. %w", err)
 			}
 			s.logger.Info("job available message received.", "RequestId", jobAvailable.RunnerRequestId)
+			jobLabels := getPrometheusLabelsFromJobAvailableMessage(&jobAvailable)
+			s.exportJobAvailableMetrics(&jobAvailable, jobLabels)
 			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
 		case "JobAssigned":
 			var jobAssigned actions.JobAssigned
@@ -122,12 +231,16 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				return fmt.Errorf("could not decode job assigned message. %w", err)
 			}
 			s.logger.Info("job assigned message received.", "RequestId", jobAssigned.RunnerRequestId)
+			jobLabels := getPrometheusLabelsFromJobAssignedMessage(&jobAssigned)
+			s.exportJobAssignedMetrics(&jobAssigned, jobLabels)
 		case "JobStarted":
 			var jobStarted actions.JobStarted
 			if err := json.Unmarshal(message, &jobStarted); err != nil {
 				return fmt.Errorf("could not decode job started message. %w", err)
 			}
 			s.logger.Info("job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
+			jobLabels := getPrometheusLabelsFromJobStartedMessage(&jobStarted)
+			s.exportJobStartedMetrics(&jobStarted, jobLabels)
 			s.updateJobInfoForRunner(jobStarted)
 		case "JobCompleted":
 			var jobCompleted actions.JobCompleted
@@ -135,6 +248,8 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				return fmt.Errorf("could not decode job completed message. %w", err)
 			}
 			s.logger.Info("job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
+			jobLabels := getPrometheusLabelsFromJobCompletedMessage(&jobCompleted)
+			s.exportJobCompletedMetrics(&jobCompleted, jobLabels)
 		default:
 			s.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
 		}
@@ -143,6 +258,10 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 	err := s.rsClient.AcquireJobsForRunnerScaleSet(s.ctx, availableJobs)
 	if err != nil {
 		return fmt.Errorf("could not acquire jobs. %w", err)
+	}
+	// export metrics for acquired jobs
+	if len(s.prometheusLabels) > 0 {
+		githubRunnerScaleSetAcquireJobTotal.With(s.prometheusLabels).Add(float64(len(availableJobs)))
 	}
 
 	return s.scaleForAssignedJobCount(message.Statistics.TotalAssignedJobs)
@@ -163,6 +282,10 @@ func (s *Service) scaleForAssignedJobCount(count int) error {
 		}
 
 		s.currentRunnerCount = targetRunnerCount
+		//export metrics about current runner count
+		if len(s.prometheusLabels) > 0 {
+			githubRunnerScaleSetDesiredEphemeralRunnerPods.With(s.prometheusLabels).Set(float64(targetRunnerCount))
+		}
 	}
 
 	return nil

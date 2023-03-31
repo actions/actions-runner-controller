@@ -170,3 +170,7 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+metrics:
+  createExporterService: false
+  exporterServiceLabels: {}

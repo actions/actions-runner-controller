@@ -95,6 +95,10 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Name:  "GITHUB_RUNNER_SCALE_SET_ID",
 			Value: strconv.Itoa(autoscalingListener.Spec.RunnerScaleSetId),
 		},
+		{
+			Name:  "GITHUB_ENABLE_PROMETHEUS_METRICS",
+			Value: "true",
+		},
 	}
 	listenerEnv = append(listenerEnv, envs...)
 
@@ -164,6 +168,13 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Command: []string{
 					"/github-runnerscaleset-listener",
+				},
+				Ports: []corev1.ContainerPort{
+					{
+						ContainerPort: 8888,
+						Name:          "metrics",
+						Protocol:      corev1.ProtocolTCP,
+					},
 				},
 			},
 		},

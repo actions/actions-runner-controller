@@ -63,6 +63,10 @@ type JobMessageBase struct {
 	WorkflowRunId   int64    `json:"workflowRunId"`
 	EventName       string   `json:"eventName"`
 	RequestLabels   []string `json:"requestLabels"`
+	// QueueTime          *time.Time `json:"queueTime"`
+	// ScaleSetAssignTime *time.Time `json:"scaleSetAssignTime"`
+	// RunnerAssignTime   *time.Time `json:"runnerAssignTime"`
+	// FinishTime         *time.Time `json:"finishTime"`
 }
 
 type Label struct {

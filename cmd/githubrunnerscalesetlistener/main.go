@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,8 +30,16 @@ import (
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promlog/flag"
+	"github.com/prometheus/common/version"
+	"github.com/prometheus/exporter-toolkit/web"
+	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"golang.org/x/net/http/httpproxy"
 )
 
@@ -46,7 +55,13 @@ type RunnerScaleSetListenerConfig struct {
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
 	ServerRootCA                string `split_words:"true"`
+	EnablePrometheusMetrics     bool   `split_words:"true"`
 }
+
+var (
+	metricsPath = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").Envar("PG_EXPORTER_WEB_TELEMETRY_PATH").String()
+	webConfig   = kingpinflag.AddFlags(kingpin.CommandLine, ":8888")
+)
 
 func main() {
 	logger, err := logging.NewLogger(logging.LogLevelDebug, logging.LogFormatText)
@@ -121,7 +136,77 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 
 	service := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, func(s *Service) {
 		s.logger = logger.WithName("service")
+
+		if rc.EnablePrometheusMetrics {
+			s.prometheusLabels = prometheus.Labels{
+				"runner_scale_set_name":             fmt.Sprint(rc.RunnerScaleSetId),
+				"runner_scale_set_config_url":       rc.ConfigureUrl,
+				"auto_scaling_runner_set_name":      rc.EphemeralRunnerSetName,
+				"auto_scaling_runner_set_namespace": rc.EphemeralRunnerSetNamespace}
+		}
 	})
+
+	if rc.EnablePrometheusMetrics {
+		// Metrics Server
+		logger.Info("Starting prometheus exporter")
+		kingpin.Version(version.Print("arc-metrics-exporter"))
+		promlogConfig := &promlog.Config{}
+		flag.AddFlags(kingpin.CommandLine, promlogConfig)
+		kingpin.HelpFlag.Short('h')
+		kingpin.Parse()
+		promLogger := promlog.New(promlogConfig)
+
+		prometheus.MustRegister(
+			githubRunnerScaleSetAvailableJobs,
+			githubRunnerScaleSetAcquiredJobs,
+			githubRunnerScaleSetAssignedJobs,
+			githubRunnerScaleSetRunningJobs,
+			githubRunnerScaleSetRegisteredRunners,
+			githubRunnerScaleSetBusyRunners,
+			githubRunnerScaleSetIdleRunners,
+			githubRunnerScaleSetAcquireJobTotal,
+			githubRunnerScaleSetDesiredEphemeralRunnerPods,
+			githubRunnerScaleSetJobAvailableTotal,
+			githubRunnerScaleSetJobAssignedTotal,
+			githubRunnerScaleSetJobStartedTotal,
+			githubRunnerScaleSetJobCompletedTotal,
+			githubRunnerScaleSetJobQueueDurationSeconds,
+			githubRunnerScaleSetJobStartDurationSeconds,
+			githubRunnerScaleSetJobRunDurationSeconds)
+
+		http.Handle(*metricsPath, promhttp.Handler())
+		landingConfig := web.LandingConfig{
+			Name:        "Actions-Runner-Controller Exporter",
+			Description: "Actions-Runner-Controller Exporter",
+			Version:     version.Info(),
+			Links: []web.LandingLinks{
+				{
+					Address: *metricsPath,
+					Text:    "Actions-Runner-Controller Metrics",
+				},
+			},
+		}
+		landingPage, err := web.NewLandingPage(landingConfig)
+		if err != nil {
+			logger.Error(err, "Error: creating landing page")
+			os.Exit(1)
+		}
+		http.Handle("/", landingPage)
+
+		metricsServer := &http.Server{}
+		go func() {
+			go func() {
+				<-ctx.Done()
+				metricsServer.Shutdown(context.Background())
+			}()
+
+			if err := web.ListenAndServe(metricsServer, webConfig, promLogger); err != nil {
+				if !errors.Is(err, http.ErrServerClosed) {
+					logger.Error(err, "problem running metrics server")
+				}
+			}
+		}()
+	}
 
 	// Start listening for messages
 	if err = service.Start(); err != nil {

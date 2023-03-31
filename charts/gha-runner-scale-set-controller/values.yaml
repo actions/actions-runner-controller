@@ -83,3 +83,9 @@ flags:
   ## Restricts the controller to only watch resources in the desired namespace.
   ## Defaults to watch all namespaces when unset.
   # watchSingleNamespace: ""
+
+metrics:
+  serviceMonitor: false
+  serviceMonitorNamespace: "default" # need to match the namespace your prometheus's watching namespaces
+  serviceMonitorLabels:
+    release: "prometheus"

@@ -1,0 +1,29 @@
+{{- if .Values.metrics.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gha-runner-scale-set-controller.serviceMonitorName" . }}
+  namespace: {{ .Values.metrics.serviceMonitorNamespace | default .Release.Namespace }}
+  labels:
+    {{- include "gha-runner-scale-set-controller.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitorLabels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    {{- if .Values.flags.watchSingleNamespace }}
+    any: false
+    matchNames:
+    - {{ .Values.flags.watchSingleNamespace | quote }}
+    {{- else }}
+    any: true
+    {{- end }}
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: gha-runner-scale-set
+      app.kubernetes.io/component: runner-scale-set-metrics-exporter
+  endpoints:
+  - port: metrics
+    path: "/metrics"
+{{- end }}
