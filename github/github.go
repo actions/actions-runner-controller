@@ -84,6 +84,8 @@ func (c *Config) NewClient() (*Client, error) {
 				return nil, fmt.Errorf("enterprise url incorrect: %v", err)
 			}
 			tr.BaseURL = githubAPIURL
+		} else if c.URL != "" && tr.BaseURL != c.URL {
+			tr.BaseURL = c.URL
 		}
 		transport = tr
 	}
