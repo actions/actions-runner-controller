@@ -101,6 +101,7 @@ func TestE2E(t *testing.T) {
 		label                     string
 		controller, controllerVer string
 		chart, chartVer           string
+		opt                       []InstallARCOption
 	}{
 		{
 			label:         "stable",
@@ -117,6 +118,12 @@ func TestE2E(t *testing.T) {
 			controllerVer: vars.controllerImageTag,
 			chart:         "",
 			chartVer:      "",
+			opt: []InstallARCOption{
+				func(ia *InstallARCConfig) {
+					ia.GithubWebhookServerEnvName = "FOO"
+					ia.GithubWebhookServerEnvValue = "foo"
+				},
+			},
 		},
 	}
 
@@ -186,7 +193,7 @@ func TestE2E(t *testing.T) {
 		for i, v := range testedVersions {
 			t.Run("install actions-runner-controller "+v.label, func(t *testing.T) {
 				t.Logf("Using controller %s:%s and chart %s:%s", v.controller, v.controllerVer, v.chart, v.chartVer)
-				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer)
+				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer, v.opt...)
 			})
 
 			if t.Failed() {
@@ -300,7 +307,7 @@ func TestE2E(t *testing.T) {
 		for i, v := range testedVersions {
 			t.Run("install actions-runner-controller "+v.label, func(t *testing.T) {
 				t.Logf("Using controller %s:%s and chart %s:%s", v.controller, v.controllerVer, v.chart, v.chartVer)
-				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer)
+				env.installActionsRunnerController(t, v.controller, v.controllerVer, testID, v.chart, v.chartVer, v.opt...)
 			})
 
 			if t.Failed() {
@@ -413,8 +420,10 @@ type env struct {
 	runnerNamespace                             string
 	logFormat                                   string
 	remoteKubeconfig                            string
+	admissionWebhooksTimeout                    string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
+	watchNamespace                              string
 
 	vars          vars
 	VerifyTimeout time.Duration
@@ -547,6 +556,7 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.runnerNamespace = testing.Getenv(t, "TEST_RUNNER_NAMESPACE", "default")
 	e.logFormat = testing.Getenv(t, "ARC_E2E_LOG_FORMAT", "")
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
+	e.admissionWebhooksTimeout = testing.Getenv(t, "ARC_E2E_ADMISSION_WEBHOOKS_TIMEOUT", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
 	e.vars = vars
 
@@ -555,6 +565,8 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	} else {
 		e.imagePullPolicy = "IfNotPresent"
 	}
+
+	e.watchNamespace = testing.Getenv(t, "TEST_WATCH_NAMESPACE", "")
 
 	if e.remoteKubeconfig == "" {
 		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
@@ -706,8 +718,19 @@ func (e *env) installCertManager(t *testing.T) {
 	e.KubectlWaitUntilDeployAvailable(t, "cert-manager", waitCfg.WithTimeout(60*time.Second))
 }
 
-func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, chart, chartVer string) {
+type InstallARCConfig struct {
+	GithubWebhookServerEnvName, GithubWebhookServerEnvValue string
+}
+
+type InstallARCOption func(*InstallARCConfig)
+
+func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, chart, chartVer string, opts ...InstallARCOption) {
 	t.Helper()
+
+	var c InstallARCConfig
+	for _, opt := range opts {
+		opt(&c)
+	}
 
 	e.createControllerNamespaceAndServiceAccount(t)
 
@@ -724,8 +747,10 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 		"TEST_ID=" + testID,
 		"NAME=" + repo,
 		"VERSION=" + tag,
+		"ADMISSION_WEBHOOKS_TIMEOUT=" + e.admissionWebhooksTimeout,
 		"IMAGE_PULL_SECRET=" + e.imagePullSecretName,
 		"IMAGE_PULL_POLICY=" + e.imagePullPolicy,
+		"WATCH_NAMESPACE=" + e.watchNamespace,
 	}
 
 	if e.useApp {
@@ -747,6 +772,11 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 			"LOG_FORMAT="+e.logFormat,
 		)
 	}
+
+	varEnv = append(varEnv,
+		"GITHUB_WEBHOOK_SERVER_ENV_NAME="+c.GithubWebhookServerEnvName,
+		"GITHUB_WEBHOOK_SERVER_ENV_VALUE="+c.GithubWebhookServerEnvValue,
+	)
 
 	scriptEnv = append(scriptEnv, varEnv...)
 	scriptEnv = append(scriptEnv, e.vars.commonScriptEnv...)
@@ -1051,6 +1081,17 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					},
 				},
 			)
+
+			// Ensure both the alias and the full command work after
+			// https://github.com/actions/actions-runner-controller/pull/2326
+			steps = append(steps,
+				testing.Step{
+					Run: "docker-compose version",
+				},
+				testing.Step{
+					Run: "docker compose version",
+				},
+			)
 		}
 
 		steps = append(steps,
@@ -1066,7 +1107,6 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			if !kubernetesContainerMode {
 				setupBuildXActionWith := &testing.With{
 					BuildkitdFlags: "--debug",
-					Endpoint:       "mycontext",
 					// As the consequence of setting `install: false`, it doesn't install buildx as an alias to `docker build`
 					// so we need to use `docker buildx build` in the next step
 					Install: false,
@@ -1092,16 +1132,24 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 					setupBuildXActionWith.Driver = "docker"
 					dockerfile = "Dockerfile.nocache"
 				}
-				steps = append(steps,
-					testing.Step{
+
+				useCustomDockerContext := os.Getenv("ARC_E2E_USE_CUSTOM_DOCKER_CONTEXT") != ""
+				if useCustomDockerContext {
+					setupBuildXActionWith.Endpoint = "mycontext"
+
+					steps = append(steps, testing.Step{
 						// https://github.com/docker/buildx/issues/413#issuecomment-710660155
 						// To prevent setup-buildx-action from failing with:
 						//   error: could not create a builder instance with TLS data loaded from environment. Please use `docker context create <context-name>` to create a context for current environment and then create a builder instance with `docker buildx create <context-name>`
 						Run: "docker context create mycontext",
 					},
-					testing.Step{
-						Run: "docker context use mycontext",
-					},
+						testing.Step{
+							Run: "docker context use mycontext",
+						},
+					)
+				}
+
+				steps = append(steps,
 					testing.Step{
 						Name: "Set up Docker Buildx",
 						Uses: "docker/setup-buildx-action@v1",

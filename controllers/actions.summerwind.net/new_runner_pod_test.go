@@ -76,9 +76,12 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 				{
-					Name: "certs-client",
+					Name: "docker-sock",
 					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium:    corev1.StorageMediumMemory,
+							SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+						},
 					},
 				},
 			},
@@ -137,15 +140,7 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 						{
 							Name:  "DOCKER_HOST",
-							Value: "tcp://localhost:2376",
-						},
-						{
-							Name:  "DOCKER_TLS_VERIFY",
-							Value: "1",
-						},
-						{
-							Name:  "DOCKER_CERT_PATH",
-							Value: "/certs/client",
+							Value: "unix:///run/docker/docker.sock",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -158,9 +153,8 @@ func TestNewRunnerPod(t *testing.T) {
 							MountPath: "/runner/_work",
 						},
 						{
-							Name:      "certs-client",
-							MountPath: "/certs/client",
-							ReadOnly:  true,
+							Name:      "docker-sock",
+							MountPath: "/run/docker",
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
@@ -169,10 +163,15 @@ func TestNewRunnerPod(t *testing.T) {
 				{
 					Name:  "docker",
 					Image: "default-docker-image",
+					Args: []string{
+						"dockerd",
+						"--host=unix:///run/docker/docker.sock",
+						"--group=$(DOCKER_GROUP_GID)",
+					},
 					Env: []corev1.EnvVar{
 						{
-							Name:  "DOCKER_TLS_CERTDIR",
-							Value: "/certs",
+							Name:  "DOCKER_GROUP_GID",
+							Value: "121",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -181,8 +180,8 @@ func TestNewRunnerPod(t *testing.T) {
 							MountPath: "/runner",
 						},
 						{
-							Name:      "certs-client",
-							MountPath: "/certs/client",
+							Name:      "docker-sock",
+							MountPath: "/run/docker",
 						},
 						{
 							Name:      "work",
@@ -485,9 +484,12 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 					{
-						Name: "certs-client",
+						Name: "docker-sock",
 						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium:    corev1.StorageMediumMemory,
+								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+							},
 						},
 					},
 				}
@@ -501,9 +503,8 @@ func TestNewRunnerPod(t *testing.T) {
 						MountPath: "/runner",
 					},
 					{
-						Name:      "certs-client",
-						MountPath: "/certs/client",
-						ReadOnly:  true,
+						Name:      "docker-sock",
+						MountPath: "/run/docker",
 					},
 				}
 			}),
@@ -527,9 +528,12 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 					{
-						Name: "certs-client",
+						Name: "docker-sock",
 						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium:    corev1.StorageMediumMemory,
+								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+							},
 						},
 					},
 				}
@@ -606,9 +610,12 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 				{
-					Name: "certs-client",
+					Name: "docker-sock",
 					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium:    corev1.StorageMediumMemory,
+							SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+						},
 					},
 				},
 			},
@@ -667,15 +674,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 						{
 							Name:  "DOCKER_HOST",
-							Value: "tcp://localhost:2376",
-						},
-						{
-							Name:  "DOCKER_TLS_VERIFY",
-							Value: "1",
-						},
-						{
-							Name:  "DOCKER_CERT_PATH",
-							Value: "/certs/client",
+							Value: "unix:///run/docker/docker.sock",
 						},
 						{
 							Name:  "RUNNER_NAME",
@@ -696,9 +695,8 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							MountPath: "/runner/_work",
 						},
 						{
-							Name:      "certs-client",
-							MountPath: "/certs/client",
-							ReadOnly:  true,
+							Name:      "docker-sock",
+							MountPath: "/run/docker",
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
@@ -707,10 +705,15 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 				{
 					Name:  "docker",
 					Image: "default-docker-image",
+					Args: []string{
+						"dockerd",
+						"--host=unix:///run/docker/docker.sock",
+						"--group=$(DOCKER_GROUP_GID)",
+					},
 					Env: []corev1.EnvVar{
 						{
-							Name:  "DOCKER_TLS_CERTDIR",
-							Value: "/certs",
+							Name:  "DOCKER_GROUP_GID",
+							Value: "121",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -719,8 +722,8 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							MountPath: "/runner",
 						},
 						{
-							Name:      "certs-client",
-							MountPath: "/certs/client",
+							Name:      "docker-sock",
+							MountPath: "/run/docker",
 						},
 						{
 							Name:      "work",
@@ -1079,6 +1082,10 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 										Name:      "work",
 										MountPath: "/runner/_work",
 									},
+									{
+										Name:      "docker-sock",
+										MountPath: "/run/docker",
+									},
 								},
 							},
 						},
@@ -1097,9 +1104,12 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 					},
 					{
-						Name: "certs-client",
+						Name: "docker-sock",
 						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium:    corev1.StorageMediumMemory,
+								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+							},
 						},
 					},
 					workGenericEphemeralVolume,
@@ -1110,13 +1120,12 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						MountPath: "/runner/_work",
 					},
 					{
-						Name:      "runner",
-						MountPath: "/runner",
+						Name:      "docker-sock",
+						MountPath: "/run/docker",
 					},
 					{
-						Name:      "certs-client",
-						MountPath: "/certs/client",
-						ReadOnly:  true,
+						Name:      "runner",
+						MountPath: "/runner",
 					},
 				}
 			}),
@@ -1144,9 +1153,12 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 					},
 					{
-						Name: "certs-client",
+						Name: "docker-sock",
 						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium:    corev1.StorageMediumMemory,
+								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+							},
 						},
 					},
 					workGenericEphemeralVolume,

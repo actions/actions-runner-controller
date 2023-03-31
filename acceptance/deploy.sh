@@ -61,6 +61,9 @@ if [ "${tool}" == "helm" ]; then
     flags+=( --set githubWebhookServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
     flags+=( --set actionsMetricsServer.imagePullSecrets[0].name=${IMAGE_PULL_SECRET})
   fi
+  if [ "${WATCH_NAMESPACE}" != "" ]; then
+    flags+=( --set watchNamespace=${WATCH_NAMESPACE} --set singleNamespace=true)
+  fi
   if [ "${CHART_VERSION}" != "" ]; then
     flags+=( --version ${CHART_VERSION})
   fi
@@ -69,6 +72,9 @@ if [ "${tool}" == "helm" ]; then
     flags+=( --set githubWebhookServer.logFormat=${LOG_FORMAT})
     flags+=( --set actionsMetricsServer.logFormat=${LOG_FORMAT})
   fi
+  if [ "${ADMISSION_WEBHOOKS_TIMEOUT}" != "" ]; then
+    flags+=( --set admissionWebHooks.timeoutSeconds=${ADMISSION_WEBHOOKS_TIMEOUT})
+  fi
   if [ -n "${CREATE_SECRETS_USING_HELM}" ]; then
     if [ -z "${WEBHOOK_GITHUB_TOKEN}" ]; then
       echo 'Failed deploying secret "actions-metrics-server" using helm. Set WEBHOOK_GITHUB_TOKEN to deploy.' 1>&2
@@ -76,6 +82,10 @@ if [ "${tool}" == "helm" ]; then
     fi
     flags+=( --set actionsMetricsServer.secret.create=true)
     flags+=( --set actionsMetricsServer.secret.github_token=${WEBHOOK_GITHUB_TOKEN})
+  fi
+  if [ -n "${GITHUB_WEBHOOK_SERVER_ENV_NAME}" ] && [ -n "${GITHUB_WEBHOOK_SERVER_ENV_VALUE}" ]; then
+    flags+=( --set githubWebhookServer.env[0].name=${GITHUB_WEBHOOK_SERVER_ENV_NAME})
+    flags+=( --set githubWebhookServer.env[0].value=${GITHUB_WEBHOOK_SERVER_ENV_VALUE})
   fi
 
   set -vx
