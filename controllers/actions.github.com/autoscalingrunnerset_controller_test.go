@@ -1224,6 +1224,15 @@ var _ = Describe("Test external permissions cleanup", func() {
 		err = k8sClient.Delete(ctx, autoscalingRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete autoscaling runner set")
 
+		err = k8sClient.Delete(ctx, roleBinding)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete kubernetes mode role binding")
+
+		err = k8sClient.Delete(ctx, role)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete kubernetes mode role")
+
+		err = k8sClient.Delete(ctx, serviceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete kubernetes mode service account")
+
 		Eventually(
 			func() bool {
 				r := new(rbacv1.RoleBinding)
@@ -1306,8 +1315,9 @@ var _ = Describe("Test external permissions cleanup", func() {
 
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName],
-				Namespace: autoscalingRunnerSet.Namespace,
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
 			},
 			Data: map[string][]byte{
 				"github_token": []byte(defaultGitHubToken),
@@ -1379,6 +1389,18 @@ var _ = Describe("Test external permissions cleanup", func() {
 		err = k8sClient.Delete(ctx, autoscalingRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete autoscaling runner set")
 
+		err = k8sClient.Delete(ctx, noPermissionServiceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete no permission service account")
+
+		err = k8sClient.Delete(ctx, secret)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete GitHub secret")
+
+		err = k8sClient.Delete(ctx, roleBinding)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete manager role binding")
+
+		err = k8sClient.Delete(ctx, role)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete manager role")
+
 		Eventually(
 			func() bool {
 				r := new(corev1.ServiceAccount)
@@ -1409,20 +1431,6 @@ var _ = Describe("Test external permissions cleanup", func() {
 
 		Eventually(
 			func() bool {
-				r := new(rbacv1.Role)
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      role.Name,
-					Namespace: role.Namespace,
-				}, r)
-
-				return errors.IsNotFound(err)
-			},
-			autoscalingRunnerSetTestTimeout,
-			autoscalingRunnerSetTestInterval,
-		).Should(BeTrue(), "Expected role to be cleaned up")
-
-		Eventually(
-			func() bool {
 				r := new(rbacv1.RoleBinding)
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name:      roleBinding.Name,
@@ -1434,5 +1442,19 @@ var _ = Describe("Test external permissions cleanup", func() {
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue(), "Expected role binding to be cleaned up")
+
+		Eventually(
+			func() bool {
+				r := new(rbacv1.Role)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      role.Name,
+					Namespace: role.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected role to be cleaned up")
 	})
 })
