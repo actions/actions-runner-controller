@@ -1470,7 +1470,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
-	assert.Equal(t, 5, len(managerRole.Rules))
+	assert.Equal(t, 6, len(managerRole.Rules))
 
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
@@ -1505,8 +1505,8 @@ func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
-	assert.Equal(t, 6, len(managerRole.Rules))
-	assert.Equal(t, "configmaps", managerRole.Rules[5].Resources[0])
+	assert.Equal(t, 7, len(managerRole.Rules))
+	assert.Equal(t, "configmaps", managerRole.Rules[6].Resources[0])
 }
 
 func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
