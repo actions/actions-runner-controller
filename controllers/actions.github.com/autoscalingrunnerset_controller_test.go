@@ -1132,7 +1132,6 @@ var _ = Describe("Test external permissions cleanup", func() {
 					"app.kubernetes.io/name": "gha-runner-scale-set",
 				},
 				Annotations: map[string]string{
-					"actions.github.com/mode":                     "kubernetes",
 					AnnotationKeyKubernetesModeRoleBindingName:    "kube-mode-role-binding",
 					AnnotationKeyKubernetesModeRoleName:           "kube-mode-role",
 					AnnotationKeyKubernetesModeServiceAccountName: "kube-mode-service-account",

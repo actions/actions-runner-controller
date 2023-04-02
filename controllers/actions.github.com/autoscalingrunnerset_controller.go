@@ -49,7 +49,6 @@ const (
 	runnerScaleSetIdAnnotationKey             = "runner-scale-set-id"
 	runnerScaleSetNameAnnotationKey           = "runner-scale-set-name"
 	autoscalingRunnerSetCleanupFinalizerLabel = "actions.github.com/cleanup-protection"
-	autoscalingRunnerSetModeAnnotationKey     = "actions.github.com/mode"
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
@@ -116,7 +115,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		requeue, err := r.cleanupPermissions(ctx, autoscalingRunnerSet, log)
+		requeue, err := r.removeFinalizersFromPermissionResources(ctx, autoscalingRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up permissions")
 			return ctrl.Result{}, nil
@@ -319,66 +318,47 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 	return nil
 }
 
-func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
-	switch autoscalingRunnerSet.Annotations[autoscalingRunnerSetModeAnnotationKey] {
-	case "kubernetes":
-		requeue, err := r.cleanupContainerModeKubernetesPermissions(ctx, autoscalingRunnerSet, logger)
-		if err != nil {
+func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromPermissionResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
+	requeue, err = r.removeFinalizersContainerModeKubernetesPermissions(ctx, autoscalingRunnerSet, logger)
+	if err != nil {
+		return true, err
+	}
+	if requeue {
+		return true, nil
+	}
+
+	if serviceAccountName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName]; ok {
+		logger.Info("Removing finalizer from no permission service account")
+		serviceAccount := new(corev1.ServiceAccount)
+		err = r.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: autoscalingRunnerSet.Namespace}, serviceAccount)
+		switch {
+		case err == nil:
+			if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerLabel) {
+				break
+			}
+			err = patch(ctx, r.Client, serviceAccount, func(obj *corev1.ServiceAccount) {
+				controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
+			})
+			return true, err
+		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
-		if requeue {
-			return true, nil
-		}
-	default:
-		if serviceAccountName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName]; ok {
-			logger.Info("Cleaning up no permission service account")
-			serviceAccount := new(corev1.ServiceAccount)
-			err = r.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: autoscalingRunnerSet.Namespace}, serviceAccount)
-			switch {
-			case err == nil:
-				if serviceAccount.DeletionTimestamp.IsZero() {
-					err := r.Delete(ctx, serviceAccount)
-					if err != nil && !kerrors.IsNotFound(err) {
-						logger.Error(err, "Failed to delete no permission service account", "name", serviceAccountName)
-						return true, err
-					}
-					return true, nil
-				}
-				if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerLabel) {
-					break
-				}
-				err = patch(ctx, r.Client, serviceAccount, func(obj *corev1.ServiceAccount) {
-					controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerLabel)
-				})
-				return true, err
-			case err != nil && !kerrors.IsNotFound(err):
-				return true, err
-			}
-			logger.Info("Deleted no permission service account", "name", serviceAccountName)
-		} else {
-			logger.Info(
-				"Skipping cleaning up no permission service account",
-				"reason",
-				fmt.Sprintf("annotation key %q not present", AnnotationKeyGitHubSecretName),
-			)
-		}
+		logger.Info("Removed finalizer from no permission service account", "name", serviceAccountName)
+	} else {
+		logger.Info(
+			"Skipping cleaning up no permission service account",
+			"reason",
+			fmt.Sprintf("annotation key %q not present", AnnotationKeyGitHubSecretName),
+		)
 	}
 
 	if githubSecretName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName]; ok {
-		logger.Info("Cleaning up GitHub secret")
+		logger.Info("Removing finalizer from GitHub secret")
 
 		secret := new(corev1.Secret)
 		err = r.Get(ctx, types.NamespacedName{Name: githubSecretName, Namespace: autoscalingRunnerSet.Namespace}, secret)
 		switch {
 		case err == nil:
-			if secret.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, secret)
-				if err != nil && !kerrors.IsNotFound(err) {
-					logger.Error(err, "Failed to delete GitHub secret", "name", githubSecretName)
-					return true, err
-				}
-				return true, nil
-			}
 			if !controllerutil.ContainsFinalizer(secret, autoscalingRunnerSetCleanupFinalizerLabel) {
 				break
 			}
@@ -389,7 +369,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
 			return true, err
 		}
-		logger.Info("Deleted GitHub secret", "name", githubSecretName)
+		logger.Info("Removed finalizer from GitHub secret", "name", githubSecretName)
 	} else {
 		logger.Info(
 			"Skipping cleaning up GitHub secret",
@@ -399,20 +379,12 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 	}
 
 	if managerRoleBindingName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleBindingName]; ok {
-		logger.Info("Cleaning up manager role binding")
+		logger.Info("Removing finalizer from manager role binding")
 
 		roleBinding := new(rbacv1.RoleBinding)
 		err = r.Get(ctx, types.NamespacedName{Name: managerRoleBindingName, Namespace: autoscalingRunnerSet.Namespace}, roleBinding)
 		switch {
 		case err == nil:
-			if roleBinding.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, roleBinding)
-				if err != nil && !kerrors.IsNotFound(err) {
-					logger.Error(err, "Failed to delete manager role binding", "name", managerRoleBindingName)
-					return true, err
-				}
-				return true, nil
-			}
 			if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerLabel) {
 				break
 			}
@@ -423,7 +395,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
-		logger.Info("Deleted manager role binding", "name", managerRoleBindingName)
+		logger.Info("Removed finalizer from manager role binding", "name", managerRoleBindingName)
 	} else {
 		logger.Info(
 			"Skipping cleaning up manager role binding",
@@ -433,20 +405,12 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 	}
 
 	if managerRoleName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName]; ok {
-		logger.Info("Cleaning up manager role")
+		logger.Info("Removing finalizer from manager role")
 
 		role := new(rbacv1.Role)
 		err = r.Get(ctx, types.NamespacedName{Name: managerRoleName, Namespace: autoscalingRunnerSet.Namespace}, role)
 		switch {
 		case err == nil:
-			if role.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, role)
-				if err != nil && !kerrors.IsNotFound(err) {
-					logger.Error(err, "Failed to delete manager role", "name", managerRoleName)
-					return true, err
-				}
-				return true, nil
-			}
 			if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerLabel) {
 				break
 			}
@@ -457,7 +421,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
-		logger.Info("Deleted manager role", "name", managerRoleName)
+		logger.Info("Removed finalizer from manager role", "name", managerRoleName)
 	} else {
 		logger.Info(
 			"Skipping cleaning up manager role",
@@ -469,21 +433,14 @@ func (r *AutoscalingRunnerSetReconciler) cleanupPermissions(ctx context.Context,
 	return false, nil
 }
 
-func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
+func (r *AutoscalingRunnerSetReconciler) removeFinalizersContainerModeKubernetesPermissions(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
 	if roleBindingName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleBindingName]; ok {
-		logger.Info("Cleaning up container mode kubernetes role binding")
+		logger.Info("Removing finalizer from container mode kubernetes role binding")
 
 		roleBinding := new(rbacv1.RoleBinding)
 		err = r.Get(ctx, types.NamespacedName{Name: roleBindingName, Namespace: autoscalingRunnerSet.Namespace}, roleBinding)
 		switch {
 		case err == nil:
-			if roleBinding.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, roleBinding)
-				if err != nil && !kerrors.IsNotFound(err) {
-					return true, err
-				}
-				return true, nil
-			}
 			if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerLabel) {
 				break
 			}
@@ -494,6 +451,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissio
 		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
+		logger.Info("Removed finalizer from container mode kubernetes role binding", "name", roleBindingName)
 	} else {
 		logger.Info(
 			"Skipping cleaning up kubernetes mode service account",
@@ -503,19 +461,12 @@ func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissio
 	}
 
 	if roleName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName]; ok {
-		logger.Info("Cleaning up container mode kubernetes role")
+		logger.Info("Removing finalizer from container mode kubernetes role")
 
 		role := new(rbacv1.Role)
 		err = r.Get(ctx, types.NamespacedName{Name: roleName, Namespace: autoscalingRunnerSet.Namespace}, role)
 		switch {
 		case err == nil:
-			if role.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, role)
-				if err != nil && !kerrors.IsNotFound(err) {
-					return true, err
-				}
-				return true, nil
-			}
 			if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerLabel) {
 				break
 			}
@@ -526,6 +477,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissio
 		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
+		logger.Info("Removed finalizer from container mode kubernetes role")
 	} else {
 		logger.Info(
 			"Skipping cleaning up kubernetes mode role",
@@ -535,19 +487,12 @@ func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissio
 	}
 
 	if serviceAccountName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeServiceAccountName]; ok {
-		logger.Info("Cleaning up container mode kubernetes service account")
+		logger.Info("Removing finalizer from container mode kubernetes service account")
 
 		serviceAccount := new(corev1.ServiceAccount)
 		err = r.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: autoscalingRunnerSet.Namespace}, serviceAccount)
 		switch {
 		case err == nil:
-			if serviceAccount.DeletionTimestamp.IsZero() {
-				err := r.Delete(ctx, serviceAccount)
-				if err != nil && !kerrors.IsNotFound(err) {
-					return true, err
-				}
-				return true, nil
-			}
 			if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerLabel) {
 				break
 			}
@@ -558,6 +503,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupContainerModeKubernetesPermissio
 		case err != nil && !kerrors.IsNotFound(err):
 			return true, err
 		}
+		logger.Info("Removed finalizer from container mode kubernetes service account")
 	} else {
 		logger.Info(
 			"Skipping cleaning up kubernetes mode role binding",

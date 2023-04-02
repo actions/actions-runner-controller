@@ -14,9 +14,6 @@ metadata:
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
   annotations:
     {{- $containerMode := .Values.containerMode }}
-    {{- if (and $containerMode $containerMode.type) }}
-    actions.github.com/mode: {{ $containerMode.type }}
-    {{- end }}
     {{- if not (kindIs "string" .Values.githubConfigSecret) }}
     actions.github.com/cleanup-github-secret-name: {{ include "gha-runner-scale-set.githubsecret" . }}
     {{- end }}
