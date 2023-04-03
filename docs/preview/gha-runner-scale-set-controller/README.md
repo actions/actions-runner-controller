@@ -221,20 +221,21 @@ To fix this, you can either:
 
 ### v0.4.0
 
+#### ⚠️ Warning
 
-#### Warning
+This release contains a major change related to the way permissions are
+applied to the manager ([#2276](https://github.com/actions/actions-runner-controller/pull/2276) and [#2363](https://github.com/actions/actions-runner-controller/pull/2363)).
 
-This release contains a breaking change related to the way permissions are
-applied to the manager. Please evaluate these changes carefully before upgrading.
+Please evaluate these changes carefully before upgrading.
 
 #### Major changes
 
 1. Surface EphemeralRunnerSet stats to AutoscalingRunnerSet [#2382](https://github.com/actions/actions-runner-controller/pull/2382)
-1. Remove list/watch secrets permission from manager cluster role
+1. Improved security posture by removing list/watch secrets permission from manager cluster role
    [#2276](https://github.com/actions/actions-runner-controller/pull/2276)
-1. Delay role/rolebinding creation to gha-runner-scale-set during installation
+1. Improved security posture by delaying role/rolebinding creation to gha-runner-scale-set during installation
    [#2363](https://github.com/actions/actions-runner-controller/pull/2363)
-1. Support watching a single namespace from the controller
+1. Improved security posture by supporting watching a single namespace from the controller
    [#2374](https://github.com/actions/actions-runner-controller/pull/2374)
 1. Add labels to AutoscalingRunnerSet subresources to allow easier inspection [#2391](https://github.com/actions/actions-runner-controller/pull/2391)
 1. Fix bug preventing env variables from being specified
