@@ -221,6 +221,12 @@ To fix this, you can either:
 
 ### v0.4.0
 
+
+#### Warning
+
+This release contains a breaking change related to the way permissions are
+applied to the manager. Please evaluate these changes carefully before upgrading.
+
 #### Major changes
 
 1. Surface EphemeralRunnerSet stats to AutoscalingRunnerSet [#2382](https://github.com/actions/actions-runner-controller/pull/2382)
