@@ -118,7 +118,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		requeue, err := r.removeFinalizersFromDependentResources(ctx, autoscalingRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to remove finalizers on dependent resources")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 		if requeue {
@@ -755,7 +755,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("Kubernetes mode role binding finalizer has already been removed", "name", roleBindingName)
+			return
 		}
 		err = patch(ctx, c.client, roleBinding, func(obj *rbacv1.RoleBinding) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -765,12 +766,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from container mode kubernetes role binding", "name", roleBindingName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch kubernetes mode role binding: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from container mode kubernetes role binding", "name", roleBindingName)
+		c.logger.Info("Container mode kubernetes role binding has already been deleted", "name", roleBindingName)
+		return
 	}
 }
 
@@ -795,7 +798,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("Kubernetes mode role finalizer has already been removed", "name", roleName)
+			return
 		}
 		err = patch(ctx, c.client, role, func(obj *rbacv1.Role) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -805,12 +809,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from container mode kubernetes role")
 		return
 	case err != nil && !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch kubernetes mode role: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from container mode kubernetes role")
+		c.logger.Info("Container mode kubernetes role has already been deleted", "name", roleName)
+		return
 	}
 }
 
@@ -836,7 +842,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("Kubernetes mode service account finalizer has already been removed", "name", serviceAccountName)
+			return
 		}
 		err = patch(ctx, c.client, serviceAccount, func(obj *corev1.ServiceAccount) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -846,12 +853,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from container mode kubernetes service account")
 		return
 	case err != nil && !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch kubernetes mode service account: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from container mode kubernetes service account")
+		c.logger.Info("Container mode kubernetes service account has already been deleted", "name", serviceAccountName)
+		return
 	}
 }
 
@@ -877,7 +886,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("No permission service account finalizer has already been removed", "name", serviceAccountName)
+			return
 		}
 		err = patch(ctx, c.client, serviceAccount, func(obj *corev1.ServiceAccount) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -887,12 +897,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from no permission service account", "name", serviceAccountName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch service account: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from no permission service account", "name", serviceAccountName)
+		c.logger.Info("No permission service account has already been deleted", "name", serviceAccountName)
+		return
 	}
 }
 
@@ -918,7 +930,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(githubSecret, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("GitHub secret finalizer has already been removed", "name", githubSecretName)
+			return
 		}
 		err = patch(ctx, c.client, githubSecret, func(obj *corev1.Secret) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -928,12 +941,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from GitHub secret", "name", githubSecretName)
 		return
 	case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
 		c.err = fmt.Errorf("failed to fetch GitHub secret: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from GitHub secret", "name", githubSecretName)
+		c.logger.Info("GitHub secret has already been deleted", "name", githubSecretName)
+		return
 	}
 }
 
@@ -959,7 +974,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("Manager role binding finalizer has already been removed", "name", managerRoleBindingName)
+			return
 		}
 		err = patch(ctx, c.client, roleBinding, func(obj *rbacv1.RoleBinding) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -969,12 +985,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from manager role binding", "name", managerRoleBindingName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch manager role binding: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from manager role binding", "name", managerRoleBindingName)
+		c.logger.Info("Manager role binding has already been deleted", "name", managerRoleBindingName)
+		return
 	}
 }
 
@@ -1000,7 +1018,8 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerName) {
-			break
+			c.logger.Info("Manager role finalizer has already been removed", "name", managerRoleName)
+			return
 		}
 		err = patch(ctx, c.client, role, func(obj *rbacv1.Role) {
 			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
@@ -1010,12 +1029,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 			return
 		}
 		c.requeue = true
+		c.logger.Info("Removed finalizer from manager role", "name", managerRoleName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch manager role: %w", err)
 		return
 	default:
-		c.logger.Info("Removed finalizer from manager role", "name", managerRoleName)
+		c.logger.Info("Manager role has already been deleted", "name", managerRoleName)
+		return
 	}
 }
 
