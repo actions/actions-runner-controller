@@ -149,6 +149,24 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
 
 ## Troubleshooting
 
+### I'm using the charts from the `master` branch and the controller is not working
+
+The `master` branch is highly unstable! We offer no guarantees that the charts in the `master` branch will work at any given time. If you're using the charts from the `master` branch, you should expect to encounter issues. Please use the latest release instead.
+
+### Controller pod is running but the runner set listener pod is not
+
+You need to inspect the logs of the controller first and see if there are any errors. If there are no errors, and the runner set listener pod is still not running, you need to make sure that the **controller pod has access to the Kubernetes API server in your cluster!**
+
+You'll see something similar to the following in the logs of the controller pod:
+
+```log
+kubectl logs <controller_pod_name> -c manager
+17:35:28.661069       1 request.go:690] Waited for 1.032376652s due to client-side throttling, not priority and fairness, request: GET:https://10.0.0.1:443/apis/monitoring.coreos.com/v1alpha1?timeout=32s
+2023-03-15T17:35:29Z    INFO    starting manager
+```
+
+If you have a proxy configured or you're using a sidecar proxy that's automatically injected (think [Istio](https://istio.io/)), you need to make sure it's configured appropriately to allow traffic from the controller container (manager) to the Kubernetes API server.
+
 ### Check the logs
 
 You can check the logs of the controller pod using the following command:
