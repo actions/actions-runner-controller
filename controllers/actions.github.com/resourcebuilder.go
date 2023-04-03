@@ -43,6 +43,17 @@ const (
 	labelKeyListenerNamespace = "auto-scaling-listener-namespace"
 )
 
+// Annotations applied for later cleanup of resources
+const (
+	AnnotationKeyManagerRoleBindingName           = "actions.github.com/cleanup-manager-role-binding"
+	AnnotationKeyManagerRoleName                  = "actions.github.com/cleanup-manager-role-name"
+	AnnotationKeyKubernetesModeRoleName           = "actions.github.com/cleanup-kubernetes-mode-role-name"
+	AnnotationKeyKubernetesModeRoleBindingName    = "actions.github.com/cleanup-kubernetes-mode-role-binding-name"
+	AnnotationKeyKubernetesModeServiceAccountName = "actions.github.com/cleanup-kubernetes-mode-service-account-name"
+	AnnotationKeyGitHubSecretName                 = "actions.github.com/cleanup-github-secret-name"
+	AnnotationKeyNoPermissionServiceAccountName   = "actions.github.com/cleanup-no-permission-service-account-name"
+)
+
 var commonLabelKeys = [...]string{
 	LabelKeyKubernetesPartOf,
 	LabelKeyKubernetesComponent,

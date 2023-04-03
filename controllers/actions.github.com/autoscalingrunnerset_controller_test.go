@@ -13,6 +13,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -23,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -571,6 +573,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 
 			update := autoscalingRunnerSet.DeepCopy()
 			update.Spec.RunnerScaleSetName = "testset_update"
+
 			err = k8sClient.Patch(ctx, update, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to update AutoScalingRunnerSet")
 
@@ -1036,7 +1039,7 @@ var _ = Describe("Test Client optional configuration", func() {
 					g.Expect(listener.Spec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "listener does not have TLS config")
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingListenerTestInterval,
+				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "tls config is incorrect")
 		})
 
@@ -1093,8 +1096,372 @@ var _ = Describe("Test Client optional configuration", func() {
 					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS).To(BeEquivalentTo(autoscalingRunnerSet.Spec.GitHubServerTLS), "EphemeralRunnerSpec does not have TLS config")
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingListenerTestInterval,
+				autoscalingRunnerSetTestInterval,
 			).Should(Succeed())
 		})
+	})
+})
+
+var _ = Describe("Test external permissions cleanup", func() {
+	It("Should clean up kubernetes mode permissions", func() {
+		ctx := context.Background()
+		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
+
+		configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		controller := &AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Scheme:                             mgr.GetScheme(),
+			Log:                                logf.Log,
+			ControllerNamespace:                autoscalingNS.Name,
+			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			ActionsClient:                      fake.NewMultiClient(),
+		}
+		err := controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		startManagers(GinkgoT(), mgr)
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					"app.kubernetes.io/name": "gha-runner-scale-set",
+				},
+				Annotations: map[string]string{
+					AnnotationKeyKubernetesModeRoleBindingName:    "kube-mode-role-binding",
+					AnnotationKeyKubernetesModeRoleName:           "kube-mode-role",
+					AnnotationKeyKubernetesModeServiceAccountName: "kube-mode-service-account",
+				},
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				RunnerGroup:        "testgroup",
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+		}
+
+		err = k8sClient.Create(ctx, role)
+		Expect(err).NotTo(HaveOccurred(), "failed to create kubernetes mode role")
+
+		serviceAccount := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeServiceAccountName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+		}
+
+		err = k8sClient.Create(ctx, serviceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to create kubernetes mode service account")
+
+		roleBinding := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleBindingName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      serviceAccount.Name,
+					Namespace: serviceAccount.Namespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				// Kind is the type of resource being referenced
+				Kind: "Role",
+				Name: role.Name,
+			},
+		}
+
+		err = k8sClient.Create(ctx, roleBinding)
+		Expect(err).NotTo(HaveOccurred(), "failed to create kubernetes mode role binding")
+
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+		Eventually(
+			func() (string, error) {
+				created := new(v1alpha1.AutoscalingRunnerSet)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+				if err != nil {
+					return "", err
+				}
+				if len(created.Finalizers) == 0 {
+					return "", nil
+				}
+				return created.Finalizers[0], nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
+
+		err = k8sClient.Delete(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete autoscaling runner set")
+
+		err = k8sClient.Delete(ctx, roleBinding)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete kubernetes mode role binding")
+
+		err = k8sClient.Delete(ctx, role)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete kubernetes mode role")
+
+		err = k8sClient.Delete(ctx, serviceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete kubernetes mode service account")
+
+		Eventually(
+			func() bool {
+				r := new(rbacv1.RoleBinding)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      roleBinding.Name,
+					Namespace: roleBinding.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected role binding to be cleaned up")
+
+		Eventually(
+			func() bool {
+				r := new(rbacv1.Role)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      role.Name,
+					Namespace: role.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected role to be cleaned up")
+	})
+
+	It("Should clean up manager permissions and no-permission service account", func() {
+		ctx := context.Background()
+		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
+
+		controller := &AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Scheme:                             mgr.GetScheme(),
+			Log:                                logf.Log,
+			ControllerNamespace:                autoscalingNS.Name,
+			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			ActionsClient:                      fake.NewMultiClient(),
+		}
+		err := controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		startManagers(GinkgoT(), mgr)
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					"app.kubernetes.io/name": "gha-runner-scale-set",
+				},
+				Annotations: map[string]string{
+					AnnotationKeyManagerRoleName:                "manager-role",
+					AnnotationKeyManagerRoleBindingName:         "manager-role-binding",
+					AnnotationKeyGitHubSecretName:               "gh-secret-name",
+					AnnotationKeyNoPermissionServiceAccountName: "no-permission-sa",
+				},
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl: "https://github.com/owner/repo",
+				MaxRunners:      &max,
+				MinRunners:      &min,
+				RunnerGroup:     "testgroup",
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+			Data: map[string][]byte{
+				"github_token": []byte(defaultGitHubToken),
+			},
+		}
+
+		err = k8sClient.Create(context.Background(), secret)
+		Expect(err).NotTo(HaveOccurred(), "failed to create github secret")
+
+		autoscalingRunnerSet.Spec.GitHubConfigSecret = secret.Name
+
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+		}
+
+		err = k8sClient.Create(ctx, role)
+		Expect(err).NotTo(HaveOccurred(), "failed to create manager role")
+
+		roleBinding := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleBindingName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "Role",
+				Name:     role.Name,
+			},
+		}
+
+		err = k8sClient.Create(ctx, roleBinding)
+		Expect(err).NotTo(HaveOccurred(), "failed to create manager role binding")
+
+		noPermissionServiceAccount := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName],
+				Namespace:  autoscalingRunnerSet.Namespace,
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+			},
+		}
+
+		err = k8sClient.Create(ctx, noPermissionServiceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to create no permission service account")
+
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+		Eventually(
+			func() (string, error) {
+				created := new(v1alpha1.AutoscalingRunnerSet)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+				if err != nil {
+					return "", err
+				}
+				if len(created.Finalizers) == 0 {
+					return "", nil
+				}
+				return created.Finalizers[0], nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
+
+		err = k8sClient.Delete(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete autoscaling runner set")
+
+		err = k8sClient.Delete(ctx, noPermissionServiceAccount)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete no permission service account")
+
+		err = k8sClient.Delete(ctx, secret)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete GitHub secret")
+
+		err = k8sClient.Delete(ctx, roleBinding)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete manager role binding")
+
+		err = k8sClient.Delete(ctx, role)
+		Expect(err).NotTo(HaveOccurred(), "failed to delete manager role")
+
+		Eventually(
+			func() bool {
+				r := new(corev1.ServiceAccount)
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{
+						Name:      noPermissionServiceAccount.Name,
+						Namespace: noPermissionServiceAccount.Namespace,
+					},
+					r,
+				)
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected no permission service account to be cleaned up")
+
+		Eventually(
+			func() bool {
+				r := new(corev1.Secret)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      secret.Name,
+					Namespace: secret.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected role binding to be cleaned up")
+
+		Eventually(
+			func() bool {
+				r := new(rbacv1.RoleBinding)
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      roleBinding.Name,
+					Namespace: roleBinding.Namespace,
+				}, r)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected role binding to be cleaned up")
+
+		Eventually(
+			func() bool {
+				r := new(rbacv1.Role)
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{
+						Name:      role.Name,
+						Namespace: role.Namespace,
+					},
+					r,
+				)
+
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "Expected role to be cleaned up")
 	})
 })

@@ -3,6 +3,11 @@ kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.managerRoleName" . }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
+    app.kubernetes.io/component: manager-role
+  finalizers:
+    - actions.github.com/cleanup-protection
 rules:
 - apiGroups:
   - ""
@@ -22,6 +27,17 @@ rules:
   - ""
   resources:
   - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
   verbs:
   - create
   - delete

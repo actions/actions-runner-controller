@@ -114,4 +114,5 @@ rules:
   verbs:
   - list
   - watch
+  - patch
 {{- end }}

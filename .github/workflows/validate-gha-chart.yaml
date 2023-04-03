@@ -71,7 +71,7 @@ jobs:
           git clone https://github.com/helm/chart-testing
           cd chart-testing
           unset CT_CONFIG_DIR
-          goreleaser build --clean --skip-validate 
+          goreleaser build --clean --skip-validate
           ./dist/chart-testing_linux_amd64_v1/ct version
           echo 'Adding ct directory to PATH...'
           echo "$RUNNER_TEMP/chart-testing/dist/chart-testing_linux_amd64_v1" >> "$GITHUB_PATH"
@@ -107,7 +107,7 @@ jobs:
           load: true
           build-args: |
             DOCKER_IMAGE_NAME=test-arc
-            VERSION=dev 
+            VERSION=dev
           tags: |
             test-arc:dev
           cache-from: type=gha
