@@ -4,11 +4,8 @@ metadata:
   name: {{ include "gha-runner-scale-set.managerRoleBindingName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/part-of: gha-runner-scale-set-controller
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
     app.kubernetes.io/component: manager-role-binding
-    app.kubernetes.io/version: {{ .Chart.Version }}
-    actions.github.com/scale-set-name: {{ .Release.Name }}
-    actions.github.com/scale-set-namespace: {{ .Release.Namespace }}
   finalizers:
     - actions.github.com/cleanup-protection
 roleRef:

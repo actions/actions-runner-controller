@@ -1160,7 +1160,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1171,7 +1171,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeServiceAccountName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1182,7 +1182,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -1317,7 +1317,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 			Data: map[string][]byte{
 				"github_token": []byte(defaultGitHubToken),
@@ -1333,7 +1333,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1344,7 +1344,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
@@ -1360,7 +1360,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerLabel},
+				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1404,11 +1404,14 @@ var _ = Describe("Test external permissions cleanup", func() {
 		Eventually(
 			func() bool {
 				r := new(corev1.ServiceAccount)
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      noPermissionServiceAccount.Name,
-					Namespace: noPermissionServiceAccount.Namespace,
-				}, r)
-
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{
+						Name:      noPermissionServiceAccount.Name,
+						Namespace: noPermissionServiceAccount.Namespace,
+					},
+					r,
+				)
 				return errors.IsNotFound(err)
 			},
 			autoscalingRunnerSetTestTimeout,
@@ -1446,10 +1449,14 @@ var _ = Describe("Test external permissions cleanup", func() {
 		Eventually(
 			func() bool {
 				r := new(rbacv1.Role)
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name:      role.Name,
-					Namespace: role.Namespace,
-				}, r)
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{
+						Name:      role.Name,
+						Namespace: role.Namespace,
+					},
+					r,
+				)
 
 				return errors.IsNotFound(err)
 			},

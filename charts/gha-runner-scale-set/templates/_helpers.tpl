@@ -33,6 +33,8 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: gha-runner-scale-set
+actions.github.com/scale-set-name: {{ .Release.Name }}
+actions.github.com/scale-set-namespace: {{ .Release.Namespace }}
 {{- end }}
 
 {{/*
