@@ -285,16 +285,20 @@ func secretDataToGitHubClientConfig(data map[string][]byte) (*github.Config, err
 
 	appID := string(data["github_app_id"])
 
-	conf.AppID, err = strconv.ParseInt(appID, 10, 64)
-	if err != nil {
-		return nil, err
+	if appID != "" {
+		conf.AppID, err = strconv.ParseInt(appID, 10, 64)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	instID := string(data["github_app_installation_id"])
 
-	conf.AppInstallationID, err = strconv.ParseInt(instID, 10, 64)
-	if err != nil {
-		return nil, err
+	if instID != "" {
+		conf.AppInstallationID, err = strconv.ParseInt(instID, 10, 64)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	conf.AppPrivateKey = string(data["github_app_private_key"])
