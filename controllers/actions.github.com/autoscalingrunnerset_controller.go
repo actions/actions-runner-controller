@@ -117,12 +117,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 		requeue, err := r.removeFinalizersFromPermissionResources(ctx, autoscalingRunnerSet, log)
 		if err != nil {
-			log.Error(err, "Failed to clean up permissions")
+			log.Error(err, "Failed to remove finalizers on dependent resources")
 			return ctrl.Result{}, nil
 		}
 
 		if requeue {
-			log.Info("Waiting for role/rolebinding/serviceaccount to be deleted")
+			log.Info("Waiting for dependent resources to be deleted")
 			return ctrl.Result{Requeue: true}, nil
 		}
 
