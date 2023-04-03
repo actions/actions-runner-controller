@@ -149,6 +149,10 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
 
 ## Troubleshooting
 
+### I'm using the charts from the `master` branch and the controller is not working
+
+The `master` branch is highly unstable! We offer no guarantees that the charts in the `master` branch will work at any given time. If you're using the charts from the `master` branch, you should expect to encounter issues. Please use the latest release instead.
+
 ### Controller pod is running but the runner set listener pod is not
 
 You need to inspect the logs of the controller first and see if there are any errors. If there are no errors, and the runner set listener pod is still not running, you need to make sure that the **controller pod has access to the Kubernetes API server in your cluster!**
