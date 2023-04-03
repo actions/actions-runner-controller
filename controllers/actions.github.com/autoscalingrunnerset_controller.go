@@ -118,7 +118,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		requeue, err := r.removeFinalizersFromDependentResources(ctx, autoscalingRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to remove finalizers on dependent resources")
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
 
 		if requeue {
