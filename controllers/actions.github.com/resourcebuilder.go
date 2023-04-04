@@ -67,6 +67,21 @@ var commonLabelKeys = [...]string{
 
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
 
+const DefaultScaleSetListenerImagePullPolicy = corev1.PullIfNotPresent
+
+// scaleSetListenerImagePullPolicy is applied to all listeners
+var scaleSetListenerImagePullPolicy = DefaultScaleSetListenerImagePullPolicy
+
+func SetListenerImagePullPolicy(pullPolicy string) bool {
+	switch p := corev1.PullPolicy(pullPolicy); p {
+	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+		scaleSetListenerImagePullPolicy = p
+		return true
+	default:
+		return false
+	}
+}
+
 type resourceBuilder struct{}
 
 func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
@@ -161,7 +176,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: autoscalingListener.Spec.ImagePullPolicy,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
@@ -375,6 +390,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			MinRunners:                    effectiveMinRunners,
 			MaxRunners:                    effectiveMaxRunners,
 			Image:                         image,
+			ImagePullPolicy:               scaleSetListenerImagePullPolicy,
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,

@@ -53,6 +53,9 @@ type AutoscalingListenerSpec struct {
 	Image string `json:"image,omitempty"`
 
 	// Required
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Required
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// +optional
