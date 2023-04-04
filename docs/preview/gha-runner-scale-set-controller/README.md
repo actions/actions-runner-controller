@@ -262,6 +262,7 @@ Please evaluate these changes carefully before upgrading.
    [#2435](https://github.com/actions/actions-runner-controller/pull/2435)
 1. Fix ignore extra dind container when container mode type is "dind"
    [#2418](https://github.com/actions/actions-runner-controller/pull/2418)
+1. Add additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
 
 ### v0.3.0
 
