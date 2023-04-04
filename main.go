@@ -171,9 +171,10 @@ func main() {
 	}
 
 	listenerPullPolicy := os.Getenv("CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY")
-	switch pullPolicy := corev1.PullPolicy(listenerPullPolicy); pullPolicy {
-	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
-		actionsgithubcom.SetListenerImagePullPolicy(pullPolicy)
+	if ok := actionsgithubcom.SetListenerImagePullPolicy(listenerPullPolicy); ok {
+		log.Info("AutoscalingListener image pull policy changed", "ImagePullPolicy", listenerPullPolicy)
+	} else {
+		log.Info("Using default AutoscalingListener image pull policy", "ImagePullPolicy", actionsgithubcom.DefaultScaleSetListenerImagePullPolicy)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

@@ -67,14 +67,18 @@ var commonLabelKeys = [...]string{
 
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
 
-// scaleSetListenerImagePullPolicy is by default PullIfNotPresent
-// manager can overwrite this value and it will be applied to all listeners
-var scaleSetListenerImagePullPolicy = corev1.PullIfNotPresent
+const DefaultScaleSetListenerImagePullPolicy = corev1.PullIfNotPresent
 
-func SetListenerImagePullPolicy(pullPolicy corev1.PullPolicy) {
-	switch pullPolicy {
+// scaleSetListenerImagePullPolicy is applied to all listeners
+var scaleSetListenerImagePullPolicy = DefaultScaleSetListenerImagePullPolicy
+
+func SetListenerImagePullPolicy(pullPolicy string) bool {
+	switch p := corev1.PullPolicy(pullPolicy); p {
 	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
-		scaleSetListenerImagePullPolicy = pullPolicy
+		scaleSetListenerImagePullPolicy = p
+		return true
+	default:
+		return false
 	}
 }
 
