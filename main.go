@@ -170,6 +170,12 @@ func main() {
 		}
 	}
 
+	listenerPullPolicy := os.Getenv("CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY")
+	switch pullPolicy := corev1.PullPolicy(listenerPullPolicy); pullPolicy {
+	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+		actionsgithubcom.SetListenerImagePullPolicy(pullPolicy)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		NewCache:           newCache,
