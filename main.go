@@ -196,6 +196,12 @@ func main() {
 			os.Exit(1)
 		}
 
+		managerImagePullPolicy := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE_PULL_POLICY")
+		if managerImagePullPolicy == "" {
+			log.Error(err, "unable to obtain listener image pull policy")
+			os.Exit(1)
+		}
+
 		actionsMultiClient := actions.NewMultiClient(
 			"actions-runner-controller/"+build.Version,
 			log.WithName("actions-clients"),
@@ -209,6 +215,7 @@ func main() {
 			DefaultRunnerScaleSetListenerImage: managerImage,
 			ActionsClient:                      actionsMultiClient,
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
+			DefaultRunnerScaleSetListenerImagePullPolicy:  corev1.PullPolicy(managerImagePullPolicy),
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)

@@ -95,6 +95,7 @@ run: generate fmt vet manifests
 run-scaleset: generate fmt vet
 	CONTROLLER_MANAGER_POD_NAMESPACE=default \
 	CONTROLLER_MANAGER_CONTAINER_IMAGE="${DOCKER_IMAGE_NAME}:${VERSION}" \
+	CONTROLLER_MANAGER_CONTAINER_IMAGE_PULL_POLICY="IfNotPresent" \
 	go run ./main.go --auto-scaling-runner-set-only
 
 # Install CRDs into a cluster

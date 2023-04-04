@@ -161,7 +161,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: autoscalingListener.Spec.ImagePullPolicy,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
@@ -329,7 +329,7 @@ func (b *resourceBuilder) newScaleSetListenerSecretMirror(autoscalingListener *v
 	return newListenerSecret
 }
 
-func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
+func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullPolicy corev1.PullPolicy, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
 		return nil, err
@@ -375,6 +375,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			MinRunners:                    effectiveMinRunners,
 			MaxRunners:                    effectiveMaxRunners,
 			Image:                         image,
+			ImagePullPolicy:               imagePullPolicy,
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,

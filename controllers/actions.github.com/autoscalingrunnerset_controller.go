@@ -58,6 +58,7 @@ type AutoscalingRunnerSetReconciler struct {
 	Scheme                                        *runtime.Scheme
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
+	DefaultRunnerScaleSetListenerImagePullPolicy  corev1.PullPolicy
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
 	ActionsClient                                 actions.MultiClient
 
@@ -583,7 +584,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		})
 	}
 
-	autoscalingListener, err := r.resourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
+	autoscalingListener, err := r.resourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, r.DefaultRunnerScaleSetListenerImagePullPolicy, imagePullSecrets)
 	if err != nil {
 		log.Error(err, "Could not create AutoscalingListener spec")
 		return ctrl.Result{}, err

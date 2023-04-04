@@ -52,6 +52,8 @@ spec:
           value: /etc/actions-runner-controller/github_app_private_key
         - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
           value: CONTROLLER_MANAGER_CONTAINER_IMAGE
+        - name: CONTROLLER_MANAGER_CONTAINER_IMAGE_PULL_POLICY
+          value: CONTROLLER_MANAGER_CONTAINER_IMAGE_PULL_POLICY
         - name: CONTROLLER_MANAGER_POD_NAMESPACE
           valueFrom:
             fieldRef:
