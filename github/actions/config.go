@@ -75,21 +75,20 @@ func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
 func (c *GitHubConfig) GitHubAPIURL(path string) *url.URL {
 	result := &url.URL{
 		Scheme: c.ConfigURL.Scheme,
+		Host:   c.ConfigURL.Host, // default for Enterprise mode
+		Path:   "/api/v3",        // default for Enterprise mode
 	}
 
 	isHosted := isHostedGitHubURL(c.ConfigURL)
 
 	if isHosted {
+		result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
+		result.Path = ""
+
 		if strings.EqualFold("www.github.com", c.ConfigURL.Host) {
 			// re-routing www.github.com to api.github.com
 			result.Host = "api.github.com"
-		} else {
-		        result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
 		}
-	} else {
-		// Enterprise
-		result.Host = c.ConfigURL.Host
-		result.Path = "/api/v3"
 	}
 
 	result.Path += path
@@ -98,9 +97,8 @@ func (c *GitHubConfig) GitHubAPIURL(path string) *url.URL {
 }
 
 func isHostedGitHubURL(u *url.URL) bool {
-	forceGhes := os.Getenv("GITHUB_ACTIONS_FORCE_GHES")
-
-	if len(forceGhes) > 0 {
+	_, forceGhes := os.LookupEnv("GITHUB_ACTIONS_FORCE_GHES")
+	if forceGhes {
 		return false
 	}
 
