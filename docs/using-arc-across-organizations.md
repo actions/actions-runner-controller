@@ -4,7 +4,7 @@
 
 > This feature requires controller version => [v0.26.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.26.0)
 
-In a large enterprise, there might be many GitHub organizations that requires self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
+In a large enterprise, there might be many GitHub organizations that requires self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](deploying-arc-runners.md#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
 
 With multitenancy, you can let ARC manage self-hosted runners across organizations. It's enabled by default and the only thing you need to start using it is to set the `spec.githubAPICredentialsFrom.secretRef.name` fields for the following resources:
 
@@ -58,4 +58,4 @@ spec:
 when and which varying ARC component(`horizontalrunnerautoscaler-controller`, `runnerdeployment-controller`, `runnerreplicaset-controller`, `runner-controller` or `runnerpod-controller`) makes specific API calls.
 > Just don't be surprised you have to repeat `githubAPICredentialsFrom.secretRef.name` settings among two resources!
 
-Please refer to [Deploying Using GitHub App Authentication](#deploying-using-github-app-authentication) for how you could create the Kubernetes secret containing GitHub App credentials.
+Please refer to [Deploying Using GitHub App Authentication](authenticating-to-the-github-api.md#deploying-using-github-app-authentication) for how you could create the Kubernetes secret containing GitHub App credentials.

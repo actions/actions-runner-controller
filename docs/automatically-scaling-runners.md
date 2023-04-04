@@ -133,7 +133,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in t
 **Benefits of this metric**
 1. Supports named repositories server-side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions/actions-runner-controller/pull/313)
 2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions/actions-runner-controller/pull/223)
-3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels)
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](using-arc-runners-in-a-workflow.md#runner-labels)
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions/actions-runner-controller/pull/223) [#315](https://github.com/actions/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
