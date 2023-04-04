@@ -255,14 +255,14 @@ Please evaluate these changes carefully before upgrading.
    [#2363](https://github.com/actions/actions-runner-controller/pull/2363)
 1. Improved security posture by supporting watching a single namespace from the controller
    [#2374](https://github.com/actions/actions-runner-controller/pull/2374)
-1. Add labels to AutoscalingRunnerSet subresources to allow easier inspection [#2391](https://github.com/actions/actions-runner-controller/pull/2391)
-1. Fix bug preventing env variables from being specified
+1. Added labels to AutoscalingRunnerSet subresources to allow easier inspection [#2391](https://github.com/actions/actions-runner-controller/pull/2391)
+1. Fixed bug preventing env variables from being specified
    [#2450](https://github.com/actions/actions-runner-controller/pull/2450)
 1. Enhance quickstart troubleshooting guides
    [#2435](https://github.com/actions/actions-runner-controller/pull/2435)
-1. Fix ignore extra dind container when container mode type is "dind"
+1. Fixed ignore extra dind container when container mode type is "dind"
    [#2418](https://github.com/actions/actions-runner-controller/pull/2418)
-1. Add additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
+1. Added additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
 
 ### v0.3.0
 
