@@ -349,12 +349,15 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
+
+	assert.Equal(t, "CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "IfNotPresent", deployment.Spec.Template.Spec.Containers[0].Env[2].Value) // default value. Needs to align with controllers/actions.github.com/resourcebuilder.go
 
 	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Resources)
 	assert.Nil(t, deployment.Spec.Template.Spec.Containers[0].SecurityContext)
@@ -434,8 +437,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "bar", deployment.Spec.Template.Annotations["foo"])
 	assert.Equal(t, "manager", deployment.Spec.Template.Annotations["kubectl.kubernetes.io/default-container"])
 
-	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
-	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
+	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Value)
 
 	assert.Len(t, deployment.Spec.Template.Spec.ImagePullSecrets, 1)
 	assert.Equal(t, "dockerhub", deployment.Spec.Template.Spec.ImagePullSecrets[0].Name)
@@ -472,12 +475,15 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "--auto-scaler-image-pull-secrets=dockerhub", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 4)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 
-	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
-	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
+	assert.Equal(t, "CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "Always", deployment.Spec.Template.Spec.Containers[0].Env[2].Value) // default value. Needs to align with controllers/actions.github.com/resourcebuilder.go
+
+	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
+	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Value)
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
@@ -698,12 +704,15 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--watch-single-namespace=demo", deployment.Spec.Template.Spec.Containers[0].Args[2])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
+
+	assert.Equal(t, "CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
+	assert.Equal(t, "IfNotPresent", deployment.Spec.Template.Spec.Containers[0].Env[2].Value) // default value. Needs to align with controllers/actions.github.com/resourcebuilder.go
 
 	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Resources)
 	assert.Nil(t, deployment.Spec.Template.Spec.Containers[0].SecurityContext)
@@ -745,17 +754,17 @@ func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, namespaceName, deployment.Namespace)
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", deployment.Name)
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 6)
-	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
-	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[2].Value)
-	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
-	assert.Equal(t, "secret-name", deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Name)
-	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Key)
-	assert.True(t, *deployment.Spec.Template.Spec.Containers[0].Env[3].ValueFrom.SecretKeyRef.Optional)
-	assert.Equal(t, "ENV_VAR_NAME_3", deployment.Spec.Template.Spec.Containers[0].Env[4].Name)
-	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[4].Value)
-	assert.Equal(t, "ENV_VAR_NAME_4", deployment.Spec.Template.Spec.Containers[0].Env[5].Name)
-	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[5].ValueFrom)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 7)
+	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
+	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Value)
+	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[4].Name)
+	assert.Equal(t, "secret-name", deployment.Spec.Template.Spec.Containers[0].Env[4].ValueFrom.SecretKeyRef.Name)
+	assert.Equal(t, "ENV_VAR_NAME_2", deployment.Spec.Template.Spec.Containers[0].Env[4].ValueFrom.SecretKeyRef.Key)
+	assert.True(t, *deployment.Spec.Template.Spec.Containers[0].Env[4].ValueFrom.SecretKeyRef.Optional)
+	assert.Equal(t, "ENV_VAR_NAME_3", deployment.Spec.Template.Spec.Containers[0].Env[5].Name)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[5].Value)
+	assert.Equal(t, "ENV_VAR_NAME_4", deployment.Spec.Template.Spec.Containers[0].Env[6].Name)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env[6].ValueFrom)
 }
 
 func TestTemplate_WatchSingleNamespace_NotCreateManagerClusterRole(t *testing.T) {
