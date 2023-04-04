@@ -54,7 +54,6 @@ const (
 	AnnotationKeyNoPermissionServiceAccountName   = "actions.github.com/cleanup-no-permission-service-account-name"
 )
 
-
 var commonLabelKeys = [...]string{
 	LabelKeyKubernetesPartOf,
 	LabelKeyKubernetesComponent,
@@ -173,7 +172,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
-				ImagePullPolicy: scaleSetListenerImagePullPolicy,
+				ImagePullPolicy: autoscalingListener.Spec.ImagePullPolicy,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
