@@ -80,14 +80,11 @@ func (c *GitHubConfig) GitHubAPIURL(path string) *url.URL {
 	isHosted := isHostedGitHubURL(c.ConfigURL)
 
 	if isHosted {
-		// Hosted
-		if strings.EqualFold("github.com", c.ConfigURL.Host) ||
-			strings.EqualFold("github.localhost", c.ConfigURL.Host) ||
-			strings.HasSuffix(c.ConfigURL.Host, ".ghe.com") {
-			result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
-		} else if strings.EqualFold("www.github.com", c.ConfigURL.Host) {
+		if strings.EqualFold("www.github.com", c.ConfigURL.Host) {
 			// re-routing www.github.com to api.github.com
 			result.Host = "api.github.com"
+		} else {
+		        result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
 		}
 	} else {
 		// Enterprise
