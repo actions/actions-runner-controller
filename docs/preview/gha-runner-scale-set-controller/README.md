@@ -36,7 +36,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --namespace "${NAMESPACE}" \
         --create-namespace \
         oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.3.0
+        --version 0.4.0
     ```
 
 1. Generate a Personal Access Token (PAT) or create and install a GitHub App. See [Creating a personal access token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) and [Creating a GitHub App](https://docs.github.com/en/developers/apps/creating-a-github-app).
@@ -57,7 +57,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
         --set githubConfigSecret.github_token="${GITHUB_PAT}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.3.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.4.0
     ```
 
     ```bash
@@ -75,7 +75,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --set githubConfigSecret.github_app_id="${GITHUB_APP_ID}" \
         --set githubConfigSecret.github_app_installation_id="${GITHUB_APP_INSTALLATION_ID}" \
         --set githubConfigSecret.github_app_private_key="${GITHUB_APP_PRIVATE_KEY}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.3.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.4.0
     ```
 
 1. Check your installation. If everything went well, you should see the following:
@@ -84,8 +84,8 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     $ helm list -n "${NAMESPACE}"
 
     NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                                    APP VERSION
-    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.3.0        preview
-    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.3.0            0.3.0
+    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.4.0        preview
+    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.4.0            0.4.0
     ```
 
     ```bash
@@ -140,7 +140,7 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
 
     ```bash
     helm pull oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.3.0 \
+        --version 0.4.0 \
         --untar && \
         kubectl replace -f <PATH>/gha-runner-scale-set-controller/crds/
     ```
@@ -236,6 +236,35 @@ To fix this, you can either:
     ```
 
 ## Changelog
+
+### v0.4.0
+
+#### ⚠️ Warning
+
+This release contains a major change related to the way permissions are
+applied to the manager ([#2276](https://github.com/actions/actions-runner-controller/pull/2276) and [#2363](https://github.com/actions/actions-runner-controller/pull/2363)).
+
+Please evaluate these changes carefully before upgrading.
+
+#### Major changes
+
+1. Surface EphemeralRunnerSet stats to AutoscalingRunnerSet [#2382](https://github.com/actions/actions-runner-controller/pull/2382)
+1. Improved security posture by removing list/watch secrets permission from manager cluster role
+   [#2276](https://github.com/actions/actions-runner-controller/pull/2276)
+1. Improved security posture by delaying role/rolebinding creation to gha-runner-scale-set during installation
+   [#2363](https://github.com/actions/actions-runner-controller/pull/2363)
+1. Improved security posture by supporting watching a single namespace from the controller
+   [#2374](https://github.com/actions/actions-runner-controller/pull/2374)
+1. Added labels to AutoscalingRunnerSet subresources to allow easier inspection [#2391](https://github.com/actions/actions-runner-controller/pull/2391)
+1. Fixed bug preventing env variables from being specified
+   [#2450](https://github.com/actions/actions-runner-controller/pull/2450)
+1. Enhance quickstart troubleshooting guides
+   [#2435](https://github.com/actions/actions-runner-controller/pull/2435)
+1. Fixed ignore extra dind container when container mode type is "dind"
+   [#2418](https://github.com/actions/actions-runner-controller/pull/2418)
+1. Added additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
+1. gha-runner-scale-set listener pod inherits the ImagePullPolicy from the manager pod [#2477](https://github.com/actions/actions-runner-controller/pull/2477)
+1. Treat `.ghe.com` domain as hosted environment [#2480](https://github.com/actions/actions-runner-controller/pull/2480)
 
 ### v0.3.0
 
