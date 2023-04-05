@@ -263,6 +263,7 @@ Please evaluate these changes carefully before upgrading.
 1. Fixed ignore extra dind container when container mode type is "dind"
    [#2418](https://github.com/actions/actions-runner-controller/pull/2418)
 1. Added additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
+1. gha-runner-scale-set listener pod inherits the ImagePullPolicy from the manager pod [#2477](https://github.com/actions/actions-runner-controller/pull/2477)
 
 ### v0.3.0
 
