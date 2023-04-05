@@ -264,6 +264,7 @@ Please evaluate these changes carefully before upgrading.
    [#2418](https://github.com/actions/actions-runner-controller/pull/2418)
 1. Added additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
 1. gha-runner-scale-set listener pod inherits the ImagePullPolicy from the manager pod [#2477](https://github.com/actions/actions-runner-controller/pull/2477)
+1. Treat `.ghe.com` domain as hosted environment [#2480](https://github.com/actions/actions-runner-controller/pull/2480)
 
 ### v0.3.0
 
