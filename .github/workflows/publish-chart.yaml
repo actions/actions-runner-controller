@@ -183,7 +183,9 @@ jobs:
       # - https://github.com/actions/actions-runner-controller/pull/2452
       - name: Commit and push to actions/actions-runner-controller
         run: |
+          git stash
           git checkout gh-pages
+          git stash pop
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
           git add .
