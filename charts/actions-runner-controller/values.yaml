@@ -47,6 +47,7 @@ authSecret:
   #github_basicauth_username: ""
   #github_basicauth_password: ""
 
+# http(s) should be specified for dockerRegistryMirror, e.g.: dockerRegistryMirror="https://<your-docker-registry-mirror>"
 dockerRegistryMirror: ""
 image:
   repository: "summerwind/actions-runner-controller"
