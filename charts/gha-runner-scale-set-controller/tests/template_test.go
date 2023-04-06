@@ -169,7 +169,7 @@ func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 
 	assert.Empty(t, managerClusterRole.Namespace, "ClusterRole should not have a namespace")
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-cluster-role", managerClusterRole.Name)
-	assert.Equal(t, 15, len(managerClusterRole.Rules))
+	assert.Equal(t, 16, len(managerClusterRole.Rules))
 
 	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_single_namespace_controller_role.yaml in chart", "We should get an error because the template should be skipped")
@@ -843,7 +843,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRole.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRole.Namespace)
-	assert.Equal(t, 13, len(managerSingleNamespaceWatchRole.Rules))
+	assert.Equal(t, 14, len(managerSingleNamespaceWatchRole.Rules))
 }
 
 func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
