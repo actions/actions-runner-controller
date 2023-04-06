@@ -14,6 +14,12 @@ on:
     - '!charts/gha-runner-scale-set/**'
     - '!**.md'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force publish even if the chart version is not bumped'
+        type: boolean
+        required: true
+        default: false
 
 env:
   KUBE_SCORE_VERSION: 1.10.0
@@ -90,9 +96,12 @@ jobs:
         NEW_CHART_VERSION=$(echo "$CHART_TEXT" | grep version: | cut -d ' ' -f 2)
         RELEASE_LIST=$(curl -fs https://api.github.com/repos/${{ github.repository }}/releases  | jq .[].tag_name | grep actions-runner-controller | cut -d '"' -f 2 | cut -d '-' -f 4)
         LATEST_RELEASED_CHART_VERSION=$(echo $RELEASE_LIST | cut -d ' ' -f 1)
+
         echo "CHART_VERSION_IN_MASTER=$NEW_CHART_VERSION" >> $GITHUB_ENV
         echo "LATEST_CHART_VERSION=$LATEST_RELEASED_CHART_VERSION" >> $GITHUB_ENV
-        if [[ $NEW_CHART_VERSION != $LATEST_RELEASED_CHART_VERSION ]]; then
+
+        # Always publish if force is true
+        if [[ $NEW_CHART_VERSION != $LATEST_RELEASED_CHART_VERSION || "${{ inputs.force }}" == "true" ]]; then
           echo "publish=true" >> $GITHUB_OUTPUT
         else
           echo "publish=false" >> $GITHUB_OUTPUT
@@ -115,7 +124,7 @@ jobs:
     permissions:
       contents: write # for helm/chart-releaser-action to push chart release and create a release
     env:
-      CHART_TARGET_ORG: nebuchadnezzar-corp
+      CHART_TARGET_ORG: actions-runner-controller
       CHART_TARGET_REPO: actions-runner-controller.github.io
       CHART_TARGET_BRANCH: master
 
@@ -165,26 +174,6 @@ jobs:
           --push \
           --pages-branch 'gh-pages' \
           --pages-index-path 'index.yaml'
-
-    # # This step is required to not throw away changes made to the index.yaml on every new chart release.
-    # #
-    # # We update the index.yaml in the actions-runner-controller.github.io repo
-    # # by appending the new chart version to the index.yaml saved in actions-runner-controller repo
-    # # and copying and commiting the updated index.yaml to the github.io one.
-    # # See below for more context:
-    # # - https://github.com/actions-runner-controller/actions-runner-controller.github.io/pull/2
-    # # - https://github.com/actions/actions-runner-controller/pull/2452
-    # - name: Commit and push to actions/actions-runner-controller
-    #   run: |
-    #     git stash
-    #     git checkout gh-pages
-    #     git stash pop
-    #     git config user.name "$GITHUB_ACTOR"
-    #     git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-    #     git add .
-    #     git commit -m "Update index.yaml"
-    #     git push
-    #   working-directory: ${{ github.workspace }}
 
     # Chart Release was never intended to publish to a different repo
     # this workaround is intended to move the index.yaml to the target repo
