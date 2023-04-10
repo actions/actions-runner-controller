@@ -360,6 +360,7 @@ actionsMetricsServer:
         protocol: TCP
         name: http
         #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+    loadBalancerSourceRanges: []
   ingress:
     enabled: false
     ingressClassName: ""
@@ -389,4 +390,5 @@ actionsMetricsServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
-
+  terminationGracePeriodSeconds: 10
+  lifecycle: {}
