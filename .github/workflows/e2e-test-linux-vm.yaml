@@ -110,6 +110,7 @@ jobs:
 
   single-namespace-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -200,6 +201,7 @@ jobs:
 
   dind-mode-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: arc-test-dind-workflow.yaml
@@ -289,6 +291,7 @@ jobs:
 
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
@@ -387,6 +390,7 @@ jobs:
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -487,6 +491,7 @@ jobs:
 
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -581,6 +586,7 @@ jobs:
 
   self-signed-ca-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
