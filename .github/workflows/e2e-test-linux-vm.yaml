@@ -5,7 +5,7 @@ on:
     branches:
       - master
   pull_request:
-      branches:
+    branches:
       - master
   workflow_dispatch:
 
@@ -21,6 +21,7 @@ env:
 jobs:
   default-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -55,7 +56,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -69,7 +70,7 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
-          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1)))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
@@ -85,7 +86,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
@@ -145,7 +146,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -175,7 +176,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
@@ -233,7 +234,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -264,7 +265,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
@@ -327,7 +328,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -362,7 +363,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
@@ -420,7 +421,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -462,7 +463,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
@@ -520,7 +521,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -556,7 +557,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
@@ -614,7 +615,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
@@ -642,7 +643,7 @@ jobs:
               cat ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.pem
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for mitmproxy generate its CA cert"
               exit 1
             fi
@@ -675,7 +676,7 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
