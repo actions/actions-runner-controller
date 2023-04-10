@@ -60,7 +60,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -90,7 +90,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -150,7 +150,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -180,7 +180,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -238,7 +238,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -269,7 +269,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -332,7 +332,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -367,7 +367,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -425,7 +425,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -467,7 +467,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -525,7 +525,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -561,7 +561,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -619,7 +619,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -647,7 +647,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           sudo cp ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.pem ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.crt
           sudo chown runner ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.crt
@@ -680,7 +680,7 @@ jobs:
               exit 1
             fi
             sleep 1
-            ((count++))
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
