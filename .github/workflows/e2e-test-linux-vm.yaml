@@ -70,7 +70,7 @@ jobs:
       - name: Install gha-runner-scale-set
         id: install_arc
         run: |
-          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1)))
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
           helm install "$ARC_NAME" \
           --namespace "arc-runners" \
           --create-namespace \
