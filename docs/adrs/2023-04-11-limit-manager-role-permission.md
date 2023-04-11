@@ -1,4 +1,4 @@
-# ADR 2023-02-10: Limit Permissions for Service Accounts in Actions-Runner-Controller
+# ADR 2023-04-11: Limit Permissions for Service Accounts in Actions-Runner-Controller
 
 **Date**: 2023-04-11
 
