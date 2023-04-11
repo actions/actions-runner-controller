@@ -141,6 +141,11 @@ The downside of this mode:
 
 We will apply following annotations during the installation that are going to be used in the cleanup process (`helm uninstall`). If annotation is not present, cleanup of that resource is going to be skipped.
 
+The cleanup only patches the resource removing the `actions.github.com/cleanup-protection` finalizer. The client that created a resource is responsible for deleting them. Keep in mind, `helm uninstall` will automatically delete resources, causing the cleanup procedure to be complete.
+
+Annotations applied to the `AutoscalingRunnerSet` used in the cleanup procedure
+are:
+
 - `actions.github.com/cleanup-github-secret-name`
 - `actions.github.com/cleanup-manager-role-binding`
 - `actions.github.com/cleanup-manager-role-name`
