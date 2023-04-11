@@ -213,7 +213,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			Eventually(
 				func() error {
 					podList := new(corev1.PodList)
-					err := k8sClient.List(ctx, podList, client.InNamespace(autoscalingListener.Namespace), client.MatchingFields{autoscalingRunnerSetOwnerKey: autoscalingListener.Name})
+					err := k8sClient.List(ctx, podList, client.InNamespace(autoscalingListener.Namespace), client.MatchingFields{resourceOwnerKey: autoscalingListener.Name})
 					if err != nil {
 						return err
 					}
@@ -231,7 +231,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			Eventually(
 				func() error {
 					serviceAccountList := new(corev1.ServiceAccountList)
-					err := k8sClient.List(ctx, serviceAccountList, client.InNamespace(autoscalingListener.Namespace), client.MatchingFields{autoscalingRunnerSetOwnerKey: autoscalingListener.Name})
+					err := k8sClient.List(ctx, serviceAccountList, client.InNamespace(autoscalingListener.Namespace), client.MatchingFields{resourceOwnerKey: autoscalingListener.Name})
 					if err != nil {
 						return err
 					}
