@@ -45,6 +45,7 @@ import (
 const (
 	defaultRunnerImage = "summerwind/actions-runner:latest"
 	defaultDockerImage = "docker:dind"
+	defaultDockerGID   = "1001"
 )
 
 var scheme = runtime.NewScheme()
@@ -76,18 +77,15 @@ func main() {
 		autoScalingRunnerSetOnly bool
 		enableLeaderElection     bool
 		disableAdmissionWebhook  bool
-		runnerStatusUpdateHook   bool
 		leaderElectionId         string
 		port                     int
 		syncPeriod               time.Duration
 
 		defaultScaleDownDelay time.Duration
 
-		runnerImage            string
 		runnerImagePullSecrets stringSlice
+		runnerPodDefaults      actionssummerwindnet.RunnerPodDefaults
 
-		dockerImage          string
-		dockerRegistryMirror string
 		namespace            string
 		logLevel             string
 		logFormat            string
@@ -108,10 +106,11 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
-	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
-	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&runnerPodDefaults.RunnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&runnerPodDefaults.DockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&runnerPodDefaults.DockerGID, "docker-gid", defaultDockerGID, "The default GID of docker group in the docker sidecar container. Use 1001 for dockerd sidecars of Ubuntu 20.04 runners 121 for Ubuntu 22.04.")
 	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
-	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
+	flag.StringVar(&runnerPodDefaults.DockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.StringVar(&c.EnterpriseURL, "github-enterprise-url", c.EnterpriseURL, "Enterprise URL to be used for your GitHub API calls")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -122,7 +121,7 @@ func main() {
 	flag.StringVar(&c.BasicauthUsername, "github-basicauth-username", c.BasicauthUsername, "Username for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
-	flag.BoolVar(&runnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
+	flag.BoolVar(&runnerPodDefaults.UseRunnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", actionssummerwindnet.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
@@ -134,6 +133,8 @@ func main() {
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.Parse()
+
+	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
 
 	log, err := logging.NewLogger(logLevel, logFormat)
 	if err != nil {
@@ -255,16 +256,11 @@ func main() {
 		)
 
 		runnerReconciler := &actionssummerwindnet.RunnerReconciler{
-			Client:                    mgr.GetClient(),
-			Log:                       log.WithName("runner"),
-			Scheme:                    mgr.GetScheme(),
-			GitHubClient:              multiClient,
-			DockerImage:               dockerImage,
-			DockerRegistryMirror:      dockerRegistryMirror,
-			UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
-			// Defaults for self-hosted runner containers
-			RunnerImage:            runnerImage,
-			RunnerImagePullSecrets: runnerImagePullSecrets,
+			Client:            mgr.GetClient(),
+			Log:               log.WithName("runner"),
+			Scheme:            mgr.GetScheme(),
+			GitHubClient:      multiClient,
+			RunnerPodDefaults: runnerPodDefaults,
 		}
 
 		if err = runnerReconciler.SetupWithManager(mgr); err != nil {
@@ -296,17 +292,12 @@ func main() {
 		}
 
 		runnerSetReconciler := &actionssummerwindnet.RunnerSetReconciler{
-			Client:               mgr.GetClient(),
-			Log:                  log.WithName("runnerset"),
-			Scheme:               mgr.GetScheme(),
-			CommonRunnerLabels:   commonRunnerLabels,
-			DockerImage:          dockerImage,
-			DockerRegistryMirror: dockerRegistryMirror,
-			GitHubClient:         multiClient,
-			// Defaults for self-hosted runner containers
-			RunnerImage:               runnerImage,
-			RunnerImagePullSecrets:    runnerImagePullSecrets,
-			UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
+			Client:             mgr.GetClient(),
+			Log:                log.WithName("runnerset"),
+			Scheme:             mgr.GetScheme(),
+			CommonRunnerLabels: commonRunnerLabels,
+			GitHubClient:       multiClient,
+			RunnerPodDefaults:  runnerPodDefaults,
 		}
 
 		if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
@@ -319,8 +310,9 @@ func main() {
 			"version", build.Version,
 			"default-scale-down-delay", defaultScaleDownDelay,
 			"sync-period", syncPeriod,
-			"default-runner-image", runnerImage,
-			"default-docker-image", dockerImage,
+			"default-runner-image", runnerPodDefaults.RunnerImage,
+			"default-docker-image", runnerPodDefaults.DockerImage,
+			"default-docker-gid", runnerPodDefaults.DockerGID,
 			"common-runnner-labels", commonRunnerLabels,
 			"leader-election-enabled", enableLeaderElection,
 			"leader-election-id", leaderElectionId,
