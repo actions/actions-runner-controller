@@ -5,7 +5,7 @@ on:
     branches:
       - master
   pull_request:
-      branches:
+    branches:
       - master
   workflow_dispatch:
 
@@ -21,6 +21,7 @@ env:
 jobs:
   default-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -55,11 +56,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -84,11 +86,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -107,6 +110,7 @@ jobs:
 
   single-namespace-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -143,11 +147,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -172,11 +177,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -195,6 +201,7 @@ jobs:
 
   dind-mode-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: arc-test-dind-workflow.yaml
@@ -229,11 +236,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -259,11 +267,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -282,6 +291,7 @@ jobs:
 
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
@@ -321,11 +331,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -355,11 +366,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -378,6 +390,7 @@ jobs:
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -412,11 +425,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -453,11 +467,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -476,6 +491,7 @@ jobs:
 
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -510,11 +526,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -545,11 +562,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
@@ -568,6 +586,7 @@ jobs:
 
   self-signed-ca-setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
@@ -602,11 +621,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
           kubectl get pod -n arc-systems
@@ -629,11 +649,12 @@ jobs:
               cat ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.pem
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for mitmproxy generate its CA cert"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           sudo cp ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.pem ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.crt
           sudo chown runner ${{ github.workspace }}/mitmproxy/mitmproxy-ca-cert.crt
@@ -661,11 +682,12 @@ jobs:
               echo "Pod found: $POD_NAME"
               break
             fi
-            if [ "$count" -ge 10 ]; then
+            if [ "$count" -ge 60 ]; then
               echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
               exit 1
             fi
             sleep 1
+            count=$((count+1))
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
