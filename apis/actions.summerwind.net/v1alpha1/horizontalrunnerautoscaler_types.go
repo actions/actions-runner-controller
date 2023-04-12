@@ -114,11 +114,9 @@ type PushSpec struct {
 // to the scale target until ExpirationTime.
 type CapacityReservation struct {
 	Name           string      `json:"name,omitempty"`
+	EffectiveTime  metav1.Time `json:"effectiveTime,omitempty"`
 	ExpirationTime metav1.Time `json:"expirationTime,omitempty"`
 	Replicas       int         `json:"replicas,omitempty"`
-
-	// +optional
-	EffectiveTime metav1.Time `json:"effectiveTime,omitempty"`
 }
 
 type ScaleTargetRef struct {
