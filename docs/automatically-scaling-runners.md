@@ -224,34 +224,54 @@ spec:
       duration: "30m"
 ```
 
-The lifecycle of a runner provisioned from a webhook is different to a runner provisioned from the pull based scaling method:
+With the `workflowJob` trigger, each event adds or subtracts a single runner. the `scaleUpTriggers.amount` field is ignored.
+
+The `duration` field is there because event delivery is not guaranteed. If a scale-up event is received, but the corresponding
+scale-down event is not, then the extra runner would be left running forever if there were not some clean-up mechanism.
+The `duration` field sets the maximum amount of time to wait for a scale-down event. Scale-down happens at the 
+earlier of receiving the scale-down event or the expiration of `duration` after the scale-up event is processed and
+the scale-up itself is initiated.
+
+The lifecycle of a runner provisioned from a webhook is different from that of a runner provisioned from the pull based scaling method:
 
 1. GitHub sends a `workflow_job` event to ARC with `status=queued`
-2. ARC finds a HRA with a `workflow_job` webhook scale trigger that backs a RunnerDeployment / RunnerSet with matching runner labels
-3. The matched HRA adds a unit to its `capacityReservations` list
-4. ARC adds a replica and sets the EffectiveTime of that replica to current + `HRA.spec.scaleUpTriggers[].duration`
+2. ARC finds the HRA with a `workflow_job` webhook scale trigger that backs a RunnerDeployment / RunnerSet with matching runner labels. (If it finds more than one match, the event is ignored.)
+3. The matched HRA adds a `capacityReservation` to its list and sets it to expire at current time + `HRA.spec.scaleUpTriggers[].duration`
+4. If there are fewer replicas running than `maxReplicas`, HRA adds a replica and sets the EffectiveTime of that replica to the current time
 
-At this point there are a few things that can happen, either the job gets allocated to the runner or the runner is left dangling due to it not being used, if the runner gets assigned the job that triggered the scale up the lifecycle looks like this:
+At this point there are a few things that can happen:
+1. Due to idle runners already being available, the job is assigned to one of them and the new runner is left dangling due to it not being used 
+2. The job gets allocated to the runner just launched
+3. If there are already `maxReplicas` replicas running, the job waits for its `capacityReservation` to be assigned to one of them
+ 
+If the runner gets assigned the job that triggered the scale up, the lifecycle looks like this:
 
 1. The new runner gets allocated the job and processes it
 2. Upon the job ending GitHub sends another `workflow_job` event to ARC but with `status=completed`
 3. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
+
+If the job has to wait for a runner because there are already `maxReplicas` replicas running, the lifecycle looks like this:
+1. A `capacityReservation` is added to the list, but no scale-up happens because that would exceed `maxReplicas`
+2. When one of the existing runners finishes a job, GitHub sends another `workflow_job` event to ARC but with `status=completed` (or `status=canceled` if the job was cancelled)
+3. The HRA removes the oldest capacity reservation from its `capacityReservations`, the oldest waiting `capacityReservation` becomes active, and its `duration` timer starts
+4. GitHub assigns a waiting job to the newly available runner
 
 If the job is cancelled before it is allocated to a runner then the lifecycle looks like this:
 
 1. Upon the job cancellation GitHub sends another `workflow_job` event to ARC but with `status=cancelled`
 2. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
 
-If runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
+If the `status=completed` or `status=cancelled` is never delivered to ARC (which happens occasionally) then the lifecycle looks like this:
 
 1. The scale trigger duration specified via `HRA.spec.scaleUpTriggers[].duration` elapses
-2. The HRA thinks the capacity reservation is expired, removes it from HRA's `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
+2. The HRA notices that the capacity reservation has expired, removes it from HRA's `capacityReservation` list and (unless there are `maxReplicas` running and jobs waiting) terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
 
 Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to account for the following things:
 
-1. the potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node avaliable 
-2. the amount of time it takes for GitHub to allocate a job to that runner
-3. the amount of time it takes for the runner to notice the allocated job and starts running it
+1. The potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node available +
+2. The amount of time it takes for GitHub to allocate a job to that runner +
+3. The amount of time it takes for the runner to notice the allocated job and starts running it +
+4. The length of time it takes for the runner to complete the job
 
 ### Install with Helm
 
