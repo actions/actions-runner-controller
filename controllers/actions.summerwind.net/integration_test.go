@@ -105,12 +105,14 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Log:                         logf.Log,
 			Recorder:                    mgr.GetEventRecorderFor("runnerreplicaset-controller"),
 			GitHubClient:                multiClient,
-			RunnerImage:                 "example/runner:test",
-			DockerImage:                 "example/docker:test",
 			Name:                        controllerName("runner"),
 			RegistrationRecheckInterval: time.Millisecond * 100,
 			RegistrationRecheckJitter:   time.Millisecond * 10,
 			UnregistrationRetryDelay:    1 * time.Second,
+			RunnerPodDefaults: RunnerPodDefaults{
+				RunnerImage: "example/runner:test",
+				DockerImage: "example/docker:test",
+			},
 		}
 		err = runnerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runner controller")
