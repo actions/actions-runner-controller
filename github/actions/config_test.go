@@ -128,6 +128,16 @@ func TestGitHubConfig(t *testing.T) {
 					IsHosted:     true,
 				},
 			},
+			{
+				configURL: "https://anything.github.com/org/",
+				expected: &actions.GitHubConfig{
+					Scope:        actions.GitHubScopeOrganization,
+					Enterprise:   "",
+					Organization: "org",
+					Repository:   "",
+					IsHosted:     true,
+				},
+			},
 		}
 
 		for _, test := range tests {

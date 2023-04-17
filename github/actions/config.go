@@ -102,8 +102,7 @@ func isHostedGitHubURL(u *url.URL) bool {
 		return false
 	}
 
-	return strings.EqualFold(u.Host, "github.com") ||
-		strings.EqualFold(u.Host, "www.github.com") ||
+	return strings.HasSuffix(u.Host, "github.com") ||
 		strings.EqualFold(u.Host, "github.localhost") ||
 		strings.HasSuffix(u.Host, ".ghe.com")
 }
