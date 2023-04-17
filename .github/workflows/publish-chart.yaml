@@ -204,4 +204,4 @@ jobs:
         echo "New helm chart has been published" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Status:**" >> $GITHUB_STEP_SUMMARY
-        echo "- New [index.yaml](https://github.com/${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}/tree/main/actions-runner-controller) pushed" >> $GITHUB_STEP_SUMMARY
+        echo "- New [index.yaml](https://github.com/${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}/tree/master/actions-runner-controller) pushed" >> $GITHUB_STEP_SUMMARY
