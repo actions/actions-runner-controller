@@ -68,15 +68,24 @@ type RunnerReconciler struct {
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
 	GitHubClient                *MultiGitHubClient
-	RunnerImage                 string
-	RunnerImagePullSecrets      []string
-	DockerImage                 string
-	DockerRegistryMirror        string
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
-	UseRunnerStatusUpdateHook   bool
 	UnregistrationRetryDelay    time.Duration
+
+	RunnerPodDefaults RunnerPodDefaults
+}
+
+type RunnerPodDefaults struct {
+	RunnerImage            string
+	RunnerImagePullSecrets []string
+	DockerImage            string
+	DockerRegistryMirror   string
+	// The default Docker group ID to use for the dockerd sidecar container.
+	// Ubuntu 20.04 runner images assumes 1001 and the 22.04 variant assumes 121 by default.
+	DockerGID string
+
+	UseRunnerStatusUpdateHook bool
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -145,7 +154,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	ready := runnerPodReady(&pod)
 
-	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.UseRunnerStatusUpdateHook {
+	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.RunnerPodDefaults.UseRunnerStatusUpdateHook {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
@@ -292,7 +301,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
-	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
+	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
 	if needsServiceAccount {
 		serviceAccount := &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
@@ -306,7 +315,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 
 		rules := []rbacv1.PolicyRule{}
 
-		if r.UseRunnerStatusUpdateHook {
+		if r.RunnerPodDefaults.UseRunnerStatusUpdateHook {
 			rules = append(rules, []rbacv1.PolicyRule{
 				{
 					APIGroups:     []string{"actions.summerwind.dev"},
@@ -583,7 +592,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, ghc.GithubBaseURL, r.UseRunnerStatusUpdateHook)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, ghc.GithubBaseURL, r.RunnerPodDefaults)
 	if err != nil {
 		return pod, err
 	}
@@ -634,7 +643,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
-	} else if r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
+	} else if r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
 		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
 	}
 
@@ -754,13 +763,19 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 	}, nil
 }
 
-func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHook bool) (corev1.Pod, error) {
+func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, githubBaseURL string, d RunnerPodDefaults) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
 		dockerEnabled             bool = runnerSpec.DockerEnabled == nil || *runnerSpec.DockerEnabled
 		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
 		dockerdInRunnerPrivileged bool = dockerdInRunner
+
+		defaultRunnerImage            = d.RunnerImage
+		defaultRunnerImagePullSecrets = d.RunnerImagePullSecrets
+		defaultDockerImage            = d.DockerImage
+		defaultDockerRegistryMirror   = d.DockerRegistryMirror
+		useRunnerStatusUpdateHook     = d.UseRunnerStatusUpdateHook
 	)
 
 	if containerMode == "kubernetes" {
@@ -1013,10 +1028,22 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		// for actions-runner-controller) so typically should not need to be
 		// overridden
 		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
+			gid := d.DockerGID
+			// We default to gid 121 for Ubuntu 22.04 images
+			// See below for more details
+			// - https://github.com/actions/actions-runner-controller/issues/2490#issuecomment-1501561923
+			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-20.04.dockerfile#L14
+			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-22.04.dockerfile#L12
+			if strings.Contains(runnerContainer.Image, "22.04") {
+				gid = "121"
+			} else if strings.Contains(runnerContainer.Image, "20.04") {
+				gid = "1001"
+			}
+
 			dockerdContainer.Env = append(dockerdContainer.Env,
 				corev1.EnvVar{
 					Name:  "DOCKER_GROUP_GID",
-					Value: "121",
+					Value: gid,
 				})
 		}
 		dockerdContainer.Args = append(dockerdContainer.Args, "--group=$(DOCKER_GROUP_GID)")
@@ -1238,10 +1265,6 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	}
 
 	return *pod, nil
-}
-
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHookEphemeralRole bool) (corev1.Pod, error) {
-	return newRunnerPodWithContainerMode("", template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, useRunnerStatusUpdateHookEphemeralRole)
 }
 
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {

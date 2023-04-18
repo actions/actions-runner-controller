@@ -41,7 +41,6 @@ import (
 
 const (
 	autoscalingListenerContainerName = "autoscaler"
-	autoscalingListenerOwnerKey      = ".metadata.controller"
 	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
 )
 
@@ -244,65 +243,6 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	groupVersionIndexer := func(rawObj client.Object) []string {
-		groupVersion := v1alpha1.GroupVersion.String()
-		owner := metav1.GetControllerOf(rawObj)
-		if owner == nil {
-			return nil
-		}
-
-		// ...make sure it is owned by this controller
-		if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingListener" {
-			return nil
-		}
-
-		// ...and if so, return it
-		return []string{owner.Name}
-	}
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, autoscalingListenerOwnerKey, groupVersionIndexer); err != nil {
-		return err
-	}
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ServiceAccount{}, autoscalingListenerOwnerKey, groupVersionIndexer); err != nil {
-		return err
-	}
-
-	labelBasedWatchFunc := func(obj client.Object) []reconcile.Request {
-		var requests []reconcile.Request
-		labels := obj.GetLabels()
-		namespace, ok := labels["auto-scaling-listener-namespace"]
-		if !ok {
-			return nil
-		}
-
-		name, ok := labels["auto-scaling-listener-name"]
-		if !ok {
-			return nil
-		}
-		requests = append(requests,
-			reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      name,
-					Namespace: namespace,
-				},
-			},
-		)
-		return requests
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AutoscalingListener{}).
-		Owns(&corev1.Pod{}).
-		Owns(&corev1.ServiceAccount{}).
-		Watches(&source.Kind{Type: &rbacv1.Role{}}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		Watches(&source.Kind{Type: &rbacv1.RoleBinding{}}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(r)
 }
 
 func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (done bool, err error) {
@@ -614,4 +554,63 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 		"serviceAccountNamespace", serviceAccount.Namespace,
 		"serviceAccount", serviceAccount.Name)
 	return ctrl.Result{Requeue: true}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	groupVersionIndexer := func(rawObj client.Object) []string {
+		groupVersion := v1alpha1.GroupVersion.String()
+		owner := metav1.GetControllerOf(rawObj)
+		if owner == nil {
+			return nil
+		}
+
+		// ...make sure it is owned by this controller
+		if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingListener" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, resourceOwnerKey, groupVersionIndexer); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ServiceAccount{}, resourceOwnerKey, groupVersionIndexer); err != nil {
+		return err
+	}
+
+	labelBasedWatchFunc := func(obj client.Object) []reconcile.Request {
+		var requests []reconcile.Request
+		labels := obj.GetLabels()
+		namespace, ok := labels["auto-scaling-listener-namespace"]
+		if !ok {
+			return nil
+		}
+
+		name, ok := labels["auto-scaling-listener-name"]
+		if !ok {
+			return nil
+		}
+		requests = append(requests,
+			reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      name,
+					Namespace: namespace,
+				},
+			},
+		)
+		return requests
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.AutoscalingListener{}).
+		Owns(&corev1.Pod{}).
+		Owns(&corev1.ServiceAccount{}).
+		Watches(&source.Kind{Type: &rbacv1.Role{}}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+		Watches(&source.Kind{Type: &rbacv1.RoleBinding{}}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		Complete(r)
 }

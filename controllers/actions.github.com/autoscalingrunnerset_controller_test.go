@@ -280,10 +280,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
 					}
 
-					return runnerSetList.Items[0].Labels[LabelKeyRunnerSpecHash], nil
+					return runnerSetList.Items[0].Labels[labelKeyRunnerSpecHash], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[LabelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
+				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[labelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
 
 			// We should create a new listener
 			Eventually(
@@ -1160,7 +1160,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1171,7 +1171,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeServiceAccountName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1182,7 +1182,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -1317,7 +1317,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 			Data: map[string][]byte{
 				"github_token": []byte(defaultGitHubToken),
@@ -1333,7 +1333,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1344,7 +1344,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
@@ -1360,7 +1360,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 

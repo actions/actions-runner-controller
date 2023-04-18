@@ -1,8 +1,8 @@
-# ADR 2023-02-10: Limit Permissions for Service Accounts in Actions-Runner-Controller
+# ADR 2023-04-11: Limit Permissions for Service Accounts in Actions-Runner-Controller
 
-**Date**: 2023-02-10
+**Date**: 2023-04-11
 
-**Status**: Superceded [^1]
+**Status**: Done [^1]
 
 ## Context
 
@@ -64,7 +64,7 @@ To help these customers and improve security for `actions-runner-controller` in 
 - Get/List/Create/Delete/Update/Patch/Watch on `EphemeralRunners` (with `Status` and `Finalizer` sub-resource)
 
 - List/Watch on `Pods`
-- List/Watch on `Roles`
+- List/Watch/Patch on `Roles`
 - List/Watch on `RoleBindings`
 - List/Watch on `ServiceAccounts`
 
@@ -137,4 +137,31 @@ The downside of this mode:
 - When you have multiple controllers deployed, they will still use the same version of the CRD. So you will need to make sure every controller you deployed has to be the same version as each other.
 - You can't mismatch install both `actions-runner-controller` in this mode (watchSingleNamespace) with the regular installation mode (watchAllClusterNamespaces) in your cluster.
 
-[^1]: Superseded by [ADR 2023-04-11](2023-04-11-limit-manager-role-permission.md)
+## Cleanup process
+
+We will apply following annotations during the installation that are going to be used in the cleanup process (`helm uninstall`). If annotation is not present, cleanup of that resource is going to be skipped.
+
+The cleanup only patches the resource removing the `actions.github.com/cleanup-protection` finalizer. The client that created a resource is responsible for deleting them. Keep in mind, `helm uninstall` will automatically delete resources, causing the cleanup procedure to be complete.
+
+Annotations applied to the `AutoscalingRunnerSet` used in the cleanup procedure
+are:
+
+- `actions.github.com/cleanup-github-secret-name`
+- `actions.github.com/cleanup-manager-role-binding`
+- `actions.github.com/cleanup-manager-role-name`
+- `actions.github.com/cleanup-kubernetes-mode-role-binding-name`
+- `actions.github.com/cleanup-kubernetes-mode-role-name`
+- `actions.github.com/cleanup-kubernetes-mode-service-account-name`
+- `actions.github.com/cleanup-no-permission-service-account-name`
+
+The order in which resources are being patched to remove finalizers:
+
+1. Kubernetes mode `RoleBinding`
+1. Kubernetes mode `Role`
+1. Kubernetes mode `ServiceAccount`
+1. No permission `ServiceAccount`
+1. GitHub `Secret`
+1. Manager `RoleBinding`
+1. Manager `Role`
+
+[^1]: Supersedes [ADR 2023-02-10](2023-02-10-limit-manager-role-permission.md)

@@ -15,6 +15,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func newRunnerPod(template corev1.Pod, runnerSpec arcv1alpha1.RunnerConfig, githubBaseURL string, d RunnerPodDefaults) (corev1.Pod, error) {
+	return newRunnerPodWithContainerMode("", template, runnerSpec, githubBaseURL, d)
+}
+
+func setEnv(c *corev1.Container, name, value string) {
+	for j := range c.Env {
+		e := &c.Env[j]
+
+		if e.Name == name {
+			e.Value = value
+			return
+		}
+	}
+}
+
 func newWorkGenericEphemeralVolume(t *testing.T, storageReq string) corev1.Volume {
 	GBs, err := resource.ParseQuantity(storageReq)
 	if err != nil {
@@ -171,7 +186,7 @@ func TestNewRunnerPod(t *testing.T) {
 					Env: []corev1.EnvVar{
 						{
 							Name:  "DOCKER_GROUP_GID",
-							Value: "121",
+							Value: "1234",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -398,6 +413,50 @@ func TestNewRunnerPod(t *testing.T) {
 			want:        newTestPod(base, nil),
 		},
 		{
+			description: "it should respect DOCKER_GROUP_GID of the dockerd sidecar container",
+			template: corev1.Pod{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "docker",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "DOCKER_GROUP_GID",
+									Value: "2345",
+								},
+							},
+						},
+					},
+				},
+			},
+			config: arcv1alpha1.RunnerConfig{},
+			want: newTestPod(base, func(p *corev1.Pod) {
+				setEnv(&p.Spec.Containers[1], "DOCKER_GROUP_GID", "2345")
+			}),
+		},
+		{
+			description: "it should add DOCKER_GROUP_GID=1001 to the dockerd sidecar container for Ubuntu 20.04 runners",
+			template:    corev1.Pod{},
+			config: arcv1alpha1.RunnerConfig{
+				Image: "ghcr.io/summerwind/actions-runner:ubuntu-20.04-20210726-1",
+			},
+			want: newTestPod(base, func(p *corev1.Pod) {
+				setEnv(&p.Spec.Containers[1], "DOCKER_GROUP_GID", "1001")
+				p.Spec.Containers[0].Image = "ghcr.io/summerwind/actions-runner:ubuntu-20.04-20210726-1"
+			}),
+		},
+		{
+			description: "it should add DOCKER_GROUP_GID=121 to the dockerd sidecar container for Ubuntu 22.04 runners",
+			template:    corev1.Pod{},
+			config: arcv1alpha1.RunnerConfig{
+				Image: "ghcr.io/summerwind/actions-runner:ubuntu-22.04-20210726-1",
+			},
+			want: newTestPod(base, func(p *corev1.Pod) {
+				setEnv(&p.Spec.Containers[1], "DOCKER_GROUP_GID", "121")
+				p.Spec.Containers[0].Image = "ghcr.io/summerwind/actions-runner:ubuntu-22.04-20210726-1"
+			}),
+		},
+		{
 			description: "dockerdWithinRunnerContainer=true should set privileged=true and omit the dind sidecar container",
 			template:    corev1.Pod{},
 			config: arcv1alpha1.RunnerConfig{
@@ -552,7 +611,14 @@ func TestNewRunnerPod(t *testing.T) {
 	for i := range testcases {
 		tc := testcases[i]
 		t.Run(tc.description, func(t *testing.T) {
-			got, err := newRunnerPod(tc.template, tc.config, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, false)
+			got, err := newRunnerPod(tc.template, tc.config, githubBaseURL, RunnerPodDefaults{
+				RunnerImage:               defaultRunnerImage,
+				RunnerImagePullSecrets:    defaultRunnerImagePullSecrets,
+				DockerImage:               defaultDockerImage,
+				DockerRegistryMirror:      defaultDockerRegistryMirror,
+				DockerGID:                 "1234",
+				UseRunnerStatusUpdateHook: false,
+			})
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -713,7 +779,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					Env: []corev1.EnvVar{
 						{
 							Name:  "DOCKER_GROUP_GID",
-							Value: "121",
+							Value: "1234",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -1171,6 +1237,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 		defaultRunnerImage            = "default-runner-image"
 		defaultRunnerImagePullSecrets = []string{}
 		defaultDockerImage            = "default-docker-image"
+		defaultDockerGID              = "1234"
 		defaultDockerRegistryMirror   = ""
 		githubBaseURL                 = "api.github.com"
 	)
@@ -1190,12 +1257,15 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 
 		t.Run(tc.description, func(t *testing.T) {
 			r := &RunnerReconciler{
-				RunnerImage:            defaultRunnerImage,
-				RunnerImagePullSecrets: defaultRunnerImagePullSecrets,
-				DockerImage:            defaultDockerImage,
-				DockerRegistryMirror:   defaultDockerRegistryMirror,
-				GitHubClient:           multiClient,
-				Scheme:                 scheme,
+				GitHubClient: multiClient,
+				Scheme:       scheme,
+				RunnerPodDefaults: RunnerPodDefaults{
+					RunnerImage:            defaultRunnerImage,
+					RunnerImagePullSecrets: defaultRunnerImagePullSecrets,
+					DockerImage:            defaultDockerImage,
+					DockerRegistryMirror:   defaultDockerRegistryMirror,
+					DockerGID:              defaultDockerGID,
+				},
 			}
 			got, err := r.newPod(tc.runner)
 			require.NoError(t, err)
