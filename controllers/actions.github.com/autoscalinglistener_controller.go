@@ -50,6 +50,7 @@ type AutoscalingListenerReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
+	DrainJobsMode   bool
 	resourceBuilder resourceBuilder
 }
 
@@ -369,6 +370,13 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 
 		envs = append(envs, env)
+	}
+
+	if r.DrainJobsMode {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "GITHUB_DRAIN_JOBS_MODE",
+			Value: "true",
+		})
 	}
 
 	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)

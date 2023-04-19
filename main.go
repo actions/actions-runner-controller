@@ -248,10 +248,12 @@ func main() {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
 		}
+
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Log:    log.WithName("AutoscalingListener"),
-			Scheme: mgr.GetScheme(),
+			Client:        mgr.GetClient(),
+			Log:           log.WithName("AutoscalingListener"),
+			Scheme:        mgr.GetScheme(),
+			DrainJobsMode: drainJobsMode,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)

@@ -46,6 +46,7 @@ type RunnerScaleSetListenerConfig struct {
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
 	ServerRootCA                string `split_words:"true"`
+	DrainJobsMode               bool   `split_words:"true"`
 }
 
 func main() {
@@ -113,10 +114,11 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 	}
 
 	scaleSettings := &ScaleSettings{
-		Namespace:    rc.EphemeralRunnerSetNamespace,
-		ResourceName: rc.EphemeralRunnerSetName,
-		MaxRunners:   rc.MaxRunners,
-		MinRunners:   rc.MinRunners,
+		Namespace:     rc.EphemeralRunnerSetNamespace,
+		ResourceName:  rc.EphemeralRunnerSetName,
+		MaxRunners:    rc.MaxRunners,
+		MinRunners:    rc.MinRunners,
+		DrainJobsMode: rc.DrainJobsMode,
 	}
 
 	service := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, func(s *Service) {

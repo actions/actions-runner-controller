@@ -12,10 +12,11 @@ import (
 )
 
 type ScaleSettings struct {
-	Namespace    string
-	ResourceName string
-	MinRunners   int
-	MaxRunners   int
+	Namespace     string
+	ResourceName  string
+	MinRunners    int
+	MaxRunners    int
+	DrainJobsMode bool
 }
 
 type Service struct {
