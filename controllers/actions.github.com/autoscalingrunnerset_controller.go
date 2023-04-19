@@ -56,6 +56,7 @@ type AutoscalingRunnerSetReconciler struct {
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
+	DrainJobsMode                                 bool
 	ActionsClient                                 actions.MultiClient
 
 	resourceBuilder resourceBuilder
@@ -202,6 +203,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
+		// TODO: add feature flag for this optional behaviour
+		// Prevents overprovisioning of runners.
+		// We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
+		// The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
+		if r.DrainJobsMode && ((latestRunnerSet.Status.RunningEphemeralRunners + latestRunnerSet.Status.PendingEphemeralRunners) > 0) {
+			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish before creating a new runner set")
+			return ctrl.Result{}, nil
+		}
 		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
 	}
