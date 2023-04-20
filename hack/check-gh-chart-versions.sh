@@ -20,8 +20,12 @@ controller_app_version=$(cat $chart_dir/gha-runner-scale-set-controller/Chart.ya
 scaleset_version=$(cat $chart_dir/gha-runner-scale-set/Chart.yaml | yq .version)
 scaleset_app_version=$(cat $chart_dir/gha-runner-scale-set/Chart.yaml | yq .appVersion)
 
-if [[ $controller_version != $controller_app_version ]] || [[ $controller_version != $scaleset_version ]] || [[ $controller_version != $scaleset_app_version ]]; then
+if [[ $controller_version != $target_version ]] ||
+   [[ $controller_app_version != $target_version ]] ||
+   [[ $scaleset_version != $target_version ]] ||
+   [[ $scaleset_app_version != $target_version ]]; then
     echo -e "${TEXT_RED}Chart versions do not match${TEXT_RESET}"
+    echo "Target version:         $target_version"
     echo "Controller version:     $controller_version"
     echo "Controller app version: $controller_app_version"
     echo "Scale set version:      $scaleset_version"
