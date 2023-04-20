@@ -47,7 +47,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Check chart versions
-        run: ./hack/check-gh-chart-versions.sh
+        run: ./hack/check-gh-chart-versions.sh ${{ inputs.release_tag_name }}
 
       - name: Resolve parameters
         id: resolve_parameters

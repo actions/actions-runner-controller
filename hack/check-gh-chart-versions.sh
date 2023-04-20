@@ -4,6 +4,14 @@ TEXT_RED='\033[0;31m'
 TEXT_RESET='\033[0m'
 TEXT_GREEN='\033[0;32m'
 
+target_version=$1
+if [[ $# -eq 0 ]]; then
+    echo "Release version argument is required"
+    echo
+    echo "Usage:  ${0} <release version>"
+    exit 1
+fi
+
 chart_dir=$(pwd)/charts
 
 controller_version=$(cat $chart_dir/gha-runner-scale-set-controller/Chart.yaml | yq .version)
