@@ -17,7 +17,7 @@ This anti-flap configuration also has the final say on if a runner can be scaled
 This delay is configurable via 2 methods:
 
 1. By setting a new default via the controller's `--default-scale-down-delay` flag
-2. By setting by setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
+2. By setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
 Below is a complete basic example of one of the pull driven scaling metrics.
 
