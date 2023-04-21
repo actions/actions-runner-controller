@@ -229,7 +229,10 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 			} else {
 				copy.Spec.CapacityReservations = nil
 			}
-			// amount is negative, make completed amount positive by negating it
+			// This "completed" represents the number of completed and therefore removed runners in this batch,
+			// which is logged later.
+			// As the amount is negative for a scale-down trigger, we make the "completed" amount positive by negating the amount.
+			// That way, the user can see the number of removed runners(like 3), rather than the delta (like -3) in the number of runners.
 			completed -= amount
 		}
 	}
