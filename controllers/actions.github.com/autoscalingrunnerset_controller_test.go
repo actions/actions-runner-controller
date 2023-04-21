@@ -753,7 +753,7 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 	})
 })
 
-var _ = Describe("Test Client optional configuration", Ordered, func() {
+var _ = Describe("Test client optional configuration", Ordered, func() {
 	var originalBuildVersion string
 	buildVersion := "0.1.0"
 
@@ -1552,8 +1552,8 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 	})
 })
 
-var _ = Describe("Version mismatch cleanup", func() {
-	It("Should delete autoscaling runner set on a version mismatch", func() {
+var _ = Describe("Test resource version and build version mismatch", func() {
+	It("Should delete and recreate the autoscaling runner set to match the build version", func() {
 		ctx := context.Background()
 		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
 

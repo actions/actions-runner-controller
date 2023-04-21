@@ -141,14 +141,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
 			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
 				"targetVersion", build.Version,
-				"observedVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+				"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 			)
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("Successfully issued a delete for autoscaling runner set on version mismatch",
+		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
 			"targetVersion", build.Version,
-			"observedVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+			"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		)
 		return ctrl.Result{}, nil
 	}
