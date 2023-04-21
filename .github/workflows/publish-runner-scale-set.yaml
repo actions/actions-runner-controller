@@ -47,6 +47,10 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Check chart versions
+        # Binary version and chart versions need to match.
+        # In case of an upgrade, the controller will try to clean up
+        # resources with older versions that should have been cleaned up
+        # during the upgrade process
         run: ./hack/check-gh-chart-versions.sh ${{ inputs.release_tag_name }}
 
       - name: Resolve parameters
