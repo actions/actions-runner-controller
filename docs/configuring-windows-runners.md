@@ -34,7 +34,6 @@ apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
   name: k8s-runners-windows
-  namespace: actions-runner-system
 spec:
   template:
     spec:
