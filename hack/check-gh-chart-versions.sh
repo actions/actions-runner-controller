@@ -18,7 +18,7 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-chart_dir=$(pwd)/charts
+chart_dir="$(pwd)/charts"
 
 controller_version=$(yq .version < "${chart_dir}/gha-runner-scale-set-controller/Chart.yaml")
 controller_app_version=$(yq .appVersion < "${chart_dir}/gha-runner-scale-set-controller/Chart.yaml")
