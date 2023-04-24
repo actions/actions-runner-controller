@@ -14,7 +14,7 @@ target_version=$1
 if [[ $# -eq 0 ]]; then
     echo "Release version argument is required"
     echo
-    echo "Usage:  ${0} <release version>"
+    echo "Usage:  ${0} <VERSION>"
     exit 1
 fi
 
