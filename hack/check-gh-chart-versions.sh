@@ -1,5 +1,5 @@
 #!/bin/bash
-#
+set -eo pipefail
 TEXT_RED='\033[0;31m'
 TEXT_RESET='\033[0m'
 TEXT_GREEN='\033[0;32m'
