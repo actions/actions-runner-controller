@@ -202,7 +202,7 @@ generate: controller-gen
 
 # Run shellcheck on runner scripts
 shellcheck: shellcheck-install
-	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh
+	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh hack/*.sh
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
