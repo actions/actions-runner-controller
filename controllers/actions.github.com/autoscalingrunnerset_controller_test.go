@@ -268,20 +268,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 			autoscalingRunnerSet = patched.DeepCopy()
 
-			// We should create a new listener
-			Eventually(
-				func() (string, error) {
-					listener := new(v1alpha1.AutoscalingListener)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
-					if err != nil {
-						return "", err
-					}
-
-					return listener.Spec.EphemeralRunnerSetName, nil
-				},
-				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Name), "New Listener should be created")
-
 			// We should create a new EphemeralRunnerSet and delete the old one, eventually, we will have only one EphemeralRunnerSet
 			Eventually(
 				func() (string, error) {
@@ -299,6 +285,20 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[labelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
+
+			// We should create a new listener
+			Eventually(
+				func() (string, error) {
+					listener := new(v1alpha1.AutoscalingListener)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+					if err != nil {
+						return "", err
+					}
+
+					return listener.Spec.EphemeralRunnerSetName, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Name), "New Listener should be created")
 
 			// Only update the Spec for the AutoScalingListener
 			// This should trigger re-creation of the Listener only
@@ -510,6 +510,11 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).ShouldNot(HaveOccurred(), "Listener should not be recreated")
+		})
+
+		It("It should apply the update immediately (Drain Jobs Mode Disabled)", func() {
+			// Enable DrainJobsMode
+			controller.DrainJobsMode = false
 		})
 	})
 
