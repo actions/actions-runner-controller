@@ -202,34 +202,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Labels[labelKeyRunnerSpecHash])
 	}
 
-	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
-		// TODO: add feature flag for this optional behaviour
-		// Prevents overprovisioning of runners.
-		// We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
-		// The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
-		if r.DrainJobsMode && ((latestRunnerSet.Status.RunningEphemeralRunners + latestRunnerSet.Status.PendingEphemeralRunners) > 0) {
-			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish before creating a new runner set")
-			return ctrl.Result{}, nil
-		}
-		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
-		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
-	}
-
-	oldRunnerSets := existingRunnerSets.old()
-	if len(oldRunnerSets) > 0 {
-		log.Info("Cleanup old ephemeral runner sets", "count", len(oldRunnerSets))
-		err := r.deleteEphemeralRunnerSets(ctx, oldRunnerSets, log)
-		if err != nil {
-			log.Error(err, "Failed to clean up old runner sets")
-			return ctrl.Result{}, err
-		}
-	}
-
 	// Make sure the AutoscalingListener is up and running in the controller namespace
 	listener := new(v1alpha1.AutoscalingListener)
 	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
 		if kerrors.IsNotFound(err) {
 			// We don't have a listener
+			// Prevents overprovisioning of runners.
+			// We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
+			// The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
+			if r.DrainJobsMode && ((latestRunnerSet.Status.RunningEphemeralRunners + latestRunnerSet.Status.PendingEphemeralRunners) > 0) {
+				log.Info("AutoscalingListener does not exist. Waiting for the running and pending runners to finish before creating a listener.")
+				return ctrl.Result{}, nil
+			}
 			log.Info("Creating a new AutoscalingListener for the runner set", "ephemeralRunnerSetName", latestRunnerSet.Name)
 			return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
 		}
@@ -250,6 +234,28 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 		log.Info("Deleted RunnerScaleSetListener since existing one is out of date")
 		return ctrl.Result{}, nil
+	}
+
+	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
+		// Prevents overprovisioning of runners.
+		// We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
+		// The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
+		if r.DrainJobsMode && ((latestRunnerSet.Status.RunningEphemeralRunners + latestRunnerSet.Status.PendingEphemeralRunners) > 0) {
+			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish before creating a new runner set")
+			return ctrl.Result{}, nil
+		}
+		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
+		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
+	}
+
+	oldRunnerSets := existingRunnerSets.old()
+	if len(oldRunnerSets) > 0 {
+		log.Info("Cleanup old ephemeral runner sets", "count", len(oldRunnerSets))
+		err := r.deleteEphemeralRunnerSets(ctx, oldRunnerSets, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up old runner sets")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Update the status of autoscaling runner set.
