@@ -19,6 +19,7 @@ package actionsgithubcom
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -202,9 +203,31 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Labels[labelKeyRunnerSpecHash])
 	}
 
+	// Make sure the AutoscalingListener is up and running in the controller namespace
+	listener := new(v1alpha1.AutoscalingListener)
+	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
+		if kerrors.IsNotFound(err) {
+			log.Info("AutoscalingListener does not exist.")
+		}
+	}
+	// Our listener pod is out of date, so we need to delete it to get a new recreate.
+	if !reflect.DeepEqual(*listener, v1alpha1.AutoscalingListener{}) && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
+		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
+		if err := r.Delete(ctx, listener); err != nil {
+			if kerrors.IsNotFound(err) {
+				return ctrl.Result{}, nil
+			}
+			log.Error(err, "Failed to delete AutoscalingListener resource")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Deleted RunnerScaleSetListener since existing one is out of date")
+		return ctrl.Result{}, nil
+	}
+
 	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
 		if r.drainingJobs(&latestRunnerSet.Status) {
-			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish before creating a new runner set")
+			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
 			return ctrl.Result{}, nil
 		}
 		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
@@ -222,34 +245,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
-	listener := new(v1alpha1.AutoscalingListener)
-	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
-		if kerrors.IsNotFound(err) {
-			// We don't have a listener
-			if r.drainingJobs(&latestRunnerSet.Status) {
-				log.Info("Creating a new AutoscalingListener is waiting for the running and pending runners to finish")
-				return ctrl.Result{}, nil
-			}
-			log.Info("Creating a new AutoscalingListener for the runner set", "ephemeralRunnerSetName", latestRunnerSet.Name)
-			return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
+	if reflect.DeepEqual(*listener, v1alpha1.AutoscalingListener{}) {
+		// We don't have a listener
+		if r.drainingJobs(&latestRunnerSet.Status) {
+			log.Info("Creating a new AutoscalingListener is waiting for the running and pending runners to finish. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
+			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get AutoscalingListener resource")
-		return ctrl.Result{}, err
-	}
-
-	// Our listener pod is out of date, so we need to delete it to get a new recreate.
-	if listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash() {
-		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
-		if err := r.Delete(ctx, listener); err != nil {
-			if kerrors.IsNotFound(err) {
-				return ctrl.Result{}, nil
-			}
-			log.Error(err, "Failed to delete AutoscalingListener resource")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Deleted RunnerScaleSetListener since existing one is out of date")
-		return ctrl.Result{}, nil
+		log.Info("Creating a new AutoscalingListener for the runner set", "ephemeralRunnerSetName", latestRunnerSet.Name)
+		return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
 	}
 
 	// Update the status of autoscaling runner set.

@@ -410,7 +410,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 	})
 
 	Context("When updating an AutoscalingRunnerSet with running or pending jobs", func() {
-		It("It should wait for running and pending jobs to finish before applying the update (Drain Jobs Mode Enabled)", func() {
+		It("It should wait for running and pending jobs to finish before applying the update. Drain jobs mode enabled.", func() {
 			// Enable DrainJobsMode
 			controller.DrainJobsMode = true
 			// Wait till the listener is created
@@ -509,12 +509,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
-			).ShouldNot(HaveOccurred(), "Listener should not be recreated")
-		})
-
-		It("It should apply the update immediately (Drain Jobs Mode Disabled)", func() {
-			// Enable DrainJobsMode
-			controller.DrainJobsMode = false
+			).ShouldNot(Succeed(), "Listener should not be recreated")
 		})
 	})
 
