@@ -1176,9 +1176,20 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 						With: setupBuildXActionWith,
 					},
 					testing.Step{
-						Run: "docker buildx build --platform=linux/amd64 " +
+						Run: "docker buildx build --platform=linux/amd64 -t test1 --load " +
 							dockerBuildCache +
 							fmt.Sprintf("-f %s .", dockerfile),
+					},
+					testing.Step{
+						Run: "docker run --rm test1",
+					},
+					testing.Step{
+						Uses: "addnab/docker-run-action@v3",
+						With: &testing.With{
+							Image: "test1",
+							Run:   "hello",
+							Shell: "sh",
+						},
 					},
 				)
 
