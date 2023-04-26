@@ -91,7 +91,7 @@ func TestNewRunnerPod(t *testing.T) {
 					},
 				},
 				{
-					Name: "docker-sock",
+					Name: "var-run",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{
 							Medium:    corev1.StorageMediumMemory,
@@ -155,7 +155,7 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 						{
 							Name:  "DOCKER_HOST",
-							Value: "unix:///run/docker/docker.sock",
+							Value: "unix:///run/docker.sock",
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -168,8 +168,8 @@ func TestNewRunnerPod(t *testing.T) {
 							MountPath: "/runner/_work",
 						},
 						{
-							Name:      "docker-sock",
-							MountPath: "/run/docker",
+							Name:      "var-run",
+							MountPath: "/run",
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
@@ -180,7 +180,7 @@ func TestNewRunnerPod(t *testing.T) {
 					Image: "default-docker-image",
 					Args: []string{
 						"dockerd",
-						"--host=unix:///run/docker/docker.sock",
+						"--host=unix:///run/docker.sock",
 						"--group=$(DOCKER_GROUP_GID)",
 					},
 					Env: []corev1.EnvVar{
@@ -195,8 +195,8 @@ func TestNewRunnerPod(t *testing.T) {
 							MountPath: "/runner",
 						},
 						{
-							Name:      "docker-sock",
-							MountPath: "/run/docker",
+							Name:      "var-run",
+							MountPath: "/run",
 						},
 						{
 							Name:      "work",
@@ -543,7 +543,7 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 					{
-						Name: "docker-sock",
+						Name: "var-run",
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
@@ -562,8 +562,8 @@ func TestNewRunnerPod(t *testing.T) {
 						MountPath: "/runner",
 					},
 					{
-						Name:      "docker-sock",
-						MountPath: "/run/docker",
+						Name:      "var-run",
+						MountPath: "/run",
 					},
 				}
 			}),
@@ -587,7 +587,7 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 					{
-						Name: "docker-sock",
+						Name: "var-run",
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
@@ -676,7 +676,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					},
 				},
 				{
-					Name: "docker-sock",
+					Name: "var-run",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{
 							Medium:    corev1.StorageMediumMemory,
@@ -740,7 +740,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 						{
 							Name:  "DOCKER_HOST",
-							Value: "unix:///run/docker/docker.sock",
+							Value: "unix:///run/docker.sock",
 						},
 						{
 							Name:  "RUNNER_NAME",
@@ -761,8 +761,8 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							MountPath: "/runner/_work",
 						},
 						{
-							Name:      "docker-sock",
-							MountPath: "/run/docker",
+							Name:      "var-run",
+							MountPath: "/run",
 						},
 					},
 					ImagePullPolicy: corev1.PullAlways,
@@ -773,7 +773,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					Image: "default-docker-image",
 					Args: []string{
 						"dockerd",
-						"--host=unix:///run/docker/docker.sock",
+						"--host=unix:///run/docker.sock",
 						"--group=$(DOCKER_GROUP_GID)",
 					},
 					Env: []corev1.EnvVar{
@@ -788,8 +788,8 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 							MountPath: "/runner",
 						},
 						{
-							Name:      "docker-sock",
-							MountPath: "/run/docker",
+							Name:      "var-run",
+							MountPath: "/run",
 						},
 						{
 							Name:      "work",
@@ -1149,8 +1149,8 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 										MountPath: "/runner/_work",
 									},
 									{
-										Name:      "docker-sock",
-										MountPath: "/run/docker",
+										Name:      "var-run",
+										MountPath: "/run",
 									},
 								},
 							},
@@ -1170,7 +1170,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 					},
 					{
-						Name: "docker-sock",
+						Name: "var-run",
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
@@ -1186,8 +1186,8 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						MountPath: "/runner/_work",
 					},
 					{
-						Name:      "docker-sock",
-						MountPath: "/run/docker",
+						Name:      "var-run",
+						MountPath: "/run",
 					},
 					{
 						Name:      "runner",
@@ -1219,7 +1219,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						},
 					},
 					{
-						Name: "docker-sock",
+						Name: "var-run",
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
