@@ -218,7 +218,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				// so we need to be more specific in filtering out the check runs.
 				// See example check run completion at https://gist.github.com/nathanklick/268fea6496a4d7b14cecb2999747ef84
 				if e.GetWorkflowJob().GetConclusion() == "success" && e.GetWorkflowJob().RunnerID == nil {
-					log.V(1).Info("Ignoring workflow_job event because it looks like a check run completion, not a real job completion")
+					log.V(1).Info("Ignoring workflow_job event because it does not relate to a self-hosted runner")
 				} else {
 					// A negative amount is processed in the tryScale func as a scale-down request,
 					// that erases the oldest CapacityReservation with the same amount.
