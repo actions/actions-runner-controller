@@ -23,4 +23,10 @@ spec:
     {{- end }}
   selector:
     {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 4 }}
+  {{- if .Values.actionsMetricsServer.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range $ip := .Values.actionsMetricsServer.service.loadBalancerSourceRanges }}
+    - {{ $ip -}}
+    {{- end }}
+  {{- end }}
 {{- end }}
