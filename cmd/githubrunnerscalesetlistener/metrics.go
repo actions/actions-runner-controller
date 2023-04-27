@@ -1,6 +1,9 @@
 package main
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // labels
 var (
@@ -18,6 +21,11 @@ var (
 		"job_workflow_ref",
 		"event_name",
 	}
+
+	completedJobsTotalLabels   = append(jobLabels, "job_result", "runner_id", "runner_name")
+	startedJobsTotalLabels     = append(jobLabels, "runner_id")
+	jobStartupDurationLabels   = append(jobLabels, "runner_id", "runner_name")
+	jobExecutionDurationLabels = append(jobLabels, "job_result", "runner_id", "runner_name")
 )
 
 // metrics
@@ -86,6 +94,14 @@ var (
 		scaleSetLabels,
 	)
 
+	availableJobsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: metricName("available_jobs_total"),
+			Help: "Total number of jobs available for the scale set (runs-on matches and scale set passes all of the runner group permission checks).",
+		},
+		jobLabels,
+	)
+
 	acquiredJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: metricName("acquired_jobs_total"),
@@ -107,7 +123,7 @@ var (
 			Name: metricName("started_jobs_total"),
 			Help: "Total number of jobs started.",
 		},
-		append(jobLabels, "runner_id"),
+		startedJobsTotalLabels,
 	)
 
 	completedJobsTotal = prometheus.NewCounterVec(
@@ -115,7 +131,7 @@ var (
 			Name: metricName("completed_jobs_total"),
 			Help: "Total number of jobs completed.",
 		},
-		append(jobLabels, "job_result", "runner_id", "runner_name"),
+		completedJobsTotalLabels,
 	)
 
 	jobQueueDurationSeconds = prometheus.NewHistogramVec(
@@ -133,7 +149,7 @@ var (
 			Help:    "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
 			Buckets: runtimeBuckets,
 		},
-		append(jobLabels, "runner_id", "runner_name"),
+		jobStartupDurationLabels,
 	)
 
 	jobExecutionDurationSeconds = prometheus.NewHistogramVec(
@@ -142,7 +158,7 @@ var (
 			Help:    "Time spent executing workflow jobs by the scale set (in seconds).",
 			Buckets: runtimeBuckets,
 		},
-		append(jobLabels, "job_result", "runner_id", "runner_name"),
+		jobExecutionDurationLabels,
 	)
 )
 
@@ -196,4 +212,154 @@ var runtimeBuckets []float64 = []float64{
 	2400,
 	3000,
 	3600,
+}
+
+type metricsExporter struct {
+	// fields updated on each iteration
+	stats         *actions.RunnerScaleSetStatistic
+	jobsAvailable []*actions.JobAvailable
+	jobsAssigned  []*actions.JobAssigned
+	jobsStarted   []*actions.JobStarted
+	jobsCompleted []*actions.JobCompleted
+	jobsAcquired  float64
+
+	// Initialized during creation.
+	scaleSetLabels             prometheus.Labels
+	jobLabels                  prometheus.Labels
+	completedJobsTotalLabels   prometheus.Labels
+	startedJobsTotalLabels     prometheus.Labels
+	jobStartupDurationLabels   prometheus.Labels
+	jobExecutionDurationLabels prometheus.Labels
+}
+
+func (m *metricsExporter) withLabels(l prometheus.Labels) {
+	if l == nil {
+		return
+	}
+
+	m.scaleSetLabels = makeLabels(l, scaleSetLabels)
+	m.jobLabels = makeLabels(l, jobLabels)
+	m.completedJobsTotalLabels = makeLabels(l, completedJobsTotalLabels)
+	m.startedJobsTotalLabels = makeLabels(l, startedJobsTotalLabels)
+	m.jobStartupDurationLabels = makeLabels(l, jobStartupDurationLabels)
+	m.jobExecutionDurationLabels = makeLabels(l, jobExecutionDurationLabels)
+}
+
+func makeLabels(labels prometheus.Labels, names []string) prometheus.Labels {
+	l := make(prometheus.Labels, len(labels))
+	for _, lbl := range labels {
+		l[lbl] = labels[lbl]
+	}
+	return l
+}
+
+func (m *metricsExporter) reset() {
+	m.stats = nil
+	m.jobsAvailable = nil
+	m.jobsAssigned = nil
+	m.jobsStarted = nil
+	m.jobsCompleted = nil
+	m.jobsAcquired = 0
+}
+
+func (m *metricsExporter) withStatistics(stats *actions.RunnerScaleSetStatistic) {
+	if len(m.scaleSetLabels) == 0 {
+		return
+	}
+	m.stats = stats
+}
+
+func (m *metricsExporter) withJobAvailable(msg *actions.JobAvailable) {
+	if len(m.jobLabels) == 0 {
+		return
+	}
+
+	m.jobsAvailable = append(m.jobsAvailable, msg)
+}
+
+func (m *metricsExporter) withJobStarted(msg *actions.JobStarted) {
+	if len(m.startedJobsTotalLabels) == 0 {
+		return
+	}
+	m.jobsStarted = append(m.jobsStarted, msg)
+}
+
+func (m *metricsExporter) withJobAssigned(msg *actions.JobAssigned) {
+	if len(m.jobLabels) == 0 {
+		return
+	}
+	m.jobsAssigned = append(m.jobsAssigned, msg)
+}
+
+func (m *metricsExporter) withJobCompleted(msg *actions.JobCompleted) {
+	if len(m.completedJobsTotalLabels) == 0 {
+		return
+	}
+	m.jobsCompleted = append(m.jobsCompleted, msg)
+}
+
+func (m *metricsExporter) withJobsAcquired(count int) {
+	m.jobsAcquired = float64(count)
+}
+
+func (m *metricsExporter) exportStatistics() {
+	if m.stats == nil {
+		return
+	}
+	availableJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAvailableJobs))
+	acquiredJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAcquiredJobs))
+	assignedJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAssignedJobs))
+	runningJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAssignedJobs))
+	registeredRunners.With(m.scaleSetLabels).Set(float64(m.stats.TotalRegisteredRunners))
+	busyRunners.With(m.scaleSetLabels).Set(float64(m.stats.TotalBusyRunners))
+	idleRunners.With(m.scaleSetLabels).Set(float64(m.stats.TotalIdleRunners))
+}
+
+func (m *metricsExporter) exportJobsAvailable() {
+	count := float64(len(m.jobsAvailable))
+	if count == 0 {
+		return
+	}
+	availableJobsTotal.With(m.jobLabels).Add(count)
+}
+
+func (m *metricsExporter) exportJobsStarted() {
+	count := float64(len(m.jobsStarted))
+	if count == 0 {
+		return
+	}
+	startedJobsTotal.With(m.startedJobsTotalLabels).Add(count)
+}
+
+func (m *metricsExporter) exportJobsAssigned() {
+	count := float64(len(m.jobsAssigned))
+	if count == 0 {
+		return
+	}
+	assignedJobsTotal.With(m.jobLabels).Add(count)
+}
+
+func (m *metricsExporter) exportJobsCompleted() {
+	count := float64(len(m.jobsCompleted))
+	if count == 0 {
+		return
+	}
+	completedJobsTotal.With(m.completedJobsTotalLabels).Add(count)
+}
+
+func (m *metricsExporter) exportJobsAcquired() {
+	if m.jobsAcquired == 0 {
+		return
+	}
+	acquiredJobsTotal.With(m.scaleSetLabels).Add(m.jobsAcquired)
+}
+
+func (m *metricsExporter) do() {
+	m.exportStatistics()
+	m.exportJobsStarted()
+	m.exportJobsAvailable()
+	m.exportJobsStarted()
+	m.exportJobsAssigned()
+	m.exportJobsCompleted()
+	m.exportJobsAcquired()
 }
