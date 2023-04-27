@@ -102,6 +102,7 @@ if [ "${tool}" == "helm" ]; then
     --set githubWebhookServer.podAnnotations.test-id=${TEST_ID} \
     --set actionsMetricsServer.podAnnotations.test-id=${TEST_ID} \
     ${flags[@]} --set image.imagePullPolicy=${IMAGE_PULL_POLICY} \
+    --set image.dindSidecarRepositoryAndTag=${DIND_SIDECAR_REPOSITORY_AND_TAG} \
     -f ${VALUES_FILE}
   set +v
   # To prevent `CustomResourceDefinition.apiextensions.k8s.io "runners.actions.summerwind.dev" is invalid: metadata.annotations: Too long: must have at most 262144 bytes`

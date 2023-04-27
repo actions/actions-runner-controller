@@ -778,6 +778,11 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		useRunnerStatusUpdateHook     = d.UseRunnerStatusUpdateHook
 	)
 
+	const (
+		varRunVolumeName      = "var-run"
+		varRunVolumeMountPath = "/run"
+	)
+
 	if containerMode == "kubernetes" {
 		dockerdInRunner = false
 		dockerEnabled = false
@@ -1020,7 +1025,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		// explicitly invoke `dockerd` to avoid automatic TLS / TCP binding
 		dockerdContainer.Args = append([]string{
 			"dockerd",
-			"--host=unix:///run/docker/docker.sock",
+			"--host=unix:///run/docker.sock",
 		}, dockerdContainer.Args...)
 
 		// this must match a GID for the user in the runner image
@@ -1054,7 +1059,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		runnerContainer.Env = append(runnerContainer.Env,
 			corev1.EnvVar{
 				Name:  "DOCKER_HOST",
-				Value: "unix:///run/docker/docker.sock",
+				Value: "unix:///run/docker.sock",
 			},
 		)
 
@@ -1071,7 +1076,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
-				Name: "docker-sock",
+				Name: varRunVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium:    corev1.StorageMediumMemory,
@@ -1090,11 +1095,11 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
-		if ok, _ := volumeMountPresent("docker-sock", runnerContainer.VolumeMounts); !ok {
+		if ok, _ := volumeMountPresent(varRunVolumeName, runnerContainer.VolumeMounts); !ok {
 			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
 				corev1.VolumeMount{
-					Name:      "docker-sock",
-					MountPath: "/run/docker",
+					Name:      varRunVolumeName,
+					MountPath: varRunVolumeMountPath,
 				},
 			)
 		}
@@ -1108,10 +1113,10 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			},
 		}
 
-		if p, _ := volumeMountPresent("docker-sock", dockerdContainer.VolumeMounts); !p {
+		if p, _ := volumeMountPresent(varRunVolumeName, dockerdContainer.VolumeMounts); !p {
 			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
-				Name:      "docker-sock",
-				MountPath: "/run/docker",
+				Name:      varRunVolumeName,
+				MountPath: varRunVolumeMountPath,
 			})
 		}
 

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -133,6 +134,22 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		return ctrl.Result{}, nil
+	}
+
+	if autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion] != build.Version {
+		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
+			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
+				"targetVersion", build.Version,
+				"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+			)
+			return ctrl.Result{}, nil
+		}
+
+		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
+			"targetVersion", build.Version,
+			"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+		)
 		return ctrl.Result{}, nil
 	}
 

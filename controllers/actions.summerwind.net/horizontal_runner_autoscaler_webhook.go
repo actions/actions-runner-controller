@@ -115,7 +115,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 	}()
 
 	// respond ok to GET / e.g. for health check
-	if r.Method == http.MethodGet {
+	if strings.ToUpper(r.Method) == http.MethodGet {
 		ok = true
 		fmt.Fprintln(w, "webhook server is running")
 		return
@@ -210,13 +210,23 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 			if e.GetAction() == "queued" {
 				target.Amount = 1
 				break
-			} else if e.GetAction() == "completed" && e.GetWorkflowJob().GetConclusion() != "skipped" && e.GetWorkflowJob().GetRunnerID() > 0 {
-				// A negative amount is processed in the tryScale func as a scale-down request,
-				// that erases the oldest CapacityReservation with the same amount.
-				// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
-				// so that the resulting desired replicas decreases by 1.
-				target.Amount = -1
-				break
+			} else if e.GetAction() == "completed" && e.GetWorkflowJob().GetConclusion() != "skipped" {
+				// We want to filter out "completed" events sent by check runs.
+				// See https://github.com/actions/actions-runner-controller/issues/2118
+				// and https://github.com/actions/actions-runner-controller/pull/2119
+				// But canceled events have runner_id == 0 and GetRunnerID() returns 0 when RunnerID == nil,
+				// so we need to be more specific in filtering out the check runs.
+				// See example check run completion at https://gist.github.com/nathanklick/268fea6496a4d7b14cecb2999747ef84
+				if e.GetWorkflowJob().GetConclusion() == "success" && e.GetWorkflowJob().RunnerID == nil {
+					log.V(1).Info("Ignoring workflow_job event because it does not relate to a self-hosted runner")
+				} else {
+					// A negative amount is processed in the tryScale func as a scale-down request,
+					// that erases the oldest CapacityReservation with the same amount.
+					// If the first CapacityReservation was with Replicas=1, this negative scale target erases that,
+					// so that the resulting desired replicas decreases by 1.
+					target.Amount = -1
+					break
+				}
 			}
 			// If the conclusion is "skipped", we will ignore it and fallthrough to the default case.
 			fallthrough

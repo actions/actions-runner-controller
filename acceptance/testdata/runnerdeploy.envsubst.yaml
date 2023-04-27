@@ -95,6 +95,24 @@ spec:
         # that part is created by dockerd.
         mountPath: /home/runner/.local
         readOnly: false
+      # See https://github.com/actions/actions-runner-controller/issues/2123
+      # Be sure to omit the "aliases" field from the config.json.
+      # Otherwise you may encounter nasty errors like:
+      #   $ docker build
+      #   docker: 'buildx' is not a docker command.
+      #   See 'docker --help'
+      # due to the incompatibility between your host docker config.json and the runner environment.
+      # That is, your host dockcer config.json might contain this:
+      #   "aliases": {
+      #     "builder": "buildx"
+      #   }
+      # And this results in the above error when the runner does not have buildx installed yet.
+      - name: docker-config
+        mountPath: /home/runner/.docker/config.json
+        subPath: config.json
+        readOnly: true
+      - name: docker-config-root
+        mountPath: /home/runner/.docker
       volumes:
       - name: rootless-dind-work-dir
         ephemeral:
@@ -105,6 +123,15 @@ spec:
               resources:
                 requests:
                   storage: 3Gi
+      - name: docker-config
+        # Refer to .dockerconfigjson/.docker/config.json
+        secret:
+          secretName: docker-config
+          items:
+          - key: .dockerconfigjson
+            path: config.json
+      - name: docker-config-root
+        emptyDir: {}
 
       #
       # Non-standard working directory
