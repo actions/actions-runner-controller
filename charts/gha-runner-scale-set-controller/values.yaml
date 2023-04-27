@@ -102,3 +102,12 @@ flags:
   ##   This can lead to a longer time to apply the change but it will ensure
   ##   that you don't have any overprovisioning of runners.
   updateStrategy: "immediate"
+<<<<<<< HEAD
+=======
+
+metrics:
+  serviceMonitor: false
+  serviceMonitorNamespace: "default" # need to match the namespace your prometheus's watching namespaces
+  serviceMonitorLabels:
+    release: "prometheus"
+>>>>>>> 3cca498 (apply correct labels to specific metrics, have labels as constants and run them after the patch)

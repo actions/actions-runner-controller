@@ -19,12 +19,12 @@ package main
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/actions/actions-runner-controller/build"
@@ -82,20 +82,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var prometheusLabels prometheus.Labels
-	if os.Getenv("ENABLE_METRICS") == "true" {
-		prometheusLabels = prometheus.Labels{
-			metricName("id"):         strconv.Itoa(rc.RunnerScaleSetId),
-			metricName("config_url"): rc.ConfigureUrl,
-			metricName("name"):       rc.EphemeralRunnerSetName,
-			metricName("namespace"):  rc.EphemeralRunnerSetNamespace,
-		}
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	quit := make(chan error, 1)
+	errCh := make(chan error, 2)
 
 	go func() {
 		opts := runOptions{
@@ -103,10 +93,13 @@ func main() {
 				WithLogger(logger),
 			},
 		}
-		if prometheusLabels != nil {
-			opts.serviceOptions = append(opts.serviceOptions, WithPrometheusLabels(prometheusLabels))
+		opts.serviceOptions = append(opts.serviceOptions, WithPrometheusMetrics(rc))
+
+		if err := run(ctx, rc, logger, opts); err != nil && !errors.Is(err, context.Canceled) {
+			errCh <- err
+			return
 		}
-		quit <- run(ctx, rc, logger, opts)
+		errCh <- nil
 	}()
 
 	go func() {
@@ -120,6 +113,7 @@ func main() {
 			busyRunners,
 			desiredRunners,
 			idleRunners,
+			availableJobsTotal,
 			acquiredJobsTotal,
 			assignedJobsTotal,
 			startedJobsTotal,
@@ -137,18 +131,29 @@ func main() {
 			Handler: mux,
 		}
 
-		select {
-		case <-ctx.Done():
-			quit <- srv.Shutdown(context.TODO())
-		case quit <- srv.ListenAndServe():
+		go func() {
+			<-ctx.Done()
+			srv.Shutdown(context.Background())
+		}()
+
+		logger.Info("Starting metrics server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+			return
 		}
+		errCh <- nil
 	}()
 
-	err = <-quit
-	if err != nil {
-		stop()
-		logger.Error(err, "Exiting listener due to an error")
-		<-quit
+	err1 := <-errCh
+	stop()
+	if err1 != nil {
+		logger.Error(err1, "First error emitted")
+	}
+	err2 := <-errCh
+	if err2 != nil {
+		logger.Error(err2, "Second error emitted")
+	}
+	if err1 != nil || err2 != nil {
 		os.Exit(1)
 	}
 }

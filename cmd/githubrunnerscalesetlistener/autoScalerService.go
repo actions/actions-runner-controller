@@ -29,9 +29,27 @@ type Service struct {
 	metricsExporter    metricsExporter
 }
 
-func WithPrometheusMetrics(labels prometheus.Labels) func(*Service) {
+func WithPrometheusMetrics(conf RunnerScaleSetListenerConfig) func(*Service) {
 	return func(svc *Service) {
-		svc.metricsExporter.withLabels(labels)
+		l := make(prometheus.Labels)
+		l[labelKeyRunnerScaleSetName] = conf.EphemeralRunnerSetName
+		l[labelKeyRunnerScaleSetConfigURL] = conf.ConfigureUrl
+		l[labelKeyAutoScalingRunnerSetName] = conf.EphemeralRunnerSetName
+		l[labelKeyAutoScalingRunnerSetNamespace] = conf.EphemeralRunnerSetNamespace
+		// TODO
+		parsedURL, _ := actions.ParseGitHubConfigFromURL(conf.ConfigureUrl)
+
+		l[labelKeyRepositoryName] = parsedURL.Repository
+		switch parsedURL.Scope {
+		case actions.GitHubScopeEnterprise:
+			l[labelKeyOwnerName] = parsedURL.Enterprise
+		case actions.GitHubScopeUnknown:
+			// TODO: error
+		default:
+			l[labelKeyOwnerName] = parsedURL.Organization
+		}
+
+		svc.metricsExporter.withLabels(l)
 	}
 }
 
@@ -198,6 +216,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 
 func (s *Service) scaleForAssignedJobCount(count int) error {
 	targetRunnerCount := int(math.Max(math.Min(float64(s.settings.MaxRunners), float64(count)), float64(s.settings.MinRunners)))
+	s.metricsExporter.withDesiredRunners(targetRunnerCount)
 	if targetRunnerCount != s.currentRunnerCount {
 		s.logger.Info("try scale runner request up/down base on assigned job count",
 			"assigned job", count,
