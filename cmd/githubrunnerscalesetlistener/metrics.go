@@ -23,6 +23,8 @@ const (
 	labelKeyRunnerName                    = "runner_name"
 )
 
+const githubScaleSetSubsystem = "github_runner_scale_set"
+
 // labels
 var (
 	scaleSetLabels = []string{
@@ -50,139 +52,151 @@ var (
 var (
 	availableJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("available_jobs"),
-			Help: "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned but are acquired by the runner scale set.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "available_jobs",
+			Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned but are acquired by the runner scale set.",
 		},
 		scaleSetLabels,
 	)
 
 	acquiredJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("acquired_jobs"),
-			Help: "Number of jobs acquired by the scale set.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "acquired_jobs",
+			Help:      "Number of jobs acquired by the scale set.",
 		},
 		scaleSetLabels,
 	)
 
 	assignedJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("assigned_jobs"),
-			Help: "Number of jobs assigned to this scale set.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "assigned_jobs",
+			Help:      "Number of jobs assigned to this scale set.",
 		},
 		scaleSetLabels,
 	)
 
 	runningJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("running_jobs"),
-			Help: "Number of jobs running (or about to be run).",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "running_jobs",
+			Help:      "Number of jobs running (or about to be run).",
 		},
 		scaleSetLabels,
 	)
 
 	registeredRunners = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("registered_runners"),
-			Help: "Number of registered runners.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "registered_runners",
+			Help:      "Number of registered runners.",
 		},
 		scaleSetLabels,
 	)
 
 	busyRunners = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("busy_runners"),
-			Help: "Number of registered runners running a job.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "busy_runners",
+			Help:      "Number of registered runners running a job.",
 		},
 		scaleSetLabels,
 	)
 
 	desiredRunners = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("desired_runners"),
-			Help: "Number of runners desired bu the scale set.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "desired_runners",
+			Help:      "Number of runners desired bu the scale set.",
 		},
 		scaleSetLabels,
 	)
 
 	idleRunners = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: metricName("idle_runners"),
-			Help: "Number of registered runners not running a job.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "idle_runners",
+			Help:      "Number of registered runners not running a job.",
 		},
 		scaleSetLabels,
 	)
 
 	availableJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricName("available_jobs_total"),
-			Help: "Total number of jobs available for the scale set (runs-on matches and scale set passes all of the runner group permission checks).",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "available_jobs_total",
+			Help:      "Total number of jobs available for the scale set (runs-on matches and scale set passes all of the runner group permission checks).",
 		},
 		jobLabels,
 	)
 
 	acquiredJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricName("acquired_jobs_total"),
-			Help: "Total number of jobs acquired by the scale set.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "acquired_jobs_total",
+			Help:      "Total number of jobs acquired by the scale set.",
 		},
 		scaleSetLabels,
 	)
 
 	assignedJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricName("assigned_jobs_total"),
-			Help: "Total number of jobs assigned to the scale set.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "assigned_jobs_total",
+			Help:      "Total number of jobs assigned to the scale set.",
 		},
 		jobLabels,
 	)
 
 	startedJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricName("started_jobs_total"),
-			Help: "Total number of jobs started.",
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "started_jobs_total",
+			Help:      "Total number of jobs started.",
 		},
 		startedJobsTotalLabels,
 	)
 
 	completedJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricName("completed_jobs_total"),
-			Help: "Total number of jobs completed.",
+			Name:      "completed_jobs_total",
+			Help:      "Total number of jobs completed.",
+			Subsystem: githubScaleSetSubsystem,
 		},
 		completedJobsTotalLabels,
 	)
 
 	jobQueueDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    metricName("job_queue_duration_seconds"),
-			Help:    "Time spent waiting for workflow jobs to get assigned to the scale set after queueing (in seconds).",
-			Buckets: runtimeBuckets,
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "job_queue_duration_seconds",
+			Help:      "Time spent waiting for workflow jobs to get assigned to the scale set after queueing (in seconds).",
+			Buckets:   runtimeBuckets,
 		},
 		jobLabels,
 	)
 
 	jobStartupDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    metricName("job_startup_duration_seconds"),
-			Help:    "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
-			Buckets: runtimeBuckets,
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "job_startup_duration_seconds",
+			Help:      "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
+			Buckets:   runtimeBuckets,
 		},
 		jobStartupDurationLabels,
 	)
 
 	jobExecutionDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    metricName("job_execution_duration_seconds"),
-			Help:    "Time spent executing workflow jobs by the scale set (in seconds).",
-			Buckets: runtimeBuckets,
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "job_execution_duration_seconds",
+			Help:      "Time spent executing workflow jobs by the scale set (in seconds).",
+			Buckets:   runtimeBuckets,
 		},
 		jobExecutionDurationLabels,
 	)
 )
-
-func metricName(name string) string {
-	return "github_runner_scale_set_" + name
-}
 
 var runtimeBuckets []float64 = []float64{
 	0.01,
