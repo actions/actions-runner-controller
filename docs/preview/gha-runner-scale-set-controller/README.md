@@ -68,7 +68,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
     GITHUB_APP_ID="<GITHUB_APP_ID>"
     GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
     GITHUB_APP_PRIVATE_KEY="<GITHUB_APP_PRIVATE_KEY>"
-    helm install arc-runner-set \
+    helm install "${INSTALLATION_NAME}" \
         --namespace "${NAMESPACE}" \
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
