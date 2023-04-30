@@ -2,6 +2,7 @@ DOCKER_USER ?= summerwind
 DOCKER ?= docker
 DEFAULT_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
+DIND_NVCRT_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-nvcrt
 DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
 OS_IMAGE ?= ubuntu-22.04
 TARGETPLATFORM ?= $(shell arch)
@@ -57,6 +58,13 @@ docker-build-set: check-target-platform
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
+	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+	  -f actions-runner-dind-nvcrt.${OS_IMAGE}.dockerfile \
+	  -t ${DIND_NVCRT_RUNNER_NAME}:${OS_IMAGE} .
+	${DOCKER} build \
+	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
 	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}" .
@@ -79,15 +87,28 @@ docker-build-dind: check-target-platform
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
 	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE} .
 
+docker-build-dind-nvcrt: check-target-platform
+	${DOCKER} build \
+	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
+	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+	  -f actions-runner-dind-nvcrt.${OS_IMAGE}.dockerfile \
+	  -t ${DIND_NVCRT_RUNNER_NAME}:${OS_IMAGE} .
+
 docker-push-default:
 	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}"
 
 docker-push-dind:
 	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}"
 
+docker-push-dind:
+	${DOCKER} push "${DIND_NVCRT_RUNNER_NAME}:${OS_IMAGE}"
+
 docker-push-set:
 	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}"
 	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}"
+	${DOCKER} push "${DIND_NVCRT_RUNNER_NAME}:${OS_IMAGE}"
 	${DOCKER} push "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}"
 
 docker-buildx-set:
@@ -109,6 +130,13 @@ docker-buildx-set:
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
 	  -t "${DIND_RUNNER_NAME}:${OS_IMAGE}" \
+	  . ${PUSH_ARG}
+	${DOCKER} buildx build --platform ${PLATFORMS} \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
+	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+	  -f actions-runner-dind-nvcrt.${OS_IMAGE}.dockerfile \
+	  -t "${DIND_NVCRT_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 	${DOCKER} buildx build --platform ${PLATFORMS} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
@@ -144,6 +172,20 @@ docker-buildx-dind:
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
 	  -t "${DIND_RUNNER_NAME}:${OS_IMAGE}" \
+	  . ${PUSH_ARG}
+
+docker-buildx-dind-nvcrt:
+	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
+    export DOCKER_BUILDKIT=1
+	@if ! docker buildx ls | grep -q container-builder; then\
+	  docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
+	fi
+	${DOCKER} buildx build --platform ${PLATFORMS} \
+	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
+	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
+	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
+	  -t "${DIND_NVCRT_RUNNER_NAME}:${OS_IMAGE}" \
 	  . ${PUSH_ARG}
 
 docker-buildx-dind-rootless:
