@@ -98,19 +98,19 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	labels["organization"] = org
 
 	var wn string
-	var bn string
+	var hb string
 	if e.WorkflowJob != nil {
 		if n := e.WorkflowJob.WorkflowName; n != nil {
 			wn = *n
 			keysAndValues = append(keysAndValues, "workflow_name", *n)
 		}
 		if n := e.WorkflowJob.HeadBranch; n != nil {
-			bn = *n
-			keysAndValues = append(keysAndValues, "branch_name", *n)
+			hb = *n
+			keysAndValues = append(keysAndValues, "head_branch", *n)
 		}
 	}
 	labels["workflow_name"] = wn
-	labels["branch_name"] = bn
+	labels["head_branch"] = hb
 
 	log := reader.Log.WithValues(keysAndValues...)
 
