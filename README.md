@@ -12,7 +12,6 @@ If you think the project is awesome and is adding value to your business, please
 
 In case you are already the employer of one of contributors, sponsoring via GitHub Sponsors might not be an option. Just support them in other means!
 
-In addition, I(@mumoshu) guess it's also a good idea to subscribe any GitHub plans and/or collaborate with GitHub Actions team members in helpful and friendly manners to show your support to the project. All in all, we want to build an awesome community around this project!
 
 See [the sponsorship dashboard](https://github.com/sponsors/actions-runner-controller) for the former and the current sponsors.
 
