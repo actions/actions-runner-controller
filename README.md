@@ -8,7 +8,7 @@
 
 `actions-runner-controller` is an open-source project currently developed and maintained in collaboration with the GitHub Actions team, external maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions/actions-runner-controller/discussions).
 
-If you think the project is awesome and it's becoming a basis for your important business, please consider sponsoring [external maintainers](https://github.com/sponsors/actions-runner-controller) and specific contributors via GitHub Sponsors.
+If you think the project is awesome and is adding value to your business, please consider directly sponsoring [community maintainers](https://github.com/sponsors/actions-runner-controller) and individual contributors via GitHub Sponsors.
 
 In case you are already the employer of one of contributors, sponsoring via GitHub Sponsors might not be an option. Just support them in other means!
 
