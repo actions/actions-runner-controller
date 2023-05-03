@@ -205,7 +205,10 @@ func run(ctx context.Context, rc RunnerScaleSetListenerConfig, logger logr.Logge
 		MinRunners:   rc.MinRunners,
 	}
 
-	service := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, opts.serviceOptions...)
+	service, err := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, opts.serviceOptions...)
+	if err != nil {
+		return fmt.Errorf("failed to create new service: %v", err)
+	}
 
 	// Start listening for messages
 	if err = service.Start(); err != nil {

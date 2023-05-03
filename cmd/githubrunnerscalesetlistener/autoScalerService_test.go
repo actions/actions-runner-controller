@@ -21,7 +21,7 @@ func TestNewService(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -36,6 +36,7 @@ func TestNewService(t *testing.T) {
 		},
 	)
 
+	require.NoError(t, err)
 	assert.Equal(t, logger, service.logger)
 }
 
@@ -47,7 +48,7 @@ func TestStart(t *testing.T) {
 	require.NoError(t, log_err, "Error creating logger")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -61,9 +62,11 @@ func TestStart(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
-	err := service.Start()
+	err = service.Start()
 
 	assert.NoError(t, err, "Unexpected error")
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
@@ -78,7 +81,7 @@ func TestStart_ScaleToMinRunners(t *testing.T) {
 	require.NoError(t, log_err, "Error creating logger")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -92,9 +95,11 @@ func TestStart_ScaleToMinRunners(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
-	err := service.Start()
+	err = service.Start()
 
 	assert.NoError(t, err, "Unexpected error")
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
@@ -110,7 +115,7 @@ func TestStart_ScaleToMinRunnersFailed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -124,9 +129,11 @@ func TestStart_ScaleToMinRunnersFailed(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(fmt.Errorf("error")).Once()
 
-	err := service.Start()
+	err = service.Start()
 
 	assert.ErrorContains(t, err, "could not scale to match minimal runners", "Unexpected error")
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
@@ -141,7 +148,7 @@ func TestStart_GetMultipleMessages(t *testing.T) {
 	require.NoError(t, log_err, "Error creating logger")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -155,10 +162,12 @@ func TestStart_GetMultipleMessages(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Return(nil).Times(5)
 	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
-	err := service.Start()
+	err = service.Start()
 
 	assert.NoError(t, err, "Unexpected error")
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
@@ -174,7 +183,7 @@ func TestStart_ErrorOnMessage(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -188,10 +197,12 @@ func TestStart_ErrorOnMessage(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Return(nil).Times(2)
 	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Return(fmt.Errorf("error")).Once()
 
-	err := service.Start()
+	err = service.Start()
 
 	assert.ErrorContains(t, err, "could not get and process message. error", "Unexpected error")
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
@@ -207,7 +218,7 @@ func TestProcessMessage_NoStatistic(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -221,8 +232,9 @@ func TestProcessMessage_NoStatistic(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "test",
 		Body:        "test",
@@ -242,7 +254,7 @@ func TestProcessMessage_IgnoreUnknownMessageType(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -256,8 +268,9 @@ func TestProcessMessage_IgnoreUnknownMessageType(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "unknown",
 		Statistics: &actions.RunnerScaleSetStatistic{
@@ -280,7 +293,7 @@ func TestProcessMessage_InvalidBatchMessageJson(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -295,7 +308,9 @@ func TestProcessMessage_InvalidBatchMessageJson(t *testing.T) {
 		},
 	)
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	require.NoError(t, err)
+
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "RunnerScaleSetJobMessages",
 		Statistics: &actions.RunnerScaleSetStatistic{
@@ -318,7 +333,7 @@ func TestProcessMessage_InvalidJobMessageJson(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -332,8 +347,9 @@ func TestProcessMessage_InvalidJobMessageJson(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "RunnerScaleSetJobMessages",
 		Statistics: &actions.RunnerScaleSetStatistic{
@@ -356,7 +372,7 @@ func TestProcessMessage_MultipleMessages(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -370,10 +386,12 @@ func TestProcessMessage_MultipleMessages(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockRsClient.On("AcquireJobsForRunnerScaleSet", ctx, mock.MatchedBy(func(ids []int64) bool { return ids[0] == 3 && ids[1] == 4 })).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "RunnerScaleSetJobMessages",
 		Statistics: &actions.RunnerScaleSetStatistic{
@@ -397,7 +415,7 @@ func TestProcessMessage_AcquireJobsFailed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -411,9 +429,11 @@ func TestProcessMessage_AcquireJobsFailed(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockRsClient.On("AcquireJobsForRunnerScaleSet", ctx, mock.MatchedBy(func(ids []int64) bool { return ids[0] == 1 })).Return(fmt.Errorf("error")).Once()
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "RunnerScaleSetJobMessages",
 		Statistics: &actions.RunnerScaleSetStatistic{
@@ -437,7 +457,7 @@ func TestScaleForAssignedJobCount_DeDupScale(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -451,9 +471,11 @@ func TestScaleForAssignedJobCount_DeDupScale(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Return(nil).Once()
 
-	err := service.scaleForAssignedJobCount(2)
+	err = service.scaleForAssignedJobCount(2)
 	require.NoError(t, err, "Unexpected error")
 	err = service.scaleForAssignedJobCount(2)
 	require.NoError(t, err, "Unexpected error")
@@ -476,7 +498,7 @@ func TestScaleForAssignedJobCount_ScaleWithinMinMax(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -490,13 +512,15 @@ func TestScaleForAssignedJobCount_ScaleWithinMinMax(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 1).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 3).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 1).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(nil).Once()
 
-	err := service.scaleForAssignedJobCount(0)
+	err = service.scaleForAssignedJobCount(0)
 	require.NoError(t, err, "Unexpected error")
 	err = service.scaleForAssignedJobCount(3)
 	require.NoError(t, err, "Unexpected error")
@@ -521,7 +545,7 @@ func TestScaleForAssignedJobCount_ScaleFailed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -535,9 +559,11 @@ func TestScaleForAssignedJobCount_ScaleFailed(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Return(fmt.Errorf("error"))
 
-	err := service.scaleForAssignedJobCount(2)
+	err = service.scaleForAssignedJobCount(2)
 
 	assert.ErrorContains(t, err, "could not scale ephemeral runner set (namespace/resource). error", "Unexpected error")
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
@@ -553,7 +579,7 @@ func TestProcessMessage_JobStartedMessage(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -567,12 +593,14 @@ func TestProcessMessage_JobStartedMessage(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	service.currentRunnerCount = 1
 
 	mockKubeManager.On("UpdateEphemeralRunnerWithJobInfo", ctx, service.settings.Namespace, "runner1", "owner1", "repo1", ".github/workflows/ci.yaml", "job1", int64(100), int64(3)).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 	mockRsClient.On("AcquireJobsForRunnerScaleSet", ctx, mock.MatchedBy(func(ids []int64) bool { return len(ids) == 0 })).Return(nil).Once()
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "RunnerScaleSetJobMessages",
 		Statistics: &actions.RunnerScaleSetStatistic{
@@ -596,7 +624,7 @@ func TestProcessMessage_JobStartedMessageIgnoreRunnerUpdateError(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := NewService(
+	service, err := NewService(
 		ctx,
 		mockRsClient,
 		mockKubeManager,
@@ -610,12 +638,14 @@ func TestProcessMessage_JobStartedMessageIgnoreRunnerUpdateError(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
+
 	service.currentRunnerCount = 1
 
 	mockKubeManager.On("UpdateEphemeralRunnerWithJobInfo", ctx, service.settings.Namespace, "runner1", "owner1", "repo1", ".github/workflows/ci.yaml", "job1", int64(100), int64(3)).Run(func(args mock.Arguments) { cancel() }).Return(fmt.Errorf("error")).Once()
 	mockRsClient.On("AcquireJobsForRunnerScaleSet", ctx, mock.MatchedBy(func(ids []int64) bool { return len(ids) == 0 })).Return(nil).Once()
 
-	err := service.processMessage(&actions.RunnerScaleSetMessage{
+	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "RunnerScaleSetJobMessages",
 		Statistics: &actions.RunnerScaleSetStatistic{

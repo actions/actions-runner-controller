@@ -146,7 +146,7 @@ var (
 			Name:      "assigned_jobs_total",
 			Help:      "Total number of jobs assigned to the scale set.",
 		},
-		jobLabels,
+		scaleSetLabels,
 	)
 
 	startedJobsTotal = prometheus.NewCounterVec(
@@ -248,42 +248,56 @@ var runtimeBuckets []float64 = []float64{
 
 type metricsExporter struct {
 	// fields updated on each iteration
-	stats         *actions.RunnerScaleSetStatistic
-	exportFuncs   []func()
-	jobsAvailable []*actions.JobAvailable
-	jobsAssigned  []*actions.JobAssigned
-	jobsStarted   []*actions.JobStarted
-	jobsCompleted []*actions.JobCompleted
-	jobsAcquired  float64
+	exportFuncs []func()
 
 	// Initialized during creation.
-	scaleSetLabels             prometheus.Labels
-	jobLabels                  prometheus.Labels
-	completedJobsTotalLabels   prometheus.Labels
-	startedJobsTotalLabels     prometheus.Labels
-	jobStartupDurationLabels   prometheus.Labels
-	jobExecutionDurationLabels prometheus.Labels
+	baseLabels
 }
 
-func (m *metricsExporter) withLabels(l prometheus.Labels) {
-	if l == nil {
-		return
-	}
-
-	m.scaleSetLabels = makeLabels(l, scaleSetLabels)
-	m.jobLabels = makeLabels(l, jobLabels)
-	m.completedJobsTotalLabels = makeLabels(l, completedJobsTotalLabels)
-	m.startedJobsTotalLabels = makeLabels(l, startedJobsTotalLabels)
-	m.jobStartupDurationLabels = makeLabels(l, jobStartupDurationLabels)
-	m.jobExecutionDurationLabels = makeLabels(l, jobExecutionDurationLabels)
+type baseLabels struct {
+	scaleSetName                  string
+	scaleSetConfigURL             string
+	autoscalingRunnerSetName      string
+	autoscalingRunnerSetNamespace string
+	repositoryName                string
+	ownerName                     string
 }
 
-func makeLabels(labels prometheus.Labels, names []string) prometheus.Labels {
-	l := make(prometheus.Labels, len(labels))
-	for _, lbl := range names {
-		l[lbl] = labels[lbl]
+func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
+	return prometheus.Labels{
+		labelKeyRepositoryName: b.repositoryName,
+		labelKeyOwnerName:      b.ownerName,
+		labelKeyJobName:        jobBase.JobDisplayName,
+		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
+		labelKeyEventName:      jobBase.EventName,
 	}
+}
+
+func (b *baseLabels) scaleSetLabels() prometheus.Labels {
+	return prometheus.Labels{
+		labelKeyRunnerScaleSetName:            b.scaleSetName,
+		labelKeyRunnerScaleSetConfigURL:       b.scaleSetConfigURL,
+		labelKeyAutoScalingRunnerSetName:      b.autoscalingRunnerSetName,
+		labelKeyAutoScalingRunnerSetNamespace: b.autoscalingRunnerSetNamespace,
+	}
+}
+
+func (b *baseLabels) completedJobsTotalLabels(msg *actions.JobCompleted) prometheus.Labels {
+	l := b.jobLabels(&msg.JobMessageBase)
+	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
+	l[labelKeyJobResult] = msg.Result
+	l[labelKeyRunnerName] = msg.RunnerName
 	return l
+}
+
+func (b *baseLabels) startedJobsTotalLabels(msg *actions.JobStarted) prometheus.Labels {
+	l := b.jobLabels(&msg.JobMessageBase)
+	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
+	return l
+}
+
+func (m *metricsExporter) withBaseLabels(base baseLabels) {
+	m.baseLabels = base
 }
 
 func (m *metricsExporter) reset() {
@@ -291,70 +305,40 @@ func (m *metricsExporter) reset() {
 }
 
 func (m *metricsExporter) withStatistics(stats *actions.RunnerScaleSetStatistic) {
-	if len(m.scaleSetLabels) == 0 {
-		return
-	}
+	l := m.scaleSetLabels()
 	m.exportFuncs = append(m.exportFuncs, func() {
-		availableJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAvailableJobs))
-		acquiredJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAcquiredJobs))
-		assignedJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAssignedJobs))
-		runningJobs.With(m.scaleSetLabels).Set(float64(m.stats.TotalAssignedJobs))
-		registeredRunners.With(m.scaleSetLabels).Set(float64(m.stats.TotalRegisteredRunners))
-		busyRunners.With(m.scaleSetLabels).Set(float64(m.stats.TotalBusyRunners))
-		idleRunners.With(m.scaleSetLabels).Set(float64(m.stats.TotalIdleRunners))
+		availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
+		acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
+		assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
+		runningJobs.With(l).Set(float64(stats.TotalAssignedJobs))
+		registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
+		busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
+		idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
 	})
-	m.stats = stats
 }
 
 func (m *metricsExporter) withJobAvailable(msg *actions.JobAvailable) {
-	if len(m.jobLabels) == 0 {
-		return
-	}
-
 	m.exportFuncs = append(m.exportFuncs, func() {
-		availableJobsTotal.With(m.jobLabels).Inc()
+		availableJobsTotal.With(m.jobLabels(&msg.JobMessageBase)).Inc()
 	})
 }
 
 func (m *metricsExporter) withJobStarted(msg *actions.JobStarted) {
-	if len(m.startedJobsTotalLabels) == 0 {
-		return
-	}
 	m.exportFuncs = append(m.exportFuncs, func() {
-		l := newPrometheusLabelsFrom(m.jobLabels)
-		l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
-		startedJobsTotal.With(l).Inc()
+		startedJobsTotal.With(m.startedJobsTotalLabels(msg)).Inc()
 	})
 }
 
 func (m *metricsExporter) withJobAssigned(msg *actions.JobAssigned) {
-	if len(m.jobLabels) == 0 {
-		return
-	}
 	m.exportFuncs = append(m.exportFuncs, func() {
-		assignedJobsTotal.With(m.jobLabels).Inc()
+		assignedJobsTotal.With(m.scaleSetLabels()).Inc()
 	})
 }
 
 func (m *metricsExporter) withJobCompleted(msg *actions.JobCompleted) {
-	if len(m.completedJobsTotalLabels) == 0 {
-		return
-	}
 	m.exportFuncs = append(m.exportFuncs, func() {
-		l := newPrometheusLabelsFrom(m.jobLabels)
-		l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
-		l[labelKeyJobResult] = msg.Result
-		l[labelKeyRunnerName] = msg.RunnerName
-		completedJobsTotal.With(l).Inc()
+		completedJobsTotal.With(m.completedJobsTotalLabels(msg)).Inc()
 	})
-}
-
-func newPrometheusLabelsFrom(from prometheus.Labels) prometheus.Labels {
-	l := make(prometheus.Labels)
-	for k, v := range from {
-		l[k] = v
-	}
-	return l
 }
 
 func (m *metricsExporter) withJobsAcquired(count int) {
@@ -362,13 +346,13 @@ func (m *metricsExporter) withJobsAcquired(count int) {
 		return
 	}
 	m.exportFuncs = append(m.exportFuncs, func() {
-		acquiredJobsTotal.With(m.scaleSetLabels).Add(float64(count))
+		acquiredJobsTotal.With(m.scaleSetLabels()).Add(float64(count))
 	})
 }
 
 func (m *metricsExporter) withDesiredRunners(count int) {
 	m.exportFuncs = append(m.exportFuncs, func() {
-		desiredRunners.With(m.scaleSetLabels).Add(float64(count))
+		desiredRunners.With(m.scaleSetLabels()).Add(float64(count))
 	})
 }
 

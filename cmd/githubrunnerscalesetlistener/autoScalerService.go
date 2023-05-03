@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type ScaleSettings struct {
@@ -27,29 +27,35 @@ type Service struct {
 	settings           *ScaleSettings
 	currentRunnerCount int
 	metricsExporter    metricsExporter
+	errs               []error
 }
 
 func WithPrometheusMetrics(conf RunnerScaleSetListenerConfig) func(*Service) {
 	return func(svc *Service) {
-		l := make(prometheus.Labels)
-		l[labelKeyRunnerScaleSetName] = conf.EphemeralRunnerSetName
-		l[labelKeyRunnerScaleSetConfigURL] = conf.ConfigureUrl
-		l[labelKeyAutoScalingRunnerSetName] = conf.EphemeralRunnerSetName
-		l[labelKeyAutoScalingRunnerSetNamespace] = conf.EphemeralRunnerSetNamespace
-		// TODO
-		parsedURL, _ := actions.ParseGitHubConfigFromURL(conf.ConfigureUrl)
-
-		l[labelKeyRepositoryName] = parsedURL.Repository
-		switch parsedURL.Scope {
-		case actions.GitHubScopeEnterprise:
-			l[labelKeyOwnerName] = parsedURL.Enterprise
-		case actions.GitHubScopeUnknown:
-			// TODO: error
-		default:
-			l[labelKeyOwnerName] = parsedURL.Organization
+		parsedURL, err := actions.ParseGitHubConfigFromURL(conf.ConfigureUrl)
+		if err != nil {
+			svc.errs = append(svc.errs, err)
 		}
 
-		svc.metricsExporter.withLabels(l)
+		repo := parsedURL.Repository
+		var owner string
+		switch parsedURL.Scope {
+		case actions.GitHubScopeEnterprise:
+			owner = parsedURL.Enterprise
+		case actions.GitHubScopeUnknown:
+			svc.errs = append(svc.errs, fmt.Errorf("scope unknown for confuration URL: %q", conf.ConfigureUrl))
+		default:
+			owner = parsedURL.Organization
+		}
+
+		svc.metricsExporter.withBaseLabels(baseLabels{
+			scaleSetName:                  conf.EphemeralRunnerSetName,
+			scaleSetConfigURL:             conf.ConfigureUrl,
+			autoscalingRunnerSetName:      conf.EphemeralRunnerSetName,
+			autoscalingRunnerSetNamespace: conf.EphemeralRunnerSetNamespace,
+			repositoryName:                repo,
+			ownerName:                     owner,
+		})
 	}
 }
 
@@ -65,7 +71,7 @@ func NewService(
 	manager KubernetesManager,
 	settings *ScaleSettings,
 	options ...func(*Service),
-) *Service {
+) (*Service, error) {
 	s := &Service{
 		ctx:                ctx,
 		rsClient:           rsClient,
@@ -79,7 +85,11 @@ func NewService(
 		option(s)
 	}
 
-	return s
+	if len(s.errs) > 0 {
+		return nil, errors.Join(s.errs...)
+	}
+
+	return s, nil
 }
 
 func (s *Service) Start() error {

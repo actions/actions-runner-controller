@@ -194,8 +194,6 @@ func main() {
 		log.Info("Using default AutoscalingListener logging parameters", "LogLevel", actionsgithubcom.DefaultScaleSetListenerLogLevel, "LogFormat", actionsgithubcom.DefaultScaleSetListenerLogFormat)
 	}
 
-	actionsgithubcom.SetMetricsAddr(metricsAddr)
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		NewCache:           newCache,

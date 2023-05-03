@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.19.4 as builder
+FROM --platform=$BUILDPLATFORM golang:1.20.4 as builder
 
 WORKDIR /workspace
 
