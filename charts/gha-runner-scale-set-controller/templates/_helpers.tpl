@@ -51,6 +51,7 @@ Selector labels
 */}}
 {{- define "gha-runner-scale-set-controller.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "gha-runner-scale-set-controller.name" . }}
+app.kubernetes.io/namespace: {{ .Release.Namespace }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 

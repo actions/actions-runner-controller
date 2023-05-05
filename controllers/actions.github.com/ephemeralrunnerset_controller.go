@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
@@ -49,6 +50,8 @@ type EphemeralRunnerSetReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	ActionsClient actions.MultiClient
+
+	PublishMetrics bool
 
 	resourceBuilder resourceBuilder
 }
@@ -162,6 +165,34 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		"failed", len(failedEphemeralRunners),
 		"deleting", len(deletingEphemeralRunners),
 	)
+
+	if r.PublishMetrics {
+		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigUrl
+		parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
+		if err != nil {
+			log.Error(err, "Github Config URL is invalid", "URL", githubConfigURL)
+			// stop reconciling on this object
+			return ctrl.Result{}, nil
+		}
+
+		owner := parsedURL.Organization
+		if parsedURL.Enterprise != "" {
+			owner = parsedURL.Enterprise
+		}
+
+		metrics.SetEphemeralRunnerCountsByStatus(
+			metrics.CommonLabels{
+				Name:      ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
+				Namespace: ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
+				Repo:      parsedURL.Repository,
+				Owner:     owner,
+				ConfigURL: githubConfigURL,
+			},
+			len(pendingEphemeralRunners),
+			len(runningEphemeralRunners),
+			len(failedEphemeralRunners),
+		)
+	}
 
 	// cleanup finished runners and proceed
 	var errs []error

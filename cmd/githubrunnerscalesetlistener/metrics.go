@@ -9,8 +9,8 @@ import (
 
 // label names
 const (
-	labelKeyRunnerScaleSetName            = "runner_scale_set_name"
-	labelKeyRunnerScaleSetConfigURL       = "runner_scale_set_config_url"
+	labelKeyRunnerScaleSetName            = "name"
+	labelKeyRunnerScaleSetConfigURL       = "config_url"
 	labelKeyAutoScalingRunnerSetName      = "auto_scaling_runner_set_name"
 	labelKeyAutoScalingRunnerSetNamespace = "auto_scaling_runner_set_namespace"
 	labelKeyRepositoryName                = "repository_name"
@@ -100,6 +100,24 @@ var (
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "busy_runners",
 			Help:      "Number of registered runners running a job.",
+		},
+		scaleSetLabels,
+	)
+
+	minRunners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "min_runners",
+			Help:      "Number of runners desired bu the scale set.",
+		},
+		scaleSetLabels,
+	)
+
+	maxRunners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "max_runners",
+			Help:      "Number of runners desired bu the scale set.",
 		},
 		scaleSetLabels,
 	)

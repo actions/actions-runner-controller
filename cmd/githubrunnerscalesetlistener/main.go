@@ -111,6 +111,8 @@ func main() {
 			runningJobs,
 			registeredRunners,
 			busyRunners,
+			minRunners,
+			maxRunners,
 			desiredRunners,
 			idleRunners,
 			availableJobsTotal,

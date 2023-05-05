@@ -21,8 +21,12 @@ spec:
     {{- end }}
 
   selector:
-    matchLabels:
-      app.kubernetes.io/part-of: gha-runner-scale-set
+    matchExpressions:
+    - key: app.kubernetes.io/part-of
+      operator: In
+      values:
+      - gha-runner-scale-set
+      - gha-runner-scale-set-controller
   endpoints:
   - port: metrics
     path: "/metrics"

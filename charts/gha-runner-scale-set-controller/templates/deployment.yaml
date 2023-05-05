@@ -67,6 +67,11 @@ spec:
         {{- end }}
         command:
         - "/manager"
+        {{- if .Values.metrics.serviceMonitor }}
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        {{- end }}
         env:
         - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
           value: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
