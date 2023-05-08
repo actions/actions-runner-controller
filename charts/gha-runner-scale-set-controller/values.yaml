@@ -88,4 +88,4 @@ flags:
   # If this mode is disabled, the controller will apply changes immediately which could
   # result in a temporary overprovisioning of runners as the controllers reconcile
   # the desired state.
-  drainJobsMode: true
+  drainJobsMode: false
