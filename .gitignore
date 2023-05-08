@@ -35,4 +35,4 @@ bin
 .DS_STORE
 
 /test-assets
-/workspaces/actions-runner-controller/config/manager/kustomization.yaml
+config/manager/kustomization.yaml
