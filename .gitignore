@@ -35,4 +35,3 @@ bin
 .DS_STORE
 
 /test-assets
-config/manager/kustomization.yaml
