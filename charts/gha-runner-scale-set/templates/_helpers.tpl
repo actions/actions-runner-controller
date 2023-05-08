@@ -58,7 +58,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.noPermissionServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-no-permission-service-account
+{{- include "gha-runner-scale-set.fullname" . }}-no-permission
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeRoleName" -}}
@@ -70,7 +70,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode-service-account
+{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
