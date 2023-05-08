@@ -132,7 +132,7 @@ func main() {
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
-	flag.BoolVar(&drainJobsMode, "drain-jobs-mode", true, "Wait for jobs to finish before mutating resources.")
+	flag.BoolVar(&drainJobsMode, "drain-jobs-mode", false, "Wait for jobs to finish before mutating resources.")
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.Parse()
 
@@ -173,7 +173,7 @@ func main() {
 		}
 
 		if drainJobsMode {
-			log.Info("Drain jobs mode is enabled. The controller will wait for jobs to finish before mutating resources.")
+			log.Info("Drain jobs mode is enabled. The controller will wait for jobs to finish before mutating resources.", drainJobsMode)
 		}
 	}
 
