@@ -65,11 +65,16 @@ spec:
         {{- with .Values.flags.updateStrategy }}
         - "--update-strategy={{ . }}"
         {{- end }}
+        {{- with .Values.metrics }}
+        - "--listener-metrics-addr={{ .listenerAddr }}"
+        - "--listener-metrics-endpoint={{ .listenerEndpoint }}"
+        - "--metrics-addr={{ .controllerAddr }}"
+        {{- end }}
         command:
         - "/manager"
-        {{- if .Values.metrics.serviceMonitor }}
+        {{- with .Values.metrics }}
         ports:
-        - containerPort: 8080
+        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerAddr "${1}"}}
           protocol: TCP
         {{- end }}
         env:

@@ -37,24 +37,12 @@ func WithPrometheusMetrics(conf RunnerScaleSetListenerConfig) func(*Service) {
 			svc.errs = append(svc.errs, err)
 		}
 
-		repo := parsedURL.Repository
-		var owner string
-		switch parsedURL.Scope {
-		case actions.GitHubScopeEnterprise:
-			owner = parsedURL.Enterprise
-		case actions.GitHubScopeUnknown:
-			svc.errs = append(svc.errs, fmt.Errorf("scope unknown for confuration URL: %q", conf.ConfigureUrl))
-		default:
-			owner = parsedURL.Organization
-		}
-
 		svc.metricsExporter.withBaseLabels(baseLabels{
-			scaleSetName:                  conf.EphemeralRunnerSetName,
-			scaleSetConfigURL:             conf.ConfigureUrl,
-			autoscalingRunnerSetName:      conf.EphemeralRunnerSetName,
-			autoscalingRunnerSetNamespace: conf.EphemeralRunnerSetNamespace,
-			repositoryName:                repo,
-			ownerName:                     owner,
+			scaleSetName:      conf.EphemeralRunnerSetName,
+			scaleSetNamespace: conf.EphemeralRunnerSetNamespace,
+			enterprise:        parsedURL.Enterprise,
+			organization:      parsedURL.Organization,
+			repository:        parsedURL.Repository,
 		})
 	}
 }

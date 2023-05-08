@@ -9,34 +9,35 @@ import (
 
 // label names
 const (
-	labelKeyRunnerScaleSetName            = "name"
-	labelKeyRunnerScaleSetConfigURL       = "config_url"
-	labelKeyAutoScalingRunnerSetName      = "auto_scaling_runner_set_name"
-	labelKeyAutoScalingRunnerSetNamespace = "auto_scaling_runner_set_namespace"
-	labelKeyRepositoryName                = "repository_name"
-	labelKeyOwnerName                     = "owner_name"
-	labelKeyJobName                       = "job_name"
-	labelKeyJobWorkflowRef                = "job_workflow_ref"
-	labelKeyEventName                     = "event_name"
-	labelKeyJobResult                     = "job_result"
-	labelKeyRunnerID                      = "runner_id"
-	labelKeyRunnerName                    = "runner_name"
+	labelKeyRunnerScaleSetName      = "name"
+	labelKeyRunnerScaleSetNamespace = "namespace"
+	labelKeyEnterprise              = "enterprise"
+	labelKeyOrganization            = "organization"
+	labelKeyRepository              = "repository"
+	labelKeyJobName                 = "job_name"
+	labelKeyJobWorkflowRef          = "job_workflow_ref"
+	labelKeyEventName               = "event_name"
+	labelKeyJobResult               = "job_result"
+	labelKeyRunnerID                = "runner_id"
+	labelKeyRunnerName              = "runner_name"
 )
 
-const githubScaleSetSubsystem = "github_runner_scale_set"
+const githubScaleSetSubsystem = "gha"
 
 // labels
 var (
 	scaleSetLabels = []string{
 		labelKeyRunnerScaleSetName,
-		labelKeyRunnerScaleSetConfigURL,
-		labelKeyAutoScalingRunnerSetName,
-		labelKeyAutoScalingRunnerSetNamespace,
+		labelKeyRepository,
+		labelKeyOrganization,
+		labelKeyEnterprise,
+		labelKeyRunnerScaleSetNamespace,
 	}
 
 	jobLabels = []string{
-		labelKeyRepositoryName,
-		labelKeyOwnerName,
+		labelKeyRepository,
+		labelKeyOrganization,
+		labelKeyEnterprise,
 		labelKeyJobName,
 		labelKeyJobWorkflowRef,
 		labelKeyEventName,
@@ -90,7 +91,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "registered_runners",
-			Help:      "Number of registered runners.",
+			Help:      "Number of runners registered by the scale set.",
 		},
 		scaleSetLabels,
 	)
@@ -108,7 +109,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "min_runners",
-			Help:      "Number of runners desired bu the scale set.",
+			Help:      "Minimum number of runners.",
 		},
 		scaleSetLabels,
 	)
@@ -117,7 +118,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "max_runners",
-			Help:      "Number of runners desired bu the scale set.",
+			Help:      "Maximum number of runners.",
 		},
 		scaleSetLabels,
 	)
@@ -126,7 +127,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "desired_runners",
-			Help:      "Number of runners desired bu the scale set.",
+			Help:      "Number of runners desired by the scale set.",
 		},
 		scaleSetLabels,
 	)
@@ -273,18 +274,18 @@ type metricsExporter struct {
 }
 
 type baseLabels struct {
-	scaleSetName                  string
-	scaleSetConfigURL             string
-	autoscalingRunnerSetName      string
-	autoscalingRunnerSetNamespace string
-	repositoryName                string
-	ownerName                     string
+	scaleSetName      string
+	scaleSetNamespace string
+	enterprise        string
+	organization      string
+	repository        string
 }
 
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
-		labelKeyRepositoryName: b.repositoryName,
-		labelKeyOwnerName:      b.ownerName,
+		labelKeyEnterprise:     b.enterprise,
+		labelKeyOrganization:   b.organization,
+		labelKeyRepository:     b.repository,
 		labelKeyJobName:        jobBase.JobDisplayName,
 		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
 		labelKeyEventName:      jobBase.EventName,
@@ -293,10 +294,11 @@ func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Label
 
 func (b *baseLabels) scaleSetLabels() prometheus.Labels {
 	return prometheus.Labels{
-		labelKeyRunnerScaleSetName:            b.scaleSetName,
-		labelKeyRunnerScaleSetConfigURL:       b.scaleSetConfigURL,
-		labelKeyAutoScalingRunnerSetName:      b.autoscalingRunnerSetName,
-		labelKeyAutoScalingRunnerSetNamespace: b.autoscalingRunnerSetNamespace,
+		labelKeyRunnerScaleSetName:      b.scaleSetName,
+		labelKeyRunnerScaleSetNamespace: b.scaleSetNamespace,
+		labelKeyEnterprise:              b.enterprise,
+		labelKeyOrganization:            b.organization,
+		labelKeyRepository:              b.repository,
 	}
 }
 

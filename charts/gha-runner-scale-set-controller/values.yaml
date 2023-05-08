@@ -102,12 +102,15 @@ flags:
   ##   This can lead to a longer time to apply the change but it will ensure
   ##   that you don't have any overprovisioning of runners.
   updateStrategy: "immediate"
-<<<<<<< HEAD
-=======
 
+# If metrics object is not provided, following flags won't be applied:
+# --metrics-addr, --listener-metrics-addr, --listener-metrics-endpoint
+# Keep in mind, metrics are exposed by default (flags have default values)
+# specifying the default port and default endpoint.
+#
+# To turn off metrics, specify empty strings for controllerAddr and listenerAddr
 metrics:
-  serviceMonitor: false
-  serviceMonitorNamespace: "default" # need to match the namespace your prometheus's watching namespaces
-  serviceMonitorLabels:
-    release: "prometheus"
->>>>>>> 3cca498 (apply correct labels to specific metrics, have labels as constants and run them after the patch)
+  controllerAddr: ":8080"
+  listenerAddr: ":8080"
+  listenerEndpoint: "/metrics"
+

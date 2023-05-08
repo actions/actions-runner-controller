@@ -548,7 +548,3 @@ volumeMounts:
 {{- $managerServiceAccountNamespace }}
 {{- end }}
 {{- end }}
-
-{{- define "gha-runner-scale-set.metricsExporterServiceName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-metrics-exporter-service
-{{- end }}

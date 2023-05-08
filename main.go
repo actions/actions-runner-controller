@@ -74,6 +74,10 @@ func main() {
 		err      error
 		ghClient *github.Client
 
+		// metrics server configuration for AutoscalingListener
+		listenerMetricsAddr     string
+		listenerMetricsEndpoint string
+
 		metricsAddr              string
 		autoScalingRunnerSetOnly bool
 		enableLeaderElection     bool
@@ -104,6 +108,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	flag.StringVar(&listenerMetricsAddr, "listener-metrics-addr", ":8080", "The address applied to AutoscalingListener metrics server")
+	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
@@ -264,9 +270,11 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Log:    log.WithName("AutoscalingListener"),
-			Scheme: mgr.GetScheme(),
+			Client:                  mgr.GetClient(),
+			Log:                     log.WithName("AutoscalingListener"),
+			Scheme:                  mgr.GetScheme(),
+			ListenerMetricsAddr:     listenerMetricsAddr,
+			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)

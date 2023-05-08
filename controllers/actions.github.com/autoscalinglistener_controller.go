@@ -47,8 +47,10 @@ const (
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
 type AutoscalingListenerReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log                     logr.Logger
+	Scheme                  *runtime.Scheme
+	ListenerMetricsAddr     string
+	ListenerMetricsEndpoint string
 
 	resourceBuilder resourceBuilder
 }
@@ -371,9 +373,22 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		envs = append(envs, env)
 	}
 
-	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
+	var metricsConfig *listenerMetricsServerConfig
+	if len(r.ListenerMetricsAddr) != 0 {
+		metricsConfig = &listenerMetricsServerConfig{
+			addr:     r.ListenerMetricsAddr,
+			endpoint: r.ListenerMetricsEndpoint,
+		}
+	}
+
+	newPod, err := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, metricsConfig, envs...)
+	if err != nil {
+		logger.Error(err, "Failed to build listener pod")
+		return ctrl.Result{}, err
+	}
 
 	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
+		logger.Error(err, "Failed to set controller reference")
 		return ctrl.Result{}, err
 	}
 

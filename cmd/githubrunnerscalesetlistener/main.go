@@ -19,13 +19,13 @@ package main
 import (
 	"context"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -35,6 +35,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/sync/errgroup"
 )
 
 type RunnerScaleSetListenerConfig struct {
@@ -48,9 +49,12 @@ type RunnerScaleSetListenerConfig struct {
 	MaxRunners                  int    `split_words:"true"`
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
+	RunnerScaleSetName          string `split_words:"true"`
 	ServerRootCA                string `split_words:"true"`
 	LogLevel                    string `split_words:"true"`
 	LogFormat                   string `split_words:"true"`
+	MetricsAddr                 string `split_words:"true"`
+	MetricsEndpoint             string `split_words:"true"`
 }
 
 func main() {
@@ -85,9 +89,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	errCh := make(chan error, 2)
+	g, ctx := errgroup.WithContext(ctx)
 
-	go func() {
+	g.Go(func() error {
 		opts := runOptions{
 			serviceOptions: []func(*Service){
 				WithLogger(logger),
@@ -95,69 +99,77 @@ func main() {
 		}
 		opts.serviceOptions = append(opts.serviceOptions, WithPrometheusMetrics(rc))
 
-		if err := run(ctx, rc, logger, opts); err != nil && !errors.Is(err, context.Canceled) {
-			errCh <- err
-			return
-		}
-		errCh <- nil
-	}()
+		return run(ctx, rc, logger, opts)
+	})
 
-	go func() {
-		reg := prometheus.NewRegistry()
-		reg.MustRegister(
-			availableJobs,
-			acquiredJobs,
-			assignedJobs,
-			runningJobs,
-			registeredRunners,
-			busyRunners,
-			minRunners,
-			maxRunners,
-			desiredRunners,
-			idleRunners,
-			availableJobsTotal,
-			acquiredJobsTotal,
-			assignedJobsTotal,
-			startedJobsTotal,
-			completedJobsTotal,
-			jobQueueDurationSeconds,
-			jobStartupDurationSeconds,
-			jobExecutionDurationSeconds,
-		)
-
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
-
-		srv := http.Server{
-			Addr:    ":8888",
-			Handler: mux,
-		}
-
-		go func() {
-			<-ctx.Done()
-			srv.Shutdown(context.Background())
-		}()
-
-		logger.Info("Starting metrics server", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-			return
-		}
-		errCh <- nil
-	}()
-
-	err1 := <-errCh
-	stop()
-	if err1 != nil {
-		logger.Error(err1, "First error emitted")
+	if len(rc.MetricsAddr) != 0 {
+		g.Go(func() error {
+			metricsServer := metricsServer{
+				rc:     rc,
+				logger: logger,
+			}
+			g.Go(func() error {
+				<-ctx.Done()
+				return metricsServer.shutdown()
+			})
+			return metricsServer.run()
+		})
 	}
-	err2 := <-errCh
-	if err2 != nil {
-		logger.Error(err2, "Second error emitted")
-	}
-	if err1 != nil || err2 != nil {
+
+	if err := g.Wait(); err != nil {
+		logger.Error(err, "Error encountered")
 		os.Exit(1)
 	}
+}
+
+type metricsServer struct {
+	rc     RunnerScaleSetListenerConfig
+	logger logr.Logger
+	srv    *http.Server
+}
+
+func (s *metricsServer) shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return s.srv.Shutdown(ctx)
+}
+
+func (s *metricsServer) run() error {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		availableJobs,
+		acquiredJobs,
+		assignedJobs,
+		runningJobs,
+		registeredRunners,
+		busyRunners,
+		minRunners,
+		maxRunners,
+		desiredRunners,
+		idleRunners,
+		availableJobsTotal,
+		acquiredJobsTotal,
+		assignedJobsTotal,
+		startedJobsTotal,
+		completedJobsTotal,
+		jobQueueDurationSeconds,
+		jobStartupDurationSeconds,
+		jobExecutionDurationSeconds,
+	)
+
+	mux := http.NewServeMux()
+	mux.Handle(
+		s.rc.MetricsEndpoint,
+		promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}),
+	)
+
+	s.srv = &http.Server{
+		Addr:    s.rc.MetricsAddr,
+		Handler: mux,
+	}
+
+	s.logger.Info("Starting metrics server", "address", s.srv.Addr)
+	return s.srv.ListenAndServe()
 }
 
 type runOptions struct {
