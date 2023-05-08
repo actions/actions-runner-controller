@@ -210,6 +210,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			log.Info("AutoscalingListener does not exist.")
 		}
 	}
+
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
 	if !reflect.DeepEqual(*listener, v1alpha1.AutoscalingListener{}) && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
@@ -228,7 +229,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
 		if r.drainingJobs(&latestRunnerSet.Status) {
 			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
-			return ctrl.Result{}, nil
+			log.Info("Scaling down the number of desired replicas to 0")
+			// We are in the process of draining the jobs. The listener has been deleted and the ephemeral runner set replicas
+			// need to scale down to 0
+			err := patch(ctx, r.Client, latestRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
+				obj.Spec.Replicas = 0
+			})
+			if err != nil {
+				log.Error(err, "Failed to patch runner set to set desired count to 0")
+			}
+			return ctrl.Result{}, err
 		}
 		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
