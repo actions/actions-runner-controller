@@ -47,6 +47,7 @@ authSecret:
   #github_basicauth_username: ""
   #github_basicauth_password: ""
 
+# http(s) should be specified for dockerRegistryMirror, e.g.: dockerRegistryMirror="https://<your-docker-registry-mirror>"
 dockerRegistryMirror: ""
 image:
   repository: "summerwind/actions-runner-controller"
@@ -359,6 +360,7 @@ actionsMetricsServer:
         protocol: TCP
         name: http
         #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+    loadBalancerSourceRanges: []
   ingress:
     enabled: false
     ingressClassName: ""
@@ -388,4 +390,5 @@ actionsMetricsServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
-
+  terminationGracePeriodSeconds: 10
+  lifecycle: {}
