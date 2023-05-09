@@ -72,8 +72,8 @@ jobs:
         run: git diff --exit-code
       - name: Install kubebuilder
         run: |
-          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.10.0/kubebuilder_linux_amd64.tar.gz
-          tar zxvf kubebuilder_linux_amd64.tar.gz
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.10.0/kubebuilder_linux_amd64
+          chmod +x kubebuilder_linux_amd64
           sudo mv kubebuilder_linux_amd64 /usr/local/kubebuilder
       - name: Run go tests
         run: |
