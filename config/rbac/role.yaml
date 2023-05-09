@@ -105,6 +105,13 @@ rules:
 - apiGroups:
   - actions.github.com
   resources:
+  - ephemeralrunnersets/finalizers
+  verbs:
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
   - ephemeralrunnersets/status
   verbs:
   - get

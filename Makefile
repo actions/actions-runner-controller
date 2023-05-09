@@ -5,7 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.303.0
+RUNNER_VERSION ?= 2.304.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -202,7 +202,7 @@ generate: controller-gen
 
 # Run shellcheck on runner scripts
 shellcheck: shellcheck-install
-	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh
+	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh hack/*.sh
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\

@@ -50,6 +50,12 @@ spec:
         {{- end }}
         command:
         - "/actions-metrics-server"
+        {{- if .Values.actionsMetricsServer.lifecycle }}
+        {{- with .Values.actionsMetricsServer.lifecycle }}
+        lifecycle:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
         env:
         - name: GITHUB_WEBHOOK_SECRET_TOKEN
           valueFrom:
@@ -142,7 +148,7 @@ spec:
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
       {{- end }}
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: {{ .Values.actionsMetricsServer.terminationGracePeriodSeconds }}
       {{- with .Values.actionsMetricsServer.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

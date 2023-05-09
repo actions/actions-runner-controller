@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/github/actions/fake"
 	"github.com/actions/actions-runner-controller/github/actions/testserver"
@@ -38,12 +39,24 @@ const (
 	autoscalingRunnerSetTestGitHubToken = "gh_token"
 )
 
-var _ = Describe("Test AutoScalingRunnerSet controller", func() {
+var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	var ctx context.Context
 	var mgr ctrl.Manager
 	var autoscalingNS *corev1.Namespace
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
+
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -67,6 +80,9 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					LabelKeyKubernetesVersion: buildVersion,
+				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
@@ -280,10 +296,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
 					}
 
-					return runnerSetList.Items[0].Labels[LabelKeyRunnerSpecHash], nil
+					return runnerSetList.Items[0].Labels[labelKeyRunnerSpecHash], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[LabelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
+				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[labelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
 
 			// We should create a new listener
 			Eventually(
@@ -474,7 +490,19 @@ var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 	})
 })
 
-var _ = Describe("Test AutoScalingController updates", func() {
+var _ = Describe("Test AutoScalingController updates", Ordered, func() {
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
+
 	Context("Creating autoscaling runner set with RunnerScaleSetName set", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager
@@ -483,6 +511,7 @@ var _ = Describe("Test AutoScalingController updates", func() {
 		var configSecret *corev1.Secret
 
 		BeforeEach(func() {
+			originalBuildVersion = build.Version
 			ctx = context.Background()
 			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
@@ -528,6 +557,9 @@ var _ = Describe("Test AutoScalingController updates", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "https://github.com/owner/repo",
@@ -598,7 +630,18 @@ var _ = Describe("Test AutoScalingController updates", func() {
 	})
 })
 
-var _ = Describe("Test AutoscalingController creation failures", func() {
+var _ = Describe("Test AutoscalingController creation failures", Ordered, func() {
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
 	Context("When autoscaling runner set creation fails on the client", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager
@@ -629,6 +672,9 @@ var _ = Describe("Test AutoscalingController creation failures", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl: "https://github.com/owner/repo",
@@ -707,7 +753,18 @@ var _ = Describe("Test AutoscalingController creation failures", func() {
 	})
 })
 
-var _ = Describe("Test Client optional configuration", func() {
+var _ = Describe("Test client optional configuration", Ordered, func() {
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
 	Context("When specifying a proxy", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager
@@ -747,6 +804,9 @@ var _ = Describe("Test Client optional configuration", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "http://example.com/org/repo",
@@ -823,6 +883,9 @@ var _ = Describe("Test Client optional configuration", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "http://example.com/org/repo",
@@ -939,6 +1002,9 @@ var _ = Describe("Test Client optional configuration", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
@@ -989,6 +1055,9 @@ var _ = Describe("Test Client optional configuration", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "https://github.com/owner/repo",
@@ -1050,6 +1119,9 @@ var _ = Describe("Test Client optional configuration", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-asrs",
 					Namespace: autoscalingNS.Name,
+					Labels: map[string]string{
+						LabelKeyKubernetesVersion: buildVersion,
+					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "https://github.com/owner/repo",
@@ -1102,7 +1174,19 @@ var _ = Describe("Test Client optional configuration", func() {
 	})
 })
 
-var _ = Describe("Test external permissions cleanup", func() {
+var _ = Describe("Test external permissions cleanup", Ordered, func() {
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
+
 	It("Should clean up kubernetes mode permissions", func() {
 		ctx := context.Background()
 		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
@@ -1129,7 +1213,8 @@ var _ = Describe("Test external permissions cleanup", func() {
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
 				Labels: map[string]string{
-					"app.kubernetes.io/name": "gha-runner-scale-set",
+					"app.kubernetes.io/name":  "gha-runner-scale-set",
+					LabelKeyKubernetesVersion: buildVersion,
 				},
 				Annotations: map[string]string{
 					AnnotationKeyKubernetesModeRoleBindingName:    "kube-mode-role-binding",
@@ -1160,7 +1245,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1171,7 +1256,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeServiceAccountName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1182,7 +1267,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyKubernetesModeRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -1286,7 +1371,8 @@ var _ = Describe("Test external permissions cleanup", func() {
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
 				Labels: map[string]string{
-					"app.kubernetes.io/name": "gha-runner-scale-set",
+					"app.kubernetes.io/name":  "gha-runner-scale-set",
+					LabelKeyKubernetesVersion: buildVersion,
 				},
 				Annotations: map[string]string{
 					AnnotationKeyManagerRoleName:                "manager-role",
@@ -1317,7 +1403,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyGitHubSecretName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 			Data: map[string][]byte{
 				"github_token": []byte(defaultGitHubToken),
@@ -1333,7 +1419,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1344,7 +1430,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyManagerRoleBindingName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
@@ -1360,7 +1446,7 @@ var _ = Describe("Test external permissions cleanup", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       autoscalingRunnerSet.Annotations[AnnotationKeyNoPermissionServiceAccountName],
 				Namespace:  autoscalingRunnerSet.Namespace,
-				Finalizers: []string{autoscalingRunnerSetCleanupFinalizerName},
+				Finalizers: []string{AutoscalingRunnerSetCleanupFinalizerName},
 			},
 		}
 
@@ -1463,5 +1549,78 @@ var _ = Describe("Test external permissions cleanup", func() {
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue(), "Expected role to be cleaned up")
+	})
+})
+
+var _ = Describe("Test resource version and build version mismatch", func() {
+	It("Should delete and recreate the autoscaling runner set to match the build version", func() {
+		ctx := context.Background()
+		autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
+
+		configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		controller := &AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Scheme:                             mgr.GetScheme(),
+			Log:                                logf.Log,
+			ControllerNamespace:                autoscalingNS.Name,
+			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			ActionsClient:                      fake.NewMultiClient(),
+		}
+		err := controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		originalVersion := build.Version
+		defer func() {
+			build.Version = originalVersion
+		}()
+		build.Version = "0.2.0"
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet := &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					"app.kubernetes.io/name":    "gha-runner-scale-set",
+					"app.kubernetes.io/version": "0.1.0",
+				},
+				Annotations: map[string]string{
+					AnnotationKeyKubernetesModeRoleBindingName:    "kube-mode-role-binding",
+					AnnotationKeyKubernetesModeRoleName:           "kube-mode-role",
+					AnnotationKeyKubernetesModeServiceAccountName: "kube-mode-service-account",
+				},
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				RunnerGroup:        "testgroup",
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// create autoscaling runner set before starting a manager
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred())
+
+		startManagers(GinkgoT(), mgr)
+
+		Eventually(func() bool {
+			ars := new(v1alpha1.AutoscalingRunnerSet)
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Name}, ars)
+			return errors.IsNotFound(err)
+		}).Should(BeTrue())
 	})
 })
