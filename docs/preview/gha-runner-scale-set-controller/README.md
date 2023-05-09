@@ -16,7 +16,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 ### Demo
 
-https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a73e-27f5e8c75720.mp4
+[![Watch the walkthrough](https://img.youtube.com/vi/wQ0k5k6KW5Y/hqdefault.jpg)](https://youtu.be/wQ0k5k6KW5Y)
 
 ## Setup
 
