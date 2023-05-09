@@ -72,7 +72,7 @@ jobs:
         run: git diff --exit-code
       - name: Install kubebuilder
         run: |
-          curl -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.26.1-darwin-arm64.tar.gz" -o kubebuilder-tools
+          curl -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.26.1-linux-amd64.tar.gz" -o kubebuilder-tools
           tar -zvxf kubebuilder-tools
           sudo mv kubebuilder /usr/local/
       - name: Run go tests
