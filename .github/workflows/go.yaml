@@ -72,9 +72,9 @@ jobs:
         run: git diff --exit-code
       - name: Install kubebuilder
         run: |
-          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_linux_amd64.tar.gz
-          tar zxvf kubebuilder_2.3.2_linux_amd64.tar.gz
-          sudo mv kubebuilder_2.3.2_linux_amd64 /usr/local/kubebuilder
+          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.10.0/kubebuilder_linux_amd64.tar.gz
+          tar zxvf kubebuilder_linux_amd64.tar.gz
+          sudo mv kubebuilder_linux_amd64 /usr/local/kubebuilder
       - name: Run go tests
         run: |
           go test -short `go list ./... | grep -v ./test_e2e_arc`
