@@ -68,7 +68,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
     GITHUB_APP_ID="<GITHUB_APP_ID>"
     GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
     GITHUB_APP_PRIVATE_KEY="<GITHUB_APP_PRIVATE_KEY>"
-    helm install arc-runner-set \
+    helm install "${INSTALLATION_NAME}" \
         --namespace "${NAMESPACE}" \
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
@@ -101,13 +101,12 @@ In addition to the increased reliability of the automatic scaling, we have worke
     ```yaml
     name: Test workflow
     on:
-        workflow_dispatch:
-
+      workflow_dispatch:
     jobs:
-    test:
+      test:
         runs-on: arc-runner-set
-        steps:
-        - name: Hello world
+          steps:
+          - name: Hello world
             run: echo "Hello world"
     ```
 
@@ -209,10 +208,10 @@ To fix this, you can either:
 
     ```yaml
     spec:
-        securityContext:
-            fsGroup: 123
-        containers:
-        - name: runner
+      securityContext:
+        fsGroup: 123
+      containers:
+      - name: runner
         image: ghcr.io/actions/actions-runner:<VERSION> # Replace <VERSION> with the version you want to use
         command: ["/home/runner/run.sh"]
     ```
@@ -222,15 +221,15 @@ To fix this, you can either:
     ```yaml
     template:
     spec:
-        initContainers:
-        - name: kube-init
+      initContainers:
+      - name: kube-init
         image: ghcr.io/actions/actions-runner:latest
         command: ["sudo", "chown", "-R", "1001:123", "/home/runner/_work"]
         volumeMounts:
-            - name: work
-            mountPath: /home/runner/_work
-        containers:
-        - name: runner
+        - name: work
+          mountPath: /home/runner/_work
+      containers:
+      - name: runner
         image: ghcr.io/actions/actions-runner:latest
         command: ["/home/runner/run.sh"]
     ```
