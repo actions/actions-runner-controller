@@ -7,36 +7,121 @@ Date: 2023-05-08
 ## Context
 
 Prometheus metrics are a common way to monitor the cluster. Providing metrics
-can be a helpful way to monitor scale sets and health of the ephemeral runners.
+can be a helpful way to monitor scale sets and the health of the ephemeral runners.
 
 ## Proposal
 
-There are two main components driving the behaviour of the scale set:
+Two main components are driving the behavior of the scale set:
 
-1. ARC controllers responsible for managing kubernetes resources.
+1. ARC controllers responsible for managing Kubernetes resources.
 2. The `AutoscalingListener`, driver of the autoscaling solution responsible for
    describing the desired state.
 
+We can approach publishing those metrics in 3 different ways
+
+### Expose Service Monitor, Services for listeners and a Service for the manager
+
 To expose metrics, we would need to create 3 additional resources:
 
-1. `ServiceMonitor` - resource used by prometheus to match namespaces and
-    services from where it needs to gather metrics
+1. `ServiceMonitor` - a resource used by Prometheus to match namespaces and
+   services from where it needs to gather metrics
 2. `Service` for the `gha-runner-scale-set-controller` - service that will
-    target ARC controller `Deployment`
-3. `Service` for the `gha-runner-scale-set` listeners - service that will target
-    all listeners for each `AutoscalingRunnerSet`
+   target ARC controller `Deployment`
+3. `Service` for each `gha-runner-scale-set` listener - service that will target
+   a single listener pod for each `AutoscalingRunnerSet`
 
-Metrics can be enabled or disabled on the controller level. If the flag
-`metrics-addr` is not empty, the controller and listeners are going to register
-the appropriate collectors.
+#### Pros
 
-Alternatively, if there is a need to control the metrics exposure per
-`AutoscalingRunnerSet`, we can control it by applying additional label on the
-listener.
+- Easy to control which scale set exposes metrics and which does not.
+- Easy to implement using helm charts in case they are enabled per chart
+  installation.
+
+#### Cons
+
+- With a cluster running many scale sets, we are going to create a lot of
+  resources.
+- In case metrics are enabled on the controller manager level, and they should
+  be applied across all `AutoscalingRunnerSets`, it is difficult to inherit this
+  configuration by applying helm charts.
+
+### Create an aggregator service
+
+To create an aggregator service, we can create a simple web application
+responsible for publishing and gathering metrics. All listeners would be
+responsible to communicate the metrics on each message, and controllers are
+responsible to communicate the metrics on each reconciliation.
+
+The application can be executed as a single pod, or as a side container next to
+the manager.
+
+Pros for running the aggregator next to the manager:
+
+- It exists side by side and is following the life cycle of the controller
+  manager
+- We don't need to introduce another controller managing the state of the pod
+
+Cons for running the aggregator next to the manager:
+
+- Crashes of the aggregator can influence the controller manager execution
+- The controller manager pod needs more resources to run
+
+Pros for running the aggregator as a stand-alone:
+
+- Does not influence the controller manager pod
+- The life cycle of the metric can be controlled by the controller manager (by
+  implementing another controller)
+
+Cons for running the aggregator as a stand-alone:
+
+- We need to implement the controller that can spin up the aggregator in case of
+  the crash.
+- If we choose not to implement the controller, the resource like `Deployment`
+  can be used to manage the aggregator, but we lose control over its life cycle.
+
+To expose metrics in this way, we need to:
+
+1. Create a web server with a single `/metrics` endpoint. The endpoint will have
+   `POST` and `GET` methods registered. The `GET` is used by Prometheus to
+   fetch the metrics, while the `POST` is going to be used by controllers and
+   listeners to publish their metrics.
+2. `ServiceMonitor` - to target the metrics aggregator service
+3. `Service` sitting in front of the web server.
+
+#### Pros
+
+- This implementation requires a few additional resources to be created
+  in a cluster.
+- Web server is easy to implement and easy to document - all metrics are aggregated in a
+  single package, and the web server only needs to apply them to its state on
+  `POST`. The `GET` handler is simple.
+- We can avoid Pushgateway from Prometheus.
+
+#### Cons
+
+- Another image that we need to publish on release.
+- Change in metric configuration (on manager update) would require re-creation
+  of all listeners. This is not a big problem but is something to point out.
+- Managing requests/limits can be tricky.
+
+### Use a Prometheus Pushgateway
+
+#### Pros
+
+- Using a supported way of pushing the metrics.
+- Easy to implement using their library.
+
+#### Cons
+
+- In the Prometheus docs, they specify that: "Usually, the only valid use case
+  for Pushgateway is for capturing the outcome of a service-level batch job".
+  The listener does not really fit this criteria.
+- Pushgateway is a single point of failure and potential bottleneck.
+- You lose Prometheus's automatic instance health monitoring via the up metric (generated on every scrape).
+- The Pushgateway never forgets series pushed to it and will expose them to Prometheus forever unless those series are manually deleted via the Pushgateway's API.
 
 ### Metrics exposed by the controller
 
-To get a better understanding about health and workings of the cluster
+To get a better understanding of health and workings of the cluster
 resources, we need to expose the following metrics:
 
 - `pending_ephemeral_runners` - Number of ephemeral runners in a pending state.
@@ -88,6 +173,7 @@ so the names are going to have `github_runner_scale_set_controller` prefix.
 
 ## Consequences
 
-Users can define alerts, monitor the behaviour of both the actions-based metrics
-(gathered from the listener) and the kubernetes resource-based metrics
+Users can define alerts, monitor the behavior of both the actions-based metrics
+(gathered from the listener) and the Kubernetes resource-based metrics
 (gathered from the controller manager).
+
