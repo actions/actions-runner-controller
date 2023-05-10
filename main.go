@@ -250,10 +250,9 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client:        mgr.GetClient(),
-			Log:           log.WithName("AutoscalingListener"),
-			Scheme:        mgr.GetScheme(),
-			DrainJobsMode: drainJobsMode,
+			Client: mgr.GetClient(),
+			Log:    log.WithName("AutoscalingListener"),
+			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
