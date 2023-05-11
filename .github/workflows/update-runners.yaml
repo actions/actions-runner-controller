@@ -48,7 +48,7 @@ jobs:
   check_pr:
     runs-on: ubuntu-latest
     needs: check_versions
-    if: (needs.check_versions.outputs.runner_current_version != needs.check_versions.outputs.runner_latest_version || needs.check_versions.outputs.container_hooks_current_version != needs.check_versions.outputs.container_hooks_latest_version)
+    if: needs.check_versions.outputs.container_hooks_current_version != needs.check_versions.outputs.container_hooks_latest_version
     outputs:
       pr_name: ${{ steps.pr_name.outputs.pr_name }}
     env:
