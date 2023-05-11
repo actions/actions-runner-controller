@@ -82,7 +82,7 @@ jobs:
           PR_NAME="Updates:"
           if [ "$RUNNER_CURRENT_VERSION" != "$RUNNER_LATEST_VERSION" ]
           then
-            PR_NAME="$PR_NAME $RUNNER_MESSAGE and"
+            PR_NAME="$PR_NAME $RUNNER_MESSAGE"
           fi
           if [ "$CONTAINER_HOOKS_CURRENT_VERSION" != "$CONTAINER_HOOKS_LATEST_VERSION" ]
           then
