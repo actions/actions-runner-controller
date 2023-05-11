@@ -120,8 +120,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      
       - name: New branch
-        run: git checkout -b update-runner-$LATEST_VERSION
+        run: git checkout -b update-runner-"$(date +%Y-%m-%d)"
+      
       - name: Update files
         run: |
           sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/VERSION
