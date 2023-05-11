@@ -16,15 +16,15 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
-      runner_current_version: ${{ steps.versions.outputs.runner_current_version }}
-      runner_latest_version: ${{ steps.versions.outputs.runner_latest_version }}
-      container_hooks_current_version: ${{ steps.versions.outputs.container_hooks_current_version }}
-      container_hooks_latest_version: ${{ steps.versions.outputs.container_hooks_latest_version }}
+      runner_current_version: ${{ steps.runner_versions.outputs.runner_current_version }}
+      runner_latest_version: ${{ steps.runner_versions.outputs.runner_latest_version }}
+      container_hooks_current_version: ${{ steps.container_hooks_versions.outputs.container_hooks_current_version }}
+      container_hooks_latest_version: ${{ steps.container_hooks_versions.outputs.container_hooks_latest_version }}
     steps:
       - uses: actions/checkout@v3
 
       - name: Get runner current and latest versions
-        id: versions
+        id: runner_versions
         run: |
           CURRENT_VERSION="$(echo -n $(cat runner/VERSION | grep 'RUNNER_VERSION=' | cut -d '=' -f2))"
           echo "Current version: $CURRENT_VERSION"
@@ -35,6 +35,7 @@ jobs:
           echo runner_latest_version=$LATEST_VERSION >> $GITHUB_OUTPUT
 
       - name: Get container-hooks current and latest versions
+        id: container_hooks_versions
         run: |
           CURRENT_VERSION="$(echo -n $(cat runner/VERSION | grep 'RUNNER_CONTAINER_HOOKS_VERSION=' | cut -d '=' -f2))"
           echo "Current version: $CURRENT_VERSION"
@@ -78,10 +79,10 @@ jobs:
           RUNNER_MESSAGE="runner to v${RUNNER_LATEST_VERSION}"
           CONTAINER_HOOKS_MESSAGE="container-hooks to v${CONTAINER_HOOKS_LATEST_VERSION}"
           
-          PR_NAME="Updates: "
+          PR_NAME="Updates:"
           if [ "$RUNNER_CURRENT_VERSION" != "$RUNNER_LATEST_VERSION" ]
           then
-            PR_NAME="$PR_NAME $RUNNER_MESSAGE and "
+            PR_NAME="$PR_NAME $RUNNER_MESSAGE and"
           fi
           if [ "$CONTAINER_HOOKS_CURRENT_VERSION" != "$CONTAINER_HOOKS_LATEST_VERSION" ]
           then
