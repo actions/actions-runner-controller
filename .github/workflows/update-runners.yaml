@@ -16,8 +16,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
-      current_version: ${{ steps.versions.outputs.current_version }}
-      latest_version: ${{ steps.versions.outputs.latest_version }}
+      runner_current_version: ${{ steps.versions.outputs.runner_current_version }}
+      runner_latest_version: ${{ steps.versions.outputs.runner_latest_version }}
+      container_hooks_current_version: ${{ steps.versions.outputs.container_hooks_current_version }}
+      container_hooks_latest_version: ${{ steps.versions.outputs.container_hooks_latest_version }}
     steps:
       - uses: actions/checkout@v3
 
@@ -48,9 +50,9 @@ jobs:
   check_pr:
     runs-on: ubuntu-latest
     needs: check_versions
-    # if: needs.check_versions.outputs.container_hooks_current_version != needs.check_versions.outputs.container_hooks_latest_version
-    # outputs:
-    #   pr_name: ${{ steps.pr_name.outputs.pr_name }}
+    if: needs.check_versions.outputs.runner_current_version != needs.check_versions.outputs.runner_latest_version || needs.check_versions.outputs.container_hooks_current_version != needs.check_versions.outputs.container_hooks_latest_version
+    outputs:
+      pr_name: ${{ steps.pr_name.outputs.pr_name }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -61,39 +63,39 @@ jobs:
           echo "CONTAINER_HOOKS_CURRENT_VERSION=${{ needs.check_versions.outputs.container_hooks_current_version }}"
           echo "CONTAINER_HOOKS_LATEST_VERSION=${{ needs.check_versions.outputs.container_hooks_latest_version }}"
 
-      # - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      # - name: PR Name
-      #   id: pr_name
-      #   env:
-      #     RUNNER_CURRENT_VERSION: ${{ needs.check_versions.outputs.runner_current_version }}
-      #     RUNNER_LATEST_VERSION: ${{ needs.check_versions.outputs.runner_latest_version }}
-      #     CONTAINER_HOOKS_CURRENT_VERSION: ${{ needs.check_versions.outputs.container_hooks_current_version }}
-      #     CONTAINER_HOOKS_LATEST_VERSION: ${{ needs.check_versions.outputs.container_hooks_latest_version }}
-      #   # Generate a PR name with the following title:
-      #   # Updates: runner to v2.304.0 and container-hooks to v0.3.1
-      #   run: |
-      #     RUNNER_MESSAGE="runner to v${RUNNER_LATEST_VERSION}"
-      #     CONTAINER_HOOKS_MESSAGE="container-hooks to v${CONTAINER_HOOKS_LATEST_VERSION}"
+      - name: PR Name
+        id: pr_name
+        env:
+          RUNNER_CURRENT_VERSION: ${{ needs.check_versions.outputs.runner_current_version }}
+          RUNNER_LATEST_VERSION: ${{ needs.check_versions.outputs.runner_latest_version }}
+          CONTAINER_HOOKS_CURRENT_VERSION: ${{ needs.check_versions.outputs.container_hooks_current_version }}
+          CONTAINER_HOOKS_LATEST_VERSION: ${{ needs.check_versions.outputs.container_hooks_latest_version }}
+        # Generate a PR name with the following title:
+        # Updates: runner to v2.304.0 and container-hooks to v0.3.1
+        run: |
+          RUNNER_MESSAGE="runner to v${RUNNER_LATEST_VERSION}"
+          CONTAINER_HOOKS_MESSAGE="container-hooks to v${CONTAINER_HOOKS_LATEST_VERSION}"
           
-      #     PR_NAME="Updates: "
-      #     if [ "$RUNNER_CURRENT_VERSION" != "$RUNNER_LATEST_VERSION" ]
-      #     then
-      #       PR_NAME="$PR_NAME $RUNNER_MESSAGE and "
-      #     fi
-      #     if [ "$CONTAINER_HOOKS_CURRENT_VERSION" != "$CONTAINER_HOOKS_LATEST_VERSION" ]
-      #     then
-      #       PR_NAME="$PR_NAME $CONTAINER_HOOKS_MESSAGE"
-      #     fi
+          PR_NAME="Updates: "
+          if [ "$RUNNER_CURRENT_VERSION" != "$RUNNER_LATEST_VERSION" ]
+          then
+            PR_NAME="$PR_NAME $RUNNER_MESSAGE and "
+          fi
+          if [ "$CONTAINER_HOOKS_CURRENT_VERSION" != "$CONTAINER_HOOKS_LATEST_VERSION" ]
+          then
+            PR_NAME="$PR_NAME $CONTAINER_HOOKS_MESSAGE"
+          fi
           
-      #     result=$(gh pr list --search "$PR_NAME" --json number --jq ".[].number" --limit 1)
-      #     if [ -z "$result" ]
-      #     then
-      #       echo "No existing PRs found, setting output with pr_name=$PR_NAME"
-      #       echo pr_name=$PR_NAME >> $GITHUB_OUTPUT
-      #     else
-      #       echo "Found a PR with title '$PR_NAME' already existing: ${{ github.server_url }}/${{ github.repository }}/pull/$result"
-      #     fi
+          result=$(gh pr list --search "$PR_NAME" --json number --jq ".[].number" --limit 1)
+          if [ -z "$result" ]
+          then
+            echo "No existing PRs found, setting output with pr_name=$PR_NAME"
+            echo pr_name=$PR_NAME >> $GITHUB_OUTPUT
+          else
+            echo "Found a PR with title '$PR_NAME' already existing: ${{ github.server_url }}/${{ github.repository }}/pull/$result"
+          fi
 
   # update_version updates runner version in the files listed below, commits
   # the changes and opens a pull request as `github-actions` bot.
