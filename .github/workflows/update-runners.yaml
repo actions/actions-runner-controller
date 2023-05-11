@@ -24,7 +24,7 @@ jobs:
       - name: Get runner current and latest versions
         id: versions
         run: |
-          CURRENT_VERSION="$(echo -n $(cat runner/VERSION | grep 'RUNNER_VERSION=' | cut -d '=' -f2))""
+          CURRENT_VERSION="$(echo -n $(cat runner/VERSION | grep 'RUNNER_VERSION=' | cut -d '=' -f2))"
           echo "Current version: $CURRENT_VERSION"
           echo runner_current_version=$CURRENT_VERSION >> $GITHUB_OUTPUT
 
@@ -34,7 +34,7 @@ jobs:
 
       - name: Get container-hooks current and latest versions
         run: |
-          CURRENT_VERSION="$(echo -n $(cat runner/VERSION | grep 'RUNNER_CONTAINER_HOOKS_VERSION=' | cut -d '=' -f2))""
+          CURRENT_VERSION="$(echo -n $(cat runner/VERSION | grep 'RUNNER_CONTAINER_HOOKS_VERSION=' | cut -d '=' -f2))"
           echo "Current version: $CURRENT_VERSION"
           echo container_hooks_current_version=$CURRENT_VERSION >> $GITHUB_OUTPUT
 
