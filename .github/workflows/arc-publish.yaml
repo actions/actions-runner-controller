@@ -1,4 +1,4 @@
-name: Publish ARC
+name: Publish ARC Image
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
