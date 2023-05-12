@@ -1,4 +1,4 @@
-name: Release Runner Images
+name: Release ARC Runner Images
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
@@ -10,7 +10,7 @@ on:
       - 'master'
     paths:
       - 'runner/VERSION'
-      - '.github/workflows/release-runners.yaml'
+      - '.github/workflows/arc-release-runners.yaml'
 
 env:
   # Safeguard to prevent pushing images to registeries after build
