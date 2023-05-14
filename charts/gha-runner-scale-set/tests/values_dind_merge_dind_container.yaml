@@ -1,0 +1,33 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    containers:
+    - name: dind
+      image: docker:dind
+      env:
+      - name: TEST_ENV
+        value: test1234
+      - name: MY_NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      volumeMounts:
+      - name: work
+        mountPath: /home/runner/_work
+      - name: dind-cert
+        mountPath: /certs/client
+      - name: dind-externals
+        mountPath: /home/runner/externals
+      - name: others
+        mountPath: /others
+      securityContext:
+        privileged: false
+        runAsUser: 8888
+      resources:
+        limits:
+          memory: 64Mi
+          cpu: 250m
+containerMode:
+  type: dind

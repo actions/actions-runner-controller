@@ -87,6 +87,36 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
+{{- $dindCount := 0 -}}
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "dind" }}
+    {{- $dindCount = add $dindCount 1 -}}
+    {{- range $key, $val := $container }}
+      {{- if and (ne $key "volumeMounts") (ne $key "name") (ne $key "image") (ne $key "securityContext") $val }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
+      {{- end }}
+    {{- end }}
+image: {{ default "docker:dind" $container.image }}
+    {{- if hasKey $container "securityContext" }}
+securityContext: {{ toYaml $container.securityContext | nindent 2 }}
+    {{- else }}
+securityContext:
+  privileged: true
+    {{- end }}
+    {{- if hasKey $container "volumeMounts" }}
+volumeMounts: {{ toYaml $container.volumeMounts | nindent 2 }}
+    {{- else }}
+volumeMounts:
+  - name: work
+    mountPath: /home/runner/_work
+  - name: dind-cert
+    mountPath: /certs/client
+  - name: dind-externals
+    mountPath: /home/runner/externals
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if eq $dindCount 0 }}
 image: docker:dind
 securityContext:
   privileged: true
@@ -97,6 +127,7 @@ volumeMounts:
     mountPath: /certs/client
   - name: dind-externals
     mountPath: /home/runner/externals
+{{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}

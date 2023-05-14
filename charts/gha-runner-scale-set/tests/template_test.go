@@ -1622,6 +1622,51 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraPodSpec(t *testing.T) {
 	assert.Equal(t, "192.0.2.1", ars.Spec.Template.Spec.DNSConfig.Nameservers[0], "DNS Nameserver should be set")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_DinDMergeDinDContainer(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_merge_dind_container.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "There should be 2 containers")
+	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name, "Container name should be dind")
+	assert.Equal(t, "250m", ars.Spec.Template.Spec.Containers[1].Resources.Limits.Cpu().String(), "CPU Limit should be set")
+	assert.Equal(t, "64Mi", ars.Spec.Template.Spec.Containers[1].Resources.Limits.Memory().String(), "Memory Limit should be set")
+	assert.Equal(t, "TEST_ENV", ars.Spec.Template.Spec.Containers[1].Env[0].Name, "TEST_ENV should be set")
+	assert.Equal(t, "test1234", ars.Spec.Template.Spec.Containers[1].Env[0].Value, "DOCKER_HOST should be set to `test1234`")
+	assert.Equal(t, "MY_NODE_NAME", ars.Spec.Template.Spec.Containers[1].Env[1].Name, "MY_NODE_NAME should be set")
+	assert.Equal(t, "spec.nodeName", ars.Spec.Template.Spec.Containers[1].Env[1].ValueFrom.FieldRef.FieldPath, "MY_NODE_NAME should be set to `spec.nodeName`")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name, "VolumeMount name should be work")
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /home/runner/_work")
+	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name, "VolumeMount name should be dind-cert")
+	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /certs/client")
+	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name, "VolumeMount name should be dind-externals")
+	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath, "VolumeMount mountPath should be /home/runner/externals")
+	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[1].VolumeMounts[3].Name, "VolumeMount name should be others")
+	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[1].VolumeMounts[3].MountPath, "VolumeMount mountPath should be /others")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
 	t.Parallel()
 
