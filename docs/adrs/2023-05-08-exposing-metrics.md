@@ -19,7 +19,7 @@ Two main components are driving the behavior of the scale set:
 
 We can approach publishing those metrics in 3 different ways
 
-### Expose Service Monitor, Services for listeners and a Service for the manager
+### Option 1: Expose a metrics endpoint for the controller-manager and every instance of the listener
 
 To expose metrics, we would need to create 3 additional resources:
 
@@ -44,7 +44,7 @@ To expose metrics, we would need to create 3 additional resources:
   be applied across all `AutoscalingRunnerSets`, it is difficult to inherit this
   configuration by applying helm charts.
 
-### Create an aggregator service
+### Option 2: Create a single metrics aggregator service
 
 To create an aggregator service, we can create a simple web application
 responsible for publishing and gathering metrics. All listeners would be
@@ -54,31 +54,34 @@ responsible to communicate the metrics on each reconciliation.
 The application can be executed as a single pod, or as a side container next to
 the manager.
 
-Pros for running the aggregator next to the manager:
+#### Running the aggregator as a container in the controller-manager pod
 
+**Pros:**
 - It exists side by side and is following the life cycle of the controller
   manager
 - We don't need to introduce another controller managing the state of the pod
 
-Cons for running the aggregator next to the manager:
+**Cons**
 
 - Crashes of the aggregator can influence the controller manager execution
 - The controller manager pod needs more resources to run
 
-Pros for running the aggregator as a stand-alone:
+#### Running the aggregator in a separate pod
+
+**Pros**
 
 - Does not influence the controller manager pod
 - The life cycle of the metric can be controlled by the controller manager (by
   implementing another controller)
 
-Cons for running the aggregator as a stand-alone:
+**Cons**
 
 - We need to implement the controller that can spin up the aggregator in case of
   the crash.
 - If we choose not to implement the controller, the resource like `Deployment`
   can be used to manage the aggregator, but we lose control over its life cycle.
 
-To expose metrics in this way, we need to:
+#### Metrics webserver requirements
 
 1. Create a web server with a single `/metrics` endpoint. The endpoint will have
    `POST` and `GET` methods registered. The `GET` is used by Prometheus to
@@ -87,7 +90,7 @@ To expose metrics in this way, we need to:
 2. `ServiceMonitor` - to target the metrics aggregator service
 3. `Service` sitting in front of the web server.
 
-#### Pros
+**Pros**
 
 - This implementation requires a few additional resources to be created
   in a cluster.
@@ -96,14 +99,14 @@ To expose metrics in this way, we need to:
   `POST`. The `GET` handler is simple.
 - We can avoid Pushgateway from Prometheus.
 
-#### Cons
+**Cons**
 
 - Another image that we need to publish on release.
 - Change in metric configuration (on manager update) would require re-creation
   of all listeners. This is not a big problem but is something to point out.
 - Managing requests/limits can be tricky.
 
-### Use a Prometheus Pushgateway
+### Option 3: Use a Prometheus Pushgateway
 
 #### Pros
 
