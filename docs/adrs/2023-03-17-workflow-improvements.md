@@ -26,7 +26,7 @@ At the moment we have three workflows that validate Go code:
 - [Validate ARC](https://github.com/actions/actions-runner-controller/blob/01e9dd3/.github/workflows/validate-arc.yaml):
   this is a bit of a catch-all workflow, other than Go tests this also validates
   Kubernetes manifests, runs `go generate`, `go fmt` and `go vet`
-- [Run CodeQL](https://github.com/actions/actions-runner-controller/blob/a095f0b66aad5fbc8aa8d7032f3299233e4c84d2/.github/workflows/run-codeql.yaml)
+- [Run CodeQL](https://github.com/actions/actions-runner-controller/blob/master/.github/workflows/global-run-codeql.yaml)
 
 ### Proposal
 

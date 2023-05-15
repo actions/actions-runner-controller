@@ -1,6 +1,6 @@
 # This workflows polls releases from actions/runner and in case of a new one it
 # updates files containing runner version and opens a pull request.
-name: Update runners
+name: Runner Updates Check (Scheduled Job)
 
 on:
   schedule:

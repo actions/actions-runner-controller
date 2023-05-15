@@ -1,4 +1,4 @@
-name: CI ARC E2E Linux VM Test
+name: (gha) E2E Tests
 
 on:
   push:
