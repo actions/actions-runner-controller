@@ -12,7 +12,7 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/e2e-test-dispatch-workflow.yaml'
       - '.github/workflows/gha-e2e-tests.yaml'
-      - '.github/workflows/arc-publish.yaml	'
+      - '.github/workflows/arc-publish.yaml'
       - '.github/workflows/arc-publish-chart.yaml'
       - '.github/workflows/gha-publish-chart.yaml'
       - '.github/workflows/arc-release-runners.yaml'
