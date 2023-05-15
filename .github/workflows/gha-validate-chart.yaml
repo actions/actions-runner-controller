@@ -61,23 +61,7 @@ jobs:
           python-version: '3.7'
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.3.1
-
-      - name: Set up latest version chart-testing
-        run: |
-          echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
-          sudo apt update
-          sudo apt install goreleaser
-          git clone https://github.com/helm/chart-testing
-          cd chart-testing
-          unset CT_CONFIG_DIR
-          goreleaser build --clean --skip-validate
-          ./dist/chart-testing_linux_amd64_v1/ct version
-          echo 'Adding ct directory to PATH...'
-          echo "$RUNNER_TEMP/chart-testing/dist/chart-testing_linux_amd64_v1" >> "$GITHUB_PATH"
-          echo 'Setting CT_CONFIG_DIR...'
-          echo "CT_CONFIG_DIR=$RUNNER_TEMP/chart-testing/etc" >> "$GITHUB_ENV"
-        working-directory: ${{ runner.temp }}
+        uses: helm/chart-testing-action@v2.4.0
 
       - name: Run chart-testing (list-changed)
         id: list-changed
