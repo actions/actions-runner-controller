@@ -161,6 +161,178 @@ func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
 	})
 }
 
+func TestAutoscalitRunnerSetReconciler_UpdateRunnerScaleSet(t *testing.T) {
+	t.Run("It should re-create EphemeralRunnerSet and Listener as needed when updating AutoScalingRunnerSet", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		eventually := eventually.New(
+			eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+			eventually.WithInterval(autoscalingRunnerSetTestInterval),
+		)
+		autoscalingNS, mgr := createNamespace(t)
+		configSecret := createDefaultSecret(t, autoscalingNS.Name)
+
+		controller := &AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Scheme:                             mgr.GetScheme(),
+			Log:                                logf.Log,
+			ControllerNamespace:                autoscalingNS.Name,
+			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			ActionsClient:                      fake.NewMultiClient(),
+		}
+		err := controller.SetupWithManager(mgr)
+		require.NoError(t, err, "failed to setup controller")
+
+		autoscalingRunnerSet := newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name)
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		require.NoError(t, err, "failed to create AutoScalingRunnerSet")
+
+		startManagers(t, mgr)
+
+		// Wait till the listener is created
+		listener := new(v1alpha1.AutoscalingListener)
+		eventually.Must(t, func(t testing.TB) {
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+			require.NoError(t, err)
+		})
+
+		runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+		err = k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+		require.NoError(t, err)
+		require.Len(t, runnerSetList.Items, 1)
+
+		runnerSet := runnerSetList.Items[0]
+
+		// Update the AutoScalingRunnerSet.Spec.Template
+		// This should trigger re-creation of EphemeralRunnerSet and Listener
+		patched := autoscalingRunnerSet.DeepCopy()
+		patched.Spec.Template.Spec.PriorityClassName = "test-priority-class"
+		err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+		require.NoError(t, err)
+
+		autoscalingRunnerSet = patched.DeepCopy()
+
+		// We should create a new EphemeralRunnerSet and delete the old one, eventually, we will have only one EphemeralRunnerSet
+		eventually.Must(t, func(t testing.TB) {
+			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+			require.NoError(t, err)
+			require.Len(t, runnerSetList.Items, 1)
+
+			assert.NotEqual(t, runnerSetList.Items[0].Labels[LabelKeyRunnerSpecHash], runnerSet.Labels[LabelKeyRunnerSpecHash])
+		})
+
+		// We should create a new listener
+		eventually.Must(t, func(t testing.TB) {
+			listener := new(v1alpha1.AutoscalingListener)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+			require.NoError(t, err)
+
+			assert.NotEqual(t, listener.Spec.EphemeralRunnerSetName, runnerSet.Name)
+		})
+
+		// Only update the Spec for the AutoScalingListener
+		// This should trigger re-creation of the Listener only
+		runnerSetList = new(v1alpha1.EphemeralRunnerSetList)
+		err = k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+		require.NoError(t, err)
+		require.Len(t, runnerSetList.Items, 1)
+
+		runnerSet = runnerSetList.Items[0]
+
+		listener = new(v1alpha1.AutoscalingListener)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+		require.NoError(t, err)
+
+		patched = autoscalingRunnerSet.DeepCopy()
+		min := 10
+		patched.Spec.MinRunners = &min
+		err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+		require.NoError(t, err)
+
+		// We should not re-create a new EphemeralRunnerSet
+		// TODO: make this test more robust/quicker, possibly by finding a way to
+		// deterministically wait for the patch to be applied
+		time.Sleep(2 * time.Second)
+		runnerSetList = new(v1alpha1.EphemeralRunnerSetList)
+		err = k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+		require.NoError(t, err)
+		require.Len(t, runnerSetList.Items, 1)
+		require.Equal(t, runnerSetList.Items[0].UID, runnerSet.UID)
+
+		// We should only re-create a new listener
+		eventually.Must(t, func(t testing.TB) {
+			listener := new(v1alpha1.AutoscalingListener)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+			require.NoError(t, err)
+
+			assert.NotEqual(t, listener.UID, listener.UID)
+		})
+	})
+
+	t.Run("It should update RunnerScaleSet's runner group on service when it changes", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		eventually := eventually.New(
+			eventually.WithTimeout(autoscalingRunnerSetTestTimeout),
+			eventually.WithInterval(autoscalingRunnerSetTestInterval),
+		)
+		autoscalingNS, mgr := createNamespace(t)
+		configSecret := createDefaultSecret(t, autoscalingNS.Name)
+
+		controller := &AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Scheme:                             mgr.GetScheme(),
+			Log:                                logf.Log,
+			ControllerNamespace:                autoscalingNS.Name,
+			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			ActionsClient:                      fake.NewMultiClient(),
+		}
+		err := controller.SetupWithManager(mgr)
+		require.NoError(t, err, "failed to setup controller")
+
+		autoscalingRunnerSet := newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name)
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		require.NoError(t, err, "failed to create AutoScalingRunnerSet")
+
+		startManagers(t, mgr)
+
+		updated := new(v1alpha1.AutoscalingRunnerSet)
+		// Wait till the listener is created
+		eventually.Must(t, func(t testing.TB) {
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, updated)
+			require.NoError(t, err)
+		})
+
+		patched := autoscalingRunnerSet.DeepCopy()
+		patched.Spec.RunnerGroup = "testgroup2"
+		err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+		require.NoError(t, err)
+
+		// Check if AutoScalingRunnerSet has the new runner group in its annotation
+		eventually.Must(t, func(t testing.TB) {
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+			require.NoError(t, err)
+
+			assert.Equal(t, "testgroup2", updated.Annotations[runnerScaleSetRunnerGroupNameKey])
+		})
+
+		// delete the annotation and it should be re-added
+		patched = autoscalingRunnerSet.DeepCopy()
+		delete(patched.Annotations, runnerScaleSetRunnerGroupNameKey)
+		err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+		require.NoError(t, err)
+
+		// Check if AutoScalingRunnerSet still has the runner group in its annotation
+		eventually.Must(t, func(t testing.TB) {
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+			require.NoError(t, err)
+
+			assert.Equal(t, "testgroup2", updated.Annotations[runnerScaleSetRunnerGroupNameKey])
+		})
+	})
+}
+
 // var _ = Describe("Test AutoScalingRunnerSet controller", func() {
 // 	var ctx context.Context
 // 	var mgr ctrl.Manager
@@ -214,301 +386,6 @@ func TestAutoscalitRunnerSetReconciler_DeleteRunnerScaleSet(t *testing.T) {
 // 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
 //
 // 		startManagers(GinkgoT(), mgr)
-// 	})
-//
-// 	Context("When creating a new AutoScalingRunnerSet", func() {
-// 		It("It should create/add all required resources for a new AutoScalingRunnerSet (finalizer, runnerscaleset, ephemeralrunnerset, listener)", func() {
-// 			// Check if finalizer is added
-// 			created := new(v1alpha1.AutoscalingRunnerSet)
-// 			Eventually(
-// 				func() (string, error) {
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
-// 					if err != nil {
-// 						return "", err
-// 					}
-// 					if len(created.Finalizers) == 0 {
-// 						return "", nil
-// 					}
-// 					return created.Finalizers[0], nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
-//
-// 			// Check if runner scale set is created on service
-// 			Eventually(
-// 				func() (string, error) {
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					if _, ok := created.Annotations[runnerScaleSetIdKey]; !ok {
-// 						return "", nil
-// 					}
-//
-// 					if _, ok := created.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
-// 						return "", nil
-// 					}
-//
-// 					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdKey], created.Annotations[runnerScaleSetRunnerGroupNameKey]), nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
-//
-// 			// Check if ephemeral runner set is created
-// 			Eventually(
-// 				func() (int, error) {
-// 					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-// 					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 					if err != nil {
-// 						return 0, err
-// 					}
-//
-// 					return len(runnerSetList.Items), nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
-//
-// 			// Check if listener is created
-// 			Eventually(
-// 				func() error {
-// 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
-//
-// 			// Check if status is updated
-// 			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-// 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
-// 			Expect(len(runnerSetList.Items)).To(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
-// 		})
-// 	})
-//
-// 	Context("When deleting a new AutoScalingRunnerSet", func() {
-// 		It("It should cleanup all resources for a deleting AutoScalingRunnerSet before removing it", func() {
-// 			// Wait till the listener is created
-// 			Eventually(
-// 				func() error {
-// 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
-//
-// 			// Delete the AutoScalingRunnerSet
-// 			err := k8sClient.Delete(ctx, autoscalingRunnerSet)
-// 			Expect(err).NotTo(HaveOccurred(), "failed to delete AutoScalingRunnerSet")
-//
-// 			// Check if the listener is deleted
-// 			Eventually(
-// 				func() error {
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
-// 					if err != nil && errors.IsNotFound(err) {
-// 						return nil
-// 					}
-//
-// 					return fmt.Errorf("listener is not deleted")
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be deleted")
-//
-// 			// Check if all the EphemeralRunnerSet is deleted
-// 			Eventually(
-// 				func() error {
-// 					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-// 					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 					if err != nil {
-// 						return err
-// 					}
-//
-// 					if len(runnerSetList.Items) != 0 {
-// 						return fmt.Errorf("EphemeralRunnerSet is not deleted, count=%v", len(runnerSetList.Items))
-// 					}
-//
-// 					return nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "All EphemeralRunnerSet should be deleted")
-//
-// 			// Check if the AutoScalingRunnerSet is deleted
-// 			Eventually(
-// 				func() error {
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingRunnerSet))
-// 					if err != nil && errors.IsNotFound(err) {
-// 						return nil
-// 					}
-//
-// 					return fmt.Errorf("AutoScalingRunnerSet is not deleted")
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "AutoScalingRunnerSet should be deleted")
-// 		})
-// 	})
-//
-// 	Context("When updating a new AutoScalingRunnerSet", func() {
-// 		It("It should re-create EphemeralRunnerSet and Listener as needed when updating AutoScalingRunnerSet", func() {
-// 			// Wait till the listener is created
-// 			listener := new(v1alpha1.AutoscalingListener)
-// 			Eventually(
-// 				func() error {
-// 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
-//
-// 			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-// 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
-// 			Expect(len(runnerSetList.Items)).To(Equal(1), "There should be 1 EphemeralRunnerSet")
-// 			runnerSet := runnerSetList.Items[0]
-//
-// 			// Update the AutoScalingRunnerSet.Spec.Template
-// 			// This should trigger re-creation of EphemeralRunnerSet and Listener
-// 			patched := autoscalingRunnerSet.DeepCopy()
-// 			patched.Spec.Template.Spec.PriorityClassName = "test-priority-class"
-// 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
-// 			autoscalingRunnerSet = patched.DeepCopy()
-//
-// 			// We should create a new EphemeralRunnerSet and delete the old one, eventually, we will have only one EphemeralRunnerSet
-// 			Eventually(
-// 				func() (string, error) {
-// 					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-// 					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					if len(runnerSetList.Items) != 1 {
-// 						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
-// 					}
-//
-// 					return runnerSetList.Items[0].Labels[LabelKeyRunnerSpecHash], nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[LabelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
-//
-// 			// We should create a new listener
-// 			Eventually(
-// 				func() (string, error) {
-// 					listener := new(v1alpha1.AutoscalingListener)
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					return listener.Spec.EphemeralRunnerSetName, nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Name), "New Listener should be created")
-//
-// 			// Only update the Spec for the AutoScalingListener
-// 			// This should trigger re-creation of the Listener only
-// 			runnerSetList = new(v1alpha1.EphemeralRunnerSetList)
-// 			err = k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
-// 			Expect(len(runnerSetList.Items)).To(Equal(1), "There should be 1 EphemeralRunnerSet")
-// 			runnerSet = runnerSetList.Items[0]
-//
-// 			listener = new(v1alpha1.AutoscalingListener)
-// 			err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
-// 			Expect(err).NotTo(HaveOccurred(), "failed to get Listener")
-//
-// 			patched = autoscalingRunnerSet.DeepCopy()
-// 			min := 10
-// 			patched.Spec.MinRunners = &min
-// 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
-//
-// 			// We should not re-create a new EphemeralRunnerSet
-// 			Consistently(
-// 				func() (string, error) {
-// 					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-// 					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					if len(runnerSetList.Items) != 1 {
-// 						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
-// 					}
-//
-// 					return string(runnerSetList.Items[0].UID), nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
-//
-// 			// We should only re-create a new listener
-// 			Eventually(
-// 				func() (string, error) {
-// 					listener := new(v1alpha1.AutoscalingListener)
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					return string(listener.UID), nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
-// 		})
-//
-// 		It("It should update RunnerScaleSet's runner group on service when it changes", func() {
-// 			updated := new(v1alpha1.AutoscalingRunnerSet)
-// 			// Wait till the listener is created
-// 			Eventually(
-// 				func() error {
-// 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
-//
-// 			patched := autoscalingRunnerSet.DeepCopy()
-// 			patched.Spec.RunnerGroup = "testgroup2"
-// 			err := k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
-//
-// 			// Check if AutoScalingRunnerSet has the new runner group in its annotation
-// 			Eventually(
-// 				func() (string, error) {
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
-// 						return "", nil
-// 					}
-//
-// 					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
-//
-// 			// delete the annotation and it should be re-added
-// 			patched = autoscalingRunnerSet.DeepCopy()
-// 			delete(patched.Annotations, runnerScaleSetRunnerGroupNameKey)
-// 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
-// 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
-//
-// 			// Check if AutoScalingRunnerSet still has the runner group in its annotation
-// 			Eventually(
-// 				func() (string, error) {
-// 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
-// 					if err != nil {
-// 						return "", err
-// 					}
-//
-// 					if _, ok := updated.Annotations[runnerScaleSetRunnerGroupNameKey]; !ok {
-// 						return "", nil
-// 					}
-//
-// 					return updated.Annotations[runnerScaleSetRunnerGroupNameKey], nil
-// 				},
-// 				autoscalingRunnerSetTestTimeout,
-// 				autoscalingRunnerSetTestInterval,
-// 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
-// 		})
 // 	})
 //
 // 	It("Should update Status on EphemeralRunnerSet status Update", func() {
