@@ -20,6 +20,7 @@
       - [Releasing legacy actions-runner-controller image and helm charts](#releasing-legacy-actions-runner-controller-image-and-helm-charts)
       - [Release actions-runner-controller runner images](#release-actions-runner-controller-runner-images)
       - [Release gha-runner-scale-set-controller image and helm charts](#release-gha-runner-scale-set-controller-image-and-helm-charts)
+      - [Release actions/runner image](#release-actionsrunner-image)
 
 ## Welcome
 
@@ -300,4 +301,26 @@ flowchart LR
 ```
 
 #### Release gha-runner-scale-set-controller image and helm charts
+
+1. Make sure the master branch is stable and all CI jobs are passing.
+1. Prepare a release PR (example: https://github.com/actions/actions-runner-controller/pull/2467)
+   1. Bump up the version of the chart in: charts/gha-runner-scale-set-controller/Chart.yaml
+   2. Bump up the version of the chart in: charts/gha-runner-scale-set/Chart.yaml
+      1. Make sure that `version`, `appVersion` of both charts are always the same. These versions cannot diverge.
+   3. Update the quickstart guide to reflect the latest versions: docs/preview/gha-runner-scale-set-controller/README.md
+   4. Add changelog to the PR as well as the quickstart guide.
+1. Merge the release PR
+1. Manually trigger the [(gha) Publish Helm Charts](https://github.com/actions/actions-runner-controller/actions/workflows/gha-publish-chart.yaml) workflow
+
+| Parameter                                       | Description                                                                                            | Default        |
+|-------------------------------------------------|--------------------------------------------------------------------------------------------------------|----------------|
+| `ref`                                           | The branch, tag or SHA to cut a release from.                                                          | default branch |
+| `release_tag_name`                              | The tag of the controller image. This is not a git tag.                                                | canary         |
+| `push_to_registries`                            | Push images to registries. Use false to test the build process.                                        | false          |
+| `publish_gha_runner_scale_set_controller_chart` | Publish new helm chart for gha-runner-scale-set-controller. This will push the new OCI archive to GHCR | false          |
+| `publish_gha_runner_scale_set_chart`            | Publish new helm chart for gha-runner-scale-set. This will push the new OCI archive to GHCR            | false          |
+
+#### Release actions/runner image
+
+A new runner image is built and published to https://github.com/actions/runner/pkgs/container/actions-runner whenever a new runner binary has been released. There's nothing to do here.
 
