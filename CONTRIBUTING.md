@@ -21,6 +21,7 @@
       - [Release actions-runner-controller runner images](#release-actions-runner-controller-runner-images)
       - [Release gha-runner-scale-set-controller image and helm charts](#release-gha-runner-scale-set-controller-image-and-helm-charts)
       - [Release actions/runner image](#release-actionsrunner-image)
+      - [Canary releases](#canary-releases)
 
 ## Welcome
 
@@ -302,15 +303,16 @@ flowchart LR
 
 #### Release gha-runner-scale-set-controller image and helm charts
 
-1. Make sure the master branch is stable and all CI jobs are passing.
+1. Make sure the master branch is stable and all CI jobs are passing
 1. Prepare a release PR (example: https://github.com/actions/actions-runner-controller/pull/2467)
    1. Bump up the version of the chart in: charts/gha-runner-scale-set-controller/Chart.yaml
    2. Bump up the version of the chart in: charts/gha-runner-scale-set/Chart.yaml
       1. Make sure that `version`, `appVersion` of both charts are always the same. These versions cannot diverge.
    3. Update the quickstart guide to reflect the latest versions: docs/preview/gha-runner-scale-set-controller/README.md
-   4. Add changelog to the PR as well as the quickstart guide.
+   4. Add changelog to the PR as well as the quickstart guide
 1. Merge the release PR
 1. Manually trigger the [(gha) Publish Helm Charts](https://github.com/actions/actions-runner-controller/actions/workflows/gha-publish-chart.yaml) workflow
+1. Manually create a tag and release in [actions/actions-runner-controller](https://github.com/actions/actions-runner-controller/releases) with the format: `gha-runner-scale-set-x.x.x` where the version (x.x.x) matches that of the Helm chart
 
 | Parameter                                       | Description                                                                                            | Default        |
 |-------------------------------------------------|--------------------------------------------------------------------------------------------------------|----------------|
@@ -324,3 +326,23 @@ flowchart LR
 
 A new runner image is built and published to https://github.com/actions/runner/pkgs/container/actions-runner whenever a new runner binary has been released. There's nothing to do here.
 
+#### Canary releases
+
+We publish canary images for both the legacy actions-runner-controller and gha-runner-scale-set-controller images.
+
+```mermaid
+flowchart LR
+    subgraph org: actions
+    event_a{{"push: [master]"}} -- triggers --> workflow_a["publish-canary.yaml"]
+    end
+    subgraph org: actions-runner-controller
+    workflow_a["publish-canary.yaml"] -- triggers --> event_d{{"repository_dispatch"}} --> workflow_b["publish-canary.yaml"]
+    workflow_b["publish-canary.yaml"] -- push --> A["GHCR: \nactions-runner-controller/actions-runner-controller:canary"]
+    workflow_b["publish-canary.yaml"] -- push --> B["DockerHub: \nsummerwind/actions-runner-controller:canary"]
+    end
+```
+
+1. [actions-runner-controller canary image](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller)
+2. [gha-runner-scale-set-controller image](https://github.com/actions/actions-runner-controller/pkgs/container/gha-runner-scale-set-controller)
+
+These canary images are automatically built and released on each push to the master branch.
