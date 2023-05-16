@@ -264,8 +264,28 @@ There are 7 components that we release regularly:
 
 #### Releasing legacy actions-runner-controller image and helm charts
 
-1. Start by making sure the master branch is stable and all CI jobs are passing.
-2. ...
+1. Start by making sure the master branch is stable and all CI jobs are passing
+2. Create a new release in https://github.com/actions/actions-runner-controller/releases (Draft a new release)
+3. Bump up the `version` and `appVersion` in charts/actions-runner-controller/Chart.yaml - make sure the `version` matches the release version you just created. (Example: https://github.com/actions/actions-runner-controller/pull/2577)
+4. When the workflows finish execution, you will see:
+   1. A new controller image published to: https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller
+   2. Helm charts published to: https://github.com/actions-runner-controller/actions-runner-controller.github.io/tree/master/actions-runner-controller (the index.yaml file is updated)
+
+When a new release is created, the [Publish ARC Image](https://github.com/actions/actions-runner-controller/blob/master/.github/workflows/arc-publish.yaml) workflow is triggered.
+
+```mermaid
+flowchart LR
+    subgraph repository: actions/actions-runner-controller
+    event_a{{"release: published"}} -- triggers --> workflow_a["arc-publish.yaml"]
+    event_b{{"workflow_dispatch"}} -- triggers --> workflow_a["arc-publish.yaml"]
+    workflow_a["arc-publish.yaml"] -- uploads --> package["actions-runner-controller.tar.gz"]
+    end
+    subgraph repository: actions-runner-controller/releases
+    workflow_a["arc-publish.yaml"] -- triggers --> event_d{{"repository_dispatch"}} --> workflow_b["publish-arc.yaml"]
+    workflow_b["publish-arc.yaml"] -- push --> A["GHCR: \nactions-runner-controller/actions-runner-controller:*"]
+    workflow_b["publish-arc.yaml"] -- push --> B["DockerHub: \nsummerwind/actions-runner-controller:*"]
+    end
+```
 
 #### Release actions-runner-controller runner images
 
