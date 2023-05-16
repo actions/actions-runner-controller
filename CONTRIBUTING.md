@@ -32,14 +32,13 @@ reviewed and merged.
 
 ## Before contributing code
 
-We welcome code patches, but to make sure things are well coordinated you should  discuss any significant change before starting the work.
-The maintainers ask that you signal your intention to contribute to the project using the issue tracker. 
-If there is an existing issue that you want to work on, please let us know so we can get it assigned to you.
-If you noticed a bug or want to add a new feature, there are issue templates you can fill out.
+We welcome code patches, but to make sure things are well coordinated you should discuss any significant change before starting the work. The maintainers ask that you signal your intention to contribute to the project using the issue tracker. If there is an existing issue that you want to work on, please let us know so we can get it assigned to you. If you noticed a bug or want to add a new feature, there are issue templates you can fill out.
 
 When filing a feature request, the maintainers will review the change and give you a decision on whether we are willing to accept the feature into the project.
+
 For significantly large and/or complex features, we may request that you write up an architectural decision record ([ADR](https://github.blog/2020-08-13-why-write-adrs/)) detailing the change.
-Please use the [template](/adrs/0000-TEMPLATE.md) as guidance.
+
+Please use the [template](/docs/adrs/yyyy-mm-dd-TEMPLATE) as guidance.
 
 <!-- 
   TODO: Add a pre-requisite section describing what developers should
@@ -52,6 +51,7 @@ Depending on what you are patching depends on how you should go about it.
 Below are some guides on how to test patches locally as well as develop the controller and runners.
 
 When submitting a PR for a change please provide evidence that your change works as we still need to work on improving the CI of the project.
+
 Some resources are provided for helping achieve this, see this guide for details.
 
 ### Developing the Controller
