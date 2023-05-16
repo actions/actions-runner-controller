@@ -1,4 +1,4 @@
-name: Publish Helm Chart
+name: Publish ARC Helm Charts
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
@@ -8,7 +8,7 @@ on:
     - master
     paths:
     - 'charts/**'
-    - '.github/workflows/publish-chart.yaml'
+    - '.github/workflows/arc-publish-chart.yaml'
     - '!charts/actions-runner-controller/docs/**'
     - '!charts/gha-runner-scale-set-controller/**'
     - '!charts/gha-runner-scale-set/**'
@@ -171,6 +171,7 @@ jobs:
           --owner "$(echo ${{ github.repository }} | cut -d '/' -f 1)" \
           --git-repo "$(echo ${{ github.repository }} | cut -d '/' -f 2)" \
           --index-path ${{ github.workspace }}/index.yaml \
+          --token ${{ secrets.GITHUB_TOKEN }} \
           --push \
           --pages-branch 'gh-pages' \
           --pages-index-path 'index.yaml'

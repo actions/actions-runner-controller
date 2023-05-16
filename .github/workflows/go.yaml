@@ -8,7 +8,6 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-
   pull_request:
     paths:
       - '.github/workflows/go.yaml'
@@ -72,9 +71,11 @@ jobs:
         run: git diff --exit-code
       - name: Install kubebuilder
         run: |
-          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_linux_amd64.tar.gz
-          tar zxvf kubebuilder_2.3.2_linux_amd64.tar.gz
-          sudo mv kubebuilder_2.3.2_linux_amd64 /usr/local/kubebuilder
+          curl -D headers.txt -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.26.1-linux-amd64.tar.gz" -o kubebuilder-tools
+          echo "$(grep -i etag headers.txt -m 1 | cut -d'"' -f2) kubebuilder-tools" > sum
+          md5sum -c sum
+          tar -zvxf kubebuilder-tools
+          sudo mv kubebuilder /usr/local/
       - name: Run go tests
         run: |
           go test -short `go list ./... | grep -v ./test_e2e_arc`

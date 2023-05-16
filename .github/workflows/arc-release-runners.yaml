@@ -1,4 +1,4 @@
-name: Runners
+name: Release ARC Runner Images
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
@@ -10,7 +10,7 @@ on:
       - 'master'
     paths:
       - 'runner/VERSION'
-      - '.github/workflows/release-runners.yaml'
+      - '.github/workflows/arc-release-runners.yaml'
 
 env:
   # Safeguard to prevent pushing images to registeries after build
@@ -18,7 +18,6 @@ env:
   TARGET_ORG: actions-runner-controller
   TARGET_WORKFLOW: release-runners.yaml
   DOCKER_VERSION: 20.10.23
-  RUNNER_CONTAINER_HOOKS_VERSION: 0.2.0
 
 jobs:
   build-runners:
@@ -27,10 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Get runner version
-        id: runner_version
+        id: versions
         run: |
-          version=$(echo -n $(cat runner/VERSION))
-          echo runner_version=$version >> $GITHUB_OUTPUT
+          runner_current_version="$(echo -n $(cat runner/VERSION | grep 'RUNNER_VERSION=' | cut -d '=' -f2))"
+          container_hooks_current_version="$(echo -n $(cat runner/VERSION | grep 'RUNNER_CONTAINER_HOOKS_VERSION=' | cut -d '=' -f2))"
+          echo runner_version=$runner_current_version >> $GITHUB_OUTPUT
+          echo container_hooks_version=$container_hooks_current_version >> $GITHUB_OUTPUT
 
       - name: Get Token
         id: get_workflow_token
@@ -42,7 +43,8 @@ jobs:
 
       - name: Trigger Build And Push Runner Images To Registries
         env:
-          RUNNER_VERSION: ${{ steps.runner_version.outputs.runner_version }}
+          RUNNER_VERSION: ${{ steps.versions.outputs.runner_version }}
+          CONTAINER_HOOKS_VERSION: ${{ steps.versions.outputs.container_hooks_version }}
         run: |
           # Authenticate
           gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
@@ -51,20 +53,21 @@ jobs:
           gh workflow run ${{ env.TARGET_WORKFLOW }} -R ${{ env.TARGET_ORG }}/releases \
             -f runner_version=${{ env.RUNNER_VERSION }} \
             -f docker_version=${{ env.DOCKER_VERSION }} \
-            -f runner_container_hooks_version=${{ env.RUNNER_CONTAINER_HOOKS_VERSION }} \
+            -f runner_container_hooks_version=${{ env.CONTAINER_HOOKS_VERSION }} \
             -f sha='${{ github.sha }}' \
             -f push_to_registries=${{ env.PUSH_TO_REGISTRIES }}
 
       - name: Job summary
         env:
-          RUNNER_VERSION: ${{ steps.runner_version.outputs.runner_version }}
+          RUNNER_VERSION: ${{ steps.versions.outputs.runner_version }}
+          CONTAINER_HOOKS_VERSION: ${{ steps.versions.outputs.container_hooks_version }}
         run: |
           echo "The [release-runners.yaml](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/release-runners.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- runner_version: ${{ env.RUNNER_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- docker_version: ${{ env.DOCKER_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- runner_container_hooks_version: ${{ env.RUNNER_CONTAINER_HOOKS_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- runner_container_hooks_version: ${{ env.CONTAINER_HOOKS_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- sha: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- push_to_registries: ${{ env.PUSH_TO_REGISTRIES }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

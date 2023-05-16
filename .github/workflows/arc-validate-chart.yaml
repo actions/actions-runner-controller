@@ -1,4 +1,4 @@
-name: Validate Helm Chart (gha-runner-scale-set-controller and gha-runner-scale-set)
+name: Validate Helm Chart
 
 on:
   pull_request:
@@ -6,18 +6,22 @@ on:
       - master
     paths:
       - 'charts/**'
-      - '.github/workflows/validate-gha-chart.yaml'
-      - '!charts/actions-runner-controller/**'
+      - '.github/workflows/arc-validate-chart.yaml'
+      - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
+      - '!charts/gha-runner-scale-set-controller/**'
+      - '!charts/gha-runner-scale-set/**'
   push:
     paths:
       - 'charts/**'
-      - '.github/workflows/validate-gha-chart.yaml'
-      - '!charts/actions-runner-controller/**'
+      - '.github/workflows/arc-validate-chart.yaml'
+      - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
+      - '!charts/gha-runner-scale-set-controller/**'
+      - '!charts/gha-runner-scale-set/**'
   workflow_dispatch:
 env:
-  KUBE_SCORE_VERSION: 1.16.1
+  KUBE_SCORE_VERSION: 1.10.0
   HELM_VERSION: v3.8.0
 
 permissions:
@@ -61,74 +65,32 @@ jobs:
           python-version: '3.7'
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.3.1
-
-      - name: Set up latest version chart-testing
-        run: |
-          echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
-          sudo apt update
-          sudo apt install goreleaser
-          git clone https://github.com/helm/chart-testing
-          cd chart-testing
-          unset CT_CONFIG_DIR
-          goreleaser build --clean --skip-validate
-          ./dist/chart-testing_linux_amd64_v1/ct version
-          echo 'Adding ct directory to PATH...'
-          echo "$RUNNER_TEMP/chart-testing/dist/chart-testing_linux_amd64_v1" >> "$GITHUB_PATH"
-          echo 'Setting CT_CONFIG_DIR...'
-          echo "CT_CONFIG_DIR=$RUNNER_TEMP/chart-testing/etc" >> "$GITHUB_ENV"
-        working-directory: ${{ runner.temp }}
+        uses: helm/chart-testing-action@v2.4.0
 
       - name: Run chart-testing (list-changed)
         id: list-changed
         run: |
-          ct version
-          changed=$(ct list-changed --config charts/.ci/ct-config-gha.yaml)
+          changed=$(ct list-changed --config charts/.ci/ct-config.yaml)
           if [[ -n "$changed" ]]; then
             echo "::set-output name=changed::true"
           fi
 
       - name: Run chart-testing (lint)
         run: |
-          ct lint --config charts/.ci/ct-config-gha.yaml
-
-      - name: Set up docker buildx
-        uses: docker/setup-buildx-action@v2
-        if: steps.list-changed.outputs.changed == 'true'
-        with:
-          version: latest
-
-      - name: Build controller image
-        uses: docker/build-push-action@v3
-        if: steps.list-changed.outputs.changed == 'true'
-        with:
-          file: Dockerfile
-          platforms: linux/amd64
-          load: true
-          build-args: |
-            DOCKER_IMAGE_NAME=test-arc
-            VERSION=dev
-          tags: |
-            test-arc:dev
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          ct lint --config charts/.ci/ct-config.yaml
 
       - name: Create kind cluster
         uses: helm/kind-action@v1.4.0
         if: steps.list-changed.outputs.changed == 'true'
-        with:
-          cluster_name: chart-testing
 
-      - name: Load image into cluster
+      # We need cert-manager already installed in the cluster because we assume the CRDs exist
+      - name: Install cert-manager
         if: steps.list-changed.outputs.changed == 'true'
         run: |
-            export DOCKER_IMAGE_NAME=test-arc
-            export VERSION=dev
-            export IMG_RESULT=load
-            make docker-buildx
-            kind load docker-image test-arc:dev --name chart-testing
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
 
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
         run: |
-          ct install --config charts/.ci/ct-config-gha.yaml
+          ct install --config charts/.ci/ct-config.yaml

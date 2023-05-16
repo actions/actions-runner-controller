@@ -1,4 +1,4 @@
-name: Publish Canary Image
+name: Publish Canary Images
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
@@ -11,19 +11,19 @@ on:
       - '.github/actions/**'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/e2e-test-dispatch-workflow.yaml'
-      - '.github/workflows/e2e-test-linux-vm.yaml'
-      - '.github/workflows/publish-arc.yaml'
-      - '.github/workflows/publish-chart.yaml'
-      - '.github/workflows/publish-runner-scale-set.yaml'
-      - '.github/workflows/release-runners.yaml'
-      - '.github/workflows/run-codeql.yaml'
-      - '.github/workflows/run-first-interaction.yaml'
-      - '.github/workflows/run-stale.yaml'
-      - '.github/workflows/update-runners.yaml'
+      - '.github/workflows/gha-e2e-tests.yaml'
+      - '.github/workflows/arc-publish.yaml'
+      - '.github/workflows/arc-publish-chart.yaml'
+      - '.github/workflows/gha-publish-chart.yaml'
+      - '.github/workflows/arc-release-runners.yaml'
+      - '.github/workflows/global-run-codeql.yaml'
+      - '.github/workflows/global-run-first-interaction.yaml'
+      - '.github/workflows/global-run-stale.yaml'
+      - '.github/workflows/arc-update-runners-scheduled.yaml'
       - '.github/workflows/validate-arc.yaml'
-      - '.github/workflows/validate-chart.yaml'
-      - '.github/workflows/validate-gha-chart.yaml'
-      - '.github/workflows/validate-runners.yaml'
+      - '.github/workflows/arc-validate-chart.yaml'
+      - '.github/workflows/gha-validate-chart.yaml'
+      - '.github/workflows/arc-validate-runners.yaml'
       - '.github/dependabot.yml'
       - '.github/RELEASE_NOTE_TEMPLATE.md'
       - 'runner/**'
