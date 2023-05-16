@@ -16,7 +16,9 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 ### Demo
 
-[![Watch the walkthrough](https://img.youtube.com/vi/wQ0k5k6KW5Y/hqdefault.jpg)](https://youtu.be/wQ0k5k6KW5Y)
+[![Watch the walkthrough](./thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
+
+> Will take you to Youtube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
 
 ## Setup
 
