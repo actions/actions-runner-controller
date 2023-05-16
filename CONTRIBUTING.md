@@ -15,6 +15,11 @@
     - [Opening the Pull Request](#opening-the-pull-request)
   - [Helm Version Changes](#helm-version-changes)
   - [Testing Controller Built from a Pull Request](#testing-controller-built-from-a-pull-request)
+  - [Release process](#release-process)
+    - [Workflow structure](#workflow-structure)
+      - [Releasing legacy actions-runner-controller image and helm charts](#releasing-legacy-actions-runner-controller-image-and-helm-charts)
+      - [Release actions-runner-controller runner images](#release-actions-runner-controller-runner-images)
+      - [Release gha-runner-scale-set-controller image and helm charts](#release-gha-runner-scale-set-controller-image-and-helm-charts)
 
 ## Welcome
 
@@ -217,3 +222,82 @@ Please also note that you need to replace `$DOCKER_USER` with your own DockerHub
 Only the maintainers can release a new version of actions-runner-controller, publish a new version of the helm charts, and runner images.
 
 All release workflows have been moved to [actions-runner-controller/releases](https://github.com/actions-runner-controller/releases) since the packages are owned by the former organization.
+
+### Workflow structure
+
+Following the migration of actions-runner-controller to the GitHub actions work, all the workflows had to be modified to accomodate the move to the new organization. The following table describes the workflows, their purpose and dependencies.
+
+| Filename                          | Workflow name                        | Purpose                                                                                                                                                                                                                                                         |
+|-----------------------------------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| gha-e2e-tests.yaml                | (gha) E2E Tests                      | Runs end to end for the Autoscaling Runner Set mode. Coverage is restricted to this mode. Legacy modes are not tested.                                                                                                                                          |
+| go.yaml                           | Format, Lint, Unit Tests             | Formats, lints and runs unit tests for the entire codebase.                                                                                                                                                                                                     |
+| arc-publish.yaml                  | Publish ARC Image                    | Uploads release/actions-runner-controller.yaml as an artifact to the newly created release and triggers the [build and publication of the controller image](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-arc.yaml) |
+| global-publish-canary.yaml        | Publish Canary Images                | Builds and publishes canary controller container images for both new and legacy modes.                                                                                                                                                                          |
+| arc-publish-chart.yaml            | Publish ARC Helm Charts              | Packages and publishes charts/actions-runner-controller (via GitHub Pages)                                                                                                                                                                                      |
+| gha-publish-chart.yaml            | (gha) Publish Helm Charts            | Packages and publishes charts/gha-runner-scale-set-controller and charts/gha-runner-scale-set charts (OCI to GHCR)                                                                                                                                              |
+| arc-release-runners.yaml          | Release ARC Runner Images            | Triggers [release-runners.yaml](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/release-runners.yaml) which will build and push new runner images used with the legacy ARC modes.                                             |
+| global-run-codeql.yaml            | Run CodeQL                           | Run CodeQL on all the codebase                                                                                                                                                                                                                                  |
+| global-run-first-interaction.yaml | First Interaction                    | Informs first time contributors what to expect when they open a new issue / PR                                                                                                                                                                                  |
+| global-run-stale.yaml             | Run Stale Bot                        | Closes issues / PRs without activity                                                                                                                                                                                                                            |
+| arc-update-runners-scheduled.yaml | Runner Updates Check (Scheduled Job) | Polls [actions/runner](https://github.com/actions/runner) and [actions/runner-container-hooks](https://github.com/actions/runner-container-hooks) for new releases. If found, a PR is created to publish new runner images                                      |
+| arc-validate-chart.yaml           | Validate Helm Chart                  | Run helm chart validators for charts/actions-runner-controller                                                                                                                                                                                                  |
+| gha-validate-chart.yaml           | (gha) Validate Helm Charts           | Run helm chart validators for charts/gha-runner-scale-set-controller and charts/gha-runner-scale-set charts                                                                                                                                                     |
+| arc-validate-runners.yaml         | Validate ARC Runners                 | Run validators for runners                                                                                                                                                                                                                                      |
+
+There are 7 components that we release regularly:
+
+1. legacy [actions-runner-controller controller image](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller)
+2. legacy [actions-runner-controller helm charts](https://actions-runner-controller.github.io/actions-runner-controller/)
+3. legacy actions-runner-controller runner images
+   1. [ubuntu-20.04](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner)
+   2. [ubuntu-22.04](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner)
+   3. [dind-ubuntu-20.04](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner-dind)
+   4. [dind-ubuntu-22.04](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner-dind)
+   5. [dind-rootless-ubuntu-20.04](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner-dind-rootless)
+   6. [dind-rootless-ubuntu-22.04](https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner-dind-rootless)
+4. [gha-runner-scale-set-controller image](https://github.com/actions/actions-runner-controller/pkgs/container/gha-runner-scale-set-controller)
+5. [gha-runner-scale-set-controller helm charts](https://github.com/actions/actions-runner-controller/pkgs/container/actions-runner-controller-charts%2Fgha-runner-scale-set-controller)
+6. [gha-runner-scale-set runner helm charts](https://github.com/actions/actions-runner-controller/pkgs/container/actions-runner-controller-charts%2Fgha-runner-scale-set)
+7. [actions/runner image](https://github.com/actions/actions-runner-controller/pkgs/container/actions-runner-controller%2Factions-runner)
+
+#### Releasing legacy actions-runner-controller image and helm charts
+
+1. Start by making sure the master branch is stable and all CI jobs are passing.
+2. ...
+
+#### Release actions-runner-controller runner images
+
+**Manual steps:**
+
+1. Navigate to the [actions-runner-controller/releases](https://github.com/actions-runner-controller/releases) repository
+2. Trigger [the release-runners.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml) workflow.
+
+<!-- Table of Paramters -->
+| Parameter                        | Description                                                                                                                                                                                                                         | Default       |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `runner_version`                 | The version of the [actions/runner](https://github.com/actions/runner) to use                                                                                                                                                       | `2.300.2`     |
+| `docker_version`                 | The version of docker to use                                                                                                                                                                                                        | `20.10.12`    |
+| `runner_container_hooks_version` | The version of [actions/runner-container-hooks](https://github.com/actions/runner-container-hooks) to use                                                                                                                           | `0.2.0`       |
+| `sha`                            | The commit sha from [actions/actions-runner-controller](https://github.com/actions/actions-runner-controller) to be used to build the runner images. This will be provided to `actions/checkout` & used to tag the container images | Empty string. |
+| `push_to_registries`             | Whether to push the images to the registries. Use false to test the build                                                                                                                                                           | false         |
+
+**Automated steps:**
+
+```mermaid
+flowchart LR
+    workflow["release-runners.yaml"] -- workflow_dispatch* --> workflow_b["release-runners.yaml"]
+    subgraph repository: actions/actions-runner-controller
+    runner_updates_check["arc-update-runners-scheduled.yaml"] -- "polls (daily)" --> runner_releases["actions/runner/releases"]
+    runner_updates_check -- creates --> runner_update_pr["PR: update /runner/VERSION"]
+    runner_update_pr --> runner_update_pr_merge{{"merge"}}
+    runner_update_pr_merge -- triggers --> workflow["release-runners.yaml"]
+    end
+    subgraph repository: actions-runner-controller/releases
+    workflow_b["release-runners.yaml"] -- push --> A["GHCR: \n actions-runner-controller/actions-runner:* \n actions-runner-controller/actions-runner-dind:* \n actions-runner-controller/actions-runner-dind-rootless:*"]
+    workflow_b["release-runners.yaml"] -- push --> B["DockerHub: \n summerwind/actions-runner:* \n summerwind/actions-runner-dind:* \n summerwind/actions-runner-dind-rootless:*"]
+    event_b{{"workflow_dispatch"}} -- triggers --> workflow_b["release-runners.yaml"]
+    end
+```
+
+#### Release gha-runner-scale-set-controller image and helm charts
+
