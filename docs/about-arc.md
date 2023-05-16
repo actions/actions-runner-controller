@@ -14,7 +14,7 @@ You can create workflows that build and test every pull request to your reposito
 Runners execute the job that is assigned to them by Github Actions workflow. There are two types of Runners:
 
 - [Github-hosted runners](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners) - GitHub provides Linux, Windows, and macOS virtual machines to run your workflows. These virtual machines are hosted in the cloud by Github.
-- [Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners) - you can host your own self-hosted runners in your own data center or cloud infrastructure. ARC deploys self-hosted runners.
+- [Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners) - you can host your own self-hosted runners in your own data center or cloud infrastructure. ARC deploys self-hosted runners.
 
 ## Self hosted runners
 Self-hosted runners offer more control of hardware, operating system, and software tools than GitHub-hosted runners. With self-hosted runners, you can create custom hardware configurations that meet your needs with processing power or memory to run larger jobs, install software available on your local network, and choose an operating system not offered by GitHub-hosted runners.
@@ -83,7 +83,7 @@ The GitHub hosted runners include a large amount of pre-installed software packa
 ARC maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. These images do not contain all of the software installed on the GitHub runners. They contain subset of packages from the GitHub runners: Basic CLI packages, git, docker and build-essentials. To install additional software, it is recommended to use the corresponding setup actions. For instance, `actions/setup-java` for Java or `actions/setup-node` for Node.
 
 ## Executing workflows
-Now, all the setup and configuration is done. A workflow can be created in the same repository that could target the self hosted runner created from ARC. The workflow needs to have `runs-on: self-hosted` so it can target the self host pool. For more information on targeting workflows to run on self hosted runners, see "[Using Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow)."
+Now, all the setup and configuration is done. A workflow can be created in the same repository that could target the self hosted runner created from ARC. The workflow needs to have `runs-on: self-hosted` so it can target the self host pool. For more information on targeting workflows to run on self hosted runners, see "[Using Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/using-self-hosted-runners-in-a-workflow)."
 
 ## Scaling runners - statically with replicas count
 With a small tweak to the replicas count (for eg - `replicas: 2`) in the `runnerdeployment.yaml` file, more runners can be created. Depending on the count of replicas, those many sets of pods would be created. As before, Each pod contains the two containers.

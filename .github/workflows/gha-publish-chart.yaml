@@ -1,4 +1,4 @@
-name: Publish Runner Scale Set Controller Charts
+name: (gha) Publish Helm Charts
 
 on:
   workflow_dispatch:
@@ -101,7 +101,7 @@ jobs:
 
       - name: Job summary
         run: |
-          echo "The [publish-runner-scale-set.yaml](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/publish-runner-scale-set.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "The [gha-publish-chart.yaml](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/gha-publish-chart.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY

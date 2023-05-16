@@ -1,4 +1,4 @@
-name: Validate Runners
+name: Validate ARC Runners
 
 on:
   pull_request:
