@@ -137,7 +137,7 @@ GINKGO_FOCUS='[It] should create a new Runner resource from the specified templa
 >
 > If you want to stick with `snap`-provided `docker`, do not forget to set `TMPDIR` to somewhere under `$HOME`.
 > Otherwise `kind load docker-image` fail while running `docker save`.
-> See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap for more information.
+> See <https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap> for more information.
 
 To test your local changes against both PAT and App based authentication please run the `acceptance` make target with the authentication configuration details provided:
 
@@ -265,11 +265,11 @@ There are 7 components that we release regularly:
 #### Releasing legacy actions-runner-controller image and helm charts
 
 1. Start by making sure the master branch is stable and all CI jobs are passing
-2. Create a new release in https://github.com/actions/actions-runner-controller/releases (Draft a new release)
-3. Bump up the `version` and `appVersion` in charts/actions-runner-controller/Chart.yaml - make sure the `version` matches the release version you just created. (Example: https://github.com/actions/actions-runner-controller/pull/2577)
+2. Create a new release in <https://github.com/actions/actions-runner-controller/releases> (Draft a new release)
+3. Bump up the `version` and `appVersion` in charts/actions-runner-controller/Chart.yaml - make sure the `version` matches the release version you just created. (Example: <https://github.com/actions/actions-runner-controller/pull/2577>)
 4. When the workflows finish execution, you will see:
-   1. A new controller image published to: https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller
-   2. Helm charts published to: https://github.com/actions-runner-controller/actions-runner-controller.github.io/tree/master/actions-runner-controller (the index.yaml file is updated)
+   1. A new controller image published to: <https://github.com/actions-runner-controller/actions-runner-controller/pkgs/container/actions-runner-controller>
+   2. Helm charts published to: <https://github.com/actions-runner-controller/actions-runner-controller.github.io/tree/master/actions-runner-controller> (the index.yaml file is updated)
 
 When a new release is created, the [Publish ARC Image](https://github.com/actions/actions-runner-controller/blob/master/.github/workflows/arc-publish.yaml) workflow is triggered.
 
@@ -311,7 +311,7 @@ flowchart LR
     workflow["release-runners.yaml"] -- workflow_dispatch* --> workflow_b["release-runners.yaml"]
     subgraph repository: actions/actions-runner-controller
     runner_updates_check["arc-update-runners-scheduled.yaml"] -- "polls (daily)" --> runner_releases["actions/runner/releases"]
-    runner_updates_check -- creates --> runner_update_pr["PR: update /runner/VERSION"]
+    runner_updates_check -- creates --> runner_update_pr["PR: update /runner/VERSION"]****
     runner_update_pr --> runner_update_pr_merge{{"merge"}}
     runner_update_pr_merge -- triggers --> workflow["release-runners.yaml"]
     end
@@ -325,7 +325,7 @@ flowchart LR
 #### Release gha-runner-scale-set-controller image and helm charts
 
 1. Make sure the master branch is stable and all CI jobs are passing
-1. Prepare a release PR (example: https://github.com/actions/actions-runner-controller/pull/2467)
+1. Prepare a release PR (example: <https://github.com/actions/actions-runner-controller/pull/2467>)
    1. Bump up the version of the chart in: charts/gha-runner-scale-set-controller/Chart.yaml
    2. Bump up the version of the chart in: charts/gha-runner-scale-set/Chart.yaml
       1. Make sure that `version`, `appVersion` of both charts are always the same. These versions cannot diverge.
@@ -345,7 +345,7 @@ flowchart LR
 
 #### Release actions/runner image
 
-A new runner image is built and published to https://github.com/actions/runner/pkgs/container/actions-runner whenever a new runner binary has been released. There's nothing to do here.
+A new runner image is built and published to <https://github.com/actions/runner/pkgs/container/actions-runner> whenever a new runner binary has been released. There's nothing to do here.
 
 #### Canary releases
 
