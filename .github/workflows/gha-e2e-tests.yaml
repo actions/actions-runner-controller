@@ -19,7 +19,7 @@ env:
   IMAGE_VERSION: "0.4.0"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == "pull_request" }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ contains(fromJSON('["pull_request"]'), github.event_name) }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
