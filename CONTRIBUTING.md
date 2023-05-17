@@ -227,7 +227,7 @@ All release workflows have been moved to [actions-runner-controller/releases](ht
 
 ### Workflow structure
 
-Following the migration of actions-runner-controller to the GitHub actions work, all the workflows had to be modified to accomodate the move to the new organization. The following table describes the workflows, their purpose and dependencies.
+Following the migration of actions-runner-controller into GitHub actions, all the workflows had to be modified to accommodate the move to a new organization. The following table describes the workflows, their purpose and dependencies.
 
 | Filename                          | Workflow name                        | Purpose                                                                                                                                                                                                                                                         |
 |-----------------------------------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
