@@ -193,7 +193,7 @@ Before shipping your PR, please check the following items to make sure CI passes
 - Run `go mod tidy` if you made changes to dependencies.
 - Format the code using `gofmt`
 - Run the `golangci-lint` tool locally.
-  -  We recommend you use `make lint` to run the tool using a Docker container matching the CI version.
+  - We recommend you use `make lint` to run the tool using a Docker container matching the CI version.
 
 ### Opening the Pull Request
 
@@ -293,6 +293,7 @@ flowchart LR
 
 1. Navigate to the [actions-runner-controller/releases](https://github.com/actions-runner-controller/releases) repository
 2. Trigger [the release-runners.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/release-runners.yaml) workflow.
+   1. The list of input prameters for this workflow is defined in the table below (always inspect the workflow file for the latest version)
 
 <!-- Table of Paramters -->
 | Parameter                        | Description                                                                                                                                                                                                                         | Default       |
