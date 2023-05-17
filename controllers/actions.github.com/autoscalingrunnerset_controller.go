@@ -19,7 +19,6 @@ package actionsgithubcom
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -222,14 +221,19 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
 	listener := new(v1alpha1.AutoscalingListener)
+	listenerFound := true
 	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
 		if kerrors.IsNotFound(err) {
+			listenerFound = false
 			log.Info("AutoscalingListener does not exist.")
+		} else {
+			log.Error(err, "Failed to get AutoscalingListener resource")
+			return ctrl.Result{}, err
 		}
 	}
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
-	if !reflect.DeepEqual(*listener, v1alpha1.AutoscalingListener{}) && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
+	if listenerFound && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
 			if kerrors.IsNotFound(err) {
@@ -272,8 +276,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
-	if reflect.DeepEqual(*listener, v1alpha1.AutoscalingListener{}) {
-		// We don't have a listener
+	if !listenerFound {
 		if r.drainingJobs(&latestRunnerSet.Status) {
 			log.Info("Creating a new AutoscalingListener is waiting for the running and pending runners to finish. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
 			return ctrl.Result{}, nil
