@@ -97,15 +97,6 @@ jobs:
           jq -n '{"event_type": "arc", "client_payload": {"release_tag_name": "${{ env.VERSION }}", "push_to_registries": "${{ env.PUSH_TO_REGISTRIES }}" }}' \
             | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
 
-      - name: Wait for the workflow to finish
-        run: sleep 5
-        # uses: peter-evans/wait-on-github-action@v1
-        # with:
-        #   github-token: ${{ secrets.GITHUB_TOKEN }}
-        #   workflow: "publish-arc.yaml"
-        #   event: "workflow_run"
-        #   workflow_conclusion: "success"
-
       - name: Job summary
         run: |
           echo "The [publish-arc](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-arc.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
