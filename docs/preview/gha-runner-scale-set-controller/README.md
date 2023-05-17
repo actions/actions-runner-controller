@@ -4,7 +4,20 @@ This new autoscaling mode brings numerous enhancements (described in the followi
 
 ## How it works
 
-![arc_hld_v1 drawio (1)](https://user-images.githubusercontent.com/568794/212665433-2d1f3d6e-0ba8-4f02-9d1b-27d00c49abd1.png)
+![ARC architecture diagram](arc-diagram-light.png#gh-light-mode-only)
+![ARC architecture diagram](arc-diagram-dark.png#gh-dark-mode-only)
+
+1. ARC is installed using the supplied Helm charts, and the controller manager pod is deployed in the specified namespace. A new `AutoScalingRunnerSet` resource is deployed via the supplied Helm charts or a customized manifest file. The `AutoScalingRunnerSet` controller calls GitHub's APIs to fetch the runner group ID that the runner scale set will belong to.
+2. The `AutoScalingRunnerSet` controller calls the APIs one more time to either fetch or create a runner scale set in the `Actions Service` before creating the `Runner ScaleSet Listener` resource.
+3. A `Runner ScaleSet Listener` pod is deployed by the `AutoScaling Listener Controller`. In this pod, the listener application connects to the `Actions Service` to authenticate and establish a long poll HTTPS connection. The listener stays idle until it receives a `Job Available` message from the `Actions Service`.
+4. When a workflow run is triggered from a repository, the `Actions Service` dispatches individual job runs to the runners or runner scalesets where the `runs-on` property matches the name of the runner scaleset or labels of self-hosted runners.
+5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it checks whether it can scale up to the desired count. If it can, the `Runner ScaleSet Listener` acknowledges the message.
+6. The `Runner ScaleSet Listener` uses a `Service Account` and a `Role` bound to that account to make an HTTPS call through the Kubernetes APIs to patch the `EphemeralRunner Set` resource with the number of desired replicas count.
+7. The `EphemeralRunner Set` attempts to create new runners and the `EphemeralRunner Controller` requests a JIT configuration token to register these runners. The controller attempts to create runner pods. If the pod's status is `failed`, the controller retries up to 5 times. After 24 hours the `Actions Service` unassigns the job if no runner accepts it.
+8. Once the runner pod is created, the runner application in the pod uses the JIT configuration token to register itself with the `Actions Service`. It then establishes another HTTPS long poll connection to receive the job details it needs to execute.
+9. The `Actions Service` acknowledges the runner registration and dispatches the job run details.
+10. Throughout the job run execution, the runner continuously communicates the logs and job run status back to the `Actions Service`.
+11. When the runner completes its job successfully, the `EphemeralRunner Controller` checks with the `Actions Service` to see if runner can be deleted. If it can, the `Ephemeral RunnerSet` deletes the runner.
 
 In addition to the increased reliability of the automatic scaling, we have worked on these improvements:
 
@@ -16,7 +29,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 ### Demo
 
-[![Watch the walkthrough](./thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
+[![Watch the walkthrough](thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
 
 > Will take you to Youtube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
 
