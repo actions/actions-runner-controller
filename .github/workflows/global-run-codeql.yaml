@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '30 1 * * 0'
 
+concurrency:
+  # This will make sure we only apply the concurrency limits on pull requests but not pushes to master
+  group: ${{ github.workflow }}-${{ contains(fromJSON('["pull_request"]'), github.event_name) }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze
