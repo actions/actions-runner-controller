@@ -19,7 +19,8 @@ env:
   IMAGE_VERSION: "0.4.0"
 
 concurrency:
-  # This will make sure we only apply the concurrency limits on pull requests but not pushes to master
+  # This will make sure we only apply the concurrency limits on pull requests 
+  # but not pushes to master branch
   group: ${{ github.workflow }}-${{ contains(fromJSON('["pull_request"]'), github.event_name) || github.run_id }}-${{ github.ref }}
   cancel-in-progress: true
 
