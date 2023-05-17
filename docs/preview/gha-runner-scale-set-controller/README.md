@@ -16,7 +16,9 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 ### Demo
 
-[![Watch the walkthrough](https://img.youtube.com/vi/wQ0k5k6KW5Y/hqdefault.jpg)](https://youtu.be/wQ0k5k6KW5Y)
+[![Watch the walkthrough](./thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
+
+> Will take you to Youtube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
 
 ## Setup
 
@@ -35,8 +37,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
     helm install arc \
         --namespace "${NAMESPACE}" \
         --create-namespace \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.4.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller
     ```
 
 1. Generate a Personal Access Token (PAT) or create and install a GitHub App. See [Creating a personal access token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) and [Creating a GitHub App](https://docs.github.com/en/developers/apps/creating-a-github-app).
@@ -57,7 +58,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
         --set githubConfigSecret.github_token="${GITHUB_PAT}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.4.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
     ```
 
     ```bash
@@ -75,7 +76,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
         --set githubConfigSecret.github_app_id="${GITHUB_APP_ID}" \
         --set githubConfigSecret.github_app_installation_id="${GITHUB_APP_INSTALLATION_ID}" \
         --set githubConfigSecret.github_app_private_key="${GITHUB_APP_PRIVATE_KEY}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.4.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
     ```
 
 1. Check your installation. If everything went well, you should see the following:
@@ -139,7 +140,6 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
 
     ```bash
     helm pull oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.4.0 \
         --untar && \
         kubectl replace -f <PATH>/gha-runner-scale-set-controller/crds/
     ```
