@@ -18,6 +18,10 @@ env:
   IMAGE_NAME: "arc-test-image"
   IMAGE_VERSION: "0.4.0"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == "pull_request" }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   default-setup:
     runs-on: ubuntu-latest

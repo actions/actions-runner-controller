@@ -28,6 +28,10 @@ env:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   lint-chart:
     name: Lint Chart
