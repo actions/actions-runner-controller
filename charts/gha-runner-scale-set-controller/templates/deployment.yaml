@@ -59,8 +59,8 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
-        {{- if .Values.flags.drainJobsMode }}
-        - "--drain-jobs-mode"
+        {{- with .Values.flags.updateStrategy }}
+        - "--update-strategy={{ . }}"
         {{- end }}
         command:
         - "/manager"

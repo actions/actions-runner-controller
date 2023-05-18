@@ -57,7 +57,7 @@ type AutoscalingRunnerSetReconciler struct {
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
-	DrainJobsMode                                 bool
+	UpdateStrategy                                string
 	ActionsClient                                 actions.MultiClient
 
 	resourceBuilder resourceBuilder
@@ -223,13 +223,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	listener := new(v1alpha1.AutoscalingListener)
 	listenerFound := true
 	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
-		if kerrors.IsNotFound(err) {
-			listenerFound = false
-			log.Info("AutoscalingListener does not exist.")
-		} else {
+		if !kerrors.IsNotFound(err) {
 			log.Error(err, "Failed to get AutoscalingListener resource")
 			return ctrl.Result{}, err
 		}
+
+		listenerFound = false
+		log.Info("AutoscalingListener does not exist.")
 	}
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
@@ -305,7 +305,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 // We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
 // The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
 func (r *AutoscalingRunnerSetReconciler) drainingJobs(latestRunnerSetStatus *v1alpha1.EphemeralRunnerSetStatus) bool {
-	if r.DrainJobsMode && ((latestRunnerSetStatus.RunningEphemeralRunners + latestRunnerSetStatus.PendingEphemeralRunners) > 0) {
+	if r.UpdateStrategy == "eventual" && ((latestRunnerSetStatus.RunningEphemeralRunners + latestRunnerSetStatus.PendingEphemeralRunners) > 0) {
 		return true
 	}
 	return false

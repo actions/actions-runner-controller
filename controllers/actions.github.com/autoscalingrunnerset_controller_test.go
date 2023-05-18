@@ -426,9 +426,9 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	})
 
 	Context("When updating an AutoscalingRunnerSet with running or pending jobs", func() {
-		It("It should wait for running and pending jobs to finish before applying the update. Drain jobs mode enabled.", func() {
-			// Enable DrainJobsMode
-			controller.DrainJobsMode = true
+		It("It should wait for running and pending jobs to finish before applying the update. Update Strategy is set to eventual.", func() {
+			// Switch update strategy to eventual (drain jobs )
+			controller.UpdateStrategy = "eventual"
 			// Wait till the listener is created
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
