@@ -122,6 +122,37 @@ the manager.
 - You lose Prometheus's automatic instance health monitoring via the up metric (generated on every scrape).
 - The Pushgateway never forgets series pushed to it and will expose them to Prometheus forever unless those series are manually deleted via the Pushgateway's API.
 
+## Decision
+
+Since there are many ways in which you can collect metrics, we have decided not
+to apply `prometheus-operator` resources nor `Service`.
+
+The responsibility of the controller and the autoscaling listener is
+only to expose metrics. It is up to the user to decide how to collect them.
+
+When installing the ARC, the configuration for both the controller manager
+and autoscaling listeners' metric servers is established.
+
+### Controller metrics
+
+By default, metrics server is listening on `0.0.0.0:8080`.
+You can control the port of the metrics server using the `--metrics-addr` flag.
+
+Metrics can be collected from `/metrics` endpoint
+
+If the value of  `--metrics-addr` is an empty string, metrics server won't be
+started.
+
+### Autoscaling listeners
+
+By default, metrics server is listening on `0.0.0.0:8080`.
+The endpoint used to expose metrics is `/metrics`.
+
+You can control both the address and the endpoint using `--listener-metrics-addr` and `--listener-metrics-endpoint` flags.
+
+If the value of  `--listener-metrics-addr` is an empty string, metrics server won't be
+started.
+
 ### Metrics exposed by the controller
 
 To get a better understanding of health and workings of the cluster
