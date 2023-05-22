@@ -825,6 +825,11 @@ jobs:
             count=$((count+1))
           done
 
+          # Give some time for the runners to pickup the jobs
+          # otherwise the runner pods will be deleted before the jobs are picked up
+          # when we push the upgrade
+          sleep 60
+
       - name: Upgrade the gha-runner-scale-set
         shell: bash
         run: |
