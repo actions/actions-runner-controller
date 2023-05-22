@@ -790,13 +790,21 @@ jobs:
           kubectl get pod -n arc-systems
 
       - name: Trigger long running jobs
-        run: |
-          echo "${{ steps.setup.outputs.token }}" | gh auth login --with-token
-          gh workflow run ${{ env.WORKFLOW_FILE }} \
-            -R ${{ env.TARGET_ORG }}/${{ env.TARGET_REPO }} \
-            -f delay=10 \
-            -f arc_name=${{ steps.install_arc.outputs.ARC_NAME }}
+        uses: ./.github/actions/execute-assert-arc-e2e
+        timeout-minutes: 10
+        with:
+          auth-token: ${{ steps.setup.outputs.token }}
+          repo-owner: ${{ env.TARGET_ORG }}
+          repo-name: ${{env.TARGET_REPO}}
+          workflow-file: ${{env.WORKFLOW_FILE}}
+          arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
+          arc-namespace: "arc-runners"
+          arc-controller-namespace: "arc-systems"
+          wait-to-finish: "false"
           
+      - name: Wait for the runners to go up
+        shell: bash
+        run: |
           # Wait for the runners to go up
           count=0
           while true; do
@@ -818,6 +826,7 @@ jobs:
           done
 
       - name: Upgrade the gha-runner-scale-set
+        shell: bash
         run: |
           helm upgrade --install "${{ steps.install_arc.outputs.ARC_NAME }}" \
             --namespace "arc-runners" \
@@ -832,6 +841,7 @@ jobs:
             ./charts/gha-runner-scale-set
 
       - name: Assert that the listener is deleted while jobs are running
+        shell: bash
         run: |
           count=0
           while true; do
@@ -858,6 +868,7 @@ jobs:
           done
 
       - name: Assert that the listener goes back up after the jobs are done
+        shell: bash
         run: |
           count=0
           while true; do
