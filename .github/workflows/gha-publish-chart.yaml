@@ -33,7 +33,11 @@ env:
   HELM_VERSION: v3.8.0
 
 permissions:
- packages: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 jobs:
   build-push-image:

@@ -37,6 +37,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   # Safeguard to prevent pushing images to registeries after build
   PUSH_TO_REGISTRIES: true

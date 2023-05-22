@@ -14,7 +14,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
-	github.com/gruntwork-io/terratest v0.41.11
+	github.com/gruntwork-io/terratest v0.41.24
 	github.com/hashicorp/go-retryablehttp v0.7.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo v1.16.5
@@ -27,7 +27,7 @@ require (
 	go.uber.org/multierr v1.7.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/net v0.8.0
-	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783
+	golang.org/x/oauth2 v0.1.0
 	golang.org/x/sync v0.1.0
 	gomodules.xyz/jsonpatch/v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -39,7 +39,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.40.56 // indirect
+	github.com/aws/aws-sdk-go v1.44.122 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
