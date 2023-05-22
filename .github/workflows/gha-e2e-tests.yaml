@@ -802,34 +802,6 @@ jobs:
           arc-controller-namespace: "arc-systems"
           wait-to-running: "true"
           wait-to-finish: "false"
-          
-      # - name: Wait for the runners to go up
-      #   shell: bash
-      #   run: |
-      #     # Wait for the runners to go up
-      #     count=0
-      #     while true; do
-      #       RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n arc-runners --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-      #       RESOURCES="$(kubectl get pods -A)"
-      #       if [ "$RUNNERS_COUNT" -eq 3 ]; then
-      #         echo "Runners are up"
-      #         echo "$RESOURCES"
-      #         exit 0
-      #       fi
-      #       if [ "$count" -ge 120 ]; then
-      #         echo "Timeout waiting for runners to go up: $RUNNERS_COUNT out of 3"
-      #         echo "$RESOURCES"
-      #         exit 1
-      #       fi
-      #       echo "Waiting for runners to go up: $RUNNERS_COUNT out of 3"
-      #       sleep 1
-      #       count=$((count+1))
-      #     done
-
-      #     # Give some time for the runners to pickup the jobs
-      #     # otherwise the runner pods will be deleted before the jobs are picked up
-      #     # when we push the upgrade
-      #     sleep 180
 
       - name: Upgrade the gha-runner-scale-set
         shell: bash
