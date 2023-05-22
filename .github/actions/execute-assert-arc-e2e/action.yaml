@@ -147,15 +147,12 @@ runs:
               run_id: workflow_run_id
             })
             console.log(`${getRunResponse.data.html_url}: ${getRunResponse.data.status} (${getRunResponse.data.conclusion})`);
-            if (getRunResponse.data.status == 'running') {
-              console.log(`Workflow run finished properly.`)
-              return
-            } else {
-              core.setFailed(`The triggered workflow run finish with result ${getRunResponse.data.conclusion}`)
+            if (getRunResponse.data.status == 'in_progress') {
+              console.log(`Workflow run is in progress.`)
               return
             }
           }
-          core.setFailed(`The triggered workflow run didn't finish properly using ${{inputs.arc-name}}`)
+          core.setFailed(`The triggered workflow run didn't start properly using ${{inputs.arc-name}}`)
 
     - name: Wait for workflow to finish successfully
       if: inputs.wait-to-finish == 'true'
