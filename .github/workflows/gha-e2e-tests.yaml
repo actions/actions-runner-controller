@@ -808,16 +808,16 @@ jobs:
           # Wait for the runners to go up
           count=0
           while true; do
-            RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n arc-runners -o=jsonpath='{.items}' | jq 'length')"
-            RUNNERS="$(kubectl get pods -l app.kubernetes.io/component=runner -n arc-runners --field-selector=status.phase=Running)"
+            RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n arc-runners --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
+            RESOURCES="$(kubectl get pods -A)"
             if [ "$RUNNERS_COUNT" -eq 3 ]; then
               echo "Runners are up"
-              echo "$RUNNERS"
+              echo "$RESOURCES"
               exit 0
             fi
             if [ "$count" -ge 120 ]; then
               echo "Timeout waiting for runners to go up: $RUNNERS_COUNT out of 3"
-              echo "$RUNNERS"
+              echo "$RESOURCES"
               exit 1
             fi
             echo "Waiting for runners to go up: $RUNNERS_COUNT out of 3"
