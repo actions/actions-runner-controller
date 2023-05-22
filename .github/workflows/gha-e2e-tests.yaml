@@ -838,7 +838,8 @@ jobs:
             --set template.spec.containers[0].command={"/home/runner/run.sh"} \
             --set template.spec.containers[0].env[0].name="TEST" \
             --set template.spec.containers[0].env[0].value="E2E TESTS" \
-            ./charts/gha-runner-scale-set
+            ./charts/gha-runner-scale-set \
+            --debug
 
       - name: Assert that the listener is deleted while jobs are running
         shell: bash
