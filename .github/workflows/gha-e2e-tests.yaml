@@ -709,7 +709,7 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     env:
-      WORKFLOW_FILE: "short-sleepy-matrix.yaml"
+      WORKFLOW_FILE: "arc-test-sleepy-matrix.yaml"
     steps:
       - uses: actions/checkout@v3
         with:
