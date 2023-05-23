@@ -49,6 +49,24 @@ const (
 	runnerScaleSetNameAnnotationKey   = "runner-scale-set-name"
 )
 
+type UpdateStrategy string
+
+// Defines how the controller should handle upgrades while having running jobs.
+const (
+	// "immediate": (default) The controller will immediately apply the change causing the
+	// recreation of the listener and ephemeral runner set. This can lead to an
+	// overprovisioning of runners, if there are pending / running jobs. This should not
+	// be a problem at a small scale, but it could lead to a significant increase of
+	// resources if you have a lot of jobs running concurrently.
+	UpdateStrategyImmediate = UpdateStrategy("immediate")
+	// "eventual": The controller will remove the listener and ephemeral runner set
+	// immediately, but will not recreate them (to apply changes) until all
+	// pending / running jobs have completed.
+	// This can lead to a longer time to apply the change but it will ensure
+	// that you don't have any overprovisioning of runners.
+	UpdateStrategyEventual = UpdateStrategy("eventual")
+)
+
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
 type AutoscalingRunnerSetReconciler struct {
 	client.Client
@@ -57,7 +75,7 @@ type AutoscalingRunnerSetReconciler struct {
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
-	UpdateStrategy                                string
+	UpdateStrategy                                UpdateStrategy
 	ActionsClient                                 actions.MultiClient
 
 	resourceBuilder resourceBuilder
@@ -305,7 +323,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 // We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
 // The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
 func (r *AutoscalingRunnerSetReconciler) drainingJobs(latestRunnerSetStatus *v1alpha1.EphemeralRunnerSetStatus) bool {
-	if r.UpdateStrategy == "eventual" && ((latestRunnerSetStatus.RunningEphemeralRunners + latestRunnerSetStatus.PendingEphemeralRunners) > 0) {
+	if r.UpdateStrategy == UpdateStrategyEventual && ((latestRunnerSetStatus.RunningEphemeralRunners + latestRunnerSetStatus.PendingEphemeralRunners) > 0) {
 		return true
 	}
 	return false
