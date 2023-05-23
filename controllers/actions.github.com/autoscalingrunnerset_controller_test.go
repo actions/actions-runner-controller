@@ -1722,10 +1722,14 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 
 		startManagers(GinkgoT(), mgr)
 
-		Eventually(func() bool {
-			ars := new(v1alpha1.AutoscalingRunnerSet)
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Name}, ars)
-			return errors.IsNotFound(err)
-		}).Should(BeTrue())
+		Eventually(
+			func() bool {
+				ars := new(v1alpha1.AutoscalingRunnerSet)
+				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Name}, ars)
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue())
 	})
 })
