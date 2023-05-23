@@ -76,10 +76,26 @@ affinity: {}
 priorityClassName: ""
 
 flags:
-  # Log level can be set here with one of the following values: "debug", "info", "warn", "error".
-  # Defaults to "debug".
+  ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
+  ## Defaults to "debug".
   logLevel: "debug"
 
   ## Restricts the controller to only watch resources in the desired namespace.
   ## Defaults to watch all namespaces when unset.
   # watchSingleNamespace: ""
+
+  ## Defines how the controller should handle upgrades while having running jobs.
+  ##
+  ## The srategies available are:
+  ## - "immediate": (default) The controller will immediately apply the change causing the
+  ##   recreation of the listener and ephemeral runner set. This can lead to an 
+  ##   overprovisioning of runners, if there are pending / running jobs. This should not
+  ##   be a problem at a small scale, but it could lead to a significant increase of 
+  ##   resources if you have a lot of jobs running concurrently.
+  ## 
+  ## - "eventual": The controller will remove the listener and ephemeral runner set 
+  ##   immediately, but will not recreate them (to apply changes) until all 
+  ##   pending / running jobs have completed.
+  ##   This can lead to a longer time to apply the change but it will ensure
+  ##   that you don't have any overprovisioning of runners.
+  updateStrategy: "immediate"

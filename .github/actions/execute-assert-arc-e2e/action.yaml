@@ -23,6 +23,14 @@ inputs:
   arc-controller-namespace:
     description: 'The namespace of the configured gha-runner-scale-set-controller'
     required: true
+  wait-to-finish:
+    description: 'Wait for the workflow run to finish'
+    required: true
+    default: "true"
+  wait-to-running:
+    description: 'Wait for the workflow run to start running'
+    required: true
+    default: "false"
 
 runs:
   using: "composite"
@@ -118,7 +126,36 @@ runs:
         | ${{steps.query_workflow.outputs.workflow_run_url}} |
         EOF
 
+    - name: Wait for workflow to start running
+      if: inputs.wait-to-running == 'true' && inputs.wait-to-finish == 'false'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms))
+          }
+          const owner = '${{inputs.repo-owner}}'
+          const repo = '${{inputs.repo-name}}'
+          const workflow_run_id = ${{steps.query_workflow.outputs.workflow_run}}
+          const workflow_job_id = ${{steps.query_workflow.outputs.workflow_job}}
+          let count = 0
+          while (count++<10) {
+            await sleep(30 * 1000);
+            let getRunResponse = await github.rest.actions.getWorkflowRun({
+              owner: owner,
+              repo: repo,
+              run_id: workflow_run_id
+            })
+            console.log(`${getRunResponse.data.html_url}: ${getRunResponse.data.status} (${getRunResponse.data.conclusion})`);
+            if (getRunResponse.data.status == 'in_progress') {
+              console.log(`Workflow run is in progress.`)
+              return
+            }
+          }
+          core.setFailed(`The triggered workflow run didn't start properly using ${{inputs.arc-name}}`)
+
     - name: Wait for workflow to finish successfully
+      if: inputs.wait-to-finish == 'true'
       uses: actions/github-script@v6
       with:
         script: |
@@ -151,10 +188,15 @@ runs:
           }
           core.setFailed(`The triggered workflow run didn't finish properly using ${{inputs.arc-name}}`)
 
+    - name: cleanup
+      if: inputs.wait-to-finish == 'true'
+      shell: bash
+      run: |
+        helm uninstall ${{ inputs.arc-name }} --namespace ${{inputs.arc-namespace}} --debug
+        kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n ${{inputs.arc-name}} -l app.kubernetes.io/instance=${{ inputs.arc-name }}
+
     - name: Gather logs and cleanup
       shell: bash
       if: always()
       run: |
-        helm uninstall ${{ inputs.arc-name }} --namespace ${{inputs.arc-namespace}} --debug
-        kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n ${{inputs.arc-name}} -l app.kubernetes.io/instance=${{ inputs.arc-name }}
         kubectl logs deployment/arc-gha-runner-scale-set-controller -n ${{inputs.arc-controller-namespace}}
