@@ -88,58 +88,73 @@ if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
   log.debug 'Passing --disableupdate to config.sh to disable automatic runner updates.'
 fi
 
-update-status "Registering"
+# This is for registering ARC v0 runners.
+# ARC v1 runners do not need config.sh for registering themselves.
+# ARC v1 runners are supposed to given the ACTIONS_RUNNER_INPUT_JITCONFIG envvars
+# so we use it as the trigger to skip config.sh.
+if [ -z "${ACTIONS_RUNNER_INPUT_JITCONFIG:-}" ]; then
+  update-status "Registering"
 
-retries_left=10
-while [[ ${retries_left} -gt 0 ]]; do
-  log.debug 'Configuring the runner.'
-  ./config.sh --unattended --replace \
-    --name "${RUNNER_NAME}" \
-    --url "${GITHUB_URL}${ATTACH}" \
-    --token "${RUNNER_TOKEN}" \
-    --runnergroup "${RUNNER_GROUPS}" \
-    --labels "${RUNNER_LABELS}" \
-    --work "${RUNNER_WORKDIR}" "${config_args[@]}"
+  retries_left=10
+  while [[ ${retries_left} -gt 0 ]]; do
+    log.debug 'Configuring the runner.'
+    ./config.sh --unattended --replace \
+      --name "${RUNNER_NAME}" \
+      --url "${GITHUB_URL}${ATTACH}" \
+      --token "${RUNNER_TOKEN}" \
+      --runnergroup "${RUNNER_GROUPS}" \
+      --labels "${RUNNER_LABELS}" \
+      --work "${RUNNER_WORKDIR}" "${config_args[@]}"
 
-  if [ -f .runner ]; then
-    log.debug 'Runner successfully configured.'
-    break
+    if [ -f .runner ]; then
+      log.debug 'Runner successfully configured.'
+      break
+    fi
+
+    log.debug 'Configuration failed. Retrying'
+    retries_left=$((retries_left - 1))
+    sleep 1
+  done
+
+  # Note that ARC v1 runners do create this file, but only after the runner
+  # agent is up and running.
+  # On the other hand, this logic assumes the file to be created BEFORE
+  # the runner is up, by running `config.sh`, which is not present in a v1 runner deployment.
+  # That's why we need to skip this check for v1 runners.
+  # Otherwise v1 runner will never start up due to this check.
+  if [ ! -f .runner ]; then
+    # we couldn't configure and register the runner; no point continuing
+    log.error 'Configuration failed!'
+    exit 2
   fi
 
-  log.debug 'Configuration failed. Retrying'
-  retries_left=$((retries_left - 1))
-  sleep 1
-done
-
-if [ ! -f .runner ]; then
-  # we couldn't configure and register the runner; no point continuing
-  log.error 'Configuration failed!'
-  exit 2
+  cat .runner
+  # Note: the `.runner` file's content should be something like the below:
+  #
+  # $ cat /runner/.runner
+  # {
+  # "agentId": 117, #=> corresponds to the ID of the runner
+  # "agentName": "THE_RUNNER_POD_NAME",
+  # "poolId": 1,
+  # "poolName": "Default",
+  # "serverUrl": "https://pipelines.actions.githubusercontent.com/SOME_RANDOM_ID",
+  # "gitHubUrl": "https://github.com/USER/REPO",
+  # "workFolder": "/some/work/dir" #=> corresponds to Runner.Spec.WorkDir
+  # }
+  #
+  # Especially `agentId` is important, as other than listing all the runners in the repo,
+  # this is the only change we could get the exact runnner ID which can be useful for further
+  # GitHub API call like the below. Note that 171 is the agentId seen above.
+  #   curl \
+  #     -H "Accept: application/vnd.github.v3+json" \
+  #     -H "Authorization: bearer ${GITHUB_TOKEN}"
+  #     https://api.github.com/repos/USER/REPO/actions/runners/171
 fi
 
-cat .runner
-# Note: the `.runner` file's content should be something like the below:
-#
-# $ cat /runner/.runner
-# {
-# "agentId": 117, #=> corresponds to the ID of the runner
-# "agentName": "THE_RUNNER_POD_NAME",
-# "poolId": 1,
-# "poolName": "Default",
-# "serverUrl": "https://pipelines.actions.githubusercontent.com/SOME_RANDOM_ID",
-# "gitHubUrl": "https://github.com/USER/REPO",
-# "workFolder": "/some/work/dir" #=> corresponds to Runner.Spec.WorkDir
-# }
-#
-# Especially `agentId` is important, as other than listing all the runners in the repo,
-# this is the only change we could get the exact runnner ID which can be useful for further
-# GitHub API call like the below. Note that 171 is the agentId seen above.
-#   curl \
-#     -H "Accept: application/vnd.github.v3+json" \
-#     -H "Authorization: bearer ${GITHUB_TOKEN}"
-#     https://api.github.com/repos/USER/REPO/actions/runners/171
-
 # Hack due to the DinD volumes
+# This is necessary only for legacy ARC v0.x.
+# ARC v1.x uses the "externals" as the copy source and "tmpDir" as the copy destionation.
+# See https://github.com/actions/actions-runner-controller/blob/91c8991835016f8c6568f101d4a28185baec3dcc/charts/gha-runner-scale-set/templates/_helpers.tpl#L76-L87
 if [ -z "${UNITTEST:-}" ] && [ -e ./externalstmp ]; then
   mkdir -p ./externals
   mv ./externalstmp/* ./externals/

@@ -77,7 +77,9 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/bin/dumb-init
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
+# Set this to /home/runner for compatibility with v1 runners
+ARG RUNNER_ASSETS_DIR=/runnertmp
+ENV RUNNER_ASSETS_DIR=$RUNNER_ASSETS_DIR
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
