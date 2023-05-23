@@ -132,7 +132,7 @@ func main() {
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
-	flag.StringVar(&updateStrategy, "update-strategy", "immediate", "Immediately or eventually mutate resources on upgrade with running/pending jobs.")
+	flag.StringVar(&updateStrategy, "update-strategy", "immediate", `Resources reconciliation strategy on upgrade with running/pending jobs. Valid values are: "immediate", "eventual". Defaults to "immediate".`)
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.Parse()
 
@@ -172,8 +172,12 @@ func main() {
 			newCache = cache.MultiNamespacedCacheBuilder([]string{managerNamespace, watchSingleNamespace})
 		}
 
-		if len(updateStrategy) > 0 {
-			log.Info("update-strategy is set to: ", "updateStrategy", updateStrategy)
+		switch updateStrategy {
+		case "eventual", "immediate":
+			log.Info(`Update strategy set to:`, "updateStrategy", updateStrategy)
+		default:
+			log.Info(`Update strategy not recognized. Defaulting to "immediately"`, "updateStrategy", updateStrategy)
+			updateStrategy = "immediate"
 		}
 	}
 
@@ -222,7 +226,7 @@ func main() {
 			ControllerNamespace:                managerNamespace,
 			DefaultRunnerScaleSetListenerImage: managerImage,
 			ActionsClient:                      actionsMultiClient,
-			UpdateStrategy:                     updateStrategy,
+			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
