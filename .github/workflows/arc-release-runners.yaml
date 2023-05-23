@@ -19,6 +19,10 @@ env:
   TARGET_WORKFLOW: release-runners.yaml
   DOCKER_VERSION: 20.10.23
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   build-runners:
     name: Trigger Build and Push of Runner Images

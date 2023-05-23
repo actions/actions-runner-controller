@@ -12,6 +12,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # This will make sure we only apply the concurrency limits on pull requests 
+  # but not pushes to master branch by making the concurrency group name unique
+  # for pushes
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   shellcheck:
     name: runner / shellcheck
