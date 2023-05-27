@@ -113,7 +113,7 @@ spec:
                   description: ScaleDownDelaySecondsAfterScaleUp is the approximate delay for a scale down followed by a scale up Used to prevent flapping (down->up->down->... loop)
                   type: integer
                 scaleTargetRef:
-                  description: ScaleTargetRef sis the reference to scaled resource like RunnerDeployment
+                  description: ScaleTargetRef is the reference to scaled resource like RunnerDeployment
                   properties:
                     kind:
                       description: Kind is the type of resource being referenced
