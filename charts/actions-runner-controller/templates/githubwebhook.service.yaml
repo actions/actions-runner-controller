@@ -5,7 +5,7 @@ metadata:
   name: {{ include "actions-runner-controller-github-webhook-server.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+    {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}
 {{- if .Values.githubWebhookServer.service.annotations }}
   annotations:
     {{ toYaml .Values.githubWebhookServer.service.annotations | nindent 4 }}
