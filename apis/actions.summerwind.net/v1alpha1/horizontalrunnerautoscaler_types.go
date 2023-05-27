@@ -22,7 +22,7 @@ import (
 
 // HorizontalRunnerAutoscalerSpec defines the desired state of HorizontalRunnerAutoscaler
 type HorizontalRunnerAutoscalerSpec struct {
-	// ScaleTargetRef sis the reference to scaled resource like RunnerDeployment
+	// ScaleTargetRef is the reference to scaled resource like RunnerDeployment
 	ScaleTargetRef ScaleTargetRef `json:"scaleTargetRef,omitempty"`
 
 	// MinReplicas is the minimum number of replicas the deployment is allowed to scale

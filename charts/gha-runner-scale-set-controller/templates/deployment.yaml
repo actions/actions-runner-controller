@@ -59,6 +59,9 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
+        {{- with .Values.flags.updateStrategy }}
+        - "--update-strategy={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         env:

@@ -42,6 +42,7 @@ const (
 var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	var ctx context.Context
 	var mgr ctrl.Manager
+	var controller *AutoscalingRunnerSetReconciler
 	var autoscalingNS *corev1.Namespace
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
@@ -63,7 +64,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
-		controller := &AutoscalingRunnerSetReconciler{
+		controller = &AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
 			Scheme:                             mgr.GetScheme(),
 			Log:                                logf.Log,
@@ -421,6 +422,110 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
+		})
+	})
+
+	Context("When updating an AutoscalingRunnerSet with running or pending jobs", func() {
+		It("It should wait for running and pending jobs to finish before applying the update. Update Strategy is set to eventual.", func() {
+			// Switch update strategy to eventual (drain jobs )
+			controller.UpdateStrategy = UpdateStrategyEventual
+			// Wait till the listener is created
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			// Wait till the ephemeral runner set is created
+			Eventually(
+				func() (int, error) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					if err != nil {
+						return 0, err
+					}
+
+					return len(runnerSetList.Items), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
+
+			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+
+			// Emulate running and pending jobs
+			runnerSet := runnerSetList.Items[0]
+			activeRunnerSet := runnerSet.DeepCopy()
+			activeRunnerSet.Status.CurrentReplicas = 6
+			activeRunnerSet.Status.FailedEphemeralRunners = 1
+			activeRunnerSet.Status.RunningEphemeralRunners = 2
+			activeRunnerSet.Status.PendingEphemeralRunners = 3
+
+			desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
+				CurrentRunners:          activeRunnerSet.Status.CurrentReplicas,
+				State:                   "",
+				PendingEphemeralRunners: activeRunnerSet.Status.PendingEphemeralRunners,
+				RunningEphemeralRunners: activeRunnerSet.Status.RunningEphemeralRunners,
+				FailedEphemeralRunners:  activeRunnerSet.Status.FailedEphemeralRunners,
+			}
+
+			err = k8sClient.Status().Patch(ctx, activeRunnerSet, client.MergeFrom(&runnerSet))
+			Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
+
+			Eventually(
+				func() (v1alpha1.AutoscalingRunnerSetStatus, error) {
+					updated := new(v1alpha1.AutoscalingRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+					if err != nil {
+						return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
+					}
+					return updated.Status, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+
+			// Patch the AutoScalingRunnerSet image which should trigger
+			// the recreation of the Listener and EphemeralRunnerSet
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.Template.Spec = corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "runner",
+						Image: "ghcr.io/actions/abcd:1.1.1",
+					},
+				},
+			}
+			// patched.Spec.Template.Spec.PriorityClassName = "test-priority-class"
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+			autoscalingRunnerSet = patched.DeepCopy()
+
+			// The EphemeralRunnerSet should not be recreated
+			Consistently(
+				func() (string, error) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					Expect(err).NotTo(HaveOccurred(), "failed to fetch AutoScalingRunnerSet")
+					return runnerSetList.Items[0].Name, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Equal(activeRunnerSet.Name), "The EphemeralRunnerSet should not be recreated")
+
+			// The listener should not be recreated
+			Consistently(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).ShouldNot(Succeed(), "Listener should not be recreated")
 		})
 	})
 
@@ -1617,10 +1722,14 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 
 		startManagers(GinkgoT(), mgr)
 
-		Eventually(func() bool {
-			ars := new(v1alpha1.AutoscalingRunnerSet)
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Name}, ars)
-			return errors.IsNotFound(err)
-		}).Should(BeTrue())
+		Eventually(
+			func() bool {
+				ars := new(v1alpha1.AutoscalingRunnerSet)
+				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Name}, ars)
+				return errors.IsNotFound(err)
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue())
 	})
 })
