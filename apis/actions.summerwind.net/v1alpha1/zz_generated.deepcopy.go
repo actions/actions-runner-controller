@@ -436,6 +436,11 @@ func (in *RunnerConfig) DeepCopyInto(out *RunnerConfig) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.DockerVarRunVolumeSizeLimit != nil {
+		in, out := &in.DockerVarRunVolumeSizeLimit, &out.DockerVarRunVolumeSizeLimit
+		x := (*in).DeepCopy()
+		*out = &x
+	}
 	if in.VolumeSizeLimit != nil {
 		in, out := &in.VolumeSizeLimit, &out.VolumeSizeLimit
 		x := (*in).DeepCopy()
