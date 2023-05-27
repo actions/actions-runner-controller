@@ -192,6 +192,10 @@ admissionWebHooks:
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
 logFormat: text
 
+# enable setting the docker group id for the runner container
+# https://github.com/actions/actions-runner-controller/pull/2499
+#dockerGID: 121
+
 githubWebhookServer:
   enabled: false
   replicaCount: 1
