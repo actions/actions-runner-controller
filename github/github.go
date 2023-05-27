@@ -15,7 +15,7 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/go-logr/logr"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/oauth2"
 )
