@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v50/github"
+	gogithub "github.com/google/go-github/v52/github"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/actions/actions-runner-controller/github"
@@ -98,13 +98,19 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	labels["organization"] = org
 
 	var wn string
+	var hb string
 	if e.WorkflowJob != nil {
 		if n := e.WorkflowJob.WorkflowName; n != nil {
 			wn = *n
 			keysAndValues = append(keysAndValues, "workflow_name", *n)
 		}
+		if n := e.WorkflowJob.HeadBranch; n != nil {
+			hb = *n
+			keysAndValues = append(keysAndValues, "head_branch", *n)
+		}
 	}
 	labels["workflow_name"] = wn
+	labels["head_branch"] = hb
 
 	log := reader.Log.WithValues(keysAndValues...)
 

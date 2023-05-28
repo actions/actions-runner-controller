@@ -8,7 +8,7 @@ import (
 	"time"
 
 	github2 "github.com/actions/actions-runner-controller/github"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 
 	"github.com/actions/actions-runner-controller/github/fake"
 
