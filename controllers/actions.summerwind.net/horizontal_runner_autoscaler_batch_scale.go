@@ -142,10 +142,24 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 		return err
 	}
 
-	copy := hra.DeepCopy()
 	now := time.Now()
 
-	if hra.Spec.MaxReplicas != nil && len(copy.Spec.CapacityReservations) > *hra.Spec.MaxReplicas {
+	copy, err := s.planBatchScale(ctx, batch, &hra, now)
+	if err != nil {
+		return err
+	}
+
+	if err := s.Client.Patch(ctx, copy, client.MergeFrom(&hra)); err != nil {
+		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
+	}
+
+	return nil
+}
+
+func (s *batchScaler) planBatchScale(ctx context.Context, batch batchScaleOperation, hra *v1alpha1.HorizontalRunnerAutoscaler, now time.Time) (*v1alpha1.HorizontalRunnerAutoscaler, error) {
+	copy := hra.DeepCopy()
+
+	if hra.Spec.MaxReplicas != nil && len(copy.Spec.CapacityReservations) > *copy.Spec.MaxReplicas {
 		// We have more reservations than MaxReplicas, meaning that we previously
 		// could not scale up to meet a capacity demand because we had hit MaxReplicas.
 		// Therefore, there are reservations that are starved for capacity. We extend the
@@ -155,6 +169,20 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 		// See https://github.com/actions/actions-runner-controller/issues/2254 for more context.
 
 		// Extend the expiration time of all the reservations not yet assigned to replicas.
+		//
+		// Note that we assume that the two scenarios equivalent here.
+		// The first case is where the number of reservations become greater than MaxReplicas.
+		// The second case is where MaxReplicas become greater than the number of reservations equivalent.
+		// Presuming the HRA.spec.scaleTriggers[].duration as "the duration until the reservation expires after a corresponding runner was deployed",
+		// it's correct.
+		//
+		// In other words, we settle on a capacity reservation's ExpirationTime only after the corresponding runner is "about to be" deployed.
+		// It's "about to be deployed" not "deployed" because we have no way to correlate a capacity reservation and the runner;
+		// the best we can do here is to simulate the desired behavior by reading MaxReplicas and assuming it will be equal to the number of active runners soon.
+		//
+		// Perhaps we could use RunnerDeployment.Status.Replicas or RunnerSet.Status.Replicas instead of the MaxReplicas as a better source of "the number of active runners".
+		// However, note that the status is not guaranteed to be up-to-date.
+		// It might not be that easy to decide which is better to use.
 		for i := *hra.Spec.MaxReplicas; i < len(copy.Spec.CapacityReservations); i++ {
 			// Let's say maxReplicas=3 and the workflow job of status=completed result in deleting the first capacity reservation
 			//   copy.Spec.CapacityReservations[i] where i=0.
@@ -167,7 +195,7 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 			// it might expire before it is assigned to a runner, due to the delay between the time the
 			// expiration timer starts and the time a runner becomes available.
 			//
-			// Why is there such delay? Because ARC implements the scale duration and expiration as such...
+			// Why is there such delay? Because ARC implements the scale duration and expiration as such.
 			// The expiration timer starts when the reservation is created, while the runner is created only after
 			// the corresponding reservation fits within maxReplicas.
 			//
@@ -177,6 +205,9 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 			// There is no guarantee that all the reservations have the same duration, and even if there were,
 			// at this point we have lost the reference to the duration that was intended.
 			// However, we can compute the intended duration from the existing interval.
+			//
+			// In other words, updating HRA.spec.scaleTriggers[].duration does not result in delaying capacity reservations expiration any longer
+			// than the "intended" duration, which is the duration of the trigger when the reservation was created.
 			duration := copy.Spec.CapacityReservations[i].ExpirationTime.Time.Sub(copy.Spec.CapacityReservations[i].EffectiveTime.Time)
 			copy.Spec.CapacityReservations[i].EffectiveTime = metav1.Time{Time: now}
 			copy.Spec.CapacityReservations[i].ExpirationTime = metav1.Time{Time: now.Add(duration)}
@@ -192,13 +223,7 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 	var added, completed int
 
 	for _, scale := range batch.scaleOps {
-		amount := 1
-
-		if scale.trigger.Amount != 0 {
-			amount = scale.trigger.Amount
-		}
-
-		scale.log.V(2).Info("Adding capacity reservation", "amount", amount)
+		amount := scale.trigger.Amount
 
 		// We do not track if a webhook-based scale-down event matches an expired capacity reservation
 		// or a job for which the scale-up event was never received. This means that scale-down
@@ -212,6 +237,8 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 		// but that would be a lot of work. So for now we allow for some slop, and hope that
 		// GitHub provides a better autoscaling solution soon.
 		if amount > 0 {
+			scale.log.V(2).Info("Adding capacity reservation", "amount", amount)
+
 			// Parts of this function require that Spec.CapacityReservations.Replicas always equals 1.
 			// Enforce that rule no matter what the `amount` value is
 			for i := 0; i < amount; i++ {
@@ -223,6 +250,8 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 			}
 			added += amount
 		} else if amount < 0 {
+			scale.log.V(2).Info("Removing capacity reservation", "amount", -amount)
+
 			// Remove the requested number of reservations unless there are not that many left
 			if len(copy.Spec.CapacityReservations) > -amount {
 				copy.Spec.CapacityReservations = copy.Spec.CapacityReservations[-amount:]
@@ -248,9 +277,5 @@ func (s *batchScaler) batchScale(ctx context.Context, batch batchScaleOperation)
 		"after", after,
 	)
 
-	if err := s.Client.Patch(ctx, copy, client.MergeFrom(&hra)); err != nil {
-		return fmt.Errorf("patching horizontalrunnerautoscaler to add capacity reservation: %w", err)
-	}
-
-	return nil
+	return copy, nil
 }
