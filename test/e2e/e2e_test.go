@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/testing"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
