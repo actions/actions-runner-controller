@@ -376,19 +376,24 @@ func TestGetRequest(t *testing.T) {
 
 func TestGetValidCapacityReservations(t *testing.T) {
 	now := time.Now()
+	duration, _ := time.ParseDuration("10m")
+	effectiveTime := now.Add(-duration)
 
 	hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
 		Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
 			CapacityReservations: []actionsv1alpha1.CapacityReservation{
 				{
+					EffectiveTime:  metav1.Time{Time: effectiveTime.Add(-time.Second)},
 					ExpirationTime: metav1.Time{Time: now.Add(-time.Second)},
 					Replicas:       1,
 				},
 				{
+					EffectiveTime:  metav1.Time{Time: effectiveTime},
 					ExpirationTime: metav1.Time{Time: now},
 					Replicas:       2,
 				},
 				{
+					EffectiveTime:  metav1.Time{Time: effectiveTime.Add(time.Second)},
 					ExpirationTime: metav1.Time{Time: now.Add(time.Second)},
 					Replicas:       3,
 				},
