@@ -88,6 +88,15 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.dind-container" -}}
 image: docker:dind
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "dind" }}
+    {{- range $key, $val := $container }}
+      {{- if and (ne $key "securityContext") (ne $key "volumeMounts") (ne $key "name") }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
 securityContext:
   privileged: true
 volumeMounts:
