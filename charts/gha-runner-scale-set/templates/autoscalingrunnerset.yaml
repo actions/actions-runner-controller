@@ -119,7 +119,7 @@ spec:
         {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
         {{- end }}
         {{- with .Values.template.spec.initContainers }}
-      {{- toYaml . | nindent 8 }}
+      {{- toYaml . | nindent 6 }}
         {{- end }}
       {{- end }}
       containers:
