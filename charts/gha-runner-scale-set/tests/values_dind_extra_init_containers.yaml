@@ -1,0 +1,17 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    initContainers:
+    - name: kube-init
+      image: runner-image:latest
+      command: ["sudo", "chown", "-R", "1001:123", "/home/runner/_work"]
+      volumeMounts:
+      - name: work
+        mountPath: /home/runner/_work
+    - name: ls
+      image: ubuntu:latest
+      command: ["ls"]
+containerMode:
+  type: dind
