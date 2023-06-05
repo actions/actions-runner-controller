@@ -1,8 +1,9 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.7.0
+    controller-gen.kubebuilder.io/version: v0.11.3
   creationTimestamp: null
   name: autoscalinglisteners.actions.github.com
 spec:
@@ -14,132 +15,136 @@ spec:
     singular: autoscalinglistener
   scope: Namespaced
   versions:
-    - additionalPrinterColumns:
-        - jsonPath: .spec.githubConfigUrl
-          name: GitHub Configure URL
-          type: string
-        - jsonPath: .spec.autoscalingRunnerSetNamespace
-          name: AutoscalingRunnerSet Namespace
-          type: string
-        - jsonPath: .spec.autoscalingRunnerSetName
-          name: AutoscalingRunnerSet Name
-          type: string
-      name: v1alpha1
-      schema:
-        openAPIV3Schema:
-          description: AutoscalingListener is the Schema for the autoscalinglisteners API
-          properties:
-            apiVersion:
-              description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-              type: string
-            kind:
-              description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-              type: string
-            metadata:
-              type: object
-            spec:
-              description: AutoscalingListenerSpec defines the desired state of AutoscalingListener
-              properties:
-                autoscalingRunnerSetName:
-                  description: Required
-                  type: string
-                autoscalingRunnerSetNamespace:
-                  description: Required
-                  type: string
-                ephemeralRunnerSetName:
-                  description: Required
-                  type: string
-                githubConfigSecret:
-                  description: Required
-                  type: string
-                githubConfigUrl:
-                  description: Required
-                  type: string
-                githubServerTLS:
-                  properties:
-                    certificateFrom:
-                      description: Required
-                      properties:
-                        configMapKeyRef:
-                          description: Required
-                          properties:
-                            key:
-                              description: The key to select.
-                              type: string
-                            name:
-                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
-                              type: string
-                            optional:
-                              description: Specify whether the ConfigMap or its key must be defined
-                              type: boolean
-                          required:
-                            - key
-                          type: object
-                      type: object
-                  type: object
-                image:
-                  description: Required
-                  type: string
-                imagePullPolicy:
-                  description: Required
-                  type: string
-                imagePullSecrets:
-                  description: Required
-                  items:
-                    description: LocalObjectReference contains enough information to let you locate the referenced object inside the same namespace.
+  - additionalPrinterColumns:
+    - jsonPath: .spec.githubConfigUrl
+      name: GitHub Configure URL
+      type: string
+    - jsonPath: .spec.autoscalingRunnerSetNamespace
+      name: AutoscalingRunnerSet Namespace
+      type: string
+    - jsonPath: .spec.autoscalingRunnerSetName
+      name: AutoscalingRunnerSet Name
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AutoscalingListener is the Schema for the autoscalinglisteners
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AutoscalingListenerSpec defines the desired state of AutoscalingListener
+            properties:
+              autoscalingRunnerSetName:
+                description: Required
+                type: string
+              autoscalingRunnerSetNamespace:
+                description: Required
+                type: string
+              ephemeralRunnerSetName:
+                description: Required
+                type: string
+              githubConfigSecret:
+                description: Required
+                type: string
+              githubConfigUrl:
+                description: Required
+                type: string
+              githubServerTLS:
+                properties:
+                  certificateFrom:
+                    description: Required
                     properties:
-                      name:
-                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
+                      configMapKeyRef:
+                        description: Required
+                        properties:
+                          key:
+                            description: The key to select.
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              TODO: Add other useful fields. apiVersion, kind, uid?'
+                            type: string
+                          optional:
+                            description: Specify whether the ConfigMap or its key
+                              must be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    type: object
+                type: object
+              image:
+                description: Required
+                type: string
+              imagePullPolicy:
+                description: Required
+                type: string
+              imagePullSecrets:
+                description: Required
+                items:
+                  description: LocalObjectReference contains enough information to
+                    let you locate the referenced object inside the same namespace.
+                  properties:
+                    name:
+                      description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        TODO: Add other useful fields. apiVersion, kind, uid?'
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
+              maxRunners:
+                description: Required
+                minimum: 0
+                type: integer
+              minRunners:
+                description: Required
+                minimum: 0
+                type: integer
+              proxy:
+                properties:
+                  http:
+                    properties:
+                      credentialSecretRef:
+                        type: string
+                      url:
+                        description: Required
                         type: string
                     type: object
-                  type: array
-                maxRunners:
-                  description: Required
-                  minimum: 0
-                  type: integer
-                minRunners:
-                  description: Required
-                  minimum: 0
-                  type: integer
-                proxy:
-                  properties:
-                    http:
-                      properties:
-                        credentialSecretRef:
-                          type: string
-                        url:
-                          description: Required
-                          type: string
-                      type: object
-                    https:
-                      properties:
-                        credentialSecretRef:
-                          type: string
-                        url:
-                          description: Required
-                          type: string
-                      type: object
-                    noProxy:
-                      items:
+                  https:
+                    properties:
+                      credentialSecretRef:
                         type: string
-                      type: array
-                  type: object
-                runnerScaleSetId:
-                  description: Required
-                  type: integer
-              type: object
-            status:
-              description: AutoscalingListenerStatus defines the observed state of AutoscalingListener
-              type: object
-          type: object
-      served: true
-      storage: true
-      subresources:
-        status: {}
-  preserveUnknownFields: false
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
+                      url:
+                        description: Required
+                        type: string
+                    type: object
+                  noProxy:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              runnerScaleSetId:
+                description: Required
+                type: integer
+            type: object
+          status:
+            description: AutoscalingListenerStatus defines the observed state of AutoscalingListener
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
