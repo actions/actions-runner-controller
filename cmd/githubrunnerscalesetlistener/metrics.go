@@ -44,9 +44,9 @@ var (
 	}
 
 	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID)
-	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
 	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
+	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
 )
 
 // metrics
@@ -313,6 +313,22 @@ func (b *baseLabels) completedJobsTotalLabels(msg *actions.JobCompleted) prometh
 func (b *baseLabels) startedJobsTotalLabels(msg *actions.JobStarted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
 	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
+	l[labelKeyRunnerName] = msg.RunnerName
+	return l
+}
+
+func (b *baseLabels) jobStartupDurationLabels(msg *actions.JobStarted) prometheus.Labels {
+	l := b.jobLabels(&msg.JobMessageBase)
+	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
+	l[labelKeyRunnerName] = msg.RunnerName
+	return l
+}
+
+func (b *baseLabels) jobExecutionDurationLabels(msg *actions.JobCompleted) prometheus.Labels {
+	l := b.jobLabels(&msg.JobMessageBase)
+	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
+	l[labelKeyRunnerName] = msg.RunnerName
+	l[labelKeyJobResult] = msg.Result
 	return l
 }
 
@@ -346,18 +362,27 @@ func (m *metricsExporter) withJobAvailable(msg *actions.JobAvailable) {
 func (m *metricsExporter) withJobStarted(msg *actions.JobStarted) {
 	m.exportFuncs = append(m.exportFuncs, func() {
 		startedJobsTotal.With(m.startedJobsTotalLabels(msg)).Inc()
+
+		startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
+		jobStartupDurationSeconds.With(m.jobStartupDurationLabels(msg)).Observe(float64(startupDuration))
 	})
 }
 
 func (m *metricsExporter) withJobAssigned(msg *actions.JobAssigned) {
 	m.exportFuncs = append(m.exportFuncs, func() {
 		assignedJobsTotal.With(m.scaleSetLabels()).Inc()
+
+		queueDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
+		jobQueueDurationSeconds.With(m.jobLabels(&msg.JobMessageBase)).Observe(float64(queueDuration))
 	})
 }
 
 func (m *metricsExporter) withJobCompleted(msg *actions.JobCompleted) {
 	m.exportFuncs = append(m.exportFuncs, func() {
 		completedJobsTotal.With(m.completedJobsTotalLabels(msg)).Inc()
+
+		executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
+		jobExecutionDurationSeconds.With(m.jobExecutionDurationLabels(msg)).Observe(float64(executionDuration))
 	})
 }
 
