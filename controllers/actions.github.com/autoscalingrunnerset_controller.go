@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -42,13 +43,28 @@ import (
 )
 
 const (
-	// TODO: Replace with shared image.
-	autoscalingRunnerSetOwnerKey             = ".metadata.controller"
-	LabelKeyRunnerSpecHash                   = "runner-spec-hash"
-	autoscalingRunnerSetFinalizerName        = "autoscalingrunnerset.actions.github.com/finalizer"
-	runnerScaleSetIdAnnotationKey            = "runner-scale-set-id"
-	runnerScaleSetNameAnnotationKey          = "runner-scale-set-name"
-	autoscalingRunnerSetCleanupFinalizerName = "actions.github.com/cleanup-protection"
+	labelKeyRunnerSpecHash            = "runner-spec-hash"
+	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
+	runnerScaleSetIdAnnotationKey     = "runner-scale-set-id"
+	runnerScaleSetNameAnnotationKey   = "runner-scale-set-name"
+)
+
+type UpdateStrategy string
+
+// Defines how the controller should handle upgrades while having running jobs.
+const (
+	// "immediate": (default) The controller will immediately apply the change causing the
+	// recreation of the listener and ephemeral runner set. This can lead to an
+	// overprovisioning of runners, if there are pending / running jobs. This should not
+	// be a problem at a small scale, but it could lead to a significant increase of
+	// resources if you have a lot of jobs running concurrently.
+	UpdateStrategyImmediate = UpdateStrategy("immediate")
+	// "eventual": The controller will remove the listener and ephemeral runner set
+	// immediately, but will not recreate them (to apply changes) until all
+	// pending / running jobs have completed.
+	// This can lead to a longer time to apply the change but it will ensure
+	// that you don't have any overprovisioning of runners.
+	UpdateStrategyEventual = UpdateStrategy("eventual")
 )
 
 // AutoscalingRunnerSetReconciler reconciles a AutoscalingRunnerSet object
@@ -59,6 +75,7 @@ type AutoscalingRunnerSetReconciler struct {
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
+	UpdateStrategy                                UpdateStrategy
 	ActionsClient                                 actions.MultiClient
 
 	resourceBuilder resourceBuilder
@@ -139,6 +156,22 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	if autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion] != build.Version {
+		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
+			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
+				"targetVersion", build.Version,
+				"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+			)
+			return ctrl.Result{}, nil
+		}
+
+		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
+			"targetVersion", build.Version,
+			"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+		)
+		return ctrl.Result{}, nil
+	}
+
 	if !controllerutil.ContainsFinalizer(autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
 		log.Info("Adding finalizer")
 		if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
@@ -201,10 +234,51 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	desiredSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 	for _, runnerSet := range existingRunnerSets.all() {
-		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Labels[LabelKeyRunnerSpecHash])
+		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Labels[labelKeyRunnerSpecHash])
 	}
 
-	if desiredSpecHash != latestRunnerSet.Labels[LabelKeyRunnerSpecHash] {
+	// Make sure the AutoscalingListener is up and running in the controller namespace
+	listener := new(v1alpha1.AutoscalingListener)
+	listenerFound := true
+	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
+		if !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to get AutoscalingListener resource")
+			return ctrl.Result{}, err
+		}
+
+		listenerFound = false
+		log.Info("AutoscalingListener does not exist.")
+	}
+
+	// Our listener pod is out of date, so we need to delete it to get a new recreate.
+	if listenerFound && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
+		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
+		if err := r.Delete(ctx, listener); err != nil {
+			if kerrors.IsNotFound(err) {
+				return ctrl.Result{}, nil
+			}
+			log.Error(err, "Failed to delete AutoscalingListener resource")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Deleted RunnerScaleSetListener since existing one is out of date")
+		return ctrl.Result{}, nil
+	}
+
+	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
+		if r.drainingJobs(&latestRunnerSet.Status) {
+			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
+			log.Info("Scaling down the number of desired replicas to 0")
+			// We are in the process of draining the jobs. The listener has been deleted and the ephemeral runner set replicas
+			// need to scale down to 0
+			err := patch(ctx, r.Client, latestRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
+				obj.Spec.Replicas = 0
+			})
+			if err != nil {
+				log.Error(err, "Failed to patch runner set to set desired count to 0")
+			}
+			return ctrl.Result{}, err
+		}
 		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
 	}
@@ -220,30 +294,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
-	listener := new(v1alpha1.AutoscalingListener)
-	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
-		if kerrors.IsNotFound(err) {
-			// We don't have a listener
-			log.Info("Creating a new AutoscalingListener for the runner set", "ephemeralRunnerSetName", latestRunnerSet.Name)
-			return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
+	if !listenerFound {
+		if r.drainingJobs(&latestRunnerSet.Status) {
+			log.Info("Creating a new AutoscalingListener is waiting for the running and pending runners to finish. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
+			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get AutoscalingListener resource")
-		return ctrl.Result{}, err
-	}
-
-	// Our listener pod is out of date, so we need to delete it to get a new recreate.
-	if listener.Labels[LabelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash() {
-		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
-		if err := r.Delete(ctx, listener); err != nil {
-			if kerrors.IsNotFound(err) {
-				return ctrl.Result{}, nil
-			}
-			log.Error(err, "Failed to delete AutoscalingListener resource")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Deleted RunnerScaleSetListener since existing one is out of date")
-		return ctrl.Result{}, nil
+		log.Info("Creating a new AutoscalingListener for the runner set", "ephemeralRunnerSetName", latestRunnerSet.Name)
+		return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
 	}
 
 	// Update the status of autoscaling runner set.
@@ -260,6 +317,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// Prevents overprovisioning of runners.
+// We reach this code path when runner scale set has been patched with a new runner spec but there are still running ephemeral runners.
+// The safest approach is to wait for the running ephemeral runners to finish before creating a new runner set.
+func (r *AutoscalingRunnerSetReconciler) drainingJobs(latestRunnerSetStatus *v1alpha1.EphemeralRunnerSetStatus) bool {
+	if r.UpdateStrategy == UpdateStrategyEventual && ((latestRunnerSetStatus.RunningEphemeralRunners + latestRunnerSetStatus.PendingEphemeralRunners) > 0) {
+		return true
+	}
+	return false
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {
@@ -601,7 +668,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 
 func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*EphemeralRunnerSets, error) {
 	list := new(v1alpha1.EphemeralRunnerSetList)
-	if err := r.List(ctx, list, client.InNamespace(autoscalingRunnerSet.Namespace), client.MatchingFields{autoscalingRunnerSetOwnerKey: autoscalingRunnerSet.Name}); err != nil {
+	if err := r.List(ctx, list, client.InNamespace(autoscalingRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: autoscalingRunnerSet.Name}); err != nil {
 		return nil, fmt.Errorf("failed to list ephemeral runner sets: %v", err)
 	}
 
@@ -694,7 +761,7 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		return []string{owner.Name}
 	}
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.EphemeralRunnerSet{}, autoscalingRunnerSetOwnerKey, groupVersionIndexer); err != nil {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.EphemeralRunnerSet{}, resourceOwnerKey, groupVersionIndexer); err != nil {
 		return err
 	}
 
@@ -754,12 +821,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 	err := c.client.Get(ctx, types.NamespacedName{Name: roleBindingName, Namespace: c.autoscalingRunnerSet.Namespace}, roleBinding)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(roleBinding, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("Kubernetes mode role binding finalizer has already been removed", "name", roleBindingName)
 			return
 		}
 		err = patch(ctx, c.client, roleBinding, func(obj *rbacv1.RoleBinding) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch kubernetes mode role binding without finalizer: %w", err)
@@ -797,12 +864,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 	err := c.client.Get(ctx, types.NamespacedName{Name: roleName, Namespace: c.autoscalingRunnerSet.Namespace}, role)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(role, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("Kubernetes mode role finalizer has already been removed", "name", roleName)
 			return
 		}
 		err = patch(ctx, c.client, role, func(obj *rbacv1.Role) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch kubernetes mode role without finalizer: %w", err)
@@ -841,12 +908,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 	err := c.client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: c.autoscalingRunnerSet.Namespace}, serviceAccount)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(serviceAccount, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("Kubernetes mode service account finalizer has already been removed", "name", serviceAccountName)
 			return
 		}
 		err = patch(ctx, c.client, serviceAccount, func(obj *corev1.ServiceAccount) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch kubernetes mode service account without finalizer: %w", err)
@@ -885,12 +952,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 	err := c.client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: c.autoscalingRunnerSet.Namespace}, serviceAccount)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(serviceAccount, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(serviceAccount, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("No permission service account finalizer has already been removed", "name", serviceAccountName)
 			return
 		}
 		err = patch(ctx, c.client, serviceAccount, func(obj *corev1.ServiceAccount) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch service account without finalizer: %w", err)
@@ -929,12 +996,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 	err := c.client.Get(ctx, types.NamespacedName{Name: githubSecretName, Namespace: c.autoscalingRunnerSet.Namespace}, githubSecret)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(githubSecret, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(githubSecret, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("GitHub secret finalizer has already been removed", "name", githubSecretName)
 			return
 		}
 		err = patch(ctx, c.client, githubSecret, func(obj *corev1.Secret) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch GitHub secret without finalizer: %w", err)
@@ -973,12 +1040,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 	err := c.client.Get(ctx, types.NamespacedName{Name: managerRoleBindingName, Namespace: c.autoscalingRunnerSet.Namespace}, roleBinding)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(roleBinding, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(roleBinding, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("Manager role binding finalizer has already been removed", "name", managerRoleBindingName)
 			return
 		}
 		err = patch(ctx, c.client, roleBinding, func(obj *rbacv1.RoleBinding) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch manager role binding without finalizer: %w", err)
@@ -1017,12 +1084,12 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 	err := c.client.Get(ctx, types.NamespacedName{Name: managerRoleName, Namespace: c.autoscalingRunnerSet.Namespace}, role)
 	switch {
 	case err == nil:
-		if !controllerutil.ContainsFinalizer(role, autoscalingRunnerSetCleanupFinalizerName) {
+		if !controllerutil.ContainsFinalizer(role, AutoscalingRunnerSetCleanupFinalizerName) {
 			c.logger.Info("Manager role finalizer has already been removed", "name", managerRoleName)
 			return
 		}
 		err = patch(ctx, c.client, role, func(obj *rbacv1.Role) {
-			controllerutil.RemoveFinalizer(obj, autoscalingRunnerSetCleanupFinalizerName)
+			controllerutil.RemoveFinalizer(obj, AutoscalingRunnerSetCleanupFinalizerName)
 		})
 		if err != nil {
 			c.err = fmt.Errorf("failed to patch manager role without finalizer: %w", err)

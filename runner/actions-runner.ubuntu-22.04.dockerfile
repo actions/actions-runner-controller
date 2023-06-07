@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION
-ARG RUNNER_CONTAINER_HOOKS_VERSION=0.2.0
+ARG RUNNER_CONTAINER_HOOKS_VERSION
 # Docker and Docker Compose arguments
 ARG CHANNEL=stable
 ARG DOCKER_VERSION=20.10.23
@@ -98,6 +98,8 @@ COPY docker-shim.sh /usr/local/bin/docker
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
 
+# Add the Python "User Script Directory" to the PATH
+ENV PATH="${PATH}:${HOME}/.local/bin/"
 ENV ImageOS=ubuntu22
 
 RUN echo "PATH=${PATH}" > /etc/environment \

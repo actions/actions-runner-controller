@@ -70,6 +70,8 @@ type RunnerConfig struct {
 	// +optional
 	DockerRegistryMirror *string `json:"dockerRegistryMirror,omitempty"`
 	// +optional
+	DockerVarRunVolumeSizeLimit *resource.Quantity `json:"dockerVarRunVolumeSizeLimit,omitempty"`
+	// +optional
 	VolumeSizeLimit *resource.Quantity `json:"volumeSizeLimit,omitempty"`
 	// +optional
 	VolumeStorageMedium *string `json:"volumeStorageMedium,omitempty"`
