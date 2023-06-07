@@ -1,4 +1,4 @@
-{{- if and .Values.actionsMetricsServer.enabled .Values.actionsMetrics.serviceMonitor }}
+{{- if and .Values.actionsMetricsServer.enabled .Values.actionsMetrics.serviceMonitor.enable }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -19,6 +19,8 @@ spec:
       tlsConfig:
         insecureSkipVerify: true
       {{- end }}
+      interval: {{ .Values.actionsMetrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.actionsMetrics.serviceMonitor.timeout }}
   selector:
     matchLabels:
       {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 6 }}
