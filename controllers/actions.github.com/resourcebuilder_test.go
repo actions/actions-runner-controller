@@ -2,6 +2,8 @@ package actionsgithubcom
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -90,4 +92,71 @@ func TestLabelPropagation(t *testing.T) {
 	for key := range ephemeralRunner.Labels {
 		assert.Equal(t, ephemeralRunner.Labels[key], pod.Labels[key])
 	}
+}
+
+func TestGitHubURLTrimLabelValues(t *testing.T) {
+	enterprise := strings.Repeat("a", 64)
+	organization := strings.Repeat("b", 64)
+	repository := strings.Repeat("c", 64)
+
+	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion: "0.2.0",
+			},
+			Annotations: map[string]string{
+				runnerScaleSetIdAnnotationKey:      "1",
+				AnnotationKeyGitHubRunnerGroupName: "test-group",
+			},
+		},
+	}
+
+	t.Run("org/repo", func(t *testing.T) {
+		autoscalingRunnerSet := autoscalingRunnerSet.DeepCopy()
+		autoscalingRunnerSet.Spec = v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
+		}
+
+		var b resourceBuilder
+		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
+		require.NoError(t, err)
+		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
+		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], 63)
+		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], trimLabelVauleSuffix))
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], trimLabelVauleSuffix))
+
+		listener, err := b.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+		require.NoError(t, err)
+		assert.Len(t, listener.Labels[LabelKeyGitHubEnterprise], 0)
+		assert.Len(t, listener.Labels[LabelKeyGitHubOrganization], 63)
+		assert.Len(t, listener.Labels[LabelKeyGitHubRepository], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], trimLabelVauleSuffix))
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], trimLabelVauleSuffix))
+	})
+
+	t.Run("enterprise", func(t *testing.T) {
+		autoscalingRunnerSet := autoscalingRunnerSet.DeepCopy()
+		autoscalingRunnerSet.Spec = v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
+		}
+
+		var b resourceBuilder
+		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
+		require.NoError(t, err)
+		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], trimLabelVauleSuffix))
+		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], 0)
+		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], 0)
+
+		listener, err := b.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+		require.NoError(t, err)
+		assert.Len(t, listener.Labels[LabelKeyGitHubEnterprise], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], trimLabelVauleSuffix))
+		assert.Len(t, listener.Labels[LabelKeyGitHubOrganization], 0)
+		assert.Len(t, listener.Labels[LabelKeyGitHubRepository], 0)
+	})
 }
