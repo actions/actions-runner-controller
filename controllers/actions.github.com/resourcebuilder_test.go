@@ -126,12 +126,16 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], 63)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], trimLabelVauleSuffix))
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], trimLabelVauleSuffix))
 
 		listener, err := b.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 		require.NoError(t, err)
 		assert.Len(t, listener.Labels[LabelKeyGitHubEnterprise], 0)
 		assert.Len(t, listener.Labels[LabelKeyGitHubOrganization], 63)
 		assert.Len(t, listener.Labels[LabelKeyGitHubRepository], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], trimLabelVauleSuffix))
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], trimLabelVauleSuffix))
 	})
 
 	t.Run("enterprise", func(t *testing.T) {
@@ -144,12 +148,14 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], trimLabelVauleSuffix))
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], 0)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], 0)
 
 		listener, err := b.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 		require.NoError(t, err)
 		assert.Len(t, listener.Labels[LabelKeyGitHubEnterprise], 63)
+		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], trimLabelVauleSuffix))
 		assert.Len(t, listener.Labels[LabelKeyGitHubOrganization], 0)
 		assert.Len(t, listener.Labels[LabelKeyGitHubRepository], 0)
 	})
