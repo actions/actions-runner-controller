@@ -88,6 +88,15 @@ Create the name of the service account to use
 {{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-rolebinding
 {{- end }}
 
+{{- define "gha-runner-scale-set-controller.watchSingleNamespaceRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-watch-single-namespace-role
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.watchSingleNamespaceRoleNameRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-watch-single-namespace-rolebinding
+{{- end }}
+
+
 {{- define "gha-runner-scale-set-controller.managerListenerRoleName" -}}
 {{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-role
 {{- end }}
