@@ -118,10 +118,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	}
 
 	var total, inProgress, queued, completed, unknown int
-	type callback func()
-	listWorkflowJobs := func(user string, repoName string, runID int64, fallback_cb callback) {
+	listWorkflowJobs := func(user string, repoName string, runID int64) {
 		if runID == 0 {
-			fallback_cb()
 			return
 		}
 		opt := github.ListWorkflowJobsOptions{ListOptions: github.ListOptions{PerPage: 50}}
@@ -139,7 +137,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			opt.Page = resp.NextPage
 		}
 		if len(allJobs) == 0 {
-			fallback_cb()
+			r.Log.Info("Detected run with no jobs, ignoring the case and not scaling.", "repo_name", repoName, "run_id", runID)
 		} else {
 		JOB:
 			for _, job := range allJobs {
@@ -201,9 +199,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			case "completed":
 				completed++
 			case "in_progress":
-				listWorkflowJobs(user, repoName, run.GetID(), func() { inProgress++ })
+				listWorkflowJobs(user, repoName, run.GetID())
 			case "queued":
-				listWorkflowJobs(user, repoName, run.GetID(), func() { queued++ })
+				listWorkflowJobs(user, repoName, run.GetID())
 			default:
 				unknown++
 			}
