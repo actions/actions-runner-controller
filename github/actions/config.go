@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -34,9 +35,7 @@ func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
 		return nil, err
 	}
 
-	isHosted := u.Host == "github.com" ||
-		u.Host == "www.github.com" ||
-		u.Host == "github.localhost"
+	isHosted := isHostedGitHubURL(u)
 
 	configURL := &GitHubConfig{
 		ConfigURL: u,
@@ -76,23 +75,35 @@ func ParseGitHubConfigFromURL(in string) (*GitHubConfig, error) {
 func (c *GitHubConfig) GitHubAPIURL(path string) *url.URL {
 	result := &url.URL{
 		Scheme: c.ConfigURL.Scheme,
+		Host:   c.ConfigURL.Host, // default for Enterprise mode
+		Path:   "/api/v3",        // default for Enterprise mode
 	}
 
-	switch c.ConfigURL.Host {
-	// Hosted
-	case "github.com", "github.localhost":
-		result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
-	// re-routing www.github.com to api.github.com
-	case "www.github.com":
-		result.Host = "api.github.com"
+	isHosted := isHostedGitHubURL(c.ConfigURL)
 
-	// Enterprise
-	default:
-		result.Host = c.ConfigURL.Host
-		result.Path = "/api/v3"
+	if isHosted {
+		result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
+		result.Path = ""
+
+		if strings.EqualFold("www.github.com", c.ConfigURL.Host) {
+			// re-routing www.github.com to api.github.com
+			result.Host = "api.github.com"
+		}
 	}
 
 	result.Path += path
 
 	return result
+}
+
+func isHostedGitHubURL(u *url.URL) bool {
+	_, forceGhes := os.LookupEnv("GITHUB_ACTIONS_FORCE_GHES")
+	if forceGhes {
+		return false
+	}
+
+	return strings.EqualFold(u.Host, "github.com") ||
+		strings.EqualFold(u.Host, "www.github.com") ||
+		strings.EqualFold(u.Host, "github.localhost") ||
+		strings.HasSuffix(u.Host, ".ghe.com")
 }

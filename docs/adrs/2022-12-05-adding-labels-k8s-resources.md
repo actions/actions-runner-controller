@@ -1,12 +1,12 @@
-# ADR 2023-04-14: Adding labels to our resources
+# ADR 2022-12-05: Adding labels to our resources
 
-**Date**: 2023-04-14
+**Date**: 2022-12-05
 
-**Status**: Done [^1]
+**Status**: Superceded [^1]
 
 ## Context
 
-Users need to provide us with logs so that we can help support and troubleshoot their issues. We need a way for our users to filter and retrieve the logs we need.
+users need to provide us with logs so that we can help support and troubleshoot their issues. We need a way for our users to filter and retrieve the logs we need.
 
 ## Proposal
 
@@ -18,7 +18,7 @@ to be `actions-runner-controller`.
 Assuming standard logging that would allow us to get all ARC logs by running
 
 ```bash
-kubectl logs -l 'app.kubernetes.io/part-of=gha-runner-scale-set-controller'
+kubectl logs -l 'app.kubernetes.io/part-of=actions-runner-controller'
 ```
 
 which would be very useful for development to begin with.
@@ -32,7 +32,7 @@ Labels to be set by the Helm chart:
 ```yaml
 metadata:
   labels:
-    app.kubernetes.io/part-of: gha-runner-scale-set-controller
+    app.kubernetes.io/part-of: actions-runner-controller
     app.kubernetes.io/component: controller-manager
     app.kubernetes.io/version: "x.x.x"
 ```
@@ -44,7 +44,7 @@ Labels to be set by controller at creation:
 ```yaml
 metadata:
   labels:
-    app.kubernetes.io/part-of: gha-runner-scale-set-controller
+    app.kubernetes.io/part-of: actions-runner-controller
     app.kubernetes.io/component: runner-scale-set-listener
     app.kubernetes.io/version: "x.x.x"
     actions.github.com/scale-set-name: scale-set-name # this corresponds to metadata.name as set for AutoscalingRunnerSet
@@ -62,7 +62,7 @@ Labels to be set by controller at creation:
 ```yaml
 metadata:
   labels:
-    app.kubernetes.io/part-of: gha-runner-scale-set-controller
+    app.kubernetes.io/part-of: actions-runner-controller
     app.kubernetes.io/component: runner
     app.kubernetes.io/version: "x.x.x"
     actions.github.com/scale-set-name: scale-set-name # this corresponds to metadata.name as set for AutoscalingRunnerSet
@@ -77,7 +77,7 @@ metadata:
 
 This would allow us to ask users:
 
-> Can you please send us the logs coming from pods labelled 'app.kubernetes.io/part-of=gha-runner-scale-set-controller'?
+> Can you please send us the logs coming from pods labelled 'app.kubernetes.io/part-of=actions-runner-controller'?
 
 Or for example if they're having problems specifically with runners:
 
@@ -86,4 +86,4 @@ Or for example if they're having problems specifically with runners:
 This way users don't have to understand ARC moving parts but we still have a
 way to target them specifically if we need to.
 
-[^1]: [ADR 2022-12-05](2022-12-05-adding-labels-k8s-resources.md)
+[^1]: Superseded by [ADR 2023-03-14](2023-03-14-adding-labels-k8s-resources.md)

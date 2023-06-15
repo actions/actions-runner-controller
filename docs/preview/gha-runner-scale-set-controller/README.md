@@ -4,7 +4,20 @@ This new autoscaling mode brings numerous enhancements (described in the followi
 
 ## How it works
 
-![arc_hld_v1 drawio (1)](https://user-images.githubusercontent.com/568794/212665433-2d1f3d6e-0ba8-4f02-9d1b-27d00c49abd1.png)
+![ARC architecture diagram](arc-diagram-light.png#gh-light-mode-only)
+![ARC architecture diagram](arc-diagram-dark.png#gh-dark-mode-only)
+
+1. ARC is installed using the supplied Helm charts, and the controller manager pod is deployed in the specified namespace. A new `AutoScalingRunnerSet` resource is deployed via the supplied Helm charts or a customized manifest file. The `AutoScalingRunnerSet` controller calls GitHub's APIs to fetch the runner group ID that the runner scale set will belong to.
+2. The `AutoScalingRunnerSet` controller calls the APIs one more time to either fetch or create a runner scale set in the `Actions Service` before creating the `Runner ScaleSet Listener` resource.
+3. A `Runner ScaleSet Listener` pod is deployed by the `AutoScaling Listener Controller`. In this pod, the listener application connects to the `Actions Service` to authenticate and establish a long poll HTTPS connection. The listener stays idle until it receives a `Job Available` message from the `Actions Service`.
+4. When a workflow run is triggered from a repository, the `Actions Service` dispatches individual job runs to the runners or runner scalesets where the `runs-on` property matches the name of the runner scaleset or labels of self-hosted runners.
+5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it checks whether it can scale up to the desired count. If it can, the `Runner ScaleSet Listener` acknowledges the message.
+6. The `Runner ScaleSet Listener` uses a `Service Account` and a `Role` bound to that account to make an HTTPS call through the Kubernetes APIs to patch the `EphemeralRunner Set` resource with the number of desired replicas count.
+7. The `EphemeralRunner Set` attempts to create new runners and the `EphemeralRunner Controller` requests a JIT configuration token to register these runners. The controller attempts to create runner pods. If the pod's status is `failed`, the controller retries up to 5 times. After 24 hours the `Actions Service` unassigns the job if no runner accepts it.
+8. Once the runner pod is created, the runner application in the pod uses the JIT configuration token to register itself with the `Actions Service`. It then establishes another HTTPS long poll connection to receive the job details it needs to execute.
+9. The `Actions Service` acknowledges the runner registration and dispatches the job run details.
+10. Throughout the job run execution, the runner continuously communicates the logs and job run status back to the `Actions Service`.
+11. When the runner completes its job successfully, the `EphemeralRunner Controller` checks with the `Actions Service` to see if runner can be deleted. If it can, the `Ephemeral RunnerSet` deletes the runner.
 
 In addition to the increased reliability of the automatic scaling, we have worked on these improvements:
 
@@ -16,7 +29,9 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 ### Demo
 
-https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a73e-27f5e8c75720.mp4
+[![Watch the walkthrough](thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
+
+> Will take you to Youtube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
 
 ## Setup
 
@@ -35,8 +50,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     helm install arc \
         --namespace "${NAMESPACE}" \
         --create-namespace \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.3.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller
     ```
 
 1. Generate a Personal Access Token (PAT) or create and install a GitHub App. See [Creating a personal access token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) and [Creating a GitHub App](https://docs.github.com/en/developers/apps/creating-a-github-app).
@@ -57,7 +71,7 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
         --set githubConfigSecret.github_token="${GITHUB_PAT}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.3.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
     ```
 
     ```bash
@@ -68,14 +82,14 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     GITHUB_APP_ID="<GITHUB_APP_ID>"
     GITHUB_APP_INSTALLATION_ID="<GITHUB_APP_INSTALLATION_ID>"
     GITHUB_APP_PRIVATE_KEY="<GITHUB_APP_PRIVATE_KEY>"
-    helm install arc-runner-set \
+    helm install "${INSTALLATION_NAME}" \
         --namespace "${NAMESPACE}" \
         --create-namespace \
         --set githubConfigUrl="${GITHUB_CONFIG_URL}" \
         --set githubConfigSecret.github_app_id="${GITHUB_APP_ID}" \
         --set githubConfigSecret.github_app_installation_id="${GITHUB_APP_INSTALLATION_ID}" \
         --set githubConfigSecret.github_app_private_key="${GITHUB_APP_PRIVATE_KEY}" \
-        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set --version 0.3.0
+        oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
     ```
 
 1. Check your installation. If everything went well, you should see the following:
@@ -84,8 +98,8 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     $ helm list -n "${NAMESPACE}"
 
     NAME            NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                                    APP VERSION
-    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.3.0        preview
-    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.3.0            0.3.0
+    arc             arc-systems     1               2023-01-18 10:03:36.610534934 +0000 UTC deployed        gha-runner-scale-set-controller-0.4.0        preview
+    arc-runner-set  arc-systems     1               2023-01-18 10:20:14.795285645 +0000 UTC deployed        gha-runner-scale-set-0.4.0            0.4.0
     ```
 
     ```bash
@@ -101,13 +115,12 @@ https://user-images.githubusercontent.com/568794/212668313-8946ddc5-60c1-461f-a7
     ```yaml
     name: Test workflow
     on:
-        workflow_dispatch:
-
+      workflow_dispatch:
     jobs:
-    test:
+      test:
         runs-on: arc-runner-set
-        steps:
-        - name: Hello world
+          steps:
+          - name: Hello world
             run: echo "Hello world"
     ```
 
@@ -140,7 +153,6 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
 
     ```bash
     helm pull oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-        --version 0.3.0 \
         --untar && \
         kubectl replace -f <PATH>/gha-runner-scale-set-controller/crds/
     ```
@@ -148,6 +160,24 @@ Upgrading actions-runner-controller requires a few extra steps because CRDs will
 1. Reinstall actions-runner-controller using the steps from the previous section
 
 ## Troubleshooting
+
+### I'm using the charts from the `master` branch and the controller is not working
+
+The `master` branch is highly unstable! We offer no guarantees that the charts in the `master` branch will work at any given time. If you're using the charts from the `master` branch, you should expect to encounter issues. Please use the latest release instead.
+
+### Controller pod is running but the runner set listener pod is not
+
+You need to inspect the logs of the controller first and see if there are any errors. If there are no errors, and the runner set listener pod is still not running, you need to make sure that the **controller pod has access to the Kubernetes API server in your cluster!**
+
+You'll see something similar to the following in the logs of the controller pod:
+
+```log
+kubectl logs <controller_pod_name> -c manager
+17:35:28.661069       1 request.go:690] Waited for 1.032376652s due to client-side throttling, not priority and fairness, request: GET:https://10.0.0.1:443/apis/monitoring.coreos.com/v1alpha1?timeout=32s
+2023-03-15T17:35:29Z    INFO    starting manager
+```
+
+If you have a proxy configured or you're using a sidecar proxy that's automatically injected (think [Istio](https://istio.io/)), you need to make sure it's configured appropriately to allow traffic from the controller container (manager) to the Kubernetes API server.
 
 ### Check the logs
 
@@ -160,7 +190,7 @@ kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-runner-scale-set-co
 
 ```bash
 # Runner set listener logs
-kubectl logs -n "${NAMESPACE}" -l auto-scaling-runner-set-namespace=arc-systems -l auto-scaling-runner-set-name=arc-runner-set
+kubectl logs -n "${NAMESPACE}" -l actions.github.com/scale-set-namespace=arc-systems -l actions.github.com/scale-set-name=arc-runner-set
 ```
 
 ### Naming error: `Name must have up to characters`
@@ -191,10 +221,10 @@ To fix this, you can either:
 
     ```yaml
     spec:
-        securityContext:
-            fsGroup: 123
-        containers:
-        - name: runner
+      securityContext:
+        fsGroup: 123
+      containers:
+      - name: runner
         image: ghcr.io/actions/actions-runner:<VERSION> # Replace <VERSION> with the version you want to use
         command: ["/home/runner/run.sh"]
     ```
@@ -204,20 +234,49 @@ To fix this, you can either:
     ```yaml
     template:
     spec:
-        initContainers:
-        - name: kube-init
+      initContainers:
+      - name: kube-init
         image: ghcr.io/actions/actions-runner:latest
         command: ["sudo", "chown", "-R", "1001:123", "/home/runner/_work"]
         volumeMounts:
-            - name: work
-            mountPath: /home/runner/_work
-        containers:
-        - name: runner
+        - name: work
+          mountPath: /home/runner/_work
+      containers:
+      - name: runner
         image: ghcr.io/actions/actions-runner:latest
         command: ["/home/runner/run.sh"]
     ```
 
 ## Changelog
+
+### v0.4.0
+
+#### ⚠️ Warning
+
+This release contains a major change related to the way permissions are
+applied to the manager ([#2276](https://github.com/actions/actions-runner-controller/pull/2276) and [#2363](https://github.com/actions/actions-runner-controller/pull/2363)).
+
+Please evaluate these changes carefully before upgrading.
+
+#### Major changes
+
+1. Surface EphemeralRunnerSet stats to AutoscalingRunnerSet [#2382](https://github.com/actions/actions-runner-controller/pull/2382)
+1. Improved security posture by removing list/watch secrets permission from manager cluster role
+   [#2276](https://github.com/actions/actions-runner-controller/pull/2276)
+1. Improved security posture by delaying role/rolebinding creation to gha-runner-scale-set during installation
+   [#2363](https://github.com/actions/actions-runner-controller/pull/2363)
+1. Improved security posture by supporting watching a single namespace from the controller
+   [#2374](https://github.com/actions/actions-runner-controller/pull/2374)
+1. Added labels to AutoscalingRunnerSet subresources to allow easier inspection [#2391](https://github.com/actions/actions-runner-controller/pull/2391)
+1. Fixed bug preventing env variables from being specified
+   [#2450](https://github.com/actions/actions-runner-controller/pull/2450)
+1. Enhance quickstart troubleshooting guides
+   [#2435](https://github.com/actions/actions-runner-controller/pull/2435)
+1. Fixed ignore extra dind container when container mode type is "dind"
+   [#2418](https://github.com/actions/actions-runner-controller/pull/2418)
+1. Added additional cleanup finalizers [#2433](https://github.com/actions/actions-runner-controller/pull/2433)
+1. gha-runner-scale-set listener pod inherits the ImagePullPolicy from the manager pod [#2477](https://github.com/actions/actions-runner-controller/pull/2477)
+1. Treat `.ghe.com` domain as hosted environment [#2480](https://github.com/actions/actions-runner-controller/pull/2480)
 
 ### v0.3.0
 

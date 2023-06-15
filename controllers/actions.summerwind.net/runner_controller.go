@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
@@ -67,15 +68,24 @@ type RunnerReconciler struct {
 	Recorder                    record.EventRecorder
 	Scheme                      *runtime.Scheme
 	GitHubClient                *MultiGitHubClient
-	RunnerImage                 string
-	RunnerImagePullSecrets      []string
-	DockerImage                 string
-	DockerRegistryMirror        string
 	Name                        string
 	RegistrationRecheckInterval time.Duration
 	RegistrationRecheckJitter   time.Duration
-	UseRunnerStatusUpdateHook   bool
 	UnregistrationRetryDelay    time.Duration
+
+	RunnerPodDefaults RunnerPodDefaults
+}
+
+type RunnerPodDefaults struct {
+	RunnerImage            string
+	RunnerImagePullSecrets []string
+	DockerImage            string
+	DockerRegistryMirror   string
+	// The default Docker group ID to use for the dockerd sidecar container.
+	// Ubuntu 20.04 runner images assumes 1001 and the 22.04 variant assumes 121 by default.
+	DockerGID string
+
+	UseRunnerStatusUpdateHook bool
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runners,verbs=get;list;watch;create;update;patch;delete
@@ -144,7 +154,7 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	ready := runnerPodReady(&pod)
 
-	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.UseRunnerStatusUpdateHook {
+	if (runner.Status.Phase != phase || runner.Status.Ready != ready) && !r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Status.Phase == "" && r.RunnerPodDefaults.UseRunnerStatusUpdateHook {
 		if pod.Status.Phase == corev1.PodRunning {
 			// Seeing this message, you can expect the runner to become `Running` soon.
 			log.V(1).Info(
@@ -291,7 +301,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
-	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
+	needsServiceAccount := runner.Spec.ServiceAccountName == "" && (r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes")
 	if needsServiceAccount {
 		serviceAccount := &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
@@ -305,7 +315,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 
 		rules := []rbacv1.PolicyRule{}
 
-		if r.UseRunnerStatusUpdateHook {
+		if r.RunnerPodDefaults.UseRunnerStatusUpdateHook {
 			rules = append(rules, []rbacv1.PolicyRule{
 				{
 					APIGroups:     []string{"actions.summerwind.dev"},
@@ -582,7 +592,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		}
 	}
 
-	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, ghc.GithubBaseURL, r.UseRunnerStatusUpdateHook)
+	pod, err := newRunnerPodWithContainerMode(runner.Spec.ContainerMode, template, runner.Spec.RunnerConfig, ghc.GithubBaseURL, r.RunnerPodDefaults)
 	if err != nil {
 		return pod, err
 	}
@@ -633,7 +643,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
-	} else if r.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
+	} else if r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
 		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
 	}
 
@@ -753,13 +763,24 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 	}, nil
 }
 
-func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHook bool) (corev1.Pod, error) {
+func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, githubBaseURL string, d RunnerPodDefaults) (corev1.Pod, error) {
 	var (
 		privileged                bool = true
 		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
 		dockerEnabled             bool = runnerSpec.DockerEnabled == nil || *runnerSpec.DockerEnabled
 		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
 		dockerdInRunnerPrivileged bool = dockerdInRunner
+
+		defaultRunnerImage            = d.RunnerImage
+		defaultRunnerImagePullSecrets = d.RunnerImagePullSecrets
+		defaultDockerImage            = d.DockerImage
+		defaultDockerRegistryMirror   = d.DockerRegistryMirror
+		useRunnerStatusUpdateHook     = d.UseRunnerStatusUpdateHook
+	)
+
+	const (
+		varRunVolumeName      = "var-run"
+		varRunVolumeMountPath = "/run"
 	)
 
 	if containerMode == "kubernetes" {
@@ -787,6 +808,11 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		dockerRegistryMirror = defaultDockerRegistryMirror
 	} else {
 		dockerRegistryMirror = *runnerSpec.DockerRegistryMirror
+	}
+
+	if runnerSpec.DockerVarRunVolumeSizeLimit == nil {
+		runnerSpec.DockerVarRunVolumeSizeLimit = resource.NewScaledQuantity(1, resource.Mega)
+
 	}
 
 	// Be aware some of the environment variables are used
@@ -1001,6 +1027,47 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
+		// explicitly invoke `dockerd` to avoid automatic TLS / TCP binding
+		dockerdContainer.Args = append([]string{
+			"dockerd",
+			"--host=unix:///run/docker.sock",
+		}, dockerdContainer.Args...)
+
+		// this must match a GID for the user in the runner image
+		// default matches GitHub Actions infra (and default runner images
+		// for actions-runner-controller) so typically should not need to be
+		// overridden
+		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
+			gid := d.DockerGID
+			// We default to gid 121 for Ubuntu 22.04 images
+			// See below for more details
+			// - https://github.com/actions/actions-runner-controller/issues/2490#issuecomment-1501561923
+			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-20.04.dockerfile#L14
+			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-22.04.dockerfile#L12
+			if strings.Contains(runnerContainer.Image, "22.04") {
+				gid = "121"
+			} else if strings.Contains(runnerContainer.Image, "20.04") {
+				gid = "1001"
+			}
+
+			dockerdContainer.Env = append(dockerdContainer.Env,
+				corev1.EnvVar{
+					Name:  "DOCKER_GROUP_GID",
+					Value: gid,
+				})
+		}
+		dockerdContainer.Args = append(dockerdContainer.Args, "--group=$(DOCKER_GROUP_GID)")
+
+		// ideally, we could mount the socket directly at `/var/run/docker.sock`
+		// to use the default, but that's not practical since it won't exist
+		// when the container starts, so can't use subPath on the volume mount
+		runnerContainer.Env = append(runnerContainer.Env,
+			corev1.EnvVar{
+				Name:  "DOCKER_HOST",
+				Value: "unix:///run/docker.sock",
+			},
+		)
+
 		if ok, _ := workVolumePresent(pod.Spec.Volumes); !ok {
 			pod.Spec.Volumes = append(pod.Spec.Volumes,
 				corev1.Volume{
@@ -1014,9 +1081,12 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
-				Name: "certs-client",
+				Name: varRunVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium:    corev1.StorageMediumMemory,
+						SizeLimit: runnerSpec.DockerVarRunVolumeSizeLimit,
+					},
 				},
 			},
 		)
@@ -1030,28 +1100,14 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
-		runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "certs-client",
-				MountPath: "/certs/client",
-				ReadOnly:  true,
-			},
-		)
-
-		runnerContainer.Env = append(runnerContainer.Env, []corev1.EnvVar{
-			{
-				Name:  "DOCKER_HOST",
-				Value: "tcp://localhost:2376",
-			},
-			{
-				Name:  "DOCKER_TLS_VERIFY",
-				Value: "1",
-			},
-			{
-				Name:  "DOCKER_CERT_PATH",
-				Value: "/certs/client",
-			},
-		}...)
+		if ok, _ := volumeMountPresent(varRunVolumeName, runnerContainer.VolumeMounts); !ok {
+			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      varRunVolumeName,
+					MountPath: varRunVolumeMountPath,
+				},
+			)
+		}
 
 		// Determine the volume mounts assigned to the docker sidecar. In case extra mounts are included in the RunnerSpec, append them to the standard
 		// set of mounts. See https://github.com/actions/actions-runner-controller/issues/435 for context.
@@ -1060,14 +1116,16 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				Name:      runnerVolumeName,
 				MountPath: runnerVolumeMountPath,
 			},
-			{
-				Name:      "certs-client",
-				MountPath: "/certs/client",
-			},
 		}
 
-		mountPresent, _ := workVolumeMountPresent(dockerdContainer.VolumeMounts)
-		if !mountPresent {
+		if p, _ := volumeMountPresent(varRunVolumeName, dockerdContainer.VolumeMounts); !p {
+			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
+				Name:      varRunVolumeName,
+				MountPath: varRunVolumeMountPath,
+			})
+		}
+
+		if p, _ := workVolumeMountPresent(dockerdContainer.VolumeMounts); !p {
 			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
 				Name:      "work",
 				MountPath: workDir,
@@ -1077,11 +1135,6 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		if dockerdContainer.Image == "" {
 			dockerdContainer.Image = defaultDockerImage
 		}
-
-		dockerdContainer.Env = append(dockerdContainer.Env, corev1.EnvVar{
-			Name:  "DOCKER_TLS_CERTDIR",
-			Value: "/certs",
-		})
 
 		if dockerdContainer.SecurityContext == nil {
 			dockerdContainer.SecurityContext = &corev1.SecurityContext{
@@ -1224,10 +1277,6 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	return *pod, nil
 }
 
-func newRunnerPod(template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, defaultRunnerImage string, defaultRunnerImagePullSecrets []string, defaultDockerImage, defaultDockerRegistryMirror string, githubBaseURL string, useRunnerStatusUpdateHookEphemeralRole bool) (corev1.Pod, error) {
-	return newRunnerPodWithContainerMode("", template, runnerSpec, defaultRunnerImage, defaultRunnerImagePullSecrets, defaultDockerImage, defaultDockerRegistryMirror, githubBaseURL, useRunnerStatusUpdateHookEphemeralRole)
-}
-
 func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	name := "runner-controller"
 	if r.Name != "" {
@@ -1273,6 +1322,15 @@ func removeFinalizer(finalizers []string, finalizerName string) ([]string, bool)
 	return result, removed
 }
 
+func envVarPresent(name string, items []corev1.EnvVar) (bool, int) {
+	for index, item := range items {
+		if item.Name == name {
+			return true, index
+		}
+	}
+	return false, -1
+}
+
 func workVolumePresent(items []corev1.Volume) (bool, int) {
 	for index, item := range items {
 		if item.Name == "work" {
@@ -1283,12 +1341,16 @@ func workVolumePresent(items []corev1.Volume) (bool, int) {
 }
 
 func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
+	return volumeMountPresent("work", items)
+}
+
+func volumeMountPresent(name string, items []corev1.VolumeMount) (bool, int) {
 	for index, item := range items {
-		if item.Name == "work" {
+		if item.Name == name {
 			return true, index
 		}
 	}
-	return false, 0
+	return false, -1
 }
 
 func applyWorkVolumeClaimTemplateToPod(pod *corev1.Pod, workVolumeClaimTemplate *v1alpha1.WorkVolumeClaimTemplate, workDir string) error {

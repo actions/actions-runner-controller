@@ -40,8 +40,7 @@ import (
 )
 
 const (
-	ephemeralRunnerSetReconcilerOwnerKey = ".metadata.controller"
-	ephemeralRunnerSetFinalizerName      = "ephemeralrunner.actions.github.com/finalizer"
+	ephemeralRunnerSetFinalizerName = "ephemeralrunner.actions.github.com/finalizer"
 )
 
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
@@ -56,6 +55,7 @@ type EphemeralRunnerSetReconciler struct {
 
 //+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/finalizers,verbs=update;patch
 //+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get
 
@@ -146,7 +146,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		ctx,
 		ephemeralRunnerList,
 		client.InNamespace(req.Namespace),
-		client.MatchingFields{ephemeralRunnerSetReconcilerOwnerKey: req.Name},
+		client.MatchingFields{resourceOwnerKey: req.Name},
 	)
 	if err != nil {
 		log.Error(err, "Unable to list child ephemeral runners")
@@ -242,7 +242,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 
 func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{ephemeralRunnerSetReconcilerOwnerKey: ephemeralRunnerSet.Name})
+	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
 	if err != nil {
 		return false, fmt.Errorf("failed to list child ephemeral runners: %v", err)
 	}
@@ -356,10 +356,9 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
 			Namespace: ephemeralRunnerSet.Namespace,
-			Labels:    map[string]string{
-				// TODO: figure out autoScalingRunnerSet name and set it as a label for this secret
-				// "auto-scaling-runner-set-namespace": ephemeralRunnerSet.Namespace,
-				// "auto-scaling-runner-set-name": ephemeralRunnerSet.Name,
+			Labels: map[string]string{
+				LabelKeyGitHubScaleSetName:      ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
+				LabelKeyGitHubScaleSetNamespace: ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
 			},
 		},
 		Data: proxySecretData,
@@ -522,7 +521,7 @@ func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Conte
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Index EphemeralRunner owned by EphemeralRunnerSet so we can perform faster look ups.
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.EphemeralRunner{}, ephemeralRunnerSetReconcilerOwnerKey, func(rawObj client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.EphemeralRunner{}, resourceOwnerKey, func(rawObj client.Object) []string {
 		groupVersion := v1alpha1.GroupVersion.String()
 
 		// grab the job object, extract the owner...

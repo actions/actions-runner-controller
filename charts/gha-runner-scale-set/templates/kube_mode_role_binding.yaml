@@ -1,9 +1,12 @@
-{{- if and (eq .Values.containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+{{- $containerMode := .Values.containerMode }}
+{{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
+  name: {{ include "gha-runner-scale-set.kubeModeRoleBindingName" . }}
   namespace: {{ .Release.Namespace }}
+  finalizers:
+    - actions.github.com/cleanup-protection
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

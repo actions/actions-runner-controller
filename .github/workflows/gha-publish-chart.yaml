@@ -1,4 +1,4 @@
-name: Publish Runner Scale Set Controller Charts
+name: (gha) Publish Helm Charts
 
 on:
   workflow_dispatch:
@@ -33,10 +33,14 @@ env:
   HELM_VERSION: v3.8.0
 
 permissions:
- packages: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 jobs:
-  build-push-image: 
+  build-push-image:
     name: Build and push controller image
     runs-on: ubuntu-latest
     steps:
@@ -46,7 +50,14 @@ jobs:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
 
-      - name: Resolve parameters 
+      - name: Check chart versions
+        # Binary version and chart versions need to match.
+        # In case of an upgrade, the controller will try to clean up
+        # resources with older versions that should have been cleaned up
+        # during the upgrade process
+        run: ./hack/check-gh-chart-versions.sh ${{ inputs.release_tag_name }}
+
+      - name: Resolve parameters
         id: resolve_parameters
         run: |
           resolvedRef="${{ inputs.ref }}"
@@ -67,7 +78,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
         with:
           # Pinning v0.9.1 for Buildx and BuildKit v0.10.6
-          # BuildKit v0.11 which has a bug causing intermittent 
+          # BuildKit v0.11 which has a bug causing intermittent
           # failures pushing images to GHCR
           version: v0.9.1
           driver-opts: image=moby/buildkit:v0.10.6
@@ -94,7 +105,7 @@ jobs:
 
       - name: Job summary
         run: |
-          echo "The [publish-runner-scale-set.yaml](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/publish-runner-scale-set.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "The [gha-publish-chart.yaml](https://github.com/actions/actions-runner-controller/blob/main/.github/workflows/gha-publish-chart.yaml) workflow run was completed successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
           echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
@@ -115,7 +126,7 @@ jobs:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
 
-      - name: Resolve parameters 
+      - name: Resolve parameters
         id: resolve_parameters
         run: |
           resolvedRef="${{ inputs.ref }}"
@@ -126,7 +137,7 @@ jobs:
           echo "INFO: Resolving short SHA for $resolvedRef"
           echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
-          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT 
+          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
         # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
@@ -163,7 +174,7 @@ jobs:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
 
-      - name: Resolve parameters 
+      - name: Resolve parameters
         id: resolve_parameters
         run: |
           resolvedRef="${{ inputs.ref }}"
@@ -174,7 +185,7 @@ jobs:
           echo "INFO: Resolving short SHA for $resolvedRef"
           echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
-          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT 
+          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
         # Using https://github.com/Azure/setup-helm/releases/tag/v3.5

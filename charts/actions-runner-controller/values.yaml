@@ -47,6 +47,7 @@ authSecret:
   #github_basicauth_username: ""
   #github_basicauth_password: ""
 
+# http(s) should be specified for dockerRegistryMirror, e.g.: dockerRegistryMirror="https://<your-docker-registry-mirror>"
 dockerRegistryMirror: ""
 image:
   repository: "summerwind/actions-runner-controller"
@@ -191,6 +192,10 @@ admissionWebHooks:
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
 logFormat: text
 
+# enable setting the docker group id for the runner container
+# https://github.com/actions/actions-runner-controller/pull/2499
+#dockerGID: 121
+
 githubWebhookServer:
   enabled: false
   replicaCount: 1
@@ -279,6 +284,19 @@ githubWebhookServer:
   # queueLimit: 100
   terminationGracePeriodSeconds: 10
   lifecycle: {}
+  # specify additional environment variables for the webhook server pod.
+  # It's possible to specify either key vale pairs e.g.:
+  # my_env_var: "some value"
+  # my_other_env_var: "other value"
+
+  # or a list of complete environment variable definitions e.g.:
+  # - name: GITHUB_WEBHOOK_SECRET_TOKEN
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: GITHUB_WEBHOOK_SECRET_TOKEN
+  #       name: prod-gha-controller-webhook-token
+  #       optional: true
+  env: {}
 
 actionsMetrics:
   serviceAnnotations: {}
@@ -346,6 +364,7 @@ actionsMetricsServer:
         protocol: TCP
         name: http
         #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+    loadBalancerSourceRanges: []
   ingress:
     enabled: false
     ingressClassName: ""
@@ -375,4 +394,5 @@ actionsMetricsServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
-
+  terminationGracePeriodSeconds: 10
+  lifecycle: {}

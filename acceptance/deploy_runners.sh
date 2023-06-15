@@ -6,6 +6,10 @@ OP=${OP:-apply}
 
 RUNNER_LABEL=${RUNNER_LABEL:-self-hosted}
 
+# See https://github.com/actions/actions-runner-controller/issues/2123
+kubectl delete secret generic docker-config || :
+kubectl create secret generic docker-config --from-file .dockerconfigjson=<(jq -M 'del(.aliases)' $HOME/.docker/config.json) --type=kubernetes.io/dockerconfigjson || :
+
 cat acceptance/testdata/kubernetes_container_mode.envsubst.yaml  | NAMESPACE=${RUNNER_NAMESPACE} envsubst  | kubectl apply -f -
 
 if [ -n "${TEST_REPO}" ]; then

@@ -70,6 +70,9 @@ spec:
         {{- if .Values.logFormat  }}  
         - "--log-format={{ .Values.logFormat }}"
         {{- end }}
+        {{- if .Values.dockerGID  }}
+        - "--docker-gid={{ .Values.dockerGID }}"
+        {{- end }}
         command:
         - "/manager"
         env:

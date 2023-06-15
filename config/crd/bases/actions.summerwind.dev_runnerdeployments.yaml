@@ -17,6 +17,21 @@ spec:
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
+        - jsonPath: .spec.template.spec.enterprise
+          name: Enterprise
+          type: string
+        - jsonPath: .spec.template.spec.organization
+          name: Organization
+          type: string
+        - jsonPath: .spec.template.spec.repository
+          name: Repository
+          type: string
+        - jsonPath: .spec.template.spec.group
+          name: Group
+          type: string
+        - jsonPath: .spec.template.spec.labels
+          name: Labels
+          type: string
         - jsonPath: .spec.replicas
           name: Desired
           type: number
@@ -1482,6 +1497,12 @@ spec:
                           type: integer
                         dockerRegistryMirror:
                           type: string
+                        dockerVarRunVolumeSizeLimit:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                         dockerVolumeMounts:
                           items:
                             description: VolumeMount describes a mounting of a Volume within a container.

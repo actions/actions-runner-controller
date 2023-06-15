@@ -81,6 +81,13 @@ rules:
 - apiGroups:
   - actions.github.com
   resources:
+  - ephemeralrunnersets/finalizers
+  verbs:
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
   - ephemeralrunners
   verbs:
   - create
@@ -133,4 +140,5 @@ rules:
   verbs:
   - list
   - watch
+  - patch
 {{- end }}
