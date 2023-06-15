@@ -207,7 +207,6 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 	if err != nil {
 		return fmt.Errorf("could not acquire jobs. %w", err)
 	}
-	s.metricsExporter.withJobsAcquired(len(availableJobs))
 
 	return s.scaleForAssignedJobCount(message.Statistics.TotalAssignedJobs)
 }

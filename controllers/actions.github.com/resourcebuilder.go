@@ -254,6 +254,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			corev1.ContainerPort{
 				ContainerPort: int32(port),
 				Protocol:      corev1.ProtocolTCP,
+				Name:          "metrics",
 			},
 		)
 	}

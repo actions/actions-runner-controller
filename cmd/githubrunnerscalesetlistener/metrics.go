@@ -69,6 +69,16 @@ var (
 		scaleSetLabels,
 	)
 
+	// TODO: add statistic
+	completedJobs = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "completed_jobs",
+			Help:      "Number of completed jobs by the scale set.",
+		},
+		scaleSetLabels,
+	)
+
 	assignedJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
@@ -350,6 +360,11 @@ func (m *metricsExporter) withStatistics(stats *actions.RunnerScaleSetStatistic)
 		registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
 		busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
 		idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
+
+		// Use add directly for metrics totals that are scale-set specific.
+		acquiredJobsTotal.With(m.scaleSetLabels()).Add(float64(stats.TotalAcquiredJobs))
+		assignedJobsTotal.With(m.scaleSetLabels()).Add(float64(stats.TotalAssignedJobs))
+
 	})
 }
 
@@ -370,9 +385,7 @@ func (m *metricsExporter) withJobStarted(msg *actions.JobStarted) {
 
 func (m *metricsExporter) withJobAssigned(msg *actions.JobAssigned) {
 	m.exportFuncs = append(m.exportFuncs, func() {
-		assignedJobsTotal.With(m.scaleSetLabels()).Inc()
-
-		queueDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
+		queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
 		jobQueueDurationSeconds.With(m.jobLabels(&msg.JobMessageBase)).Observe(float64(queueDuration))
 	})
 }
@@ -386,18 +399,9 @@ func (m *metricsExporter) withJobCompleted(msg *actions.JobCompleted) {
 	})
 }
 
-func (m *metricsExporter) withJobsAcquired(count int) {
-	if count == 0 {
-		return
-	}
-	m.exportFuncs = append(m.exportFuncs, func() {
-		acquiredJobsTotal.With(m.scaleSetLabels()).Add(float64(count))
-	})
-}
-
 func (m *metricsExporter) withDesiredRunners(count int) {
 	m.exportFuncs = append(m.exportFuncs, func() {
-		desiredRunners.With(m.scaleSetLabels()).Add(float64(count))
+		desiredRunners.With(m.scaleSetLabels()).Set(float64(count))
 	})
 }
 
