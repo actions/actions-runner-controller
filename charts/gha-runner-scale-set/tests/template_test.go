@@ -1,13 +1,16 @@
 package tests
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	actionsgithubcom "github.com/actions/actions-runner-controller/controllers/actions.github.com"
 	"github.com/gruntwork-io/terratest/modules/helm"
 	"github.com/gruntwork-io/terratest/modules/k8s"
+	"github.com/gruntwork-io/terratest/modules/logger"
 	"github.com/gruntwork-io/terratest/modules/random"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +29,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -43,7 +47,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
 	assert.Equal(t, namespaceName, githubSecret.Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", githubSecret.Name)
 	assert.Equal(t, "gh_token12345", string(githubSecret.Data["github_token"]))
-	assert.Equal(t, "actions.github.com/secret-protection", githubSecret.Finalizers[0])
+	assert.Equal(t, "actions.github.com/cleanup-protection", githubSecret.Finalizers[0])
 }
 
 func TestTemplateRenderedGitHubSecretWithGitHubApp(t *testing.T) {
@@ -57,6 +61,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubApp(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                               "https://github.com/actions",
 			"githubConfigSecret.github_app_id":              "10",
@@ -90,6 +95,7 @@ func TestTemplateRenderedGitHubSecretErrorWithMissingAuthInput(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_app_id":   "",
@@ -117,6 +123,7 @@ func TestTemplateRenderedGitHubSecretErrorWithMissingAppInput(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_app_id":   "10",
@@ -143,6 +150,7 @@ func TestTemplateNotRenderedGitHubSecretWithPredefinedSecret(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret":                 "pre-defined-secret",
@@ -167,6 +175,7 @@ func TestTemplateRenderedSetServiceAccountToNoPermission(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -188,6 +197,7 @@ func TestTemplateRenderedSetServiceAccountToNoPermission(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Equal(t, "test-runners-gha-runner-scale-set-no-permission-service-account", ars.Spec.Template.Spec.ServiceAccountName)
+	assert.Empty(t, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName]) // no finalizer protections in place
 }
 
 func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
@@ -201,6 +211,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -217,6 +228,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", serviceAccount.Name)
+	assert.Equal(t, "actions.github.com/cleanup-protection", serviceAccount.Finalizers[0])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role.yaml"})
 	var role rbacv1.Role
@@ -224,6 +236,9 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 
 	assert.Equal(t, namespaceName, role.Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", role.Name)
+
+	assert.Equal(t, "actions.github.com/cleanup-protection", role.Finalizers[0])
+
 	assert.Len(t, role.Rules, 5, "kube mode role should have 5 rules")
 	assert.Equal(t, "pods", role.Rules[0].Resources[0])
 	assert.Equal(t, "pods/exec", role.Rules[1].Resources[0])
@@ -236,18 +251,21 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &roleBinding)
 
 	assert.Equal(t, namespaceName, roleBinding.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.Name)
+	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role-binding", roleBinding.Name)
 	assert.Len(t, roleBinding.Subjects, 1)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", roleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, roleBinding.Subjects[0].Namespace)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.RoleRef.Name)
 	assert.Equal(t, "Role", roleBinding.RoleRef.Kind)
+	assert.Equal(t, "actions.github.com/cleanup-protection", serviceAccount.Finalizers[0])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-service-account", ars.Spec.Template.Spec.ServiceAccountName)
+	expectedServiceAccountName := "test-runners-gha-runner-scale-set-kube-mode-service-account"
+	assert.Equal(t, expectedServiceAccountName, ars.Spec.Template.Spec.ServiceAccountName)
+	assert.Equal(t, expectedServiceAccountName, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName])
 }
 
 func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
@@ -261,6 +279,7 @@ func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -279,6 +298,7 @@ func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Equal(t, "test-service-account", ars.Spec.Template.Spec.ServiceAccountName)
+	assert.Empty(t, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName])
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
@@ -292,6 +312,7 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -311,6 +332,10 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 
 	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/part-of"])
+	assert.Equal(t, "autoscaling-runner-set", ars.Labels["app.kubernetes.io/component"])
+	assert.NotEmpty(t, ars.Labels["app.kubernetes.io/version"])
+
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
 
@@ -339,6 +364,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -388,6 +414,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                     "https://github.com/actions",
 			"githubConfigSecret.github_token":     "gh_token12345",
@@ -435,6 +462,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MaxRunnersValidationError(t *testi
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -462,6 +490,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinRunnersValidationError(t *testi
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -490,6 +519,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidationError(t *te
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -518,6 +548,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidationSameValue(t
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -549,6 +580,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidation_OnlyMin(t 
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -579,6 +611,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunnersValidation_OnlyMax(t 
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -612,6 +645,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunners_FromValuesFile(t *te
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger:         logger.Discard,
 		ValuesFiles:    []string{testValuesPath},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -639,6 +673,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraVolumes(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -673,6 +708,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -709,6 +745,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_K8S_ExtraVolumes(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -740,6 +777,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -831,6 +869,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -888,6 +927,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) 
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret":                 "pre-defined-secrets",
@@ -922,6 +962,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ErrorOnEmptyPredefinedSecret(t *te
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret":                 "",
@@ -948,6 +989,7 @@ func TestTemplateRenderedWithProxy(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret":                 "pre-defined-secrets",
@@ -1011,6 +1053,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 	t.Run("providing githubServerTLS.runnerMountPath", func(t *testing.T) {
 		t.Run("mode: default", func(t *testing.T) {
 			options := &helm.Options{
+				Logger: logger.Discard,
 				SetValues: map[string]string{
 					"githubConfigUrl":    "https://github.com/actions",
 					"githubConfigSecret": "pre-defined-secrets",
@@ -1069,6 +1112,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 		t.Run("mode: dind", func(t *testing.T) {
 			options := &helm.Options{
+				Logger: logger.Discard,
 				SetValues: map[string]string{
 					"githubConfigUrl":    "https://github.com/actions",
 					"githubConfigSecret": "pre-defined-secrets",
@@ -1128,6 +1172,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 		t.Run("mode: kubernetes", func(t *testing.T) {
 			options := &helm.Options{
+				Logger: logger.Discard,
 				SetValues: map[string]string{
 					"githubConfigUrl":    "https://github.com/actions",
 					"githubConfigSecret": "pre-defined-secrets",
@@ -1189,6 +1234,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 	t.Run("without providing githubServerTLS.runnerMountPath", func(t *testing.T) {
 		t.Run("mode: default", func(t *testing.T) {
 			options := &helm.Options{
+				Logger: logger.Discard,
 				SetValues: map[string]string{
 					"githubConfigUrl":    "https://github.com/actions",
 					"githubConfigSecret": "pre-defined-secrets",
@@ -1243,6 +1289,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 		t.Run("mode: dind", func(t *testing.T) {
 			options := &helm.Options{
+				Logger: logger.Discard,
 				SetValues: map[string]string{
 					"githubConfigUrl":    "https://github.com/actions",
 					"githubConfigSecret": "pre-defined-secrets",
@@ -1298,6 +1345,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 
 		t.Run("mode: kubernetes", func(t *testing.T) {
 			options := &helm.Options{
+				Logger: logger.Discard,
 				SetValues: map[string]string{
 					"githubConfigUrl":    "https://github.com/actions",
 					"githubConfigSecret": "pre-defined-secrets",
@@ -1387,6 +1435,7 @@ func TestTemplateNamingConstraints(t *testing.T) {
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			options := &helm.Options{
+				Logger:         logger.Discard,
 				SetValues:      setValues,
 				KubectlOptions: k8s.NewKubectlOptions("", "", tc.namespaceName),
 			}
@@ -1408,6 +1457,7 @@ func TestTemplateRenderedGitHubConfigUrlEndsWIthSlash(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions/",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -1438,6 +1488,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -1454,7 +1505,11 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
-	assert.Equal(t, 5, len(managerRole.Rules))
+	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
+	assert.Equal(t, 6, len(managerRole.Rules))
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
 }
 
 func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
@@ -1468,6 +1523,7 @@ func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                                      "https://github.com/actions",
 			"githubConfigSecret.github_token":                      "gh_token12345",
@@ -1485,8 +1541,9 @@ func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
-	assert.Equal(t, 6, len(managerRole.Rules))
-	assert.Equal(t, "configmaps", managerRole.Rules[5].Resources[0])
+	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
+	assert.Equal(t, 7, len(managerRole.Rules))
+	assert.Equal(t, "configmaps", managerRole.Rules[6].Resources[0])
 }
 
 func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
@@ -1500,6 +1557,7 @@ func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
@@ -1517,6 +1575,7 @@ func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
 	assert.Equal(t, namespaceName, managerRoleBinding.Namespace, "namespace should match the namespace of the Helm release")
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role-binding", managerRoleBinding.Name)
 	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRoleBinding.RoleRef.Name)
+	assert.Equal(t, "actions.github.com/cleanup-protection", managerRoleBinding.Finalizers[0])
 	assert.Equal(t, "arc", managerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, "arc-system", managerRoleBinding.Subjects[0].Namespace)
 }
@@ -1535,6 +1594,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraContainers(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -1582,6 +1642,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraPodSpec(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -1615,6 +1676,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -1660,6 +1722,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_KubeModeMergePodSpec(t *testing.T)
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
@@ -1687,4 +1750,108 @@ func TestTemplateRenderedAutoScalingRunnerSet_KubeModeMergePodSpec(t *testing.T)
 	assert.Equal(t, "/work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /work")
 	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name, "VolumeMount name should be others")
 	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /others")
+}
+
+func TestTemplateRenderedAutoscalingRunnerSetAnnotation_GitHubSecret(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	annotationExpectedTests := map[string]*helm.Options{
+		"GitHub token": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"githubConfigUrl":                    "https://github.com/actions",
+				"githubConfigSecret.github_token":    "gh_token12345",
+				"controllerServiceAccount.name":      "arc",
+				"controllerServiceAccount.namespace": "arc-system",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		},
+		"GitHub app": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"githubConfigUrl":                               "https://github.com/actions",
+				"githubConfigSecret.github_app_id":              "10",
+				"githubConfigSecret.github_app_installation_id": "100",
+				"githubConfigSecret.github_app_private_key":     "private_key",
+				"controllerServiceAccount.name":                 "arc",
+				"controllerServiceAccount.namespace":            "arc-system",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		},
+	}
+
+	for name, options := range annotationExpectedTests {
+		t.Run("Annotation set: "+name, func(t *testing.T) {
+			output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+			var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+			helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+			assert.NotEmpty(t, autoscalingRunnerSet.Annotations[actionsgithubcom.AnnotationKeyGitHubSecretName])
+		})
+	}
+
+	t.Run("Annotation should not be set", func(t *testing.T) {
+		options := &helm.Options{
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"githubConfigUrl":                    "https://github.com/actions",
+				"githubConfigSecret":                 "pre-defined-secret",
+				"controllerServiceAccount.name":      "arc",
+				"controllerServiceAccount.namespace": "arc-system",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}
+		output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+		var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+		assert.Empty(t, autoscalingRunnerSet.Annotations[actionsgithubcom.AnnotationKeyGitHubSecretName])
+	})
+}
+
+func TestTemplateRenderedAutoscalingRunnerSetAnnotation_KubernetesModeCleanup(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+			"containerMode.type":                 "kubernetes",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	annotationValues := map[string]string{
+		actionsgithubcom.AnnotationKeyGitHubSecretName:                 "test-runners-gha-runner-scale-set-github-secret",
+		actionsgithubcom.AnnotationKeyManagerRoleName:                  "test-runners-gha-runner-scale-set-manager-role",
+		actionsgithubcom.AnnotationKeyManagerRoleBindingName:           "test-runners-gha-runner-scale-set-manager-role-binding",
+		actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName: "test-runners-gha-runner-scale-set-kube-mode-service-account",
+		actionsgithubcom.AnnotationKeyKubernetesModeRoleName:           "test-runners-gha-runner-scale-set-kube-mode-role",
+		actionsgithubcom.AnnotationKeyKubernetesModeRoleBindingName:    "test-runners-gha-runner-scale-set-kube-mode-role-binding",
+	}
+
+	for annotation, value := range annotationValues {
+		assert.Equal(t, value, autoscalingRunnerSet.Annotations[annotation], fmt.Sprintf("Annotation %q does not match the expected value", annotation))
+	}
 }

@@ -65,19 +65,19 @@ githubConfigSecret:
 #   certificateFrom:
 #     configMapKeyRef:
 #       name: config-map-name
-#       key: ca.pem
+#       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
-containerMode:
-  type: ""  ## type can be set to dind or kubernetes
-  ## the following is required when containerMode.type=kubernetes
-  # kubernetesModeWorkVolumeClaim:
-  #   accessModes: ["ReadWriteOnce"]
-  #   # For local testing, use https://github.com/openebs/dynamic-localpv-provisioner/blob/develop/docs/quickstart.md to provide dynamic provision volume with storageClassName: openebs-hostpath
-  #   storageClassName: "dynamic-blob-storage"
-  #   resources:
-  #     requests:
-  #       storage: 1Gi
+# containerMode:
+#   type: "dind"  ## type can be set to dind or kubernetes
+#   ## the following is required when containerMode.type=kubernetes
+#   kubernetesModeWorkVolumeClaim:
+#     accessModes: ["ReadWriteOnce"]
+#     # For local testing, use https://github.com/openebs/dynamic-localpv-provisioner/blob/develop/docs/quickstart.md to provide dynamic provision volume with storageClassName: openebs-hostpath
+#     storageClassName: "dynamic-blob-storage"
+#     resources:
+#       requests:
+#         storage: 1Gi
 
 ## template is the PodSpec for each runner Pod
 template:
@@ -161,7 +161,7 @@ template:
       image: ghcr.io/actions/actions-runner:latest
       command: ["/home/runner/run.sh"]
 
-## Optional controller service account that needs to have required Role and RoleBinding 
+## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.
 ## In case the helm chart can't find the right service account, you can explicitly pass in the following value

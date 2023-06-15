@@ -5,7 +5,7 @@ kind: Kustomization
 images:
 - name: controller
   newName: summerwind/actions-runner-controller
-  newTag: dev
+  newTag: latest
 
 replacements:
 - path: env-replacement.yaml

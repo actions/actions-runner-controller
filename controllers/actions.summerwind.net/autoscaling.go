@@ -11,7 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	prometheus_metrics "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net/metrics"
 	arcgithub "github.com/actions/actions-runner-controller/github"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

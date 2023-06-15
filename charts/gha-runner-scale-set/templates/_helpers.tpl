@@ -11,16 +11,8 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 If release name contains chart name it will be used as a full name.
 */}}
 {{- define "gha-runner-scale-set.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
+{{- $name := default .Chart.Name }}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
 {{- end }}
 
 {{/*
@@ -40,6 +32,9 @@ helm.sh/chart: {{ include "gha-runner-scale-set.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: gha-runner-scale-set
+actions.github.com/scale-set-name: {{ .Release.Name }}
+actions.github.com/scale-set-namespace: {{ .Release.Namespace }}
 {{- end }}
 
 {{/*
@@ -68,6 +63,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "gha-runner-scale-set.kubeModeRoleName" -}}
 {{- include "gha-runner-scale-set.fullname" . }}-kube-mode-role
+{{- end }}
+
+{{- define "gha-runner-scale-set.kubeModeRoleBindingName" -}}
+{{- include "gha-runner-scale-set.fullname" . }}-kube-mode-role-binding
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
@@ -432,7 +431,7 @@ volumeMounts:
 {{- include "gha-runner-scale-set.fullname" . }}-manager-role
 {{- end }}
 
-{{- define "gha-runner-scale-set.managerRoleBinding" -}}
+{{- define "gha-runner-scale-set.managerRoleBindingName" -}}
 {{- include "gha-runner-scale-set.fullname" . }}-manager-role-binding
 {{- end }}
 

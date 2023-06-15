@@ -80,6 +80,9 @@ spec:
                 image:
                   description: Required
                   type: string
+                imagePullPolicy:
+                  description: Required
+                  type: string
                 imagePullSecrets:
                   description: Required
                   items:

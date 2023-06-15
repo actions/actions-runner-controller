@@ -59,6 +59,9 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
+        {{- with .Values.flags.updateStrategy }}
+        - "--update-strategy={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         env:
@@ -68,14 +71,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY
+          value: "{{ .Values.image.pullPolicy | default "IfNotPresent" }}"
         {{- with .Values.env }}
-          {{- if kindIs "slice" .Values.env }}
-        {{- toYaml .Values.env | nindent 8 }}
-          {{- else }}
-            {{- range $key, $val := .Values.env }}
-        - name: {{ $key }}
-          value: {{ $val | quote }}
-            {{- end }}
+          {{- if kindIs "slice" . }}
+            {{- toYaml . | nindent 8 }}
           {{- end }}
         {{- end }}
         {{- with .Values.resources }}

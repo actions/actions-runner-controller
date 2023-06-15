@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/github"
-	gogithub "github.com/google/go-github/v47/github"
+	gogithub "github.com/google/go-github/v52/github"
 )
 
 type server struct {
