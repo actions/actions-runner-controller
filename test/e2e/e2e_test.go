@@ -36,7 +36,7 @@ var (
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion = "2.304.0"
+	RunnerVersion = "2.305.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
