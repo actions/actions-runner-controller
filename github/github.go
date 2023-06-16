@@ -96,6 +96,8 @@ func (c *Config) NewClient() (*Client, error) {
 	metricsTransport := metrics.Transport{Transport: loggingTransport}
 	httpClient := &http.Client{Transport: metricsTransport}
 
+	metrics.Register()
+
 	var client *github.Client
 	var githubBaseURL string
 	var isEnterprise bool

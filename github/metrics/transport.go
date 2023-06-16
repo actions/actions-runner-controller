@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-func init() {
+func Register() {
 	metrics.Registry.MustRegister(metricRateLimit, metricRateLimitRemaining)
 }
 
