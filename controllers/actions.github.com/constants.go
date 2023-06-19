@@ -1,6 +1,9 @@
 package actionsgithubcom
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	"github.com/actions/actions-runner-controller/logging"
+	corev1 "k8s.io/api/core/v1"
+)
 
 const (
 	LabelKeyRunnerTemplateHash = "runner-template-hash"
@@ -59,6 +62,12 @@ const (
 // DefaultScaleSetListenerImagePullPolicy is the default pull policy applied
 // to the listener when ImagePullPolicy is not specified
 const DefaultScaleSetListenerImagePullPolicy = corev1.PullIfNotPresent
+
+// DefaultScaleSetListenerLogLevel is the default log level applied
+const DefaultScaleSetListenerLogLevel = string(logging.LogLevelDebug)
+
+// DefaultScaleSetListenerLogFormat is the default log format applied
+const DefaultScaleSetListenerLogFormat = string(logging.LogFormatText)
 
 // ownerKey is field selector matching the owner name of a particular resource
 const resourceOwnerKey = ".metadata.controller"
