@@ -1,4 +1,4 @@
-DOCKER_USER ?= summerwind
+DOCKER_USER ?= europe-west3-docker.pkg.dev/hoprassociation/docker-images
 DOCKER ?= docker
 DEFAULT_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
