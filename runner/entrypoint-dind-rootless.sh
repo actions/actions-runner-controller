@@ -5,7 +5,6 @@ trap graceful_stop TERM
 
 log.notice "Writing out Docker config file"
 /bin/bash <<SCRIPT
-mkdir -p /home/runner/.config/docker/
 
 if [ ! -f /home/runner/.config/docker/daemon.json ]; then
   echo "{}" > /home/runner/.config/docker/daemon.json
