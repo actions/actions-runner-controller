@@ -694,6 +694,50 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraVolumes(t *testing.T) {
 	assert.Equal(t, "/data", ars.Spec.Template.Spec.Volumes[2].HostPath.Path, "Volume host path should be /data")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraInitContainers(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_extra_init_containers.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 3, "InitContainers should be 3")
+	assert.Equal(t, "kube-init", ars.Spec.Template.Spec.InitContainers[1].Name, "InitContainers[1] Name should be kube-init")
+	assert.Equal(t, "runner-image:latest", ars.Spec.Template.Spec.InitContainers[1].Image, "InitContainers[1] Image should be runner-image:latest")
+	assert.Equal(t, "sudo", ars.Spec.Template.Spec.InitContainers[1].Command[0], "InitContainers[1] Command[0] should be sudo")
+	assert.Equal(t, "chown", ars.Spec.Template.Spec.InitContainers[1].Command[1], "InitContainers[1] Command[1] should be chown")
+	assert.Equal(t, "-R", ars.Spec.Template.Spec.InitContainers[1].Command[2], "InitContainers[1] Command[2] should be -R")
+	assert.Equal(t, "1001:123", ars.Spec.Template.Spec.InitContainers[1].Command[3], "InitContainers[1] Command[3] should be 1001:123")
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[1].Command[4], "InitContainers[1] Command[4] should be /home/runner/_work")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[0].Name, "InitContainers[1] VolumeMounts[0] Name should be work")
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[0].MountPath, "InitContainers[1] VolumeMounts[0] MountPath should be /home/runner/_work")
+
+	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[2].Name, "InitContainers[2] Name should be ls")
+	assert.Equal(t, "ubuntu:latest", ars.Spec.Template.Spec.InitContainers[2].Image, "InitContainers[2] Image should be ubuntu:latest")
+	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[2].Command[0], "InitContainers[2] Command[0] should be ls")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
 	t.Parallel()
 
