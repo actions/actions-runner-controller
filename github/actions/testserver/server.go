@@ -106,7 +106,6 @@ func (s *actionsServer) setDefaults(t ginkgo.GinkgoTInterface) {
 
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"url":"` + s.URL + `/tenant/123/","token":"` + s.token + `"}`))
-			return
 		}
 	}
 }
