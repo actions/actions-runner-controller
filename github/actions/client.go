@@ -921,6 +921,10 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
+	}
+
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
 	if err := json.NewDecoder(resp.Body).Decode(&actionsServiceAdminConnection); err != nil {
 		return nil, err
