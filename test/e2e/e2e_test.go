@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/testing"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -36,7 +36,7 @@ var (
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion = "2.304.0"
+	RunnerVersion = "2.305.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",

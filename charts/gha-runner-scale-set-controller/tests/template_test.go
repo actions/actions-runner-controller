@@ -8,6 +8,7 @@ import (
 
 	"github.com/gruntwork-io/terratest/modules/helm"
 	"github.com/gruntwork-io/terratest/modules/k8s"
+	"github.com/gruntwork-io/terratest/modules/logger"
 	"github.com/gruntwork-io/terratest/modules/random"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,7 @@ func TestTemplate_CreateServiceAccount(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create":          "true",
 			"serviceAccount.annotations.foo": "bar",
@@ -61,6 +63,7 @@ func TestTemplate_CreateServiceAccount_OverwriteName(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create":          "true",
 			"serviceAccount.name":            "overwritten-name",
@@ -90,6 +93,7 @@ func TestTemplate_CreateServiceAccount_CannotUseDefaultServiceAccount(t *testing
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create":          "true",
 			"serviceAccount.name":            "default",
@@ -113,6 +117,7 @@ func TestTemplate_NotCreateServiceAccount(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create":          "false",
 			"serviceAccount.name":            "overwritten-name",
@@ -136,6 +141,7 @@ func TestTemplate_NotCreateServiceAccount_ServiceAccountNotSet(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create":          "false",
 			"serviceAccount.annotations.foo": "bar",
@@ -158,6 +164,7 @@ func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger:         logger.Discard,
 		SetValues:      map[string]string{},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -189,6 +196,7 @@ func TestTemplate_ManagerClusterRoleBinding(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create": "true",
 		},
@@ -224,6 +232,7 @@ func TestTemplate_CreateManagerListenerRole(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger:         logger.Discard,
 		SetValues:      map[string]string{},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -253,6 +262,7 @@ func TestTemplate_ManagerListenerRoleBinding(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create": "true",
 		},
@@ -289,6 +299,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"image.tag": "dev",
 		},
@@ -345,9 +356,10 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 2)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 3)
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
+	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[2])
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
@@ -384,6 +396,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"labels.foo":                   "bar",
 			"labels.github":                "actions",
@@ -405,7 +418,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"tolerations[0].key":           "foo",
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key":      "foo",
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator": "bar",
-			"priorityClassName": "test-priority-class",
+			"priorityClassName":    "test-priority-class",
+			"flags.updateStrategy": "eventual",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -470,10 +484,11 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 3)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--auto-scaler-image-pull-secrets=dockerhub", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
+	assert.Equal(t, "--update-strategy=eventual", deployment.Spec.Template.Spec.Containers[0].Args[3])
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 4)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
@@ -508,6 +523,7 @@ func TestTemplate_EnableLeaderElectionRole(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"replicaCount": "2",
 		},
@@ -534,6 +550,7 @@ func TestTemplate_EnableLeaderElectionRoleBinding(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"replicaCount": "2",
 		},
@@ -562,6 +579,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"replicaCount": "2",
 			"image.tag":    "dev",
@@ -587,11 +605,12 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 5)
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--enable-leader-election", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--leader-election-id=test-arc-gha-runner-scale-set-controller", deployment.Spec.Template.Spec.Containers[0].Args[2])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[3])
+	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[4])
 }
 
 func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
@@ -605,6 +624,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"imagePullSecrets[0].name": "dockerhub",
 			"imagePullSecrets[1].name": "ghcr",
@@ -619,10 +639,11 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 3)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--auto-scaler-image-pull-secrets=dockerhub,ghcr", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
+	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[3])
 }
 
 func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
@@ -643,6 +664,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"image.tag":                  "dev",
 			"flags.watchSingleNamespace": "demo",
@@ -699,10 +721,11 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 3)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
 	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
 	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
 	assert.Equal(t, "--watch-single-namespace=demo", deployment.Spec.Template.Spec.Containers[0].Args[2])
+	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[3])
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
@@ -732,6 +755,7 @@ func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"env[0].Name":                            "ENV_VAR_NAME_1",
 			"env[0].Value":                           "ENV_VAR_VALUE_1",
@@ -778,6 +802,7 @@ func TestTemplate_WatchSingleNamespace_NotCreateManagerClusterRole(t *testing.T)
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"flags.watchSingleNamespace": "demo",
 		},
@@ -799,6 +824,7 @@ func TestTemplate_WatchSingleNamespace_NotManagerClusterRoleBinding(t *testing.T
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"serviceAccount.create":      "true",
 			"flags.watchSingleNamespace": "demo",
@@ -821,6 +847,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"flags.watchSingleNamespace": "demo",
 		},
@@ -841,7 +868,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 	var managerSingleNamespaceWatchRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRole)
 
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRole.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-role", managerSingleNamespaceWatchRole.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRole.Namespace)
 	assert.Equal(t, 14, len(managerSingleNamespaceWatchRole.Rules))
 }
@@ -857,6 +884,7 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
+		Logger: logger.Discard,
 		SetValues: map[string]string{
 			"flags.watchSingleNamespace": "demo",
 		},
@@ -879,9 +907,9 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	var managerSingleNamespaceWatchRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRoleBinding)
 
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-rolebinding", managerSingleNamespaceWatchRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-rolebinding", managerSingleNamespaceWatchRoleBinding.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRoleBinding.Namespace)
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-role", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerSingleNamespaceWatchRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerSingleNamespaceWatchRoleBinding.Subjects[0].Namespace)
 }

@@ -63,26 +63,24 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
 	}
 
-	githubConfig, err := actions.ParseGitHubConfigFromURL(autoscalingRunnerSet.Spec.GitHubConfigUrl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse github config from url: %v", err)
+	labels := map[string]string{
+		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
+		LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
+		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
+		LabelKeyKubernetesComponent:     "runner-scale-set-listener",
+		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+		labelKeyRunnerSpecHash:          autoscalingRunnerSet.ListenerSpecHash(),
+	}
+
+	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
+		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
 	autoscalingListener := &v1alpha1.AutoscalingListener{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scaleSetListenerName(autoscalingRunnerSet),
 			Namespace: namespace,
-			Labels: map[string]string{
-				LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
-				LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
-				LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
-				LabelKeyKubernetesComponent:     "runner-scale-set-listener",
-				LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
-				LabelKeyGitHubEnterprise:        githubConfig.Enterprise,
-				LabelKeyGitHubOrganization:      githubConfig.Organization,
-				LabelKeyGitHubRepository:        githubConfig.Repository,
-				labelKeyRunnerSpecHash:          autoscalingRunnerSet.ListenerSpecHash(),
-			},
+			Labels:    labels,
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
@@ -323,7 +321,7 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	}
 	runnerSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 
-	newLabels := map[string]string{
+	labels := map[string]string{
 		labelKeyRunnerSpecHash:          runnerSpecHash,
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-set",
@@ -332,7 +330,7 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
 	}
 
-	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, newLabels); err != nil {
+	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
@@ -345,7 +343,7 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: autoscalingRunnerSet.ObjectMeta.Name + "-",
 			Namespace:    autoscalingRunnerSet.ObjectMeta.Namespace,
-			Labels:       newLabels,
+			Labels:       labels,
 			Annotations:  newAnnotations,
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
@@ -545,14 +543,23 @@ func applyGitHubURLLabels(url string, labels map[string]string) error {
 	}
 
 	if len(githubConfig.Enterprise) > 0 {
-		labels[LabelKeyGitHubEnterprise] = githubConfig.Enterprise
+		labels[LabelKeyGitHubEnterprise] = trimLabelValue(githubConfig.Enterprise)
 	}
 	if len(githubConfig.Organization) > 0 {
-		labels[LabelKeyGitHubOrganization] = githubConfig.Organization
+		labels[LabelKeyGitHubOrganization] = trimLabelValue(githubConfig.Organization)
 	}
 	if len(githubConfig.Repository) > 0 {
-		labels[LabelKeyGitHubRepository] = githubConfig.Repository
+		labels[LabelKeyGitHubRepository] = trimLabelValue(githubConfig.Repository)
 	}
 
 	return nil
+}
+
+const trimLabelVauleSuffix = "-trim"
+
+func trimLabelValue(val string) string {
+	if len(val) > 63 {
+		return val[:63-len(trimLabelVauleSuffix)] + trimLabelVauleSuffix
+	}
+	return val
 }

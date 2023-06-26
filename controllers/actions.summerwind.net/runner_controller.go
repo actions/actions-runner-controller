@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
@@ -30,7 +31,6 @@ import (
 	"github.com/go-logr/logr"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -810,6 +810,11 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		dockerRegistryMirror = *runnerSpec.DockerRegistryMirror
 	}
 
+	if runnerSpec.DockerVarRunVolumeSizeLimit == nil {
+		runnerSpec.DockerVarRunVolumeSizeLimit = resource.NewScaledQuantity(1, resource.Mega)
+
+	}
+
 	// Be aware some of the environment variables are used
 	// in the runner entrypoint script
 	env := []corev1.EnvVar{
@@ -1080,7 +1085,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium:    corev1.StorageMediumMemory,
-						SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+						SizeLimit: runnerSpec.DockerVarRunVolumeSizeLimit,
 					},
 				},
 			},

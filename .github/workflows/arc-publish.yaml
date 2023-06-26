@@ -1,4 +1,4 @@
-name: Publish ARC
+name: Publish ARC Image
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
@@ -24,6 +24,10 @@ permissions:
 env:
   TARGET_ORG: actions-runner-controller
   TARGET_REPO: actions-runner-controller
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 jobs:
   release-controller:

@@ -1,4 +1,4 @@
-name: first-interaction
+name: First Interaction
 
 on:
   issues:
