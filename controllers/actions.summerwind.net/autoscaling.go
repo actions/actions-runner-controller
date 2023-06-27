@@ -120,6 +120,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	var total, inProgress, queued, completed, unknown int
 	listWorkflowJobs := func(user string, repoName string, runID int64) {
 		if runID == 0 {
+			// should not happen in reality
+			r.Log.Info("Detected run with no runID of 0, ignoring the case and not scaling.", "repo_name", repoName, "run_id", runID)
 			return
 		}
 		opt := github.ListWorkflowJobsOptions{ListOptions: github.ListOptions{PerPage: 50}}
@@ -137,6 +139,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			opt.Page = resp.NextPage
 		}
 		if len(allJobs) == 0 {
+			// GitHub API can return run with empty job array - should be ignored
 			r.Log.Info("Detected run with no jobs, ignoring the case and not scaling.", "repo_name", repoName, "run_id", runID)
 		} else {
 		JOB:
