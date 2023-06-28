@@ -72,7 +72,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -163,7 +163,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -252,7 +252,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -347,7 +347,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
           kubectl wait --timeout=30s --for=condition=ready pod -n openebs -l name=openebs-localpv-provisioner
 
       - name: Install gha-runner-scale-set
@@ -441,7 +441,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -542,7 +542,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -637,7 +637,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -758,7 +758,7 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -879,4 +879,4 @@ jobs:
         run: |
           helm uninstall "${{ steps.install_arc.outputs.ARC_NAME }}" --namespace "arc-runners" --debug
           kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${{ steps.install_arc.outputs.ARC_NAME }}" -l app.kubernetes.io/instance="${{ steps.install_arc.outputs.ARC_NAME }}"
-          kubectl logs deployment/arc-gha-runner-scale-set-controller -n "arc-systems"
+          kubectl logs deployment/arc-gha-rs-controller -n "arc-systems"
