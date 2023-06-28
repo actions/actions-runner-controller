@@ -45,7 +45,7 @@ func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &githubSecret)
 
 	assert.Equal(t, namespaceName, githubSecret.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", githubSecret.Name)
+	assert.Equal(t, "test-runners-gha-rs-github-secret", githubSecret.Name)
 	assert.Equal(t, "gh_token12345", string(githubSecret.Data["github_token"]))
 	assert.Equal(t, "actions.github.com/cleanup-protection", githubSecret.Finalizers[0])
 }
@@ -190,13 +190,13 @@ func TestTemplateRenderedSetServiceAccountToNoPermission(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-no-permission", serviceAccount.Name)
+	assert.Equal(t, "test-runners-gha-rs-no-permission", serviceAccount.Name)
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	assert.Equal(t, "test-runners-gha-runner-scale-set-no-permission", ars.Spec.Template.Spec.ServiceAccountName)
+	assert.Equal(t, "test-runners-gha-rs-no-permission", ars.Spec.Template.Spec.ServiceAccountName)
 	assert.Empty(t, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName]) // no finalizer protections in place
 }
 
@@ -227,7 +227,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
 
 	assert.Equal(t, namespaceName, serviceAccount.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode", serviceAccount.Name)
+	assert.Equal(t, "test-runners-gha-rs-kube-mode", serviceAccount.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", serviceAccount.Finalizers[0])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role.yaml"})
@@ -235,7 +235,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &role)
 
 	assert.Equal(t, namespaceName, role.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", role.Name)
+	assert.Equal(t, "test-runners-gha-rs-kube-mode", role.Name)
 
 	assert.Equal(t, "actions.github.com/cleanup-protection", role.Finalizers[0])
 
@@ -251,11 +251,11 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &roleBinding)
 
 	assert.Equal(t, namespaceName, roleBinding.Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role-binding", roleBinding.Name)
+	assert.Equal(t, "test-runners-gha-rs-kube-mode", roleBinding.Name)
 	assert.Len(t, roleBinding.Subjects, 1)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode", roleBinding.Subjects[0].Name)
+	assert.Equal(t, "test-runners-gha-rs-kube-mode", roleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, roleBinding.Subjects[0].Namespace)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-kube-mode-role", roleBinding.RoleRef.Name)
+	assert.Equal(t, "test-runners-gha-rs-kube-mode", roleBinding.RoleRef.Name)
 	assert.Equal(t, "Role", roleBinding.RoleRef.Kind)
 	assert.Equal(t, "actions.github.com/cleanup-protection", serviceAccount.Finalizers[0])
 
@@ -263,7 +263,7 @@ func TestTemplateRenderedSetServiceAccountToKubeMode(t *testing.T) {
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	expectedServiceAccountName := "test-runners-gha-runner-scale-set-kube-mode"
+	expectedServiceAccountName := "test-runners-gha-rs-kube-mode"
 	assert.Equal(t, expectedServiceAccountName, ars.Spec.Template.Spec.ServiceAccountName)
 	assert.Equal(t, expectedServiceAccountName, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName])
 }
@@ -330,14 +330,14 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/part-of"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "autoscaling-runner-set", ars.Labels["app.kubernetes.io/component"])
 	assert.NotEmpty(t, ars.Labels["app.kubernetes.io/version"])
 
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
 
@@ -383,10 +383,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
@@ -840,10 +840,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
 
@@ -932,10 +932,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
 	assert.Nil(t, ars.Spec.MinRunners, "MinRunners should be nil")
@@ -989,7 +989,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) 
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-runner-scale-set", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "pre-defined-secrets", ars.Spec.GitHubConfigSecret)
@@ -1548,7 +1548,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRole)
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
-	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
+	assert.Equal(t, "test-runners-gha-rs-controller", managerRole.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 6, len(managerRole.Rules))
 
@@ -1584,7 +1584,7 @@ func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRole)
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
-	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRole.Name)
+	assert.Equal(t, "test-runners-gha-rs-controller", managerRole.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 7, len(managerRole.Rules))
 	assert.Equal(t, "configmaps", managerRole.Rules[6].Resources[0])
@@ -1617,8 +1617,8 @@ func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRoleBinding)
 
 	assert.Equal(t, namespaceName, managerRoleBinding.Namespace, "namespace should match the namespace of the Helm release")
-	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role-binding", managerRoleBinding.Name)
-	assert.Equal(t, "test-runners-gha-runner-scale-set-manager-role", managerRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-runners-gha-rs-controller", managerRoleBinding.Name)
+	assert.Equal(t, "test-runners-gha-rs-controller", managerRoleBinding.RoleRef.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRoleBinding.Finalizers[0])
 	assert.Equal(t, "arc", managerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, "arc-system", managerRoleBinding.Subjects[0].Namespace)
@@ -1887,12 +1887,12 @@ func TestTemplateRenderedAutoscalingRunnerSetAnnotation_KubernetesModeCleanup(t 
 	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
 
 	annotationValues := map[string]string{
-		actionsgithubcom.AnnotationKeyGitHubSecretName:                 "test-runners-gha-runner-scale-set-github-secret",
-		actionsgithubcom.AnnotationKeyManagerRoleName:                  "test-runners-gha-runner-scale-set-manager-role",
-		actionsgithubcom.AnnotationKeyManagerRoleBindingName:           "test-runners-gha-runner-scale-set-manager-role-binding",
-		actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName: "test-runners-gha-runner-scale-set-kube-mode",
-		actionsgithubcom.AnnotationKeyKubernetesModeRoleName:           "test-runners-gha-runner-scale-set-kube-mode-role",
-		actionsgithubcom.AnnotationKeyKubernetesModeRoleBindingName:    "test-runners-gha-runner-scale-set-kube-mode-role-binding",
+		actionsgithubcom.AnnotationKeyGitHubSecretName:                 "test-runners-gha-rs-github-secret",
+		actionsgithubcom.AnnotationKeyManagerRoleName:                  "test-runners-gha-rs-controller",
+		actionsgithubcom.AnnotationKeyManagerRoleBindingName:           "test-runners-gha-rs-controller",
+		actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName: "test-runners-gha-rs-kube-mode",
+		actionsgithubcom.AnnotationKeyKubernetesModeRoleName:           "test-runners-gha-rs-kube-mode",
+		actionsgithubcom.AnnotationKeyKubernetesModeRoleBindingName:    "test-runners-gha-rs-kube-mode",
 	}
 
 	for annotation, value := range annotationValues {
