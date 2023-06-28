@@ -189,6 +189,10 @@ admissionWebHooks:
 # https://github.com/actions/actions-runner-controller/issues/1005#issuecomment-993097155
 #hostNetwork: true
 
+# If you use `hostNetwork: true`, then you need dnsPolicy: ClusterFirstWithHostNet
+# https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-dns-policy
+#dnsPolicy: ClusterFirst
+
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
 logFormat: text
 
