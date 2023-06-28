@@ -19,7 +19,7 @@ env:
   IMAGE_VERSION: "0.4.0"
 
 concurrency:
-  # This will make sure we only apply the concurrency limits on pull requests 
+  # This will make sure we only apply the concurrency limits on pull requests
   # but not pushes to master branch by making the concurrency group name unique
   # for pushes
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -58,19 +58,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -149,19 +149,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -238,19 +238,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -333,19 +333,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
           kubectl wait --timeout=30s --for=condition=ready pod -n openebs -l name=openebs-localpv-provisioner
@@ -427,19 +427,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -528,19 +528,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -623,19 +623,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -744,19 +744,19 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
             fi
             if [ "$count" -ge 60 ]; then
-              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-runner-scale-set-controller"
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
               exit 1
             fi
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-runner-scale-set-controller
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
           kubectl get pod -n arc-systems
           kubectl describe deployment arc-gha-runner-scale-set-controller -n arc-systems
 
@@ -872,7 +872,7 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-      
+
       - name: Gather logs and cleanup
         shell: bash
         if: always()
