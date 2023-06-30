@@ -7,13 +7,18 @@ package metrics
 import (
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+var onceRegister sync.Once
+
 func Register() {
-	metrics.Registry.MustRegister(metricRateLimit, metricRateLimitRemaining)
+	onceRegister.Do(func() {
+		metrics.Registry.MustRegister(metricRateLimit, metricRateLimitRemaining)
+	})
 }
 
 var (
