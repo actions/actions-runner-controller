@@ -69,16 +69,6 @@ var (
 		scaleSetLabels,
 	)
 
-	// TODO: add statistic
-	completedJobs = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "completed_jobs",
-			Help:      "Number of completed jobs by the scale set.",
-		},
-		scaleSetLabels,
-	)
-
 	assignedJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,

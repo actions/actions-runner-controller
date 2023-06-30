@@ -11,25 +11,28 @@ var labels = []string{
 	"name",
 	"namespace",
 	"repo",
-	"owner",
+	"organization",
+	"enterprise",
 	"configUrl",
 }
 
 type CommonLabels struct {
-	Name      string
-	Namespace string
-	Repo      string
-	Owner     string
-	ConfigURL string
+	Name         string
+	Namespace    string
+	Repo         string
+	Organization string
+	Enterprise   string
+	ConfigURL    string
 }
 
 func (l *CommonLabels) labels() prometheus.Labels {
 	return prometheus.Labels{
-		"name":      l.Name,
-		"namespace": l.Namespace,
-		"repo":      l.Repo,
-		"owner":     l.Owner,
-		"configUrl": l.ConfigURL,
+		"name":         l.Name,
+		"namespace":    l.Namespace,
+		"repo":         l.Repo,
+		"organization": l.Organization,
+		"enterprise":   l.Enterprise,
+		"configUrl":    l.ConfigURL,
 	}
 }
 

@@ -175,18 +175,13 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, nil
 		}
 
-		owner := parsedURL.Organization
-		if parsedURL.Enterprise != "" {
-			owner = parsedURL.Enterprise
-		}
-
 		metrics.SetEphemeralRunnerCountsByStatus(
 			metrics.CommonLabels{
-				Name:      ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
-				Namespace: ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
-				Repo:      parsedURL.Repository,
-				Owner:     owner,
-				ConfigURL: githubConfigURL,
+				Name:         ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
+				Namespace:    ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
+				Repo:         parsedURL.Repository,
+				Organization: parsedURL.Organization,
+				Enterprise:   parsedURL.Enterprise,
 			},
 			len(pendingEphemeralRunners),
 			len(runningEphemeralRunners),
