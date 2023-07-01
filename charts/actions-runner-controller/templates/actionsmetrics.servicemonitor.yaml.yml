@@ -4,7 +4,7 @@ kind: ServiceMonitor
 metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
-  {{- with .Values.actionsMetricsServer.serviceMonitorLabels }}
+  {{- with .Values.actionsMetrics.serviceMonitorLabels }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
   name: {{ include "actions-runner-controller-actions-metrics-server.serviceMonitorName" . }}
