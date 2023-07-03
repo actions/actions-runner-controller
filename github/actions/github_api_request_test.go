@@ -2,7 +2,6 @@ package actions_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -125,10 +124,11 @@ func TestNewActionsServiceRequest(t *testing.T) {
 
 		t.Run("admin token refresh failure", func(t *testing.T) {
 			newToken := defaultActionsToken(t)
+			errMessage := `{"message":"test"}`
 			unauthorizedHandler := func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				w.Write([]byte(fmt.Sprintf(`{"token":"%s", "url": "test"}`, newToken)))
+				w.Write([]byte(errMessage))
 			}
 			server := testserver.New(t, nil, testserver.WithActionsToken("random-token"), testserver.WithActionsToken(newToken), testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler))
 			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
@@ -139,6 +139,7 @@ func TestNewActionsServiceRequest(t *testing.T) {
 			client.ActionsServiceAdminTokenExpiresAt = expiresAt
 			_, err = client.NewActionsServiceRequest(ctx, http.MethodGet, "my-path", nil)
 			require.Error(t, err)
+			assert.Contains(t, err.Error(), errMessage)
 			assert.Equal(t, client.ActionsServiceAdminToken, expiringToken)
 			assert.Equal(t, client.ActionsServiceAdminTokenExpiresAt, expiresAt)
 		})

@@ -922,7 +922,13 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, fmt.Errorf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
+		registrationErr := fmt.Errorf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("%v - %v", registrationErr, err)
+		}
+		return nil, fmt.Errorf("%v - %v", registrationErr, string(body))
 	}
 
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
