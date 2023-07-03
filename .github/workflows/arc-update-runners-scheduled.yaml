@@ -146,4 +146,4 @@ jobs:
           git push -u origin HEAD
 
       - name: Create pull request
-        run: gh pr create -f
+        run: gh pr create -f -l "runners update"

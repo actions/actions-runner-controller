@@ -868,7 +868,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 	var managerSingleNamespaceWatchRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRole)
 
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRole.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-role", managerSingleNamespaceWatchRole.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRole.Namespace)
 	assert.Equal(t, 14, len(managerSingleNamespaceWatchRole.Rules))
 }
@@ -907,9 +907,9 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	var managerSingleNamespaceWatchRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRoleBinding)
 
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-rolebinding", managerSingleNamespaceWatchRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-rolebinding", managerSingleNamespaceWatchRoleBinding.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRoleBinding.Namespace)
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-role", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerSingleNamespaceWatchRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerSingleNamespaceWatchRoleBinding.Subjects[0].Namespace)
 }
