@@ -1548,7 +1548,7 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRole)
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
-	assert.Equal(t, "test-runners-gha-rs-controller", managerRole.Name)
+	assert.Equal(t, "test-runners-gha-rs-manager", managerRole.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 6, len(managerRole.Rules))
 
@@ -1584,7 +1584,7 @@ func TestTemplate_CreateManagerRole_UseConfigMaps(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRole)
 
 	assert.Equal(t, namespaceName, managerRole.Namespace, "namespace should match the namespace of the Helm release")
-	assert.Equal(t, "test-runners-gha-rs-controller", managerRole.Name)
+	assert.Equal(t, "test-runners-gha-rs-manager", managerRole.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 7, len(managerRole.Rules))
 	assert.Equal(t, "configmaps", managerRole.Rules[6].Resources[0])
@@ -1617,8 +1617,8 @@ func TestTemplate_CreateManagerRoleBinding(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &managerRoleBinding)
 
 	assert.Equal(t, namespaceName, managerRoleBinding.Namespace, "namespace should match the namespace of the Helm release")
-	assert.Equal(t, "test-runners-gha-rs-controller", managerRoleBinding.Name)
-	assert.Equal(t, "test-runners-gha-rs-controller", managerRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-runners-gha-rs-manager", managerRoleBinding.Name)
+	assert.Equal(t, "test-runners-gha-rs-manager", managerRoleBinding.RoleRef.Name)
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRoleBinding.Finalizers[0])
 	assert.Equal(t, "arc", managerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, "arc-system", managerRoleBinding.Subjects[0].Namespace)
@@ -1888,8 +1888,8 @@ func TestTemplateRenderedAutoscalingRunnerSetAnnotation_KubernetesModeCleanup(t 
 
 	annotationValues := map[string]string{
 		actionsgithubcom.AnnotationKeyGitHubSecretName:                 "test-runners-gha-rs-github-secret",
-		actionsgithubcom.AnnotationKeyManagerRoleName:                  "test-runners-gha-rs-controller",
-		actionsgithubcom.AnnotationKeyManagerRoleBindingName:           "test-runners-gha-rs-controller",
+		actionsgithubcom.AnnotationKeyManagerRoleName:                  "test-runners-gha-rs-manager",
+		actionsgithubcom.AnnotationKeyManagerRoleBindingName:           "test-runners-gha-rs-manager",
 		actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName: "test-runners-gha-rs-kube-mode",
 		actionsgithubcom.AnnotationKeyKubernetesModeRoleName:           "test-runners-gha-rs-kube-mode",
 		actionsgithubcom.AnnotationKeyKubernetesModeRoleBindingName:    "test-runners-gha-rs-kube-mode",
