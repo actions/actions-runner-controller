@@ -46,18 +46,30 @@ type RunnerScaleSetListenerConfig struct {
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
 	ServerRootCA                string `split_words:"true"`
+	LogLevel                    string `split_words:"true"`
+	LogFormat                   string `split_words:"true"`
 }
 
 func main() {
-	logger, err := logging.NewLogger(logging.LogLevelDebug, logging.LogFormatText)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: creating logger: %v\n", err)
+	var rc RunnerScaleSetListenerConfig
+	if err := envconfig.Process("github", &rc); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: processing environment variables for RunnerScaleSetListenerConfig: %v\n", err)
 		os.Exit(1)
 	}
 
-	var rc RunnerScaleSetListenerConfig
-	if err := envconfig.Process("github", &rc); err != nil {
-		logger.Error(err, "Error: processing environment variables for RunnerScaleSetListenerConfig")
+	logLevel := string(logging.LogLevelDebug)
+	if rc.LogLevel != "" {
+		logLevel = rc.LogLevel
+	}
+
+	logFormat := string(logging.LogFormatText)
+	if rc.LogFormat != "" {
+		logFormat = rc.LogFormat
+	}
+
+	logger, err := logging.NewLogger(logLevel, logFormat)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: creating logger: %v\n", err)
 		os.Exit(1)
 	}
 
