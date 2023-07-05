@@ -173,8 +173,11 @@ if [ -z "${UNITTEST:-}" ]; then
   mapfile -t env </etc/environment
 fi
 
-log.notice "WARNING LATEST TAG HAS BEEN DEPRECATED. SEE GITHUB ISSUE FOR DETAILS:"
-log.notice "https://github.com/actions/actions-runner-controller/issues/2056"
+if [ -n "${SHOW_LATEST_TAG_WARN}" ]; then
+  log.warning "WARNING: YOU'RE USING THE LATEST TAG OF THIS IMAGE, WHICH HAS BEEN DEPRECATED."
+  log.warning "SEE THIS GITHUB ISSUE FOR DETAILS:"
+  log.warning "https://github.com/actions/actions-runner-controller/issues/2056"
+fi
 
 update-status "Idle"
 exec env -- "${env[@]}" ./run.sh
