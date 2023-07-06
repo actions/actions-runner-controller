@@ -10,6 +10,7 @@ import (
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
+	"github.com/actions/actions-runner-controller/logging"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +45,27 @@ func SetListenerImagePullPolicy(pullPolicy string) bool {
 	default:
 		return false
 	}
+}
+
+var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
+var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
+
+func SetListenerLoggingParameters(level string, format string) bool {
+	switch level {
+	case logging.LogLevelDebug, logging.LogLevelInfo, logging.LogLevelWarn, logging.LogLevelError:
+	default:
+		return false
+	}
+
+	switch format {
+	case logging.LogFormatJSON, logging.LogFormatText:
+	default:
+		return false
+	}
+
+	scaleSetListenerLogLevel = level
+	scaleSetListenerLogFormat = format
+	return true
 }
 
 type resourceBuilder struct{}
@@ -127,6 +149,14 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		{
 			Name:  "GITHUB_RUNNER_SCALE_SET_ID",
 			Value: strconv.Itoa(autoscalingListener.Spec.RunnerScaleSetId),
+		},
+		{
+			Name:  "GITHUB_RUNNER_LOG_LEVEL",
+			Value: scaleSetListenerLogLevel,
+		},
+		{
+			Name:  "GITHUB_RUNNER_LOG_FORMAT",
+			Value: scaleSetListenerLogFormat,
 		},
 	}
 	listenerEnv = append(listenerEnv, envs...)
