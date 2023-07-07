@@ -110,9 +110,6 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 		return fmt.Errorf("can't process message with empty statistics")
 	}
 
-	s.metricsExporter.reset()
-	defer s.metricsExporter.do()
-
 	s.logger.Info("current runner scale set statistics.",
 		"available jobs", message.Statistics.TotalAvailableJobs,
 		"acquired jobs", message.Statistics.TotalAcquiredJobs,
@@ -122,7 +119,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 		"busy runners", message.Statistics.TotalBusyRunners,
 		"idle runners", message.Statistics.TotalIdleRunners)
 
-	s.metricsExporter.withStatistics(message.Statistics)
+	s.metricsExporter.publishStatistics(message.Statistics)
 
 	if message.MessageType != "RunnerScaleSetJobMessages" {
 		s.logger.Info("skip message with unknown message type.", "messageType", message.MessageType)
@@ -154,7 +151,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				"RequestId",
 				jobAvailable.RunnerRequestId,
 			)
-			s.metricsExporter.withJobAvailable(&jobAvailable)
+			s.metricsExporter.publishJobAvailable(&jobAvailable)
 			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
 		case "JobAssigned":
 			var jobAssigned actions.JobAssigned
@@ -166,7 +163,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				"RequestId",
 				jobAssigned.RunnerRequestId,
 			)
-			s.metricsExporter.withJobAssigned(&jobAssigned)
+			s.metricsExporter.publishJobAssigned(&jobAssigned)
 		case "JobStarted":
 			var jobStarted actions.JobStarted
 			if err := json.Unmarshal(message, &jobStarted); err != nil {
@@ -179,7 +176,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				"RunnerId",
 				jobStarted.RunnerId,
 			)
-			s.metricsExporter.withJobStarted(&jobStarted)
+			s.metricsExporter.publishJobStarted(&jobStarted)
 			s.updateJobInfoForRunner(jobStarted)
 		case "JobCompleted":
 			var jobCompleted actions.JobCompleted
@@ -197,7 +194,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				"RunnerName",
 				jobCompleted.RunnerName,
 			)
-			s.metricsExporter.withJobCompleted(&jobCompleted)
+			s.metricsExporter.publishJobCompleted(&jobCompleted)
 		default:
 			s.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
 		}
@@ -213,7 +210,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 
 func (s *Service) scaleForAssignedJobCount(count int) error {
 	targetRunnerCount := int(math.Max(math.Min(float64(s.settings.MaxRunners), float64(count)), float64(s.settings.MinRunners)))
-	s.metricsExporter.withDesiredRunners(targetRunnerCount)
+	s.metricsExporter.publishDesiredRunners(targetRunnerCount)
 	if targetRunnerCount != s.currentRunnerCount {
 		s.logger.Info("try scale runner request up/down base on assigned job count",
 			"assigned job", count,

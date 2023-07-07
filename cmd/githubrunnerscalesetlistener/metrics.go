@@ -266,9 +266,6 @@ var runtimeBuckets []float64 = []float64{
 }
 
 type metricsExporter struct {
-	// fields updated on each iteration
-	exportFuncs []func()
-
 	// Initialized during creation.
 	baseLabels
 }
@@ -302,7 +299,7 @@ func (b *baseLabels) scaleSetLabels() prometheus.Labels {
 	}
 }
 
-func (b *baseLabels) completedJobsTotalLabels(msg *actions.JobCompleted) prometheus.Labels {
+func (b *baseLabels) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
 	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
 	l[labelKeyJobResult] = msg.Result
@@ -310,25 +307,10 @@ func (b *baseLabels) completedJobsTotalLabels(msg *actions.JobCompleted) prometh
 	return l
 }
 
-func (b *baseLabels) startedJobsTotalLabels(msg *actions.JobStarted) prometheus.Labels {
+func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
 	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
 	l[labelKeyRunnerName] = msg.RunnerName
-	return l
-}
-
-func (b *baseLabels) jobStartupDurationLabels(msg *actions.JobStarted) prometheus.Labels {
-	l := b.jobLabels(&msg.JobMessageBase)
-	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
-	l[labelKeyRunnerName] = msg.RunnerName
-	return l
-}
-
-func (b *baseLabels) jobExecutionDurationLabels(msg *actions.JobCompleted) prometheus.Labels {
-	l := b.jobLabels(&msg.JobMessageBase)
-	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
-	l[labelKeyRunnerName] = msg.RunnerName
-	l[labelKeyJobResult] = msg.Result
 	return l
 }
 
@@ -336,67 +318,47 @@ func (m *metricsExporter) withBaseLabels(base baseLabels) {
 	m.baseLabels = base
 }
 
-func (m *metricsExporter) reset() {
-	m.exportFuncs = nil
-}
-
-func (m *metricsExporter) withStatistics(stats *actions.RunnerScaleSetStatistic) {
+func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	l := m.scaleSetLabels()
-	m.exportFuncs = append(m.exportFuncs, func() {
-		availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
-		acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
-		assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
-		runningJobs.With(l).Set(float64(stats.TotalAssignedJobs))
-		registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
-		busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
-		idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
 
-		// Use add directly for metrics totals that are scale-set specific.
-		acquiredJobsTotal.With(m.scaleSetLabels()).Add(float64(stats.TotalAcquiredJobs))
-		assignedJobsTotal.With(m.scaleSetLabels()).Add(float64(stats.TotalAssignedJobs))
+	availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
+	acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
+	assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
+	runningJobs.With(l).Set(float64(stats.TotalAssignedJobs))
+	registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
+	busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
+	idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
 
-	})
+	acquiredJobsTotal.With(l).Add(float64(stats.TotalAcquiredJobs))
+	assignedJobsTotal.With(l).Add(float64(stats.TotalAssignedJobs))
 }
 
-func (m *metricsExporter) withJobAvailable(msg *actions.JobAvailable) {
-	m.exportFuncs = append(m.exportFuncs, func() {
-		availableJobsTotal.With(m.jobLabels(&msg.JobMessageBase)).Inc()
-	})
+func (m *metricsExporter) publishJobAvailable(msg *actions.JobAvailable) {
+	availableJobsTotal.With(m.jobLabels(&msg.JobMessageBase)).Inc()
 }
 
-func (m *metricsExporter) withJobStarted(msg *actions.JobStarted) {
-	m.exportFuncs = append(m.exportFuncs, func() {
-		startedJobsTotal.With(m.startedJobsTotalLabels(msg)).Inc()
+func (m *metricsExporter) publishJobStarted(msg *actions.JobStarted) {
+	l := m.startedJobLabels(msg)
+	startedJobsTotal.With(l).Inc()
 
-		startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
-		jobStartupDurationSeconds.With(m.jobStartupDurationLabels(msg)).Observe(float64(startupDuration))
-	})
+	startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
+	jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
 }
 
-func (m *metricsExporter) withJobAssigned(msg *actions.JobAssigned) {
-	m.exportFuncs = append(m.exportFuncs, func() {
-		queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
-		jobQueueDurationSeconds.With(m.jobLabels(&msg.JobMessageBase)).Observe(float64(queueDuration))
-	})
+func (m *metricsExporter) publishJobAssigned(msg *actions.JobAssigned) {
+	l := m.jobLabels(&msg.JobMessageBase)
+	queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
+	jobQueueDurationSeconds.With(l).Observe(float64(queueDuration))
 }
 
-func (m *metricsExporter) withJobCompleted(msg *actions.JobCompleted) {
-	m.exportFuncs = append(m.exportFuncs, func() {
-		completedJobsTotal.With(m.completedJobsTotalLabels(msg)).Inc()
+func (m *metricsExporter) publishJobCompleted(msg *actions.JobCompleted) {
+	l := m.completedJobLabels(msg)
+	completedJobsTotal.With(l).Inc()
 
-		executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
-		jobExecutionDurationSeconds.With(m.jobExecutionDurationLabels(msg)).Observe(float64(executionDuration))
-	})
+	executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
+	jobExecutionDurationSeconds.With(l).Observe(float64(executionDuration))
 }
 
-func (m *metricsExporter) withDesiredRunners(count int) {
-	m.exportFuncs = append(m.exportFuncs, func() {
-		desiredRunners.With(m.scaleSetLabels()).Set(float64(count))
-	})
-}
-
-func (m *metricsExporter) do() {
-	for _, f := range m.exportFuncs {
-		f()
-	}
+func (m *metricsExporter) publishDesiredRunners(count int) {
+	desiredRunners.With(m.scaleSetLabels()).Set(float64(count))
 }
