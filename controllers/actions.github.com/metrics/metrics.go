@@ -10,7 +10,7 @@ var githubScaleSetControllerSubsystem = "github_runner_scale_set_controller"
 var labels = []string{
 	"name",
 	"namespace",
-	"repo",
+	"repository",
 	"organization",
 	"enterprise",
 	"configUrl",
@@ -19,7 +19,7 @@ var labels = []string{
 type CommonLabels struct {
 	Name         string
 	Namespace    string
-	Repo         string
+	Repository   string
 	Organization string
 	Enterprise   string
 	ConfigURL    string
@@ -29,7 +29,7 @@ func (l *CommonLabels) labels() prometheus.Labels {
 	return prometheus.Labels{
 		"name":         l.Name,
 		"namespace":    l.Namespace,
-		"repo":         l.Repo,
+		"repository":   l.Repository,
 		"organization": l.Organization,
 		"enterprise":   l.Enterprise,
 		"configUrl":    l.ConfigURL,

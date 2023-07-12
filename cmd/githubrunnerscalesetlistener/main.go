@@ -112,7 +112,7 @@ func main() {
 				<-ctx.Done()
 				return metricsServer.shutdown()
 			})
-			return metricsServer.run()
+			return metricsServer.listenAndServe()
 		})
 	}
 
@@ -134,7 +134,7 @@ func (s *metricsServer) shutdown() error {
 	return s.srv.Shutdown(ctx)
 }
 
-func (s *metricsServer) run() error {
+func (s *metricsServer) listenAndServe() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
 		availableJobs,
