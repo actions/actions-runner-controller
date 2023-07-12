@@ -324,13 +324,12 @@ func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatist
 	availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
 	acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
 	assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
-	runningJobs.With(l).Set(float64(stats.TotalAssignedJobs))
+	runningJobs.With(l).Set(float64(stats.TotalRunningJobs))
 	registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
 	busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
 	idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
 
 	acquiredJobsTotal.With(l).Add(float64(stats.TotalAcquiredJobs))
-	assignedJobsTotal.With(l).Add(float64(stats.TotalAssignedJobs))
 }
 
 func (m *metricsExporter) publishJobAvailable(msg *actions.JobAvailable) {
@@ -346,7 +345,10 @@ func (m *metricsExporter) publishJobStarted(msg *actions.JobStarted) {
 }
 
 func (m *metricsExporter) publishJobAssigned(msg *actions.JobAssigned) {
-	l := m.jobLabels(&msg.JobMessageBase)
+	l := m.scaleSetLabels()
+	assignedJobsTotal.With(l).Inc()
+
+	l = m.jobLabels(&msg.JobMessageBase)
 	queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
 	jobQueueDurationSeconds.With(l).Observe(float64(queueDuration))
 }
