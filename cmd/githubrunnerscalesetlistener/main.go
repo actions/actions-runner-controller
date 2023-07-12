@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/actions/actions-runner-controller/build"
@@ -31,6 +32,8 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/http/httpproxy"
 )
 
@@ -79,17 +82,83 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(rc, logger); err != nil {
-		logger.Error(err, "Run error")
+	var prometheusLabels prometheus.Labels
+	if os.Getenv("ENABLE_METRICS") == "true" {
+		prometheusLabels = prometheus.Labels{
+			metricName("id"):         strconv.Itoa(rc.RunnerScaleSetId),
+			metricName("config_url"): rc.ConfigureUrl,
+			metricName("name"):       rc.EphemeralRunnerSetName,
+			metricName("namespace"):  rc.EphemeralRunnerSetNamespace,
+		}
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	quit := make(chan error, 1)
+
+	go func() {
+		opts := runOptions{
+			serviceOptions: []func(*Service){
+				WithLogger(logger),
+			},
+		}
+		if prometheusLabels != nil {
+			opts.serviceOptions = append(opts.serviceOptions, WithPrometheusLabels(prometheusLabels))
+		}
+		quit <- run(ctx, rc, logger, opts)
+	}()
+
+	go func() {
+		reg := prometheus.NewRegistry()
+		reg.MustRegister(
+			availableJobs,
+			acquiredJobs,
+			assignedJobs,
+			runningJobs,
+			registeredRunners,
+			busyRunners,
+			desiredRunners,
+			idleRunners,
+			acquiredJobsTotal,
+			assignedJobsTotal,
+			startedJobsTotal,
+			completedJobsTotal,
+			jobQueueDurationSeconds,
+			jobStartupDurationSeconds,
+			jobExecutionDurationSeconds,
+		)
+
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
+
+		srv := http.Server{
+			Addr:    ":8888",
+			Handler: mux,
+		}
+
+		select {
+		case <-ctx.Done():
+			quit <- srv.Shutdown(context.TODO())
+		case quit <- srv.ListenAndServe():
+		}
+	}()
+
+	err = <-quit
+	if err != nil {
+		stop()
+		logger.Error(err, "Exiting listener due to an error")
+		<-quit
 		os.Exit(1)
 	}
 }
 
-func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
-	// Create root context and hook with sigint and sigterm
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+type runOptions struct {
+	serviceOptions []func(*Service)
+}
 
+func run(ctx context.Context, rc RunnerScaleSetListenerConfig, logger logr.Logger, opts runOptions) error {
+	// Create root context and hook with sigint and sigterm
 	creds := &actions.ActionsAuth{}
 	if rc.Token != "" {
 		creds.Token = rc.Token
@@ -131,9 +200,7 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		MinRunners:   rc.MinRunners,
 	}
 
-	service := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, func(s *Service) {
-		s.logger = logger.WithName("service")
-	})
+	service := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, opts.serviceOptions...)
 
 	// Start listening for messages
 	if err = service.Start(); err != nil {

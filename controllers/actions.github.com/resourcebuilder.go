@@ -228,6 +228,12 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
+				Ports: []corev1.ContainerPort{
+					{
+						ContainerPort: 8888,
+						Protocol:      corev1.ProtocolTCP,
+					},
+				},
 			},
 		},
 		ImagePullSecrets: autoscalingListener.Spec.ImagePullSecrets,

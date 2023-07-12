@@ -9,6 +9,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type ScaleSettings struct {
@@ -25,6 +26,19 @@ type Service struct {
 	kubeManager        KubernetesManager
 	settings           *ScaleSettings
 	currentRunnerCount int
+	prometheusLabels   prometheus.Labels
+}
+
+func WithPrometheusLabels(labels prometheus.Labels) func(*Service) {
+	return func(svc *Service) {
+		svc.prometheusLabels = labels
+	}
+}
+
+func WithLogger(logger logr.Logger) func(*Service) {
+	return func(s *Service) {
+		s.logger = logger.WithName("service")
+	}
 }
 
 func NewService(
