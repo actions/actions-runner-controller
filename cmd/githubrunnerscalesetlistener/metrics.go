@@ -55,7 +55,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "available_jobs",
-			Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned but are acquired by the runner scale set.",
+			Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned to the runner scale set.",
 		},
 		scaleSetLabels,
 	)
@@ -145,7 +145,7 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: githubScaleSetSubsystem,
 			Name:      "available_jobs_total",
-			Help:      "Total number of jobs available for the scale set (runs-on matches and scale set passes all of the runner group permission checks).",
+			Help:      "Total number of jobs with `runs-on` matching the runner scale set name.",
 		},
 		jobLabels,
 	)
