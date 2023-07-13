@@ -972,10 +972,10 @@ func TestControllerDeployment_MetricsPorts(t *testing.T) {
 	options := &helm.Options{
 		Logger: logger.Discard,
 		SetValues: map[string]string{
-			"image.tag":                "dev",
-			"metrics.controllerAddr":   ":8080",
-			"metrics.listenerAddr":     ":8081",
-			"metrics.listenerEndpoint": "/metrics",
+			"image.tag":                     "dev",
+			"metrics.controllerManagerAddr": ":8080",
+			"metrics.listenerAddr":          ":8081",
+			"metrics.listenerEndpoint":      "/metrics",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}

@@ -110,7 +110,7 @@ flags:
 #
 # To turn off metrics, specify empty strings for controllerAddr and listenerAddr
 metrics:
-  controllerAddr: ":8080"
+  controllerManagerAddr: ":8080"
   listenerAddr: ":8080"
   listenerEndpoint: "/metrics"
 

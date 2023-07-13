@@ -68,13 +68,13 @@ spec:
         {{- with .Values.metrics }}
         - "--listener-metrics-addr={{ .listenerAddr }}"
         - "--listener-metrics-endpoint={{ .listenerEndpoint }}"
-        - "--metrics-addr={{ .controllerAddr }}"
+        - "--metrics-addr={{ .controllerManagerAddr }}"
         {{- end }}
         command:
         - "/manager"
         {{- with .Values.metrics }}
         ports:
-        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerAddr "${1}"}}
+        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerManagerAddr "${1}"}}
           protocol: TCP
           name: metrics
         {{- end }}
