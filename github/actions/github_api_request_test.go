@@ -122,6 +122,28 @@ func TestNewActionsServiceRequest(t *testing.T) {
 			assert.Equal(t, "Bearer "+newToken, req.Header.Get("Authorization"))
 		})
 
+		t.Run("admin token refresh failure", func(t *testing.T) {
+			newToken := defaultActionsToken(t)
+			errMessage := `{"message":"test"}`
+			unauthorizedHandler := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(errMessage))
+			}
+			server := testserver.New(t, nil, testserver.WithActionsToken("random-token"), testserver.WithActionsToken(newToken), testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler))
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
+			require.NoError(t, err)
+			expiringToken := "expiring-token"
+			expiresAt := time.Now().Add(59 * time.Second)
+			client.ActionsServiceAdminToken = expiringToken
+			client.ActionsServiceAdminTokenExpiresAt = expiresAt
+			_, err = client.NewActionsServiceRequest(ctx, http.MethodGet, "my-path", nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), errMessage)
+			assert.Equal(t, client.ActionsServiceAdminToken, expiringToken)
+			assert.Equal(t, client.ActionsServiceAdminTokenExpiresAt, expiresAt)
+		})
+
 		t.Run("token is currently valid", func(t *testing.T) {
 			tokenThatShouldNotBeFetched := defaultActionsToken(t)
 			server := testserver.New(t, nil, testserver.WithActionsToken(tokenThatShouldNotBeFetched))
