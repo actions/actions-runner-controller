@@ -141,33 +141,6 @@ var (
 		scaleSetLabels,
 	)
 
-	availableJobsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "available_jobs_total",
-			Help:      "Total number of jobs with `runs-on` matching the runner scale set name.",
-		},
-		jobLabels,
-	)
-
-	acquiredJobsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "acquired_jobs_total",
-			Help:      "Total number of jobs acquired by the scale set.",
-		},
-		scaleSetLabels,
-	)
-
-	assignedJobsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "assigned_jobs_total",
-			Help:      "Total number of jobs assigned to the scale set.",
-		},
-		scaleSetLabels,
-	)
-
 	startedJobsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: githubScaleSetSubsystem,
@@ -328,12 +301,6 @@ func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatist
 	registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
 	busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
 	idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
-
-	acquiredJobsTotal.With(l).Add(float64(stats.TotalAcquiredJobs))
-}
-
-func (m *metricsExporter) publishJobAvailable(msg *actions.JobAvailable) {
-	availableJobsTotal.With(m.jobLabels(&msg.JobMessageBase)).Inc()
 }
 
 func (m *metricsExporter) publishJobStarted(msg *actions.JobStarted) {
@@ -345,10 +312,7 @@ func (m *metricsExporter) publishJobStarted(msg *actions.JobStarted) {
 }
 
 func (m *metricsExporter) publishJobAssigned(msg *actions.JobAssigned) {
-	l := m.scaleSetLabels()
-	assignedJobsTotal.With(l).Inc()
-
-	l = m.jobLabels(&msg.JobMessageBase)
+	l := m.jobLabels(&msg.JobMessageBase)
 	queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
 	jobQueueDurationSeconds.With(l).Observe(float64(queueDuration))
 }

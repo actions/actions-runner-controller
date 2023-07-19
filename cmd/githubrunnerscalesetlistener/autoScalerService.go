@@ -151,7 +151,6 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				"RequestId",
 				jobAvailable.RunnerRequestId,
 			)
-			s.metricsExporter.publishJobAvailable(&jobAvailable)
 			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
 		case "JobAssigned":
 			var jobAssigned actions.JobAssigned
