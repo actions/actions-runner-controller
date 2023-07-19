@@ -26,6 +26,18 @@ List of fields that are going to be ignored by the merge:
 - `metadata.name`: Name of the listener pod
 - `metadata.namespace`: Namespace of the listener pod
 
+The change is extending the gha-runner-scale-set template. We will extend `values.yaml` file to add `listenerTemplate` object that is optional.
+
+If not provided, the listener will be created the same way it was created before. Otherwise, the `listenerTemplate.metadata` and the `listenerTemplate.spec` are going to be merged with the default listener specification.
+
+The way the merge will work is:
+
+1. Create a default spec used for the listener
+2. All non-reserved fields are going to be applied from the provided `listenerTemplate` if they are not empty. If empty, the default configuration is used.
+3. For the container:
+   1. If the container name is "listener", values specified for that container are going to be merged with the default listener container spec. The name "listener" serves just as an indicator that the container spec should be merged with the listener container. Name will be overwritten by the controller. All fields are optional, and non-null fields are merged as described above.
+   2. If the container name is **not** "listener", the spec provided for that container will be appended to the `pod.spec.containers` without any modifications. Fields that must be specified are the required fields for the kubernetes container spec.
+
 ### Pros:
 
 - Env `CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY` can be removed as a global configuration for building Autoscaling listener resources
