@@ -157,9 +157,19 @@ template:
   ##                   storage: 1Gi
   spec:
     containers:
-    - name: runner
-      image: ghcr.io/actions/actions-runner:latest
-      command: ["/home/runner/run.sh"]
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
+
+## template is the PodSpec for each listener Pod
+# listenerTemplate:
+#   spec:
+#     containers:
+#     - name: listener # merge extra container configuration to the default configuration for the listener container.
+#       securityContext:
+#         runAsUser: 1000
+#     - name: side-car # container used as a side-car container. Spec for this container will be applied without any modifications.
+#       image: example-sidecar
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.

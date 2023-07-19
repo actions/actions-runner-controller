@@ -53,9 +53,6 @@ type AutoscalingListenerSpec struct {
 	Image string `json:"image,omitempty"`
 
 	// Required
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
-
-	// Required
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// +optional
@@ -63,6 +60,9 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
