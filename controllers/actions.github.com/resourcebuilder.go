@@ -293,8 +293,14 @@ func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec)
 	// apply pod related spec
 	// NOTE: fields that should be gnored
 	// - service account based fields
-	// - restartPolicy
-	// - imagePullSecrets
+
+	if tmpl.Spec.RestartPolicy != "" {
+		pod.Spec.RestartPolicy = tmpl.Spec.RestartPolicy
+	}
+
+	if tmpl.Spec.ImagePullSecrets != nil {
+		pod.Spec.ImagePullSecrets = tmpl.Spec.ImagePullSecrets
+	}
 
 	pod.Spec.Volumes = tmpl.Spec.Volumes
 	pod.Spec.InitContainers = tmpl.Spec.InitContainers
