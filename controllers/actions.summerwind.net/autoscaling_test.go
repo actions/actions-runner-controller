@@ -63,7 +63,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 	}{
 		// case_0
 		// Legacy functionality
-		// 2 demanded, max at 3
+		// 0 demanded due to zero runID, min at 2
 		{
 			repo:                     "test/valid",
 			min:                      intPtr(2),
