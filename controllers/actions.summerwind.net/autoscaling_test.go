@@ -76,7 +76,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		// case_1
 		// Explicitly specified the default `self-hosted` label which is ignored by the simulator,
 		// as we assume that GitHub Actions automatically associates the `self-hosted` label to every self-hosted runner.
-		// 2 demanded, max at 3
+		// 3 demanded, max at 3
 		{
 			repo:                     "test/valid",
 			labels:                   []string{"self-hosted"},
