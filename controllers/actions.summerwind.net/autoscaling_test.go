@@ -465,7 +465,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		err          string
 	}{
 		// case_0
-		// 2 demanded, max at 3
+		// 0 demanded due to zero runID, min at 2
 		{
 			org:                      "test",
 			repos:                    []string{"valid"},
