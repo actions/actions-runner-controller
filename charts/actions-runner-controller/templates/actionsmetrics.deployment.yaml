@@ -36,8 +36,8 @@ spec:
       {{- end }}
       containers:
       - args:
-        {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
-        {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
+        {{- $metricsHost := .Values.actionsMetrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
+        {{- $metricsPort := .Values.actionsMetrics.proxy.enabled | ternary "8080" .Values.actionsMetrics.port }}
         - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
         {{- if .Values.actionsMetricsServer.logLevel }}
         - "--log-level={{ .Values.actionsMetricsServer.logLevel }}"
@@ -122,8 +122,8 @@ spec:
         - containerPort: 8000
           name: http
           protocol: TCP
-        {{- if not .Values.metrics.proxy.enabled }}
-        - containerPort: {{ .Values.metrics.port }}
+        {{- if not .Values.actionsMetrics.proxy.enabled }}
+        - containerPort: {{ .Values.actionsMetrics.port }}
           name: metrics-port
           protocol: TCP
         {{- end }}
@@ -131,17 +131,17 @@ spec:
           {{- toYaml .Values.actionsMetricsServer.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.actionsMetricsServer.securityContext | nindent 12 }}
-      {{- if .Values.metrics.proxy.enabled }}
+      {{- if .Values.actionsMetrics.proxy.enabled }}
       - args:
-        - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.port }}"
+        - "--secure-listen-address=0.0.0.0:{{ .Values.actionsMetrics.port }}"
         - "--upstream=http://127.0.0.1:8080/"
         - "--logtostderr=true"
         - "--v=10"
-        image: "{{ .Values.metrics.proxy.image.repository }}:{{ .Values.metrics.proxy.image.tag }}"
+        image: "{{ .Values.actionsMetrics.proxy.image.repository }}:{{ .Values.actionsMetrics.proxy.image.tag }}"
         name: kube-rbac-proxy
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-        - containerPort: {{ .Values.metrics.port }}
+        - containerPort: {{ .Values.actionsMetrics.port }}
           name: metrics-port
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
