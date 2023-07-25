@@ -146,5 +146,9 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && which docker-compose \
     && docker compose version
 
+# Create folder structure here to avoid permission issues
+# when mounting the daemon.json file from a configmap.
+RUN mkdir -p /home/runner/.config/docker
+
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["entrypoint-dind-rootless.sh"]
