@@ -244,6 +244,7 @@ func TestTemplate_CreateManagerListenerRole(t *testing.T) {
 
 	assert.Equal(t, namespaceName, managerListenerRole.Namespace, "Role should have a namespace")
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-listener-role", managerListenerRole.Name)
+
 	assert.Equal(t, 4, len(managerListenerRole.Rules))
 	assert.Equal(t, "pods", managerListenerRole.Rules[0].Resources[0])
 	assert.Equal(t, "pods/status", managerListenerRole.Rules[1].Resources[0])
@@ -356,10 +357,13 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 3)
-	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
-	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
-	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[2])
+	expectedArgs := []string{
+		"--auto-scaling-runner-set-only",
+		"--log-level=debug",
+		"--log-format=text",
+		"--update-strategy=immediate",
+	}
+	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
@@ -420,6 +424,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator": "bar",
 			"priorityClassName":    "test-priority-class",
 			"flags.updateStrategy": "eventual",
+			"flags.logLevel":       "info",
+			"flags.logFormat":      "json",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -484,11 +490,15 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
-	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
-	assert.Equal(t, "--auto-scaler-image-pull-secrets=dockerhub", deployment.Spec.Template.Spec.Containers[0].Args[1])
-	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
-	assert.Equal(t, "--update-strategy=eventual", deployment.Spec.Template.Spec.Containers[0].Args[3])
+	expectArgs := []string{
+		"--auto-scaling-runner-set-only",
+		"--auto-scaler-image-pull-secrets=dockerhub",
+		"--log-level=info",
+		"--log-format=json",
+		"--update-strategy=eventual",
+	}
+
+	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 4)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
@@ -605,12 +615,16 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 5)
-	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
-	assert.Equal(t, "--enable-leader-election", deployment.Spec.Template.Spec.Containers[0].Args[1])
-	assert.Equal(t, "--leader-election-id=test-arc-gha-runner-scale-set-controller", deployment.Spec.Template.Spec.Containers[0].Args[2])
-	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[3])
-	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[4])
+	expectedArgs := []string{
+		"--auto-scaling-runner-set-only",
+		"--enable-leader-election",
+		"--leader-election-id=test-arc-gha-runner-scale-set-controller",
+		"--log-level=debug",
+		"--log-format=text",
+		"--update-strategy=immediate",
+	}
+
+	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 }
 
 func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
@@ -639,11 +653,15 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 
 	assert.Equal(t, namespaceName, deployment.Namespace)
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
-	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
-	assert.Equal(t, "--auto-scaler-image-pull-secrets=dockerhub,ghcr", deployment.Spec.Template.Spec.Containers[0].Args[1])
-	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[2])
-	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[3])
+	expectedArgs := []string{
+		"--auto-scaling-runner-set-only",
+		"--auto-scaler-image-pull-secrets=dockerhub,ghcr",
+		"--log-level=debug",
+		"--log-format=text",
+		"--update-strategy=immediate",
+	}
+
+	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 }
 
 func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
@@ -721,11 +739,15 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Command, 1)
 	assert.Equal(t, "/manager", deployment.Spec.Template.Spec.Containers[0].Command[0])
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Args, 4)
-	assert.Equal(t, "--auto-scaling-runner-set-only", deployment.Spec.Template.Spec.Containers[0].Args[0])
-	assert.Equal(t, "--log-level=debug", deployment.Spec.Template.Spec.Containers[0].Args[1])
-	assert.Equal(t, "--watch-single-namespace=demo", deployment.Spec.Template.Spec.Containers[0].Args[2])
-	assert.Equal(t, "--update-strategy=immediate", deployment.Spec.Template.Spec.Containers[0].Args[3])
+	expectedArgs := []string{
+		"--auto-scaling-runner-set-only",
+		"--log-level=debug",
+		"--log-format=text",
+		"--watch-single-namespace=demo",
+		"--update-strategy=immediate",
+	}
+
+	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
@@ -868,7 +890,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 	var managerSingleNamespaceWatchRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRole)
 
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRole.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-role", managerSingleNamespaceWatchRole.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRole.Namespace)
 	assert.Equal(t, 14, len(managerSingleNamespaceWatchRole.Rules))
 }
@@ -907,9 +929,9 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	var managerSingleNamespaceWatchRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRoleBinding)
 
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-rolebinding", managerSingleNamespaceWatchRoleBinding.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-rolebinding", managerSingleNamespaceWatchRoleBinding.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRoleBinding.Namespace)
-	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-role", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
+	assert.Equal(t, "test-arc-gha-runner-scale-set-controller-manager-single-namespace-watch-role", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
 	assert.Equal(t, "test-arc-gha-runner-scale-set-controller", managerSingleNamespaceWatchRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerSingleNamespaceWatchRoleBinding.Subjects[0].Namespace)
 }

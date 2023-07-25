@@ -56,6 +56,9 @@ spec:
         {{- with .Values.flags.logLevel }}
         - "--log-level={{ . }}"
         {{- end }}
+        {{- with .Values.flags.logFormat }}
+        - "--log-format={{ . }}"
+        {{- end }}
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}

@@ -5,7 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.304.0
+RUNNER_VERSION ?= 2.306.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -95,7 +95,8 @@ run: generate fmt vet manifests
 run-scaleset: generate fmt vet
 	CONTROLLER_MANAGER_POD_NAMESPACE=default \
 	CONTROLLER_MANAGER_CONTAINER_IMAGE="${DOCKER_IMAGE_NAME}:${VERSION}" \
-	go run ./main.go --auto-scaling-runner-set-only
+	go run -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=$(VERSION)'" \
+	./main.go --auto-scaling-runner-set-only
 
 # Install CRDs into a cluster
 install: manifests

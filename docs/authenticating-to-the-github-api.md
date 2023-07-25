@@ -22,7 +22,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 * Actions (read)
 * Administration (read / write)
-* Checks (read) (if you are going to use [Webhook Driven Scaling](#webhook-driven-scaling))
+* Checks (read) (if you are going to use [Webhook Driven Scaling](automatically-scaling-runners.md#webhook-driven-scaling))
 * Metadata (read)
 
 **Required Permissions for Organization Runners:**<br />
@@ -39,7 +39,7 @@ _Note: All API routes mapped to their permissions can be found [here](https://do
 
 **Subscribe to events**
 
-At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the `Workflow Job` event.
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](automatically-scaling-runners.md#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the `Workflow Job` event.
 
 ---
 
