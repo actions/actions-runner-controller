@@ -109,7 +109,10 @@ service:
 # Metrics service resource
 metrics:
   serviceAnnotations: {}
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
   port: 8443
   proxy:
@@ -308,7 +311,10 @@ actionsMetrics:
   # as a part of the helm release.
   # Do note that you also need actionsMetricsServer.enabled=true
   # to deploy the actions-metrics-server whose k8s service is referenced by the service monitor.
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
   port: 8443
   proxy:
