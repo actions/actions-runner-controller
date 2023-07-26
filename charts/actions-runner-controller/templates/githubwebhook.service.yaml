@@ -16,7 +16,7 @@ spec:
     {{ range $_, $port := .Values.githubWebhookServer.service.ports -}}
     - {{ $port | toYaml | nindent 6 }}
     {{- end }}
-    {{- if .Values.metrics.serviceMonitor }}
+    {{- if .Values.metrics.serviceMonitor.enable }}
     - name: metrics-port
       port: {{ .Values.metrics.port }}
       targetPort: metrics-port

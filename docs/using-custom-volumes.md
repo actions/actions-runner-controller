@@ -78,7 +78,7 @@ spec:
       - hostPath:
           path: /mnt/disks/ssd0
         name: tmp
-    ephemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
+      ephemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
 ```
 
 ### Docker image layers caching
