@@ -16,9 +16,9 @@ spec:
     {{ range $_, $port := .Values.actionsMetricsServer.service.ports -}}
     - {{ $port | toYaml | nindent 6 }}
     {{- end }}
-    {{- if .Values.metrics.serviceMonitor }}
+    {{- if .Values.actionsMetrics.serviceMonitor.enable }}
     - name: metrics-port
-      port: {{ .Values.metrics.port }}
+      port: {{ .Values.actionsMetrics.port }}
       targetPort: metrics-port
     {{- end }}
   selector:
