@@ -363,9 +363,9 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
-		"--metrics-addr=:8080",
-		"--listener-metrics-addr=:8080",
-		"--listener-metrics-endpoint=/metrics",
+		"--metrics-addr=0",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
 	}
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
@@ -500,9 +500,9 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--log-level=info",
 		"--log-format=json",
 		"--update-strategy=eventual",
-		"--listener-metrics-addr=:8080",
-		"--listener-metrics-endpoint=/metrics",
-		"--metrics-addr=:8080",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -629,9 +629,9 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
-		"--listener-metrics-addr=:8080",
-		"--listener-metrics-endpoint=/metrics",
-		"--metrics-addr=:8080",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -669,9 +669,9 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
-		"--listener-metrics-addr=:8080",
-		"--listener-metrics-endpoint=/metrics",
-		"--metrics-addr=:8080",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -758,9 +758,9 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--log-format=text",
 		"--watch-single-namespace=demo",
 		"--update-strategy=immediate",
-		"--listener-metrics-addr=:8080",
-		"--listener-metrics-endpoint=/metrics",
-		"--metrics-addr=:8080",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)

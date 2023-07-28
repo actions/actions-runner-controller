@@ -47,8 +47,10 @@ const (
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
 type AutoscalingListenerReconciler struct {
 	client.Client
-	Log                     logr.Logger
-	Scheme                  *runtime.Scheme
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+	// ListenerMetricsAddr is address that the metrics endpoint binds to.
+	// If it is set to "0", the metrics server is not started.
 	ListenerMetricsAddr     string
 	ListenerMetricsEndpoint string
 
@@ -374,7 +376,7 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 	}
 
 	var metricsConfig *listenerMetricsServerConfig
-	if len(r.ListenerMetricsAddr) != 0 {
+	if r.ListenerMetricsAddr != "0" {
 		metricsConfig = &listenerMetricsServerConfig{
 			addr:     r.ListenerMetricsAddr,
 			endpoint: r.ListenerMetricsEndpoint,

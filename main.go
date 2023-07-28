@@ -263,7 +263,7 @@ func main() {
 			Log:            log.WithName("EphemeralRunnerSet"),
 			Scheme:         mgr.GetScheme(),
 			ActionsClient:  actionsMultiClient,
-			PublishMetrics: metricsAddr != "",
+			PublishMetrics: metricsAddr != "0",
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)

@@ -65,10 +65,16 @@ spec:
         {{- with .Values.flags.updateStrategy }}
         - "--update-strategy={{ . }}"
         {{- end }}
+        {{- if .Values.metrics }}
         {{- with .Values.metrics }}
         - "--listener-metrics-addr={{ .listenerAddr }}"
         - "--listener-metrics-endpoint={{ .listenerEndpoint }}"
         - "--metrics-addr={{ .controllerManagerAddr }}"
+        {{- end }}
+        {{- else }}
+        - "--listener-metrics-addr=0"
+        - "--listener-metrics-endpoint="
+        - "--metrics-addr=0"
         {{- end }}
         command:
         - "/manager"
