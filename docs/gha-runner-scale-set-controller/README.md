@@ -43,6 +43,27 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.5.0
+
+1. Provide scale-set listener metrics [#2559](https://github.com/actions/actions-runner-controller/pull/2559)
+1. Add DrainJobsMode [#2569](https://github.com/actions/actions-runner-controller/pull/2569)
+1. Trim gha-runner-scale-set to gha-rs in names and remove role type suffixes [#2706](https://github.com/actions/actions-runner-controller/pull/2706)
+1. Adapt role name to prevent namespace collision [#2617](https://github.com/actions/actions-runner-controller/pull/2617)
+1. Add status check before deserializing runner-registration response [#2699](https://github.com/actions/actions-runner-controller/pull/2699)
+1. Add configurable log format to values.yaml and propagate it to listener [#2686](https://github.com/actions/actions-runner-controller/pull/2686)
+1. Extend manager roles to accept ephemeralrunnerset/finalizers [#2493](https://github.com/actions/actions-runner-controller/pull/2493)
+1. Trim repo/org/enterprise to 63 characters in label values [#2657](https://github.com/actions/actions-runner-controller/pull/2657)
+1. Discard logs on helm chart tests [#2607](https://github.com/actions/actions-runner-controller/pull/2607)
+1. Use build.Version to check if resource version is a mismatch [#2521](https://github.com/actions/actions-runner-controller/pull/2521)
+1. Reordering methods and constants so it is easier to look it up [#2501](https://github.com/actions/actions-runner-controller/pull/2501)
+1. chore: Set build version on make-runscaleset [#2713](https://github.com/actions/actions-runner-controller/pull/2713)
+1. Fix scaling back to 0 after min runners were set to number > 0 [#2742](https://github.com/actions/actions-runner-controller/pull/2742)
+1. Document customization for containerModes [#2777](https://github.com/actions/actions-runner-controller/pull/2777)
+1. Bump github.com/cloudflare/circl from 1.1.0 to 1.3.3 [#2628](https://github.com/actions/actions-runner-controller/pull/2628)
+1. chore(deps): bump github.com/stretchr/testify from 1.8.2 to 1.8.4 [#2716](https://github.com/actions/actions-runner-controller/pull/2716)
+1. Move gha-* docs out of preview [#2779](https://github.com/actions/actions-runner-controller/pull/2779)
+1. Prepare 0.5.0 release [#2783](https://github.com/actions/actions-runner-controller/pull/2783)
+
 ### v0.4.0
 
 #### ⚠️ Warning
