@@ -79,9 +79,9 @@ metadata:
 spec:
   replicas: 1
   repository: mumoshu/actions-runner-controller-ci
-  dockerdWithinRunnerContainer: true
   template:
     spec:
+      dockerdWithinRunnerContainer: true
       securityContext:
         # All level/role/type/user values will vary based on your SELinux policies.
         # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux_atomic_host/7/html/container_security_guide/docker_selinux_security_policy for information about SELinux with containers
