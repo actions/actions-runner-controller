@@ -1,11 +1,14 @@
 package app
 
 import (
+	"context"
 	"crypto/x509"
 	"fmt"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/worker"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
@@ -16,6 +19,8 @@ type App struct {
 
 	config config.Config
 	logger logr.Logger
+
+	listener *listener.Listener
 }
 
 func New(config config.Config) (*App, error) {
@@ -31,7 +36,26 @@ func New(config config.Config) (*App, error) {
 		return nil, err
 	}
 
+	worker, err := worker.NewKubernetesWorker(worker.WithLogger(app.logger))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new kubernetes worker: %w", err)
+	}
+
+	listener, err := listener.New(app.actionsClient, worker.Do, app.config.RunnerScaleSetId, listener.WithLogger(app.logger))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new listener: %w", err)
+	}
+
+	app.listener = listener
+
+	app.logger.Info("app initialized")
+
 	return app, nil
+}
+
+func (app *App) Run(ctx context.Context) error {
+	app.logger.Info("Starting listener")
+	return app.listener.Listen(ctx)
 }
 
 func (app *App) initLogger() error {
