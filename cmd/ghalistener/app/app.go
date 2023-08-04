@@ -67,7 +67,7 @@ func (app *App) Run(ctx context.Context) error {
 		panic("app not initialized")
 	}
 	app.logger.Info("Starting listener")
-	return app.listener.Listen(ctx, app.worker.Do)
+	return app.listener.Listen(ctx, app.worker)
 }
 
 func (app *App) initLogger() error {

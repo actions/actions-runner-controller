@@ -16,14 +16,6 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// message types
-const (
-	messageTypeJobAvailable = "JobAvailable"
-	messageTypeJobAssigned  = "JobAssigned"
-	messageTypeJobStarted   = "JobStarted"
-	messageTypeJobCompleted = "JobCompleted"
-)
-
 const workerName = "kubernetesworker"
 
 type Option func(*Worker)
@@ -91,75 +83,7 @@ func (w *Worker) applyDefaults() error {
 	return nil
 }
 
-func (w *Worker) Do(ctx context.Context, msg *actions.RunnerScaleSetMessage) error {
-	w.logger.Info("Processing message", "messageId", msg.MessageId, "messageType", msg.MessageType)
-	if msg.Statistics == nil {
-		return fmt.Errorf("invalid message: statistics is nil")
-	}
-
-	w.logger.Info("current runner scale set statistics.", "statistics", msg.Statistics)
-
-	if msg.MessageType != "RunnerScaleSetJobMessages" {
-		w.logger.Info("Skipping message", "messageType", msg.MessageType)
-		return nil
-	}
-
-	var batchedMessages []json.RawMessage
-	if err := json.Unmarshal([]byte(msg.Body), &batchedMessages); err != nil {
-		return fmt.Errorf("failed to unmarshal batched messages: %w", err)
-	}
-
-	var availableJobs []int64
-	for _, msg := range batchedMessages {
-		var messageType actions.JobMessageType
-		if err := json.Unmarshal(msg, &messageType); err != nil {
-			return fmt.Errorf("failed to decode job message type: %w", err)
-		}
-
-		switch messageType.MessageType {
-		case messageTypeJobAvailable:
-			var jobAvailable actions.JobAvailable
-			if err := json.Unmarshal(msg, &jobAvailable); err != nil {
-				return fmt.Errorf("failed to decode job available: %w", err)
-			}
-
-			w.logger.Info("Job available message received", "jobId", jobAvailable.RunnerRequestId)
-			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
-
-		case messageTypeJobAssigned:
-			var jobAssigned actions.JobAssigned
-			if err := json.Unmarshal(msg, &jobAssigned); err != nil {
-				return fmt.Errorf("failed to decode job assigned: %w", err)
-			}
-
-			w.logger.Info("Job assigned message received", "jobId", jobAssigned.RunnerRequestId)
-
-		case messageTypeJobStarted:
-			var jobStarted actions.JobStarted
-			if err := json.Unmarshal(msg, &jobStarted); err != nil {
-				return fmt.Errorf("could not decode job started message. %w", err)
-			}
-			w.logger.Info("job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
-			if err := w.updateRunnerWithJobInfo(ctx, jobStarted); err != nil {
-				return fmt.Errorf("failed to update runner with job info: %w", err)
-			}
-		case messageTypeJobCompleted:
-			var jobCompleted actions.JobCompleted
-			if err := json.Unmarshal(msg, &jobCompleted); err != nil {
-				return fmt.Errorf("failed to decode job completed: %w", err)
-			}
-
-			w.logger.Info("job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
-
-		default:
-			w.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
-		}
-	}
-
-	return nil
-}
-
-func (w *Worker) updateRunnerWithJobInfo(ctx context.Context, jobInfo actions.JobStarted) error {
+func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
@@ -216,7 +140,7 @@ func (w *Worker) updateRunnerWithJobInfo(ctx context.Context, jobInfo actions.Jo
 	return nil
 }
 
-func (w *Worker) updateDesiredRunners(ctx context.Context, count int) error {
+func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error {
 	targetRunnerCount := int(math.Max(math.Min(float64(w.config.MaxRunners), float64(count)), float64(w.config.MinRunners)))
 
 	logValues := []any{
@@ -267,9 +191,9 @@ func (w *Worker) updateDesiredRunners(ctx context.Context, count int) error {
 	patchedEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{}
 	err = w.clientset.RESTClient().
 		Patch(types.MergePatchType).
-		Prefix("apis", "actions.github.com", "v1alpha1").
+		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
-		Resource("EphemeralRunnerSets").
+		Resource("ephemeralrunnersets").
 		Name(w.config.EphemeralRunnerSetName).
 		Body([]byte(mergePatch)).
 		Do(ctx).

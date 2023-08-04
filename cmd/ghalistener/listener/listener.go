@@ -19,6 +19,14 @@ const (
 	sessionCreationMaxRetries = 10
 )
 
+// message types
+const (
+	messageTypeJobAvailable = "JobAvailable"
+	messageTypeJobAssigned  = "JobAssigned"
+	messageTypeJobStarted   = "JobStarted"
+	messageTypeJobCompleted = "JobCompleted"
+)
+
 type Option func(*Listener)
 
 func WithLogger(logger logr.Logger) Option {
@@ -27,8 +35,6 @@ func WithLogger(logger logr.Logger) Option {
 		h.logger = &logger
 	}
 }
-
-type HandlerFunc func(ctx context.Context, msg *actions.RunnerScaleSetMessage) error
 
 type Listener struct {
 	// configured fields
@@ -80,7 +86,12 @@ func (h *Listener) applyDefaults() error {
 	return nil
 }
 
-func (h *Listener) Listen(ctx context.Context, handle HandlerFunc) error {
+type Handler interface {
+	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
+	HandleDesiredRunnerCount(ctx context.Context, desiredRunnerCount int) error
+}
+
+func (h *Listener) Listen(ctx context.Context, handler Handler) error {
 	if err := h.createSession(ctx); err != nil {
 		return fmt.Errorf("createSession failed: %w", err)
 	}
@@ -106,7 +117,7 @@ func (h *Listener) Listen(ctx context.Context, handle HandlerFunc) error {
 		initialMessage.Body = string(acquirableJobsJson)
 	}
 
-	if err := handle(ctx, initialMessage); err != nil {
+	if err := handler.HandleDesiredRunnerCount(ctx, initialMessage.Statistics.TotalAssignedJobs); err != nil {
 		return fmt.Errorf("handling initial message failed: %w", err)
 	}
 
@@ -116,14 +127,25 @@ func (h *Listener) Listen(ctx context.Context, handle HandlerFunc) error {
 			return fmt.Errorf("getMessage failed: %w", err)
 		}
 
-		if err := handle(ctx, msg); err != nil {
-			return fmt.Errorf("handling message failed: %w", err)
+		statistics, jobsStarted, err := h.parseMessage(ctx, msg)
+		if err != nil {
+			return fmt.Errorf("failed to parse message: %w", err)
 		}
 
 		h.lastMessageID = msg.MessageId
 
 		if err := h.deleteLastMessage(ctx); err != nil {
 			return fmt.Errorf("failed to delete message: %w", err)
+		}
+
+		for _, jobStarted := range jobsStarted {
+			if err := handler.HandleJobStarted(ctx, jobStarted); err != nil {
+				return fmt.Errorf("failed to handle job started: %w", err)
+			}
+		}
+
+		if err := handler.HandleDesiredRunnerCount(ctx, statistics.TotalAssignedJobs); err != nil {
+			return fmt.Errorf("failed to handle desired runner count: %w", err)
 		}
 	}
 }
@@ -208,4 +230,86 @@ func (h *Listener) deleteLastMessage(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (h *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSetMessage) (*actions.RunnerScaleSetStatistic, []*actions.JobStarted, error) {
+	h.logger.Info("Processing message", "messageId", msg.MessageId, "messageType", msg.MessageType)
+	if msg.Statistics == nil {
+		return nil, nil, fmt.Errorf("invalid message: statistics is nil")
+	}
+
+	h.logger.Info("New runner scale set statistics.", "statistics", msg.Statistics)
+
+	if msg.MessageType != "RunnerScaleSetJobMessages" {
+		h.logger.Info("Skipping message", "messageType", msg.MessageType)
+		return nil, nil, fmt.Errorf("invalid message type: %s", msg.MessageType)
+	}
+
+	var batchedMessages []json.RawMessage
+	if len(msg.Body) > 0 {
+		if err := json.Unmarshal([]byte(msg.Body), &batchedMessages); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal batched messages: %w", err)
+		}
+	}
+
+	var availableJobs []int64
+	var startedJobs []*actions.JobStarted
+	for _, msg := range batchedMessages {
+		var messageType actions.JobMessageType
+		if err := json.Unmarshal(msg, &messageType); err != nil {
+			return nil, nil, fmt.Errorf("failed to decode job message type: %w", err)
+		}
+
+		switch messageType.MessageType {
+		case messageTypeJobAvailable:
+			var jobAvailable actions.JobAvailable
+			if err := json.Unmarshal(msg, &jobAvailable); err != nil {
+				return nil, nil, fmt.Errorf("failed to decode job available: %w", err)
+			}
+
+			h.logger.Info("Job available message received", "jobId", jobAvailable.RunnerRequestId)
+			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
+
+		case messageTypeJobAssigned:
+			var jobAssigned actions.JobAssigned
+			if err := json.Unmarshal(msg, &jobAssigned); err != nil {
+				return nil, nil, fmt.Errorf("failed to decode job assigned: %w", err)
+			}
+
+			h.logger.Info("Job assigned message received", "jobId", jobAssigned.RunnerRequestId)
+
+		case messageTypeJobStarted:
+			var jobStarted actions.JobStarted
+			if err := json.Unmarshal(msg, &jobStarted); err != nil {
+				return nil, nil, fmt.Errorf("could not decode job started message. %w", err)
+			}
+			h.logger.Info("Job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
+			startedJobs = append(startedJobs, &jobStarted)
+
+		case messageTypeJobCompleted:
+			var jobCompleted actions.JobCompleted
+			if err := json.Unmarshal(msg, &jobCompleted); err != nil {
+				return nil, nil, fmt.Errorf("failed to decode job completed: %w", err)
+			}
+
+			h.logger.Info("Job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
+
+		default:
+			h.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
+		}
+	}
+
+	h.logger.Info("Available jobs.", "count", len(availableJobs), "requestIds", fmt.Sprint(availableJobs))
+	if len(availableJobs) > 0 {
+		h.logger.Info("Acquiring jobs")
+
+		ids, err := h.client.AcquireJobs(ctx, h.scaleSetID, h.session.MessageQueueAccessToken, availableJobs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("acquire jobs failed from refreshing client. %w", err)
+		}
+
+		h.logger.Info("Jobs are acquired", "count", len(ids), "requestIds", fmt.Sprint(ids))
+	}
+
+	return msg.Statistics, startedJobs, nil
 }
