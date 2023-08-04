@@ -51,23 +51,23 @@ var (
 
 // metrics
 var (
-	availableJobs = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "available_jobs",
-			Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned to the runner scale set.",
-		},
-		scaleSetLabels,
-	)
-
-	acquiredJobs = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "acquired_jobs",
-			Help:      "Number of jobs acquired by the scale set.",
-		},
-		scaleSetLabels,
-	)
+	// availableJobs = prometheus.NewGaugeVec(
+	// 	prometheus.GaugeOpts{
+	// 		Subsystem: githubScaleSetSubsystem,
+	// 		Name:      "available_jobs",
+	// 		Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned to the runner scale set.",
+	// 	},
+	// 	scaleSetLabels,
+	// )
+	//
+	// acquiredJobs = prometheus.NewGaugeVec(
+	// 	prometheus.GaugeOpts{
+	// 		Subsystem: githubScaleSetSubsystem,
+	// 		Name:      "acquired_jobs",
+	// 		Help:      "Number of jobs acquired by the scale set.",
+	// 	},
+	// 	scaleSetLabels,
+	// )
 
 	assignedJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -159,15 +159,15 @@ var (
 		completedJobsTotalLabels,
 	)
 
-	jobQueueDurationSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Subsystem: githubScaleSetSubsystem,
-			Name:      "job_queue_duration_seconds",
-			Help:      "Time spent waiting for workflow jobs to get assigned to the scale set after queueing (in seconds).",
-			Buckets:   runtimeBuckets,
-		},
-		jobLabels,
-	)
+	// jobQueueDurationSeconds = prometheus.NewHistogramVec(
+	// 	prometheus.HistogramOpts{
+	// 		Subsystem: githubScaleSetSubsystem,
+	// 		Name:      "job_queue_duration_seconds",
+	// 		Help:      "Time spent waiting for workflow jobs to get assigned to the scale set after queueing (in seconds).",
+	// 		Buckets:   runtimeBuckets,
+	// 	},
+	// 	jobLabels,
+	// )
 
 	jobStartupDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -294,8 +294,8 @@ func (m *metricsExporter) withBaseLabels(base baseLabels) {
 func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	l := m.scaleSetLabels()
 
-	availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
-	acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
+	// availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
+	// acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
 	assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
 	runningJobs.With(l).Set(float64(stats.TotalRunningJobs))
 	registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
@@ -311,11 +311,11 @@ func (m *metricsExporter) publishJobStarted(msg *actions.JobStarted) {
 	jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
 }
 
-func (m *metricsExporter) publishJobAssigned(msg *actions.JobAssigned) {
-	l := m.jobLabels(&msg.JobMessageBase)
-	queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
-	jobQueueDurationSeconds.With(l).Observe(float64(queueDuration))
-}
+// func (m *metricsExporter) publishJobAssigned(msg *actions.JobAssigned) {
+// 	l := m.jobLabels(&msg.JobMessageBase)
+// 	queueDuration := msg.JobMessageBase.ScaleSetAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
+// 	jobQueueDurationSeconds.With(l).Observe(float64(queueDuration))
+// }
 
 func (m *metricsExporter) publishJobCompleted(msg *actions.JobCompleted) {
 	l := m.completedJobLabels(msg)

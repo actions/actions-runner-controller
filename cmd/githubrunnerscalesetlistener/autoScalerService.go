@@ -162,7 +162,7 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 				"RequestId",
 				jobAssigned.RunnerRequestId,
 			)
-			s.metricsExporter.publishJobAssigned(&jobAssigned)
+			// s.metricsExporter.publishJobAssigned(&jobAssigned)
 		case "JobStarted":
 			var jobStarted actions.JobStarted
 			if err := json.Unmarshal(message, &jobStarted); err != nil {

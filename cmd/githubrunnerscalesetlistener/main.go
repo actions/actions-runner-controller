@@ -137,8 +137,8 @@ func (s *metricsServer) shutdown() error {
 func (s *metricsServer) listenAndServe() error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
-		availableJobs,
-		acquiredJobs,
+		// availableJobs,
+		// acquiredJobs,
 		assignedJobs,
 		runningJobs,
 		registeredRunners,
@@ -149,7 +149,7 @@ func (s *metricsServer) listenAndServe() error {
 		idleRunners,
 		startedJobsTotal,
 		completedJobsTotal,
-		jobQueueDurationSeconds,
+		// jobQueueDurationSeconds,
 		jobStartupDurationSeconds,
 		jobExecutionDurationSeconds,
 	)
