@@ -21,6 +21,7 @@ type App struct {
 	logger logr.Logger
 
 	listener *listener.Listener
+	worker   *worker.Worker
 }
 
 func New(config config.Config) (*App, error) {
@@ -36,16 +37,24 @@ func New(config config.Config) (*App, error) {
 		return nil, err
 	}
 
-	worker, err := worker.NewKubernetesWorker(worker.WithLogger(app.logger))
+	worker, err := worker.NewKubernetesWorker(
+		worker.Config{
+			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
+			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
+			MaxRunners:                  config.MaxRunners,
+			MinRunners:                  config.MinRunners,
+		},
+		worker.WithLogger(app.logger),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new kubernetes worker: %w", err)
 	}
+	app.worker = worker
 
-	listener, err := listener.New(app.actionsClient, worker.Do, app.config.RunnerScaleSetId, listener.WithLogger(app.logger))
+	listener, err := listener.New(app.actionsClient, app.config.RunnerScaleSetId, listener.WithLogger(app.logger))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new listener: %w", err)
 	}
-
 	app.listener = listener
 
 	app.logger.Info("app initialized")
@@ -54,8 +63,11 @@ func New(config config.Config) (*App, error) {
 }
 
 func (app *App) Run(ctx context.Context) error {
+	if app.worker == nil || app.listener == nil {
+		panic("app not initialized")
+	}
 	app.logger.Info("Starting listener")
-	return app.listener.Listen(ctx)
+	return app.listener.Listen(ctx, app.worker.Do)
 }
 
 func (app *App) initLogger() error {

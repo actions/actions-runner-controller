@@ -35,9 +35,6 @@ type Listener struct {
 	scaleSetID int
 	client     *actions.Client
 
-	// worker callback
-	handle HandlerFunc
-
 	// internal fields
 	logger   *logr.Logger
 	hostname string
@@ -47,10 +44,9 @@ type Listener struct {
 	session       *actions.RunnerScaleSetSession
 }
 
-func New(client *actions.Client, handle HandlerFunc, scaleSetID int, options ...Option) (*Listener, error) {
+func New(client *actions.Client, scaleSetID int, options ...Option) (*Listener, error) {
 	listener := &Listener{
 		scaleSetID: scaleSetID,
-		handle:     handle,
 		client:     client,
 	}
 
@@ -84,7 +80,7 @@ func (h *Listener) applyDefaults() error {
 	return nil
 }
 
-func (h *Listener) Listen(ctx context.Context) error {
+func (h *Listener) Listen(ctx context.Context, handle HandlerFunc) error {
 	if err := h.createSession(ctx); err != nil {
 		return fmt.Errorf("createSession failed: %w", err)
 	}
@@ -110,7 +106,7 @@ func (h *Listener) Listen(ctx context.Context) error {
 		initialMessage.Body = string(acquirableJobsJson)
 	}
 
-	if err := h.handle(ctx, initialMessage); err != nil {
+	if err := handle(ctx, initialMessage); err != nil {
 		return fmt.Errorf("handling initial message failed: %w", err)
 	}
 
@@ -120,7 +116,7 @@ func (h *Listener) Listen(ctx context.Context) error {
 			return fmt.Errorf("getMessage failed: %w", err)
 		}
 
-		if err := h.handle(ctx, msg); err != nil {
+		if err := handle(ctx, msg); err != nil {
 			return fmt.Errorf("handling message failed: %w", err)
 		}
 
@@ -130,8 +126,6 @@ func (h *Listener) Listen(ctx context.Context) error {
 			return fmt.Errorf("failed to delete message: %w", err)
 		}
 	}
-
-	return nil
 }
 
 func (h *Listener) createSession(ctx context.Context) error {
