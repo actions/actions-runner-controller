@@ -112,6 +112,13 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	labels["workflow_name"] = wn
 	labels["head_branch"] = hb
 
+	var rn string
+	if n := e.WorkflowJob.RunnerName; n != nil {
+		rn = *n
+		keysAndValues = append(keysAndValues, "runner_name", *n)
+	}
+	labels["runner_name"] = rn
+
 	log := reader.Log.WithValues(keysAndValues...)
 
 	// switch on job status
