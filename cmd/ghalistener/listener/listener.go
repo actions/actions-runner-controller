@@ -30,9 +30,9 @@ const (
 type Option func(*Listener)
 
 func WithLogger(logger logr.Logger) Option {
-	return func(h *Listener) {
+	return func(l *Listener) {
 		logger = logger.WithName("actionhandler")
-		h.logger = &logger
+		l.logger = &logger
 	}
 }
 
@@ -67,20 +67,20 @@ func New(client *actions.Client, scaleSetID int, options ...Option) (*Listener, 
 	return listener, nil
 }
 
-func (h *Listener) applyDefaults() error {
+func (l *Listener) applyDefaults() error {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = uuid.NewString()
-		h.logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
+		l.logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
 	}
-	h.hostname = hostname
+	l.hostname = hostname
 
-	if h.logger == nil {
+	if l.logger == nil {
 		logger, err := logging.NewLogger(logging.LogLevelDebug, logging.LogFormatJSON)
 		if err != nil {
 			return fmt.Errorf("NewLogger failed: %w", err)
 		}
-		h.logger = &logger
+		l.logger = &logger
 	}
 
 	return nil
@@ -91,20 +91,20 @@ type Handler interface {
 	HandleDesiredRunnerCount(ctx context.Context, desiredRunnerCount int) error
 }
 
-func (h *Listener) Listen(ctx context.Context, handler Handler) error {
-	if err := h.createSession(ctx); err != nil {
+func (l *Listener) Listen(ctx context.Context, handler Handler) error {
+	if err := l.createSession(ctx); err != nil {
 		return fmt.Errorf("createSession failed: %w", err)
 	}
 
 	initialMessage := &actions.RunnerScaleSetMessage{
 		MessageId:   0,
 		MessageType: "RunnerScaleSetJobMessages",
-		Statistics:  h.session.Statistics,
+		Statistics:  l.session.Statistics,
 		Body:        "",
 	}
 
-	if h.session.Statistics.TotalAvailableJobs > 0 || h.session.Statistics.TotalAssignedJobs > 0 {
-		acquirableJobs, err := h.client.GetAcquirableJobs(ctx, h.scaleSetID)
+	if l.session.Statistics.TotalAvailableJobs > 0 || l.session.Statistics.TotalAssignedJobs > 0 {
+		acquirableJobs, err := l.client.GetAcquirableJobs(ctx, l.scaleSetID)
 		if err != nil {
 			return fmt.Errorf("failed to call GetAcquirableJobs: %w", err)
 		}
@@ -122,19 +122,19 @@ func (h *Listener) Listen(ctx context.Context, handler Handler) error {
 	}
 
 	for {
-		msg, err := h.getMessage(ctx)
+		msg, err := l.getMessage(ctx)
 		if err != nil {
 			return fmt.Errorf("getMessage failed: %w", err)
 		}
 
-		statistics, jobsStarted, err := h.parseMessage(ctx, msg)
+		statistics, jobsStarted, err := l.parseMessage(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("failed to parse message: %w", err)
 		}
 
-		h.lastMessageID = msg.MessageId
+		l.lastMessageID = msg.MessageId
 
-		if err := h.deleteLastMessage(ctx); err != nil {
+		if err := l.deleteLastMessage(ctx); err != nil {
 			return fmt.Errorf("failed to delete message: %w", err)
 		}
 
@@ -150,13 +150,13 @@ func (h *Listener) Listen(ctx context.Context, handler Handler) error {
 	}
 }
 
-func (h *Listener) createSession(ctx context.Context) error {
+func (l *Listener) createSession(ctx context.Context) error {
 	var session *actions.RunnerScaleSetSession
 	var retries int
 
 	for {
 		var err error
-		session, err = h.client.CreateMessageSession(ctx, h.scaleSetID, h.hostname)
+		session, err = l.client.CreateMessageSession(ctx, l.scaleSetID, l.hostname)
 		if err == nil {
 			break
 		}
@@ -175,7 +175,7 @@ func (h *Listener) createSession(ctx context.Context) error {
 			return fmt.Errorf("failed to create session after %d retries: %w", retries, err)
 		}
 
-		h.logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
+		l.logger.Info("Unable to create message session. Will try again in 30 seconds", "error", err.Error())
 
 		select {
 		case <-ctx.Done():
@@ -188,60 +188,59 @@ func (h *Listener) createSession(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal statistics: %w", err)
 	}
-	h.logger.Info("Current runner scale set statistics.", "statistics", string(statistics))
+	l.logger.Info("Current runner scale set statistics.", "statistics", string(statistics))
 
-	h.session = session
+	l.session = session
+
 	return nil
 }
 
-func (h *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessage, error) {
-	h.logger.Info("Getting next message", "lastMessageID", h.lastMessageID)
-	msg, err := h.client.GetMessage(ctx, h.session.MessageQueueUrl, h.session.MessageQueueAccessToken, h.lastMessageID)
+func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessage, error) {
+	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
+	msg, err := l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
 	if err == nil { // if NO error
 		return msg, nil
 	}
 
 	expiredError := &actions.MessageQueueTokenExpiredError{}
 	if !errors.As(err, &expiredError) {
-		return nil, fmt.Errorf("get message failed. %w", err)
+		return nil, fmt.Errorf("failed to get next message: %w", err)
 	}
 
-	h.logger.Info("Message queue token is expired during GetNextMessage, refreshing...")
-	session, err := h.client.RefreshMessageSession(ctx, h.session.RunnerScaleSet.Id, h.session.SessionId)
-	if err != nil {
-		return nil, fmt.Errorf("refresh message session failed. %w", err)
+	if err := l.refreshSession(ctx); err != nil {
+		return nil, err
 	}
 
-	h.session = session
+	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
 
-	h.logger.Info("Getting next message", "lastMessageID", h.lastMessageID)
-	msg, err = h.client.GetMessage(ctx, h.session.MessageQueueUrl, h.session.MessageQueueAccessToken, h.lastMessageID)
-	if err == nil { // if NO error
-		return msg, nil
+	msg, err = l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	if err != nil { // if NO error
+		return nil, fmt.Errorf("failed to get next message after message session refresh: %w", err)
 	}
 
-	return nil, fmt.Errorf("failed to get next message after message session refresh: %w", err)
+	return msg, nil
+
 }
 
-func (h *Listener) deleteLastMessage(ctx context.Context) error {
-	h.logger.Info("Deleting last message", "lastMessageID", h.lastMessageID)
-	if err := h.client.DeleteMessage(ctx, h.session.MessageQueueUrl, h.session.MessageQueueAccessToken, h.lastMessageID); err != nil {
+func (l *Listener) deleteLastMessage(ctx context.Context) error {
+	l.logger.Info("Deleting last message", "lastMessageID", l.lastMessageID)
+	if err := l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID); err != nil {
 		return fmt.Errorf("failed to delete message: %w", err)
 	}
 
 	return nil
 }
 
-func (h *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSetMessage) (*actions.RunnerScaleSetStatistic, []*actions.JobStarted, error) {
-	h.logger.Info("Processing message", "messageId", msg.MessageId, "messageType", msg.MessageType)
+func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSetMessage) (*actions.RunnerScaleSetStatistic, []*actions.JobStarted, error) {
+	l.logger.Info("Processing message", "messageId", msg.MessageId, "messageType", msg.MessageType)
 	if msg.Statistics == nil {
 		return nil, nil, fmt.Errorf("invalid message: statistics is nil")
 	}
 
-	h.logger.Info("New runner scale set statistics.", "statistics", msg.Statistics)
+	l.logger.Info("New runner scale set statistics.", "statistics", msg.Statistics)
 
 	if msg.MessageType != "RunnerScaleSetJobMessages" {
-		h.logger.Info("Skipping message", "messageType", msg.MessageType)
+		l.logger.Info("Skipping message", "messageType", msg.MessageType)
 		return nil, nil, fmt.Errorf("invalid message type: %s", msg.MessageType)
 	}
 
@@ -267,7 +266,7 @@ func (h *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, nil, fmt.Errorf("failed to decode job available: %w", err)
 			}
 
-			h.logger.Info("Job available message received", "jobId", jobAvailable.RunnerRequestId)
+			l.logger.Info("Job available message received", "jobId", jobAvailable.RunnerRequestId)
 			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
 
 		case messageTypeJobAssigned:
@@ -276,14 +275,14 @@ func (h *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, nil, fmt.Errorf("failed to decode job assigned: %w", err)
 			}
 
-			h.logger.Info("Job assigned message received", "jobId", jobAssigned.RunnerRequestId)
+			l.logger.Info("Job assigned message received", "jobId", jobAssigned.RunnerRequestId)
 
 		case messageTypeJobStarted:
 			var jobStarted actions.JobStarted
 			if err := json.Unmarshal(msg, &jobStarted); err != nil {
 				return nil, nil, fmt.Errorf("could not decode job started message. %w", err)
 			}
-			h.logger.Info("Job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
+			l.logger.Info("Job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
 			startedJobs = append(startedJobs, &jobStarted)
 
 		case messageTypeJobCompleted:
@@ -292,24 +291,58 @@ func (h *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, nil, fmt.Errorf("failed to decode job completed: %w", err)
 			}
 
-			h.logger.Info("Job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
+			l.logger.Info("Job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
 
 		default:
-			h.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
+			l.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
 		}
 	}
 
-	h.logger.Info("Available jobs.", "count", len(availableJobs), "requestIds", fmt.Sprint(availableJobs))
+	l.logger.Info("Available jobs.", "count", len(availableJobs), "requestIds", fmt.Sprint(availableJobs))
 	if len(availableJobs) > 0 {
-		h.logger.Info("Acquiring jobs")
-
-		ids, err := h.client.AcquireJobs(ctx, h.scaleSetID, h.session.MessageQueueAccessToken, availableJobs)
+		acquired, err := l.acquireAvailableJobs(ctx, availableJobs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("acquire jobs failed from refreshing client. %w", err)
+			return nil, nil, err
 		}
 
-		h.logger.Info("Jobs are acquired", "count", len(ids), "requestIds", fmt.Sprint(ids))
+		l.logger.Info("Jobs are acquired", "count", len(acquired), "requestIds", fmt.Sprint(acquired))
 	}
 
 	return msg.Statistics, startedJobs, nil
+}
+
+func (l *Listener) acquireAvailableJobs(ctx context.Context, availableJobs []int64) ([]int64, error) {
+	l.logger.Info("Acquiring jobs")
+
+	ids, err := l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, availableJobs)
+	if err == nil { // if NO errors
+		return ids, nil
+	}
+
+	expiredError := &actions.MessageQueueTokenExpiredError{}
+	if !errors.As(err, &expiredError) {
+		return nil, fmt.Errorf("failed to acquire jobs: %w", err)
+	}
+
+	if err := l.refreshSession(ctx); err != nil {
+		return nil, err
+	}
+
+	ids, err = l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, availableJobs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire jobs after session refresh: %w", err)
+	}
+
+	return ids, nil
+}
+
+func (l *Listener) refreshSession(ctx context.Context) error {
+	l.logger.Info("Message queue token is expired during GetNextMessage, refreshing...")
+	session, err := l.client.RefreshMessageSession(ctx, l.session.RunnerScaleSet.Id, l.session.SessionId)
+	if err != nil {
+		return fmt.Errorf("refresh message session failed. %w", err)
+	}
+
+	l.session = session
+	return nil
 }
