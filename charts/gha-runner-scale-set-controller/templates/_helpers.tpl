@@ -39,7 +39,7 @@ helm.sh/chart: {{ include "gha-runner-scale-set-controller.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
-app.kubernetes.io/part-of: gha-runner-scale-set-controller
+app.kubernetes.io/part-of: gha-rs-controller
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- range $k, $v := .Values.labels }}
 {{ $k }}: {{ $v }}
@@ -73,43 +73,43 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerClusterRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerClusterRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerSingleNamespaceRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerSingleNamespaceWatchRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-watch-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace-watch
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerSingleNamespaceWatchRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-watch-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace-watch
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerListenerRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-listener
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerListenerRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-listener
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.imagePullSecretsNames" -}}
