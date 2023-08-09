@@ -114,7 +114,14 @@ func createSession(ctx context.Context, logger *logr.Logger, client actions.Acti
 		return runnerScaleSetSession, initialMessage, nil
 	}
 
-	return runnerScaleSetSession, nil, nil
+	initialMessage := &actions.RunnerScaleSetMessage{
+		MessageId:   0,
+		MessageType: "RunnerScaleSetJobMessages",
+		Statistics:  runnerScaleSetSession.Statistics,
+		Body:        "",
+	}
+
+	return runnerScaleSetSession, initialMessage, nil
 }
 
 func (m *AutoScalerClient) Close() error {
