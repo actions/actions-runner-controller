@@ -61,8 +61,9 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 		want         int
 		err          string
 	}{
+		// case_0
 		// Legacy functionality
-		// 3 demanded, max at 3
+		// 0 demanded due to zero runID, min at 2
 		{
 			repo:                     "test/valid",
 			min:                      intPtr(2),
@@ -70,9 +71,10 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
 			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
-			want:                     3,
+			want:                     2,
 		},
-		// Explicitly speified the default `self-hosted` label which is ignored by the simulator,
+		// case_1
+		// Explicitly specified the default `self-hosted` label which is ignored by the simulator,
 		// as we assume that GitHub Actions automatically associates the `self-hosted` label to every self-hosted runner.
 		// 3 demanded, max at 3
 		{
@@ -80,11 +82,17 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			labels:                   []string{"self-hosted"},
 			min:                      intPtr(2),
 			max:                      intPtr(3),
-			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
-			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
-			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
-			want:                     3,
+			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"id": 1, "status":"queued"}, {"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"id": 2, "status":"in_progress"}, {"id": 3, "status":"in_progress"}]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status": "queued", "labels":["self-hosted"]}]}`,
+				2: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}]}`,
+				3: `{"jobs": [{"status": "in_progress", "labels":["self-hosted"]}]}`,
+			},
+			want: 3,
 		},
+		// case_2
 		// 2 demanded, max at 3, currently 3, delay scaling down due to grace period
 		{
 			repo:                     "test/valid",
@@ -97,6 +105,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     3,
 		},
+		// case_3
 		// 3 demanded, max at 2
 		{
 			repo:                     "test/valid",
@@ -107,6 +116,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
 			want:                     2,
 		},
+		// case_4
 		// 2 demanded, min at 2
 		{
 			repo:                     "test/valid",
@@ -117,6 +127,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     2,
 		},
+		// case_5
 		// 1 demanded, min at 2
 		{
 			repo:                     "test/valid",
@@ -127,6 +138,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
 			want:                     2,
 		},
+		// case_6
 		// 1 demanded, min at 2
 		{
 			repo:                     "test/valid",
@@ -137,6 +149,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     2,
 		},
+		// case_7
 		// 1 demanded, min at 1
 		{
 			repo:                     "test/valid",
@@ -147,6 +160,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
 			want:                     1,
 		},
+		// case_8
 		// 1 demanded, min at 1
 		{
 			repo:                     "test/valid",
@@ -157,6 +171,7 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     1,
 		},
+		// case_9
 		// fixed at 3
 		{
 			repo:                     "test/valid",
@@ -166,9 +181,36 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
 			workflowRuns_in_progress: `{"total_count": 3, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}]}"`,
-			want:                     3,
+			want:                     1,
 		},
-
+		// Case for empty GitHub Actions reponse - should not trigger scale up
+		{
+			description:              "GitHub Actions Jobs Array is empty - no scale up",
+			repo:                     "test/valid",
+			min:                      intPtr(0),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"status":"queued"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": []}`,
+			},
+			want: 0,
+		},
+		// Case for hosted GitHub Actions run
+		{
+			description:              "Hosted GitHub Actions run - no scale up",
+			repo:                     "test/valid",
+			min:                      intPtr(0),
+			max:                      intPtr(3),
+			workflowRuns:             `{"total_count": 2, "workflow_runs":[{"id": 1, "status":"queued"}, {"status":"completed"}]}"`,
+			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"id": 1, "status":"queued"}]}"`,
+			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
+			workflowJobs: map[int]string{
+				1: `{"jobs": [{"status":"queued"}]}`,
+			},
+			want: 0,
+		},
 		{
 			description:              "Job-level autoscaling with no explicit runner label (runners have implicit self-hosted, requested self-hosted, 5 jobs from 3 workflows)",
 			repo:                     "test/valid",
@@ -422,7 +464,8 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 		want         int
 		err          string
 	}{
-		// 3 demanded, max at 3
+		// case_0
+		// 0 demanded due to zero runID, min at 2
 		{
 			org:                      "test",
 			repos:                    []string{"valid"},
@@ -431,8 +474,9 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"queued"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			workflowRuns_queued:      `{"total_count": 1, "workflow_runs":[{"status":"queued"}]}"`,
 			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
-			want:                     3,
+			want:                     2,
 		},
+		// case_1
 		// 2 demanded, max at 3, currently 3, delay scaling down due to grace period
 		{
 			org:                      "test",
@@ -446,6 +490,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     3,
 		},
+		// case_2
 		// 3 demanded, max at 2
 		{
 			org:                      "test",
@@ -457,6 +502,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 2, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}]}"`,
 			want:                     2,
 		},
+		// case_3
 		// 2 demanded, min at 2
 		{
 			org:                      "test",
@@ -468,6 +514,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     2,
 		},
+		// case_4
 		// 1 demanded, min at 2
 		{
 			org:                      "test",
@@ -479,6 +526,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 0, "workflow_runs":[]}"`,
 			want:                     2,
 		},
+		// case_5
 		// 1 demanded, min at 2
 		{
 			org:                      "test",
@@ -512,6 +560,7 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns_in_progress: `{"total_count": 1, "workflow_runs":[{"status":"in_progress"}]}"`,
 			want:                     1,
 		},
+		// case_6
 		// fixed at 3
 		{
 			org:                      "test",
@@ -522,8 +571,9 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
 			workflowRuns_in_progress: `{"total_count": 3, "workflow_runs":[{"status":"in_progress"},{"status":"in_progress"},{"status":"in_progress"}]}"`,
-			want:                     3,
+			want:                     1,
 		},
+		// case_7
 		// org runner, fixed at 3
 		{
 			org:                      "test",
@@ -534,8 +584,9 @@ func TestDetermineDesiredReplicas_OrganizationalRunner(t *testing.T) {
 			workflowRuns:             `{"total_count": 4, "workflow_runs":[{"status":"in_progress"}, {"status":"in_progress"}, {"status":"in_progress"}, {"status":"completed"}]}"`,
 			workflowRuns_queued:      `{"total_count": 0, "workflow_runs":[]}"`,
 			workflowRuns_in_progress: `{"total_count": 3, "workflow_runs":[{"status":"in_progress"},{"status":"in_progress"},{"status":"in_progress"}]}"`,
-			want:                     3,
+			want:                     1,
 		},
+		// case_8
 		// org runner, 1 demanded, min at 1, no repos
 		{
 			org:                      "test",

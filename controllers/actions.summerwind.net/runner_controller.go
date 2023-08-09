@@ -607,10 +607,13 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			if runnerSpec.ContainerMode == "kubernetes" {
 				return pod, errors.New("volume mount \"work\" should be specified by workVolumeClaimTemplate in container mode kubernetes")
 			}
-			// remove work volume since it will be provided from runnerSpec.Volumes
-			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
-			_, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
-			pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts[:index], pod.Spec.Containers[0].VolumeMounts[index+1:]...)
+
+			podSpecIsPresent, index := workVolumeMountPresent(pod.Spec.Containers[0].VolumeMounts)
+			if podSpecIsPresent {
+				// remove work volume since it will be provided from runnerSpec.Volumes
+				// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
+				pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts[:index], pod.Spec.Containers[0].VolumeMounts[index+1:]...)
+			}
 		}
 
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, runnerSpec.VolumeMounts...)
@@ -623,11 +626,13 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 			if runnerSpec.ContainerMode == "kubernetes" {
 				return pod, errors.New("volume \"work\" should be specified by workVolumeClaimTemplate in container mode kubernetes")
 			}
-			_, index := workVolumePresent(pod.Spec.Volumes)
 
-			// remove work volume since it will be provided from runnerSpec.Volumes
-			// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
-			pod.Spec.Volumes = append(pod.Spec.Volumes[:index], pod.Spec.Volumes[index+1:]...)
+			podSpecIsPresent, index := workVolumePresent(pod.Spec.Volumes)
+			if podSpecIsPresent {
+				// remove work volume since it will be provided from runnerSpec.Volumes
+				// if we don't remove it here we would get a duplicate key error, i.e. two volumes named work
+				pod.Spec.Volumes = append(pod.Spec.Volumes[:index], pod.Spec.Volumes[index+1:]...)
+			}
 		}
 
 		pod.Spec.Volumes = append(pod.Spec.Volumes, runnerSpec.Volumes...)
