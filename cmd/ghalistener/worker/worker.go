@@ -28,10 +28,10 @@ func WithLogger(logger logr.Logger) Option {
 }
 
 type Config struct {
-	EphemeralRunnerSetNamespace string `split_words:"true"`
-	EphemeralRunnerSetName      string `split_words:"true"`
-	MaxRunners                  int    `split_words:"true"`
-	MinRunners                  int    `split_words:"true"`
+	EphemeralRunnerSetNamespace string
+	EphemeralRunnerSetName      string
+	MaxRunners                  int
+	MinRunners                  int
 }
 
 type Worker struct {
