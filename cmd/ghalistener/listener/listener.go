@@ -127,6 +127,10 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 			return fmt.Errorf("getMessage failed: %w", err)
 		}
 
+		if msg == nil {
+			continue
+		}
+
 		statistics, jobsStarted, err := l.parseMessage(ctx, msg)
 		if err != nil {
 			return fmt.Errorf("failed to parse message: %w", err)
