@@ -23,7 +23,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        app.kubernetes.io/part-of: gha-runner-scale-set-controller
+        app.kubernetes.io/part-of: gha-rs-controller
         app.kubernetes.io/component: controller-manager
         app.kubernetes.io/version: {{ .Chart.Version }}
         {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}

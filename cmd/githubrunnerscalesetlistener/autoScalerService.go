@@ -65,7 +65,7 @@ func NewService(
 		rsClient:           rsClient,
 		kubeManager:        manager,
 		settings:           settings,
-		currentRunnerCount: 0,
+		currentRunnerCount: -1, // force patch on startup
 		logger:             logr.FromContextOrDiscard(ctx),
 	}
 
@@ -81,14 +81,6 @@ func NewService(
 }
 
 func (s *Service) Start() error {
-	if s.settings.MinRunners > 0 {
-		s.logger.Info("scale to match minimal runners.")
-		err := s.scaleForAssignedJobCount(0)
-		if err != nil {
-			return fmt.Errorf("could not scale to match minimal runners. %w", err)
-		}
-	}
-
 	for {
 		s.logger.Info("waiting for message...")
 		select {
@@ -124,6 +116,10 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 	if message.MessageType != "RunnerScaleSetJobMessages" {
 		s.logger.Info("skip message with unknown message type.", "messageType", message.MessageType)
 		return nil
+	}
+
+	if message.MessageId == 0 && message.Body == "" { // initial message with statistics only
+		return s.scaleForAssignedJobCount(message.Statistics.TotalAssignedJobs)
 	}
 
 	var batchedMessages []json.RawMessage
