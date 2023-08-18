@@ -103,12 +103,11 @@ flags:
   ##   that you don't have any overprovisioning of runners.
   updateStrategy: "immediate"
 
-# # If metrics object is not provided, following flags won't be applied:
-# # --metrics-addr, --listener-metrics-addr, --listener-metrics-endpoint
-# # Keep in mind, metrics are exposed by default (flags have default values)
-# # specifying the default port and default endpoint.
-# #
-# # To turn off metrics, specify empty strings for controllerAddr and listenerAddr
+## If metrics object is not provided, the following flags won't be applied to both
+## the controller-manager and listener pods:
+## --metrics-addr, --listener-metrics-addr, --listener-metrics-endpoint
+##
+## To enable metrics, uncomment the following lines.
 # metrics:
 #   controllerManagerAddr: ":8080"
 #   listenerAddr: ":8080"
