@@ -109,7 +109,10 @@ service:
 # Metrics service resource
 metrics:
   serviceAnnotations: {}
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
   port: 8443
   proxy:
@@ -188,6 +191,10 @@ admissionWebHooks:
 # There may be alternatives to setting `hostNetwork: true`, see
 # https://github.com/actions/actions-runner-controller/issues/1005#issuecomment-993097155
 #hostNetwork: true
+
+# If you use `hostNetwork: true`, then you need dnsPolicy: ClusterFirstWithHostNet
+# https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-dns-policy
+#dnsPolicy: ClusterFirst
 
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
 logFormat: text
@@ -304,7 +311,10 @@ actionsMetrics:
   # as a part of the helm release.
   # Do note that you also need actionsMetricsServer.enabled=true
   # to deploy the actions-metrics-server whose k8s service is referenced by the service monitor.
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
   port: 8443
   proxy:

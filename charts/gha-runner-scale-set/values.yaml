@@ -68,6 +68,12 @@ githubConfigSecret:
 #       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
+## Container mode is is an object that provides out-of-box configuration
+## for dind and kubernetes mode. Template will be modified as documented under the
+## template object.
+##
+## If any customization is required for dind or kubernetes mode, containerMode should remain
+## empty, and configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to dind or kubernetes
 #   ## the following is required when containerMode.type=kubernetes
