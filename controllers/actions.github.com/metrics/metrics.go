@@ -5,7 +5,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-var githubScaleSetControllerSubsystem = "github_runner_scale_set_controller"
+var githubScaleSetControllerSubsystem = "gha_controller"
 
 var labels = []string{
 	"name",
@@ -13,7 +13,6 @@ var labels = []string{
 	"repository",
 	"organization",
 	"enterprise",
-	"configUrl",
 }
 
 type CommonLabels struct {
@@ -22,7 +21,6 @@ type CommonLabels struct {
 	Repository   string
 	Organization string
 	Enterprise   string
-	ConfigURL    string
 }
 
 func (l *CommonLabels) labels() prometheus.Labels {
@@ -32,7 +30,6 @@ func (l *CommonLabels) labels() prometheus.Labels {
 		"repository":   l.Repository,
 		"organization": l.Organization,
 		"enterprise":   l.Enterprise,
-		"configUrl":    l.ConfigURL,
 	}
 }
 
@@ -61,6 +58,14 @@ var (
 		},
 		labels,
 	)
+	runningListeners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetControllerSubsystem,
+			Name:      "running_listeners",
+			Help:      "Number of listeners in a running state.",
+		},
+		labels,
+	)
 )
 
 func RegisterMetrics() {
@@ -68,6 +73,7 @@ func RegisterMetrics() {
 		pendingEphemeralRunners,
 		runningEphemeralRunners,
 		failedEphemeralRunners,
+		runningListeners,
 	)
 }
 
@@ -75,4 +81,12 @@ func SetEphemeralRunnerCountsByStatus(commonLabels CommonLabels, pending, runnin
 	pendingEphemeralRunners.With(commonLabels.labels()).Set(float64(pending))
 	runningEphemeralRunners.With(commonLabels.labels()).Set(float64(running))
 	failedEphemeralRunners.With(commonLabels.labels()).Set(float64(failed))
+}
+
+func AddRunningListener(commonLabels CommonLabels) {
+	runningListeners.With(commonLabels.labels()).Set(1)
+}
+
+func SubRunningListener(commonLabels CommonLabels) {
+	runningListeners.With(commonLabels.labels()).Set(0)
 }
