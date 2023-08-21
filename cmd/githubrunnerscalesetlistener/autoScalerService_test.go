@@ -96,6 +96,7 @@ func TestStart_ScaleToMinRunners(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
 
 	mockRsClient.On("GetRunnerScaleSetMessage", ctx, mock.Anything).Run(func(args mock.Arguments) {
 		_ = service.scaleForAssignedJobCount(5)
@@ -104,8 +105,8 @@ func TestStart_ScaleToMinRunners(t *testing.T) {
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
 	err = service.Start()
-
 	assert.NoError(t, err, "Unexpected error")
+
 	assert.True(t, mockRsClient.AssertExpectations(t), "All expectations should be met")
 	assert.True(t, mockKubeManager.AssertExpectations(t), "All expectations should be met")
 }
@@ -133,6 +134,7 @@ func TestStart_ScaleToMinRunnersFailed(t *testing.T) {
 			s.logger = logger
 		},
 	)
+	require.NoError(t, err)
 
 	c := mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(fmt.Errorf("error")).Once()
 	mockRsClient.On("GetRunnerScaleSetMessage", ctx, mock.Anything).Run(func(args mock.Arguments) {
