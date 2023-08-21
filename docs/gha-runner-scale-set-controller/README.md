@@ -63,6 +63,7 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 1. chore(deps): bump github.com/stretchr/testify from 1.8.2 to 1.8.4 [#2716](https://github.com/actions/actions-runner-controller/pull/2716)
 1. Move gha-* docs out of preview [#2779](https://github.com/actions/actions-runner-controller/pull/2779)
 1. Prepare 0.5.0 release [#2783](https://github.com/actions/actions-runner-controller/pull/2783)
+1. Security fix [#2676](https://github.com/actions/actions-runner-controller/pull/2676)
 
 ### v0.4.0
 
