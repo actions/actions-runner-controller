@@ -68,7 +68,8 @@ func TestLabelPropagation(t *testing.T) {
 			Name: "test",
 		},
 	}
-	listenerPod := b.newScaleSetListenerPod(listener, listenerServiceAccount, listenerSecret)
+	listenerPod, err := b.newScaleSetListenerPod(listener, listenerServiceAccount, listenerSecret, nil)
+	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
 
 	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)

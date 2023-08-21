@@ -1,5 +1,5 @@
 apiVersion: v2
-name: gha-runner-scale-set
+name: gha-rs
 description: A Helm chart for deploying an AutoScalingRunnerSet
 
 # A chart can be either an 'application' or a 'library' chart.

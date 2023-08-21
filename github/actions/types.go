@@ -55,14 +55,18 @@ type JobMessageType struct {
 
 type JobMessageBase struct {
 	JobMessageType
-	RunnerRequestId int64    `json:"runnerRequestId"`
-	RepositoryName  string   `json:"repositoryName"`
-	OwnerName       string   `json:"ownerName"`
-	JobWorkflowRef  string   `json:"jobWorkflowRef"`
-	JobDisplayName  string   `json:"jobDisplayName"`
-	WorkflowRunId   int64    `json:"workflowRunId"`
-	EventName       string   `json:"eventName"`
-	RequestLabels   []string `json:"requestLabels"`
+	RunnerRequestId    int64     `json:"runnerRequestId"`
+	RepositoryName     string    `json:"repositoryName"`
+	OwnerName          string    `json:"ownerName"`
+	JobWorkflowRef     string    `json:"jobWorkflowRef"`
+	JobDisplayName     string    `json:"jobDisplayName"`
+	WorkflowRunId      int64     `json:"workflowRunId"`
+	EventName          string    `json:"eventName"`
+	RequestLabels      []string  `json:"requestLabels"`
+	QueueTime          time.Time `json:"queueTime"`
+	ScaleSetAssignTime time.Time `json:"scaleSetAssignTime"`
+	RunnerAssignTime   time.Time `json:"runnerAssignTime"`
+	FinishTime         time.Time `json:"finishTime"`
 }
 
 type Label struct {
