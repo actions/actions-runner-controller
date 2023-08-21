@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
+	"github.com/actions/actions-runner-controller/github/actions"
 	hash "github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -49,6 +51,10 @@ type AutoscalingListenerReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	// ListenerMetricsAddr is address that the metrics endpoint binds to.
+	// If it is set to "0", the metrics server is not started.
+	ListenerMetricsAddr     string
+	ListenerMetricsEndpoint string
 
 	resourceBuilder resourceBuilder
 }
@@ -227,6 +233,11 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
+		if err := r.publishRunningListener(autoscalingListener, false); err != nil {
+			// If publish fails, URL is incorrect which means the listener pod would never be able to start
+			return ctrl.Result{}, nil
+		}
+
 		// Create a listener pod in the controller namespace
 		log.Info("Creating a listener pod")
 		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, mirrorSecret, log)
@@ -239,6 +250,16 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		if err := r.Delete(ctx, listenerPod); err != nil && !kerrors.IsNotFound(err) {
 			log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 			return ctrl.Result{}, err
+		}
+	}
+
+	if listenerPod.Status.Phase == corev1.PodRunning {
+		if err := r.publishRunningListener(autoscalingListener, true); err != nil {
+			log.Error(err, "Unable to publish running listener", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+			// stop reconciling. We should never get to this point but if we do,
+			// listener won't be able to start up, and the crash from the pod should
+			// notify the reconciler again.
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -260,6 +281,9 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		return false, nil
 	case err != nil && !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener pods: %v", err)
+
+	default: // NOT FOUND
+		_ = r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
 	}
 	logger.Info("Listener pod is deleted")
 
@@ -371,9 +395,22 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		envs = append(envs, env)
 	}
 
-	newPod := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, envs...)
+	var metricsConfig *listenerMetricsServerConfig
+	if r.ListenerMetricsAddr != "0" {
+		metricsConfig = &listenerMetricsServerConfig{
+			addr:     r.ListenerMetricsAddr,
+			endpoint: r.ListenerMetricsEndpoint,
+		}
+	}
+
+	newPod, err := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, metricsConfig, envs...)
+	if err != nil {
+		logger.Error(err, "Failed to build listener pod")
+		return ctrl.Result{}, err
+	}
 
 	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
+		logger.Error(err, "Failed to set controller reference")
 		return ctrl.Result{}, err
 	}
 
@@ -554,6 +591,30 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 		"serviceAccountNamespace", serviceAccount.Namespace,
 		"serviceAccount", serviceAccount.Name)
 	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListener *v1alpha1.AutoscalingListener, isUp bool) error {
+	githubConfigURL := autoscalingListener.Spec.GitHubConfigUrl
+	parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
+	if err != nil {
+		return err
+	}
+
+	commonLabels := metrics.CommonLabels{
+		Name:         autoscalingListener.Name,
+		Namespace:    autoscalingListener.Namespace,
+		Repository:   parsedURL.Repository,
+		Organization: parsedURL.Organization,
+		Enterprise:   parsedURL.Enterprise,
+	}
+
+	if isUp {
+		metrics.AddRunningListener(commonLabels)
+	} else {
+		metrics.SubRunningListener(commonLabels)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

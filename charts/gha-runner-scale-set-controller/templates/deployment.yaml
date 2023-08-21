@@ -23,7 +23,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        app.kubernetes.io/part-of: gha-runner-scale-set-controller
+        app.kubernetes.io/part-of: gha-rs-controller
         app.kubernetes.io/component: controller-manager
         app.kubernetes.io/version: {{ .Chart.Version }}
         {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}
@@ -65,8 +65,25 @@ spec:
         {{- with .Values.flags.updateStrategy }}
         - "--update-strategy={{ . }}"
         {{- end }}
+        {{- if .Values.metrics }}
+        {{- with .Values.metrics }}
+        - "--listener-metrics-addr={{ .listenerAddr }}"
+        - "--listener-metrics-endpoint={{ .listenerEndpoint }}"
+        - "--metrics-addr={{ .controllerManagerAddr }}"
+        {{- end }}
+        {{- else }}
+        - "--listener-metrics-addr=0"
+        - "--listener-metrics-endpoint="
+        - "--metrics-addr=0"
+        {{- end }}
         command:
         - "/manager"
+        {{- with .Values.metrics }}
+        ports:
+        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerManagerAddr "${1}"}}
+          protocol: TCP
+          name: metrics
+        {{- end }}
         env:
         - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
           value: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
