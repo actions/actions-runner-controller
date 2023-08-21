@@ -283,7 +283,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		return false, fmt.Errorf("failed to get listener pods: %v", err)
 
 	default: // NOT FOUND
-		_ = r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
+		r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
 	}
 	logger.Info("Listener pod is deleted")
 
