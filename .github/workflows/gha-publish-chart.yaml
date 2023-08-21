@@ -151,7 +151,7 @@ jobs:
           GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set-controller/Chart.yaml | grep version: | cut -d " " -f 2)
           echo "GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}" >> $GITHUB_ENV
           helm package charts/gha-runner-scale-set-controller/ --version="${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}"
-          helm push gha-rs-controller-"${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+          helm push gha-runner-scale-set-controller-"${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
 
       - name: Job summary
         run: |
@@ -200,7 +200,7 @@ jobs:
           GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set/Chart.yaml | grep version: | cut -d " " -f 2)
           echo "GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}" >> $GITHUB_ENV
           helm package charts/gha-runner-scale-set/ --version="${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}"
-          helm push gha-rs-"${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+          helm push gha-runner-scale-set-"${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
 
       - name: Job summary
         run: |
