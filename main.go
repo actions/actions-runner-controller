@@ -27,6 +27,7 @@ import (
 	summerwindv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
 	actionsgithubcom "github.com/actions/actions-runner-controller/controllers/actions.github.com"
+	actionsgithubcommetrics "github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -73,6 +74,10 @@ func main() {
 		err      error
 		ghClient *github.Client
 
+		// metrics server configuration for AutoscalingListener
+		listenerMetricsAddr     string
+		listenerMetricsEndpoint string
+
 		metricsAddr              string
 		autoScalingRunnerSetOnly bool
 		enableLeaderElection     bool
@@ -103,6 +108,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	flag.StringVar(&listenerMetricsAddr, "listener-metrics-addr", ":8080", "The address applied to AutoscalingListener metrics server")
+	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
@@ -159,9 +166,6 @@ func main() {
 	var newCache cache.NewCacheFunc
 
 	if autoScalingRunnerSetOnly {
-		// We don't support metrics for AutoRunnerScaleSet for now
-		metricsAddr = "0"
-
 		managerNamespace = os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
 		if managerNamespace == "" {
 			log.Error(err, "unable to obtain manager pod namespace")
@@ -220,6 +224,11 @@ func main() {
 			os.Exit(1)
 		}
 
+		if metricsAddr != "" {
+			log.Info("Registering scale set metrics")
+			actionsgithubcommetrics.RegisterMetrics()
+		}
+
 		actionsMultiClient := actions.NewMultiClient(
 			"actions-runner-controller/"+build.Version,
 			log.WithName("actions-clients"),
@@ -250,19 +259,22 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunnerSet"),
-			Scheme:        mgr.GetScheme(),
-			ActionsClient: actionsMultiClient,
+			Client:         mgr.GetClient(),
+			Log:            log.WithName("EphemeralRunnerSet"),
+			Scheme:         mgr.GetScheme(),
+			ActionsClient:  actionsMultiClient,
+			PublishMetrics: metricsAddr != "0",
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Log:    log.WithName("AutoscalingListener"),
-			Scheme: mgr.GetScheme(),
+			Client:                  mgr.GetClient(),
+			Log:                     log.WithName("AutoscalingListener"),
+			Scheme:                  mgr.GetScheme(),
+			ListenerMetricsAddr:     listenerMetricsAddr,
+			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)

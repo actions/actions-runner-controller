@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -25,6 +26,31 @@ type Service struct {
 	kubeManager        KubernetesManager
 	settings           *ScaleSettings
 	currentRunnerCount int
+	metricsExporter    metricsExporter
+	errs               []error
+}
+
+func WithPrometheusMetrics(conf RunnerScaleSetListenerConfig) func(*Service) {
+	return func(svc *Service) {
+		parsedURL, err := actions.ParseGitHubConfigFromURL(conf.ConfigureUrl)
+		if err != nil {
+			svc.errs = append(svc.errs, err)
+		}
+
+		svc.metricsExporter.withBaseLabels(baseLabels{
+			scaleSetName:      conf.EphemeralRunnerSetName,
+			scaleSetNamespace: conf.EphemeralRunnerSetNamespace,
+			enterprise:        parsedURL.Enterprise,
+			organization:      parsedURL.Organization,
+			repository:        parsedURL.Repository,
+		})
+	}
+}
+
+func WithLogger(logger logr.Logger) func(*Service) {
+	return func(s *Service) {
+		s.logger = logger.WithName("service")
+	}
 }
 
 func NewService(
@@ -33,7 +59,7 @@ func NewService(
 	manager KubernetesManager,
 	settings *ScaleSettings,
 	options ...func(*Service),
-) *Service {
+) (*Service, error) {
 	s := &Service{
 		ctx:                ctx,
 		rsClient:           rsClient,
@@ -47,7 +73,11 @@ func NewService(
 		option(s)
 	}
 
-	return s
+	if len(s.errs) > 0 {
+		return nil, errors.Join(s.errs...)
+	}
+
+	return s, nil
 }
 
 func (s *Service) Start() error {
@@ -81,6 +111,8 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 		"busy runners", message.Statistics.TotalBusyRunners,
 		"idle runners", message.Statistics.TotalIdleRunners)
 
+	s.metricsExporter.publishStatistics(message.Statistics)
+
 	if message.MessageType != "RunnerScaleSetJobMessages" {
 		s.logger.Info("skip message with unknown message type.", "messageType", message.MessageType)
 		return nil
@@ -110,27 +142,54 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 			if err := json.Unmarshal(message, &jobAvailable); err != nil {
 				return fmt.Errorf("could not decode job available message. %w", err)
 			}
-			s.logger.Info("job available message received.", "RequestId", jobAvailable.RunnerRequestId)
+			s.logger.Info(
+				"job available message received.",
+				"RequestId",
+				jobAvailable.RunnerRequestId,
+			)
 			availableJobs = append(availableJobs, jobAvailable.RunnerRequestId)
 		case "JobAssigned":
 			var jobAssigned actions.JobAssigned
 			if err := json.Unmarshal(message, &jobAssigned); err != nil {
 				return fmt.Errorf("could not decode job assigned message. %w", err)
 			}
-			s.logger.Info("job assigned message received.", "RequestId", jobAssigned.RunnerRequestId)
+			s.logger.Info(
+				"job assigned message received.",
+				"RequestId",
+				jobAssigned.RunnerRequestId,
+			)
+			// s.metricsExporter.publishJobAssigned(&jobAssigned)
 		case "JobStarted":
 			var jobStarted actions.JobStarted
 			if err := json.Unmarshal(message, &jobStarted); err != nil {
 				return fmt.Errorf("could not decode job started message. %w", err)
 			}
-			s.logger.Info("job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
+			s.logger.Info(
+				"job started message received.",
+				"RequestId",
+				jobStarted.RunnerRequestId,
+				"RunnerId",
+				jobStarted.RunnerId,
+			)
+			s.metricsExporter.publishJobStarted(&jobStarted)
 			s.updateJobInfoForRunner(jobStarted)
 		case "JobCompleted":
 			var jobCompleted actions.JobCompleted
 			if err := json.Unmarshal(message, &jobCompleted); err != nil {
 				return fmt.Errorf("could not decode job completed message. %w", err)
 			}
-			s.logger.Info("job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
+			s.logger.Info(
+				"job completed message received.",
+				"RequestId",
+				jobCompleted.RunnerRequestId,
+				"Result",
+				jobCompleted.Result,
+				"RunnerId",
+				jobCompleted.RunnerId,
+				"RunnerName",
+				jobCompleted.RunnerName,
+			)
+			s.metricsExporter.publishJobCompleted(&jobCompleted)
 		default:
 			s.logger.Info("unknown job message type.", "messageType", messageType.MessageType)
 		}
@@ -146,13 +205,15 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 
 func (s *Service) scaleForAssignedJobCount(count int) error {
 	targetRunnerCount := int(math.Max(math.Min(float64(s.settings.MaxRunners), float64(count)), float64(s.settings.MinRunners)))
+	s.metricsExporter.publishDesiredRunners(targetRunnerCount)
 	if targetRunnerCount != s.currentRunnerCount {
 		s.logger.Info("try scale runner request up/down base on assigned job count",
 			"assigned job", count,
 			"decision", targetRunnerCount,
 			"min", s.settings.MinRunners,
 			"max", s.settings.MaxRunners,
-			"currentRunnerCount", s.currentRunnerCount)
+			"currentRunnerCount", s.currentRunnerCount,
+		)
 		err := s.kubeManager.ScaleEphemeralRunnerSet(s.ctx, s.settings.Namespace, s.settings.ResourceName, targetRunnerCount)
 		if err != nil {
 			return fmt.Errorf("could not scale ephemeral runner set (%s/%s). %w", s.settings.Namespace, s.settings.ResourceName, err)
@@ -173,7 +234,8 @@ func (s *Service) updateJobInfoForRunner(jobInfo actions.JobStarted) {
 		"workflowRef", jobInfo.JobWorkflowRef,
 		"workflowRunId", jobInfo.WorkflowRunId,
 		"jobDisplayName", jobInfo.JobDisplayName,
-		"requestId", jobInfo.RunnerRequestId)
+		"requestId", jobInfo.RunnerRequestId,
+	)
 	err := s.kubeManager.UpdateEphemeralRunnerWithJobInfo(s.ctx, s.settings.Namespace, jobInfo.RunnerName, jobInfo.OwnerName, jobInfo.RepositoryName, jobInfo.JobWorkflowRef, jobInfo.JobDisplayName, jobInfo.WorkflowRunId, jobInfo.RunnerRequestId)
 	if err != nil {
 		s.logger.Error(err, "could not update ephemeral runner with job info", "runnerName", jobInfo.RunnerName, "requestId", jobInfo.RunnerRequestId)

@@ -51,6 +51,7 @@ Selector labels
 */}}
 {{- define "gha-runner-scale-set-controller.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "gha-runner-scale-set-controller.name" . }}
+app.kubernetes.io/namespace: {{ .Release.Namespace }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
@@ -118,4 +119,8 @@ Create the name of the service account to use
   {{- $names = append $names $v.name }}
 {{- end }}
 {{- $names | join ","}}
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.serviceMonitorName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-service-monitor
 {{- end }}

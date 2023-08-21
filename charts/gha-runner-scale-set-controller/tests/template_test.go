@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -361,6 +362,9 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
+		"--metrics-addr=0",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
 	}
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
@@ -495,6 +499,9 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--log-level=info",
 		"--log-format=json",
 		"--update-strategy=eventual",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -621,6 +628,9 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -658,6 +668,9 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -744,6 +757,9 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--log-format=text",
 		"--watch-single-namespace=demo",
 		"--update-strategy=immediate",
+		"--listener-metrics-addr=0",
+		"--listener-metrics-endpoint=",
+		"--metrics-addr=0",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -933,4 +949,76 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller-single-namespace-watch", managerSingleNamespaceWatchRoleBinding.RoleRef.Name)
 	assert.Equal(t, "test-arc-gha-rs-controller", managerSingleNamespaceWatchRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerSingleNamespaceWatchRoleBinding.Subjects[0].Namespace)
+}
+
+func TestControllerDeployment_MetricsPorts(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
+	require.NoError(t, err)
+
+	chart := new(Chart)
+	err = yaml.Unmarshal(chartContent, chart)
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"image.tag":                     "dev",
+			"metrics.controllerManagerAddr": ":8080",
+			"metrics.listenerAddr":          ":8081",
+			"metrics.listenerEndpoint":      "/metrics",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+	var deployment appsv1.Deployment
+	helm.UnmarshalK8SYaml(t, output, &deployment)
+
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 1, "Expected one container")
+	container := deployment.Spec.Template.Spec.Containers[0]
+	assert.Len(t, container.Ports, 1)
+	port := container.Ports[0]
+	assert.Equal(t, corev1.Protocol("TCP"), port.Protocol)
+	assert.Equal(t, int32(8080), port.ContainerPort)
+
+	metricsFlags := map[string]*struct {
+		expect    string
+		frequency int
+	}{
+		"--listener-metrics-addr": {
+			expect: ":8081",
+		},
+		"--listener-metrics-endpoint": {
+			expect: "/metrics",
+		},
+		"--metrics-addr": {
+			expect: ":8080",
+		},
+	}
+	for _, cmd := range container.Args {
+		s := strings.Split(cmd, "=")
+		if len(s) != 2 {
+			continue
+		}
+		flag, ok := metricsFlags[s[0]]
+		if !ok {
+			continue
+		}
+		flag.frequency++
+		assert.Equal(t, flag.expect, s[1])
+	}
+
+	for key, value := range metricsFlags {
+		assert.Equal(t, value.frequency, 1, fmt.Sprintf("frequency of %q is not 1", key))
+	}
 }
