@@ -53,6 +53,7 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 1. Add configurable log format to values.yaml and propagate it to listener [#2686](https://github.com/actions/actions-runner-controller/pull/2686)
 1. Extend manager roles to accept ephemeralrunnerset/finalizers [#2493](https://github.com/actions/actions-runner-controller/pull/2493)
 1. Trim repo/org/enterprise to 63 characters in label values [#2657](https://github.com/actions/actions-runner-controller/pull/2657)
+1. Revert back chart renaming [#2824](https://github.com/actions/actions-runner-controller/pull/2824)
 1. Discard logs on helm chart tests [#2607](https://github.com/actions/actions-runner-controller/pull/2607)
 1. Use build.Version to check if resource version is a mismatch [#2521](https://github.com/actions/actions-runner-controller/pull/2521)
 1. Reordering methods and constants so it is easier to look it up [#2501](https://github.com/actions/actions-runner-controller/pull/2501)
