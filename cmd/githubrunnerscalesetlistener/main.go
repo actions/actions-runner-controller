@@ -25,13 +25,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/sync/errgroup"
 )
 
 type RunnerScaleSetListenerConfig struct {
@@ -45,9 +49,12 @@ type RunnerScaleSetListenerConfig struct {
 	MaxRunners                  int    `split_words:"true"`
 	MinRunners                  int    `split_words:"true"`
 	RunnerScaleSetId            int    `split_words:"true"`
+	RunnerScaleSetName          string `split_words:"true"`
 	ServerRootCA                string `split_words:"true"`
 	LogLevel                    string `split_words:"true"`
 	LogFormat                   string `split_words:"true"`
+	MetricsAddr                 string `split_words:"true"`
+	MetricsEndpoint             string `split_words:"true"`
 }
 
 func main() {
@@ -79,17 +86,95 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(rc, logger); err != nil {
-		logger.Error(err, "Run error")
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		opts := runOptions{
+			serviceOptions: []func(*Service){
+				WithLogger(logger),
+			},
+		}
+		opts.serviceOptions = append(opts.serviceOptions, WithPrometheusMetrics(rc))
+
+		return run(ctx, rc, logger, opts)
+	})
+
+	if len(rc.MetricsAddr) != 0 {
+		g.Go(func() error {
+			metricsServer := metricsServer{
+				rc:     rc,
+				logger: logger,
+			}
+			g.Go(func() error {
+				<-ctx.Done()
+				return metricsServer.shutdown()
+			})
+			return metricsServer.listenAndServe()
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		logger.Error(err, "Error encountered")
 		os.Exit(1)
 	}
 }
 
-func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
-	// Create root context and hook with sigint and sigterm
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+type metricsServer struct {
+	rc     RunnerScaleSetListenerConfig
+	logger logr.Logger
+	srv    *http.Server
+}
 
+func (s *metricsServer) shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return s.srv.Shutdown(ctx)
+}
+
+func (s *metricsServer) listenAndServe() error {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		// availableJobs,
+		// acquiredJobs,
+		assignedJobs,
+		runningJobs,
+		registeredRunners,
+		busyRunners,
+		minRunners,
+		maxRunners,
+		desiredRunners,
+		idleRunners,
+		startedJobsTotal,
+		completedJobsTotal,
+		// jobQueueDurationSeconds,
+		jobStartupDurationSeconds,
+		jobExecutionDurationSeconds,
+	)
+
+	mux := http.NewServeMux()
+	mux.Handle(
+		s.rc.MetricsEndpoint,
+		promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}),
+	)
+
+	s.srv = &http.Server{
+		Addr:    s.rc.MetricsAddr,
+		Handler: mux,
+	}
+
+	s.logger.Info("Starting metrics server", "address", s.srv.Addr)
+	return s.srv.ListenAndServe()
+}
+
+type runOptions struct {
+	serviceOptions []func(*Service)
+}
+
+func run(ctx context.Context, rc RunnerScaleSetListenerConfig, logger logr.Logger, opts runOptions) error {
+	// Create root context and hook with sigint and sigterm
 	creds := &actions.ActionsAuth{}
 	if rc.Token != "" {
 		creds.Token = rc.Token
@@ -131,9 +216,10 @@ func run(rc RunnerScaleSetListenerConfig, logger logr.Logger) error {
 		MinRunners:   rc.MinRunners,
 	}
 
-	service := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, func(s *Service) {
-		s.logger = logger.WithName("service")
-	})
+	service, err := NewService(ctx, autoScalerClient, kubeManager, scaleSettings, opts.serviceOptions...)
+	if err != nil {
+		return fmt.Errorf("failed to create new service: %v", err)
+	}
 
 	// Start listening for messages
 	if err = service.Start(); err != nil {
