@@ -302,7 +302,7 @@ githubWebhookServer:
   #       key: GITHUB_WEBHOOK_SECRET_TOKEN
   #       name: prod-gha-controller-webhook-token
   #       optional: true
-  env: {}
+  # env:
 
 actionsMetrics:
   serviceAnnotations: {}
