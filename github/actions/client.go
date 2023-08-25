@@ -634,7 +634,18 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, ParseActionsErrorFromResponse(resp)
+		if resp.StatusCode != http.StatusUnauthorized {
+			return nil, ParseActionsErrorFromResponse(resp)
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		body = trimByteOrderMark(body)
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, &MessageQueueTokenExpiredError{msg: string(body)}
 	}
 
 	var acquiredJobs *Int64List
