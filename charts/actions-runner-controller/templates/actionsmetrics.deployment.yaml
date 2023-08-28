@@ -118,6 +118,7 @@ spec:
         - name: {{ $key }}
           value: {{ $val | quote }}
         {{- end }}
+        {{- end }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag  | default (cat "v" .Chart.AppVersion | replace " " "") }}"
         name: actions-metrics-server
         imagePullPolicy: {{ .Values.image.pullPolicy }}
