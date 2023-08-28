@@ -151,8 +151,7 @@ podDisruptionBudget:
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-env:
-  {}
+# env:
   # specify additional environment variables for the controller pod.
   # It's possible to specify either key vale pairs e.g.:
   # http_proxy: "proxy.com:8080"
@@ -303,7 +302,7 @@ githubWebhookServer:
   #       key: GITHUB_WEBHOOK_SECRET_TOKEN
   #       name: prod-gha-controller-webhook-token
   #       optional: true
-  env: {}
+  # env:
 
 actionsMetrics:
   serviceAnnotations: {}
