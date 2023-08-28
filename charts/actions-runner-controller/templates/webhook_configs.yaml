@@ -19,7 +19,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -50,7 +50,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -81,7 +81,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -112,7 +112,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -156,7 +156,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -187,7 +187,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -218,7 +218,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
