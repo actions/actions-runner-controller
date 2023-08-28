@@ -554,7 +554,7 @@ This can be problematic in two scenarios:
 
 > RunnerDeployment is not affected by the Scenario 1 as RunnerDeployment-managed runners are already tolerable to unlimitedly long in-progress running job while being replaced, as it's graceful termination process is handled outside of the entrypoint and the Kubernetes' pod termination process.
 
-To make it more reliable, please set `spec.template.spec.terminationGracePeriodSeconds` field and the `RUNNER_GRACEFUL_STOP_TIMEOUT` environment variable appropriately.
+To make it more reliable, please set `spec.template.spec.terminationGracePeriodSeconds` field and the `RUNNER_GRACEFUL_STOP_TIMEOUT` environment variable appropriately. **NOTE:** if you are using the default configuration of running DinD as a sidecar, you'll need to set this environment variable in both `spec.template.spec.env` as well as `spec.template.spec.dockerEnv` for RunnerDeployment objects, otherwise the `docker` container will recieve the same termination signal and exit while the remainder of the build runs.
 
 If you want the pod to terminate in approximately 110 seconds at the latest since the termination request, try `terminationGracePeriodSeconds` of `110` and `RUNNER_GRACEFUL_STOP_TIMEOUT` of like `90`.
 
