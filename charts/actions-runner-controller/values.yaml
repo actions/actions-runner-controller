@@ -321,6 +321,19 @@ actionsMetrics:
     image:
       repository: quay.io/brancz/kube-rbac-proxy
       tag: v0.13.1
+  # specify additional environment variables for the webhook server pod.
+  # It's possible to specify either key vale pairs e.g.:
+  # my_env_var: "some value"
+  # my_other_env_var: "other value"
+
+  # or a list of complete environment variable definitions e.g.:
+  # - name: GITHUB_WEBHOOK_SECRET_TOKEN
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: GITHUB_WEBHOOK_SECRET_TOKEN
+  #       name: prod-gha-controller-webhook-token
+  #       optional: true
+  # env:
 
 actionsMetricsServer:
   enabled: false
