@@ -27,7 +27,6 @@ RUN apt-get update -y \
     dnsutils \
     ftp \
     git \
-    git-lfs \
     iproute2 \
     iputils-ping \
     iptables \
@@ -55,6 +54,10 @@ RUN apt-get update -y \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Download latest git-lfs version
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
+    apt-get install -y --no-install-recommends git-lfs
 
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid $RUNNER_UID runner

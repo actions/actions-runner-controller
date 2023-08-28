@@ -23,7 +23,6 @@ RUN apt-get update -y \
     curl \
     ca-certificates \
     git \
-    git-lfs \
     iproute2 \
     iptables \
     jq \
@@ -32,6 +31,10 @@ RUN apt-get update -y \
     unzip \
     zip \
     && rm -rf /var/lib/apt/lists/*
+
+# Download latest git-lfs version
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
+    apt-get install -y --no-install-recommends git-lfs
 
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid $RUNNER_USER_UID runner
