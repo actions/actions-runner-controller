@@ -111,9 +111,13 @@ spec:
               name: {{ include "actions-runner-controller.secretName" . }}
               optional: true
         {{- end }}
+        {{- if kindIs "slice" .Values.actionsMetricsServer.env }}
+        {{- toYaml .Values.actionsMetricsServer.env | nindent 8 }}
+        {{- else }}
         {{- range $key, $val := .Values.actionsMetricsServer.env }}
         - name: {{ $key }}
           value: {{ $val | quote }}
+        {{- end }}
         {{- end }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag  | default (cat "v" .Chart.AppVersion | replace " " "") }}"
         name: actions-metrics-server
