@@ -68,7 +68,7 @@ githubConfigSecret:
 #       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
-## Container mode is is an object that provides out-of-box configuration
+## Container mode is an object that provides out-of-box configuration
 ## for dind and kubernetes mode. Template will be modified as documented under the
 ## template object.
 ##
