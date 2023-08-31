@@ -36,10 +36,10 @@ githubConfigSecret:
 #     - example.com
 #     - example.org
 
-## maxRunners is the max number of runners the auto scaling runner set will scale up to.
+## maxRunners is the max number of runners the autoscaling runner set will scale up to.
 # maxRunners: 5
 
-## minRunners is the min number of runners the auto scaling runner set will scale down to.
+## minRunners is the min number of runners the autoscaling runner set will scale down to.
 # minRunners: 0
 
 # runnerGroup: "default"
