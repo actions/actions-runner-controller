@@ -8,10 +8,12 @@ import (
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/worker"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 )
 
 type App struct {
@@ -22,11 +24,17 @@ type App struct {
 
 	listener *listener.Listener
 	worker   *worker.Worker
+	metrics  metrics.ServerPublisher
 }
 
 func New(config config.Config) (*App, error) {
 	app := &App{
 		config: config,
+	}
+
+	ghConfig, err := actions.ParseGitHubConfigFromURL(config.ConfigureUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse GitHub config from URL: %w", err)
 	}
 
 	if err := app.initLogger(); err != nil {
@@ -35,6 +43,18 @@ func New(config config.Config) (*App, error) {
 
 	if err := app.initActionsClient(); err != nil {
 		return nil, err
+	}
+
+	if config.MetricsAddr != "" {
+		app.metrics = metrics.NewExporter(metrics.ExporterConfig{
+			ScaleSetName:      config.EphemeralRunnerSetName,
+			ScaleSetNamespace: config.EphemeralRunnerSetNamespace,
+			Enterprise:        ghConfig.Enterprise,
+			Organization:      ghConfig.Organization,
+			Repository:        ghConfig.Repository,
+			ServerAddr:        config.MetricsAddr,
+			ServerEndpoint:    config.MetricsEndpoint,
+		})
 	}
 
 	worker, err := worker.NewKubernetesWorker(
@@ -51,7 +71,12 @@ func New(config config.Config) (*App, error) {
 	}
 	app.worker = worker
 
-	listener, err := listener.New(app.actionsClient, app.config.RunnerScaleSetId, listener.WithLogger(app.logger))
+	listener, err := listener.New(listener.Config{
+		Client:     app.actionsClient,
+		ScaleSetID: app.config.RunnerScaleSetId,
+		Logger:     app.logger,
+		Metrics:    app.metrics,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new listener: %w", err)
 	}
@@ -66,8 +91,21 @@ func (app *App) Run(ctx context.Context) error {
 	if app.worker == nil || app.listener == nil {
 		panic("app not initialized")
 	}
-	app.logger.Info("Starting listener")
-	return app.listener.Listen(ctx, app.worker)
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		app.logger.Info("Starting listener")
+		return app.listener.Listen(ctx, app.worker)
+	})
+
+	if app.metrics != nil {
+		g.Go(func() error {
+			app.logger.Info("Starting metrics server")
+			return app.metrics.ListenAndServe(ctx)
+		})
+	}
+
+	return g.Wait()
 }
 
 func (app *App) initLogger() error {

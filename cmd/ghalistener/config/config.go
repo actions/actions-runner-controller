@@ -20,6 +20,8 @@ type Config struct {
 	ServerRootCA                string `split_words:"true"`
 	LogLevel                    string `split_words:"true"`
 	LogFormat                   string `split_words:"true"`
+	MetricsAddr                 string `split_words:"true"`
+	MetricsEndpoint             string `split_words:"true"`
 }
 
 func (c *Config) validate() error {

@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 )
@@ -27,22 +27,21 @@ const (
 	messageTypeJobCompleted = "JobCompleted"
 )
 
-type Option func(*Listener)
-
-func WithLogger(logger logr.Logger) Option {
-	return func(l *Listener) {
-		logger = logger.WithName("actionhandler")
-		l.logger = &logger
-	}
+type Config struct {
+	Client     *actions.Client
+	ScaleSetID int
+	Logger     logr.Logger
+	Metrics    metrics.Publisher
 }
 
 type Listener struct {
 	// configured fields
 	scaleSetID int
 	client     *actions.Client
+	metrics    metrics.Publisher
 
 	// internal fields
-	logger   *logr.Logger
+	logger   logr.Logger
 	hostname string
 
 	// updated fields
@@ -50,40 +49,26 @@ type Listener struct {
 	session       *actions.RunnerScaleSetSession
 }
 
-func New(client *actions.Client, scaleSetID int, options ...Option) (*Listener, error) {
+func New(config Config) (*Listener, error) {
 	listener := &Listener{
-		scaleSetID: scaleSetID,
-		client:     client,
+		scaleSetID: config.ScaleSetID,
+		client:     config.Client,
+		logger:     config.Logger,
+		metrics:    metrics.Discard,
 	}
 
-	for _, option := range options {
-		option(listener)
+	if config.Metrics != nil {
+		listener.metrics = config.Metrics
 	}
 
-	if err := listener.applyDefaults(); err != nil {
-		return nil, err
-	}
-
-	return listener, nil
-}
-
-func (l *Listener) applyDefaults() error {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = uuid.NewString()
-		l.logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
+		listener.logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
 	}
-	l.hostname = hostname
+	listener.hostname = hostname
 
-	if l.logger == nil {
-		logger, err := logging.NewLogger(logging.LogLevelDebug, logging.LogFormatJSON)
-		if err != nil {
-			return fmt.Errorf("NewLogger failed: %w", err)
-		}
-		l.logger = &logger
-	}
-
-	return nil
+	return listener, nil
 }
 
 type Handler interface {
