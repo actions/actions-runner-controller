@@ -172,7 +172,7 @@ If there is a need to include packages in the runner image for which there is no
 FROM summerwind/actions-runner:latest
 
 RUN sudo apt-get update -y \
-  && sudo apt-get install $YOUR_PACKAGES
+  && sudo apt-get install $YOUR_PACKAGES \
   && sudo rm -rf /var/lib/apt/lists/*
 ```
 
