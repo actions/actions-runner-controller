@@ -101,6 +101,7 @@ template:
   ##     containers:
   ##     - name: runner
   ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: DOCKER_HOST
   ##           value: tcp://localhost:2376
@@ -139,6 +140,7 @@ template:
   ##     containers:
   ##     - name: runner
   ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: ACTIONS_RUNNER_CONTAINER_HOOKS
   ##           value: /home/runner/k8s/index.js
