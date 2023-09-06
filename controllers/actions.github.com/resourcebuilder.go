@@ -53,6 +53,18 @@ const labelValueKubernetesPartOf = "gha-runner-scale-set"
 var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
 var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
 
+var scaleSetListenerImagePullPolicy = DefaultScaleSetListenerImagePullPolicy
+
+func SetListenerImagePullPolicy(pullPolicy string) bool {
+	switch p := corev1.PullPolicy(pullPolicy); p {
+	case corev1.PullAlways, corev1.PullIfNotPresent, corev1.PullNever:
+		scaleSetListenerImagePullPolicy = p
+		return true
+	default:
+		return false
+	}
+}
+
 func SetListenerLoggingParameters(level string, format string) bool {
 	switch level {
 	case logging.LogLevelDebug, logging.LogLevelInfo, logging.LogLevelWarn, logging.LogLevelError:
@@ -268,7 +280,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
-				ImagePullPolicy: DefaultScaleSetListenerImagePullPolicy,
+				ImagePullPolicy: scaleSetListenerImagePullPolicy,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
@@ -306,15 +318,15 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 
 func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec) {
 	// apply metadata
-	for k, v := range tmpl.ObjectMeta.Annotations {
-		if _, ok := pod.ObjectMeta.Annotations[k]; !ok {
-			pod.ObjectMeta.Annotations[k] = v
+	for k, v := range tmpl.Annotations {
+		if _, ok := pod.Annotations[k]; !ok {
+			pod.Annotations[k] = v
 		}
 	}
 
-	for k, v := range tmpl.ObjectMeta.Labels {
-		if _, ok := pod.ObjectMeta.Labels[k]; !ok {
-			pod.ObjectMeta.Labels[k] = v
+	for k, v := range tmpl.Labels {
+		if _, ok := pod.Labels[k]; !ok {
+			pod.Labels[k] = v
 		}
 	}
 
