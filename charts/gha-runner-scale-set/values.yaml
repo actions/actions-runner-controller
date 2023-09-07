@@ -36,10 +36,10 @@ githubConfigSecret:
 #     - example.com
 #     - example.org
 
-## maxRunners is the max number of runners the auto scaling runner set will scale up to.
+## maxRunners is the max number of runners the autoscaling runner set will scale up to.
 # maxRunners: 5
 
-## minRunners is the min number of runners the auto scaling runner set will scale down to.
+## minRunners is the min number of runners the autoscaling runner set will scale down to.
 # minRunners: 0
 
 # runnerGroup: "default"
@@ -68,7 +68,7 @@ githubConfigSecret:
 #       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
-## Container mode is is an object that provides out-of-box configuration
+## Container mode is an object that provides out-of-box configuration
 ## for dind and kubernetes mode. Template will be modified as documented under the
 ## template object.
 ##

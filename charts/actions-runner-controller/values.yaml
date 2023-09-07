@@ -70,7 +70,7 @@ rbac:
   {}
   # # This allows ARC to dynamically create a ServiceAccount and a Role for each Runner pod that uses "kubernetes" container mode,
   # # by extending ARC's manager role to have the same permissions required by the pod runs the runner agent in "kubernetes" container mode.
-  # # Without this, Kubernetes blocks ARC to create the role to prevent a priviledge escalation.
+  # # Without this, Kubernetes blocks ARC to create the role to prevent a privilege escalation.
   # # See https://github.com/actions/actions-runner-controller/pull/1268/files#r917327010
   # allowGrantingKubernetesContainerModePermissions: true
 
