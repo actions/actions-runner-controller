@@ -1672,6 +1672,53 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraContainers(t *testing.T) {
 	assert.Equal(t, "192.0.2.1", ars.Spec.Template.Spec.DNSConfig.Nameservers[0], "DNS Nameserver should be set")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_RestartPolicy(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, corev1.RestartPolicyNever, ars.Spec.Template.Spec.RestartPolicy, "RestartPolicy should be Never")
+
+	options = &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+			"template.spec.restartPolicy":        "Always",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, corev1.RestartPolicyAlways, ars.Spec.Template.Spec.RestartPolicy, "RestartPolicy should be Always")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_ExtraPodSpec(t *testing.T) {
 	t.Parallel()
 
