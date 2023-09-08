@@ -5,7 +5,7 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.308.0
+RUNNER_VERSION ?= 2.309.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
