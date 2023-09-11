@@ -82,9 +82,6 @@ spec:
                 image:
                   description: Required
                   type: string
-                imagePullPolicy:
-                  description: Required Deprecated
-                  type: string
                 imagePullSecrets:
                   description: Required
                   items:
