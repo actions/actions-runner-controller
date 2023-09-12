@@ -173,7 +173,7 @@ template:
 # listenerTemplate:
 #   spec:
 #     containers:
-#     # Use this section to append additional container configuration listener container.
+#     # Use this section to append additional configuration to the listener container.
 #     # If you change the name of the container, the configuration will not be applied to the listener,
 #     # and it will be treated as a side-car container.
 #     - name: listener
