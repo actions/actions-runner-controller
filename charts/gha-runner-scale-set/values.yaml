@@ -86,6 +86,7 @@ githubConfigSecret:
 #         storage: 1Gi
 
 ## template is the PodSpec for each runner Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:
   ## template.spec will be modified if you change the container mode
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
@@ -168,13 +169,19 @@ template:
         command: ["/home/runner/run.sh"]
 
 ## template is the PodSpec for each listener Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 # listenerTemplate:
 #   spec:
 #     containers:
-#     - name: listener # merge extra container configuration to the default configuration for the listener container.
+#     # Use this section to append additional container configuration listener container.
+#     # If you change the name of the container, the configuration will not be applied to the listener,
+#     # and it will be treated as a side-car container.
+#     - name: listener
 #       securityContext:
 #         runAsUser: 1000
-#     - name: side-car # container used as a side-car container. Spec for this container will be applied without any modifications.
+#     # Use this section to add the configuration of a side-car container. 
+#     # Spec for this container will be applied as is without any modifications.
+#     - name: side-car
 #       image: example-sidecar
 
 ## Optional controller service account that needs to have required Role and RoleBinding
