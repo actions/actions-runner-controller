@@ -37,7 +37,7 @@ func TestCreateSession(t *testing.T) {
 
 	require.NoError(t, err, "Error creating autoscaler client")
 	assert.Equal(t, session, session, "Session is not correct")
-	assert.Nil(t, asClient.initialMessage, "Initial message should be nil")
+	assert.NotNil(t, asClient.initialMessage, "Initial message should not be nil")
 	assert.Equal(t, int64(0), asClient.lastMessageId, "Last message id should be 0")
 	assert.True(t, mockActionsClient.AssertExpectations(t), "All expectations should be met")
 }
@@ -188,7 +188,7 @@ func TestCreateSession_RetrySessionConflict(t *testing.T) {
 
 	require.NoError(t, err, "Error creating autoscaler client")
 	assert.Equal(t, session, session, "Session is not correct")
-	assert.Nil(t, asClient.initialMessage, "Initial message should be nil")
+	assert.NotNil(t, asClient.initialMessage, "Initial message should not be nil")
 	assert.Equal(t, int64(0), asClient.lastMessageId, "Last message id should be 0")
 	assert.True(t, mockActionsClient.AssertExpectations(t), "All expectations should be met")
 }
@@ -335,6 +335,14 @@ func TestGetRunnerScaleSetMessage(t *testing.T) {
 	})
 
 	assert.NoError(t, err, "Error getting message")
+	assert.Equal(t, int64(0), asClient.lastMessageId, "Initial message")
+
+	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
+		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
+		return nil
+	})
+
+	assert.NoError(t, err, "Error getting message")
 	assert.Equal(t, int64(1), asClient.lastMessageId, "Last message id should be updated")
 	assert.True(t, mockActionsClient.AssertExpectations(t), "All expectations should be met")
 	assert.True(t, mockSessionClient.AssertExpectations(t), "All expectations should be met")
@@ -371,13 +379,21 @@ func TestGetRunnerScaleSetMessage_HandleFailed(t *testing.T) {
 	})
 	require.NoError(t, err, "Error creating autoscaler client")
 
+	// read initial message
+	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
+		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
+		return nil
+	})
+
+	assert.NoError(t, err, "Error getting message")
+
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return fmt.Errorf("error")
 	})
 
 	assert.ErrorContains(t, err, "handle message failed. error", "Error getting message")
-	assert.Equal(t, int64(0), asClient.lastMessageId, "Last message id should be updated")
+	assert.Equal(t, int64(0), asClient.lastMessageId, "Last message id should not be updated")
 	assert.True(t, mockActionsClient.AssertExpectations(t), "All expectations should be met")
 	assert.True(t, mockSessionClient.AssertExpectations(t), "All expectations should be met")
 }
@@ -517,6 +533,12 @@ func TestGetRunnerScaleSetMessage_RetryUntilGetMessage(t *testing.T) {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
 	})
+	assert.NoError(t, err, "Error getting initial message")
+
+	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
+		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
+		return nil
+	})
 
 	assert.NoError(t, err, "Error getting message")
 	assert.Equal(t, int64(1), asClient.lastMessageId, "Last message id should be updated")
@@ -549,6 +571,12 @@ func TestGetRunnerScaleSetMessage_ErrorOnGetMessage(t *testing.T) {
 		asc.client = mockSessionClient
 	})
 	require.NoError(t, err, "Error creating autoscaler client")
+
+	// process initial message
+	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
+		return nil
+	})
+	assert.NoError(t, err, "Error getting initial message")
 
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		return fmt.Errorf("Should not be called")
@@ -591,6 +619,12 @@ func TestDeleteRunnerScaleSetMessage_Error(t *testing.T) {
 		asc.client = mockSessionClient
 	})
 	require.NoError(t, err, "Error creating autoscaler client")
+
+	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
+		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
+		return nil
+	})
+	assert.NoError(t, err, "Error getting initial message")
 
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)

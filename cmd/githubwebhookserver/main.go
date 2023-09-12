@@ -124,7 +124,7 @@ func main() {
 	if watchNamespace == "" {
 		logger.Info("-watch-namespace is empty. HorizontalRunnerAutoscalers in all the namespaces are watched, cached, and considered as scale targets.")
 	} else {
-		logger.Info("-watch-namespace is %q. Only HorizontalRunnerAutoscalers in %q are watched, cached, and considered as scale targets.", watchNamespace, watchNamespace)
+		logger.Info(fmt.Sprintf("-watch-namespace is %q. Only HorizontalRunnerAutoscalers in %q are watched, cached, and considered as scale targets.", watchNamespace, watchNamespace))
 	}
 
 	ctrl.SetLogger(logger)

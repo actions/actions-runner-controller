@@ -6,7 +6,7 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION
 # Docker and Docker Compose arguments
 ARG CHANNEL=stable
 ARG DOCKER_VERSION=20.10.23
-ARG DOCKER_COMPOSE_VERSION=v2.16.0
+ARG DOCKER_COMPOSE_VERSION=v2.20.0
 ARG DUMB_INIT_VERSION=1.2.5
 ARG RUNNER_USER_UID=1001
 ARG DOCKER_GROUP_GID=121
@@ -20,7 +20,6 @@ RUN apt-get update -y \
     curl \
     ca-certificates \
     git \
-    git-lfs \
     iptables \
     jq \
     software-properties-common \
@@ -28,6 +27,10 @@ RUN apt-get update -y \
     unzip \
     zip \
     && rm -rf /var/lib/apt/lists/*
+
+# Download latest git-lfs version
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
+    apt-get install -y --no-install-recommends git-lfs
 
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid $RUNNER_USER_UID runner \
