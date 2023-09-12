@@ -179,7 +179,8 @@ template:
 #     - name: listener
 #       securityContext:
 #         runAsUser: 1000
-#     # Use this section to add the configuration of a side-car container. 
+#     # Use this section to add the configuration of a side-car container.
+#     # Comment it out or remove it if you don't need it.
 #     # Spec for this container will be applied as is without any modifications.
 #     - name: side-car
 #       image: example-sidecar
