@@ -282,3 +282,5 @@ func (f *FakeClient) GetRunnerByName(ctx context.Context, runnerName string) (*a
 func (f *FakeClient) RemoveRunner(ctx context.Context, runnerId int64) error {
 	return f.removeRunnerResult.err
 }
+
+func (f *FakeClient) SetUserAgent(_ actions.UserAgentInfo) {}

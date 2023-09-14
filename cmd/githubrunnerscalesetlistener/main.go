@@ -190,8 +190,12 @@ func run(ctx context.Context, rc RunnerScaleSetListenerConfig, logger logr.Logge
 		rc,
 		creds,
 		actions.WithLogger(logger),
-		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
 	)
+	actionsServiceClient.SetUserAgent(actions.UserAgentInfo{
+		Version:    build.Version,
+		CommitSHA:  build.CommitSHA,
+		ScaleSetID: rc.RunnerScaleSetId,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create an Actions Service client: %w", err)
 	}

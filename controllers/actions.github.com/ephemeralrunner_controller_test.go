@@ -729,7 +729,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 		It("uses an actions client with proxy transport", func() {
 			// Use an actual client
-			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+			controller.ActionsClient = actions.NewMultiClient(logr.Discard())
 
 			proxySuccessfulllyCalled := false
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -914,7 +914,7 @@ var _ = Describe("EphemeralRunner", func() {
 			server.StartTLS()
 
 			// Use an actual client
-			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+			controller.ActionsClient = actions.NewMultiClient(logr.Discard())
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
