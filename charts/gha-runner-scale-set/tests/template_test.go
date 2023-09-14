@@ -381,10 +381,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Equal(t, namespaceName, ars.Namespace)
-	assert.Equal(t, "test-runners", ars.Name)
+	assert.Equal(t, "test-runner-scale-set-name", ars.Name)
 
 	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
-	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, releaseName, ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
