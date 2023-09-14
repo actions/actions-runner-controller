@@ -27,7 +27,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,12 +44,6 @@ var (
 	k8sClient client.Client
 	testEnv   *envtest.Environment
 )
-
-var testUserAgent = actions.UserAgentInfo{
-	Version:    "test",
-	CommitSHA:  "test",
-	ScaleSetID: 1,
-}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
