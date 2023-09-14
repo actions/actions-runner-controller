@@ -113,6 +113,8 @@ metrics:
     enable: false
     timeout: 30s
     interval: 1m
+    relabelings: []
+    metricRelabelings: []
   serviceMonitorLabels: {}
   port: 8443
   proxy:
@@ -314,6 +316,8 @@ actionsMetrics:
     enable: false
     timeout: 30s
     interval: 1m
+    relabelings: []
+    metricRelabelings: []
   serviceMonitorLabels: {}
   port: 8443
   proxy:
