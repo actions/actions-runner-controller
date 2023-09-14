@@ -1,5 +1,4 @@
-{{- if and .Values.githubWebhookServer.enabled .Values.metrics.serviceMonitor.enable }}
-{{- $servicemonitornamespace := .Values.actionsMetrics.serviceMonitor.namespace | default .Release.Namespace }}
+{{- if .Values.metrics.serviceMonitor.enable }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -8,8 +7,8 @@ metadata:
   {{- with .Values.metrics.serviceMonitorLabels }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  name: {{ include "actions-runner-controller-github-webhook-server.serviceMonitorName" . }}
-  namespace: {{ $servicemonitornamespace }}
+  name: {{ include "actions-runner-controller.serviceMonitorName" . }}
+  namespace: {{ .Release.Namespace }}
 spec:
   endpoints:
     - path: /metrics
@@ -22,7 +21,15 @@ spec:
       {{- end }}
       interval: {{ .Values.metrics.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.timeout }}
+      {{- if .Values.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+{{ tpl (toYaml .Values.metrics.serviceMonitor.metricRelabelings | indent 8) . }}
+      {{- end }}
+      {{- if .Values.metrics.serviceMonitor.relabelings }}
+      relabelings:
+{{ tpl (toYaml .Values.metrics.serviceMonitor.relabelings | indent 8) . }}
+      {{- end }}
   selector:
     matchLabels:
-      {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 6 }}
+      {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
 {{- end }}
