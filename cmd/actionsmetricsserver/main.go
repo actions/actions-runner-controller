@@ -48,7 +48,8 @@ var (
 )
 
 const (
-	webhookSecretTokenEnvName = "GITHUB_WEBHOOK_SECRET_TOKEN"
+	webhookSecretTokenEnvName     = "GITHUB_WEBHOOK_SECRET_TOKEN"
+	prometheusBucketIntervalsName = "PROMETHEUS_BUCKET_INTERVALS"
 )
 
 func init() {
@@ -73,6 +74,9 @@ func main() {
 		logFormat string
 
 		ghClient *github.Client
+
+		// List of histogram buckets that we want to see in metrics
+		bucketsList actionsmetrics.BucketsSlice
 	)
 
 	var c github.Config
@@ -83,6 +87,7 @@ func main() {
 	}
 
 	webhookSecretTokenEnv = os.Getenv(webhookSecretTokenEnvName)
+	bucketsList.Set(os.Getenv(prometheusBucketIntervalsName))
 
 	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -112,6 +117,8 @@ func main() {
 		logger.Info(fmt.Sprintf("Using the value from %s for -github-webhook-secret-token", webhookSecretTokenEnvName))
 		webhookSecretToken = webhookSecretTokenEnv
 	}
+
+	actionsmetrics.InitializeMetrics(bucketsList)
 
 	if webhookSecretToken == "" {
 		logger.Info(fmt.Sprintf("-github-webhook-secret-token and %s are missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks and specify it via the flag or the envvar", webhookSecretTokenEnvName))
