@@ -230,7 +230,6 @@ func main() {
 		}
 
 		actionsMultiClient := actions.NewMultiClient(
-			"actions-runner-controller/"+build.Version,
 			log.WithName("actions-clients"),
 		)
 

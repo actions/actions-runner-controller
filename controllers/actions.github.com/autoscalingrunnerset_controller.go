@@ -463,6 +463,12 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		}
 	}
 
+	actionsClient.SetUserAgent(actions.UserAgentInfo{
+		Version:    build.Version,
+		CommitSHA:  build.CommitSHA,
+		ScaleSetID: runnerScaleSet.Id,
+	})
+
 	logger.Info("Created/Reused a runner scale set", "id", runnerScaleSet.Id, "runnerGroupName", runnerScaleSet.RunnerGroupName)
 	if autoscalingRunnerSet.Annotations == nil {
 		autoscalingRunnerSet.Annotations = map[string]string{}

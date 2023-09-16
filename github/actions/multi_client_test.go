@@ -10,10 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testUserAgent = UserAgentInfo{
+	Version:    "test",
+	CommitSHA:  "test",
+	ScaleSetID: 1,
+}
+
 func TestMultiClientCaching(t *testing.T) {
 	logger := logr.Discard()
 	ctx := context.Background()
-	multiClient := NewMultiClient("test-user-agent", logger).(*multiClient)
+	multiClient := NewMultiClient(logger).(*multiClient)
 
 	defaultNamespace := "default"
 	defaultConfigURL := "https://github.com/org/repo"
@@ -61,20 +67,21 @@ func TestMultiClientOptions(t *testing.T) {
 			Token: "token",
 		}
 
-		multiClient := NewMultiClient("test-user-agent", logger)
+		multiClient := NewMultiClient(logger)
 		service, err := multiClient.GetClientFor(
 			ctx,
 			defaultConfigURL,
 			*defaultCreds,
 			defaultNamespace,
-			WithUserAgent("test-option"),
 		)
+		service.SetUserAgent(testUserAgent)
+
 		require.NoError(t, err)
 
 		client := service.(*Client)
 		req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
 		require.NoError(t, err)
-		assert.Equal(t, "test-option", req.Header.Get("User-Agent"))
+		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
 	})
 
 	t.Run("GetClientFromSecret", func(t *testing.T) {
@@ -82,20 +89,20 @@ func TestMultiClientOptions(t *testing.T) {
 			"github_token": []byte("token"),
 		}
 
-		multiClient := NewMultiClient("test-user-agent", logger)
+		multiClient := NewMultiClient(logger)
 		service, err := multiClient.GetClientFromSecret(
 			ctx,
 			defaultConfigURL,
 			defaultNamespace,
 			secret,
-			WithUserAgent("test-option"),
 		)
+		service.SetUserAgent(testUserAgent)
 		require.NoError(t, err)
 
 		client := service.(*Client)
 		req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
 		require.NoError(t, err)
-		assert.Equal(t, "test-option", req.Header.Get("User-Agent"))
+		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
 	})
 }
 

@@ -88,6 +88,11 @@ spec:
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
 
+  {{- with .Values.listenerTemplate}}
+  listenerTemplate:
+    {{- toYaml . | nindent 4}}
+  {{- end }}
+
   template:
     {{- with .Values.template.metadata }}
     metadata:
