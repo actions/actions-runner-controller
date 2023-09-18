@@ -6,10 +6,11 @@ package actionsmetrics
 
 import (
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"strconv"
 	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 type BucketsSlice []float64
@@ -34,13 +35,15 @@ func (i *BucketsSlice) Set(value string) error {
 var githubWorkflowJobQueueHistogram *prometheus.HistogramVec
 var githubWorkflowJobRunHistogram *prometheus.HistogramVec
 
-func initMetrics(buckets []float64) {
-	if len(buckets) > 0 {
-		githubWorkflowJobQueueHistogram = githubWorkflowJobQueueDurationSeconds(buckets)
-		githubWorkflowJobRunHistogram = githubWorkflowJobRunDurationSeconds(buckets)
-	} else {
-		githubWorkflowJobQueueHistogram = githubWorkflowJobQueueDurationSeconds(DefaultRuntimeBuckets)
+func initMetrics(runBuckets, queueBuckets []float64) {
+	githubWorkflowJobRunHistogram = githubWorkflowJobRunDurationSeconds(runBuckets)
+	githubWorkflowJobQueueHistogram = githubWorkflowJobQueueDurationSeconds(queueBuckets)
+
+	if len(runBuckets) == 0 {
 		githubWorkflowJobRunHistogram = githubWorkflowJobRunDurationSeconds(DefaultRuntimeBuckets)
+	}
+	if len(queueBuckets) == 0 {
+		githubWorkflowJobQueueHistogram = githubWorkflowJobQueueDurationSeconds(DefaultRuntimeBuckets)
 	}
 	metrics.Registry.MustRegister(
 		githubWorkflowJobQueueHistogram,
@@ -73,10 +76,11 @@ func githubWorkflowJobRunDurationSeconds(buckets []float64) *prometheus.Histogra
 		},
 		metricLabels("job_conclusion"),
 	)
+
 }
 
-func InitializeMetrics(buckets []float64) {
-	initMetrics(buckets)
+func InitializeMetrics(runBuckets, queueBuckets []float64) {
+	initMetrics(runBuckets, queueBuckets)
 }
 
 var (

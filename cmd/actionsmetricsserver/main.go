@@ -25,12 +25,13 @@ import (
 	"os"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/actions/actions-runner-controller/pkg/actionsmetrics"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/kelseyhightower/envconfig"
 
@@ -48,8 +49,9 @@ var (
 )
 
 const (
-	webhookSecretTokenEnvName     = "GITHUB_WEBHOOK_SECRET_TOKEN"
-	prometheusBucketIntervalsName = "PROMETHEUS_BUCKET_INTERVALS"
+	webhookSecretTokenEnvName          = "GITHUB_WEBHOOK_SECRET_TOKEN"
+	prometheusRunBucketIntervalsName   = "PROMETHEUS_RUN_BUCKET_INTERVALS"
+	prometheusQueueBucketIntervalsName = "PROMETHEUS_QUEUE_BUCKET_INTERVALS"
 )
 
 func init() {
@@ -76,7 +78,8 @@ func main() {
 		ghClient *github.Client
 
 		// List of histogram buckets that we want to see in metrics
-		bucketsList actionsmetrics.BucketsSlice
+		runBucketsList   actionsmetrics.BucketsSlice
+		queueBucketsList actionsmetrics.BucketsSlice
 	)
 
 	var c github.Config
@@ -87,7 +90,14 @@ func main() {
 	}
 
 	webhookSecretTokenEnv = os.Getenv(webhookSecretTokenEnvName)
-	bucketsList.Set(os.Getenv(prometheusBucketIntervalsName))
+	run, exist := os.LookupEnv(prometheusRunBucketIntervalsName)
+	if exist {
+		runBucketsList.Set(run)
+	}
+	queue, exist := os.LookupEnv(prometheusQueueBucketIntervalsName)
+	if exist {
+		queueBucketsList.Set(queue)
+	}
 
 	flag.StringVar(&webhookAddr, "webhook-addr", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -118,7 +128,7 @@ func main() {
 		webhookSecretToken = webhookSecretTokenEnv
 	}
 
-	actionsmetrics.InitializeMetrics(bucketsList)
+	actionsmetrics.InitializeMetrics(runBucketsList, queueBucketsList)
 
 	if webhookSecretToken == "" {
 		logger.Info(fmt.Sprintf("-github-webhook-secret-token and %s are missing or empty. Create one following https://docs.github.com/en/developers/webhooks-and-events/securing-your-webhooks and specify it via the flag or the envvar", webhookSecretTokenEnvName))
