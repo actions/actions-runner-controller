@@ -196,3 +196,6 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+# This is the offcial Docker-in-Docker image. You can use this image directly form Docker, or alternatively, build your own image and reference it here.
+dockerDindImage: docker:dind
