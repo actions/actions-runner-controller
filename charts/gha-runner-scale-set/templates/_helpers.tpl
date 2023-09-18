@@ -92,7 +92,7 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+image: {{ .Values.dockerDindImage }}
 securityContext:
   privileged: true
 volumeMounts:
