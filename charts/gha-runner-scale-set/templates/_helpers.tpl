@@ -92,7 +92,13 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "dind" }}
+image: {{ $container.image | default "docker:dind" }}
+command: {{- range $container.command }}
+- {{.}} {{- end }}
+args: {{- range $container.args }}
+- {{.}} {{- end }}
 securityContext:
   privileged: true
 volumeMounts:
@@ -102,6 +108,8 @@ volumeMounts:
     mountPath: /certs/client
   - name: dind-externals
     mountPath: /home/runner/externals
+  {{- end }}
+{{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
