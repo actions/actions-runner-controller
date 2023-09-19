@@ -103,7 +103,7 @@ args: {{- range $container.args }}
   {{- end }}
 {{- end }}
 {{- if not $.dindCustomize }}
-image: "docker:dind"
+image: docker:dind
 {{- end }}
 securityContext:
   privileged: true
