@@ -112,6 +112,13 @@ template:
   ##           readOnly: true
   ##     - name: dind
   ##       image: docker:dind
+  ##       args:
+  ##         - dockerd
+  ##         - --host=unix:///run/docker/docker.sock
+  ##         - --group=$(DOCKER_GROUP_GID)
+  ##       env:
+  ##         - name: DOCKER_GROUP_GID
+  ##           value: "123"
   ##       securityContext:
   ##         privileged: true
   ##       volumeMounts:
