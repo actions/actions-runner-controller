@@ -320,6 +320,9 @@ func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec)
 	// apply metadata
 	for k, v := range tmpl.Annotations {
 		if _, ok := pod.Annotations[k]; !ok {
+			if pod.Annotations == nil {
+				pod.Annotations = make(map[string]string)
+			}
 			pod.Annotations[k] = v
 		}
 	}
