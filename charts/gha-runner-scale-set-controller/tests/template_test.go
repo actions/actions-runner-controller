@@ -1019,3 +1019,31 @@ func TestControllerDeployment_MetricsPorts(t *testing.T) {
 		assert.Equal(t, value.frequency, 1, fmt.Sprintf("frequency of %q is not 1", key))
 	}
 }
+
+func TestTemplate_PodLabels(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"labels.label1": "value1",
+			"labels.label2": "value2",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+	var deployment appsv1.Deployment
+	helm.UnmarshalK8SYaml(t, output, &deployment)
+
+	assert.Equal(t, "value1", deployment.Spec.Template.ObjectMeta.Labels["label1"])
+	assert.Equal(t, "value2", deployment.Spec.Template.ObjectMeta.Labels["label2"])
+}
