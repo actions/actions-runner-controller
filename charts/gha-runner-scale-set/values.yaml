@@ -76,6 +76,8 @@ githubConfigSecret:
 ## empty, and configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to dind or kubernetes
+#   ## Rootful DinD is used by default. If you want to use Rootless DinD, set rootless to true.
+#   rootless: false
 #   ## the following is required when containerMode.type=kubernetes
 #   kubernetesModeWorkVolumeClaim:
 #     accessModes: ["ReadWriteOnce"]

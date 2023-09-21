@@ -92,7 +92,11 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
+{{- if .Values.containerMode.rootless -}}
+image: docker:dind-rootless
+{{- else -}}
 image: docker:dind
+{{- end }}
 securityContext:
   privileged: true
 volumeMounts:
