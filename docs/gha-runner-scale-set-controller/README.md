@@ -43,6 +43,13 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.6.0
+1. Fix parsing AcquireJob MessageQueueTokenExpiredError (#2837)[https://github.com/actions/actions-runner-controller/pull/2837]
+1. Set restart policy on the runner pod to Never if restartPolicy is not set in template (#2787)[https://github.com/actions/actions-runner-controller/pull/2787]
+1. Set the AutoscalingRunnerSet name to runnerScaleSetName (#2803)[https://github.com/actions/actions-runner-controller/pull/2803]
+1. Extend and generate crds allowing listener pod spec change (#2758)[https://github.com/actions/actions-runner-controller/pull/2758]
+1. Extend the user agent and fix the build version for the listener app (#2892)[https://github.com/actions/actions-runner-controller/pull/2892]
+
 ### v0.5.0
 
 1. Provide scale-set listener metrics [#2559](https://github.com/actions/actions-runner-controller/pull/2559)
@@ -112,7 +119,7 @@ Please evaluate these changes carefully before upgrading.
 #### Major changes
 
 1. Added proxy support for the controller and the runner pods, see the new helm chart fields [#2286](https://github.com/actions/actions-runner-controller/pull/2286)
-1. Added the abiilty to provide a pre-defined kubernetes secret for the auto scaling runner set helm chart [#2234](https://github.com/actions/actions-runner-controller/pull/2234)
+1. Added the abiilty to provide a pre-defined kubernetes secret for the autoscaling runner set helm chart [#2234](https://github.com/actions/actions-runner-controller/pull/2234)
 1. Enhanced security posture by removing un-required permissions for the manager-role [#2260](https://github.com/actions/actions-runner-controller/pull/2260)
 1. Enhanced our logging by returning an error when a runner group is defined in the values file but it's not created in GitHub [#2215](https://github.com/actions/actions-runner-controller/pull/2215)
 1. Fixed helm charts issues that were preventing the use of DinD [#2291](https://github.com/actions/actions-runner-controller/pull/2291)

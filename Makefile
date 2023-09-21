@@ -5,7 +5,8 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.308.0
+COMMIT_SHA = $(shell git rev-parse HEAD)
+RUNNER_VERSION ?= 2.309.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -67,7 +68,7 @@ endif
 all: manager
 
 lint:
-	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.49.0 golangci-lint run
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.54.2 golangci-lint run
 
 GO_TEST_ARGS ?= -short
 
@@ -215,6 +216,7 @@ docker-buildx:
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		--build-arg VERSION=${VERSION} \
+		--build-arg COMMIT_SHA=${COMMIT_SHA} \
 		-t "${DOCKER_IMAGE_NAME}:${VERSION}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}

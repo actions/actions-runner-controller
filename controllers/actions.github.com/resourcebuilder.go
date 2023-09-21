@@ -33,23 +33,37 @@ var commonLabelKeys = [...]string{
 	LabelKeyGitHubRepository,
 }
 
+var reservedListenerContainerEnvKeys = map[string]struct{}{
+	"GITHUB_CONFIGURE_URL":                  {},
+	"GITHUB_EPHEMERAL_RUNNER_SET_NAMESPACE": {},
+	"GITHUB_EPHEMERAL_RUNNER_SET_NAME":      {},
+	"GITHUB_MAX_RUNNERS":                    {},
+	"GITHUB_MIN_RUNNERS":                    {},
+	"GITHUB_RUNNER_SCALE_SET_ID":            {},
+	"GITHUB_RUNNER_LOG_LEVEL":               {},
+	"GITHUB_RUNNER_LOG_FORMAT":              {},
+	"GITHUB_TOKEN":                          {},
+	"GITHUB_APP_ID":                         {},
+	"GITHUB_APP_INSTALLATION_ID":            {},
+	"GITHUB_APP_PRIVATE_KEY":                {},
+}
+
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
 
-// scaleSetListenerImagePullPolicy is applied to all listeners
+var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
+var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
+
 var scaleSetListenerImagePullPolicy = DefaultScaleSetListenerImagePullPolicy
 
 func SetListenerImagePullPolicy(pullPolicy string) bool {
 	switch p := corev1.PullPolicy(pullPolicy); p {
-	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+	case corev1.PullAlways, corev1.PullIfNotPresent, corev1.PullNever:
 		scaleSetListenerImagePullPolicy = p
 		return true
 	default:
 		return false
 	}
 }
-
-var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
-var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
 
 func SetListenerLoggingParameters(level string, format string) bool {
 	switch level {
@@ -115,10 +129,10 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			MinRunners:                    effectiveMinRunners,
 			MaxRunners:                    effectiveMaxRunners,
 			Image:                         image,
-			ImagePullPolicy:               scaleSetListenerImagePullPolicy,
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
+			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
 		},
 	}
 
@@ -266,7 +280,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Name:            autoscalingListenerContainerName,
 				Image:           autoscalingListener.Spec.Image,
 				Env:             listenerEnv,
-				ImagePullPolicy: autoscalingListener.Spec.ImagePullPolicy,
+				ImagePullPolicy: scaleSetListenerImagePullPolicy,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
@@ -295,7 +309,128 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		Spec: podSpec,
 	}
 
+	if autoscalingListener.Spec.Template != nil {
+		mergeListenerPodWithTemplate(newRunnerScaleSetListenerPod, autoscalingListener.Spec.Template)
+	}
+
 	return newRunnerScaleSetListenerPod, nil
+}
+
+func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec) {
+	// apply metadata
+	for k, v := range tmpl.Annotations {
+		if _, ok := pod.Annotations[k]; !ok {
+			pod.Annotations[k] = v
+		}
+	}
+
+	for k, v := range tmpl.Labels {
+		if _, ok := pod.Labels[k]; !ok {
+			pod.Labels[k] = v
+		}
+	}
+
+	// apply spec
+
+	// apply container
+	listenerContainer := &pod.Spec.Containers[0] // if this panics, we have bigger problems
+	for i := range tmpl.Spec.Containers {
+		c := &tmpl.Spec.Containers[i]
+
+		switch c.Name {
+		case "listener":
+			mergeListenerContainer(listenerContainer, c)
+		default:
+			pod.Spec.Containers = append(pod.Spec.Containers, *c)
+		}
+	}
+
+	// apply pod related spec
+	// NOTE: fields that should be gnored
+	// - service account based fields
+
+	if tmpl.Spec.RestartPolicy != "" {
+		pod.Spec.RestartPolicy = tmpl.Spec.RestartPolicy
+	}
+
+	if tmpl.Spec.ImagePullSecrets != nil {
+		pod.Spec.ImagePullSecrets = tmpl.Spec.ImagePullSecrets
+	}
+
+	pod.Spec.Volumes = tmpl.Spec.Volumes
+	pod.Spec.InitContainers = tmpl.Spec.InitContainers
+	pod.Spec.EphemeralContainers = tmpl.Spec.EphemeralContainers
+	pod.Spec.TerminationGracePeriodSeconds = tmpl.Spec.TerminationGracePeriodSeconds
+	pod.Spec.ActiveDeadlineSeconds = tmpl.Spec.ActiveDeadlineSeconds
+	pod.Spec.DNSPolicy = tmpl.Spec.DNSPolicy
+	pod.Spec.NodeSelector = tmpl.Spec.NodeSelector
+	pod.Spec.NodeName = tmpl.Spec.NodeName
+	pod.Spec.HostNetwork = tmpl.Spec.HostNetwork
+	pod.Spec.HostPID = tmpl.Spec.HostPID
+	pod.Spec.HostIPC = tmpl.Spec.HostIPC
+	pod.Spec.ShareProcessNamespace = tmpl.Spec.ShareProcessNamespace
+	pod.Spec.SecurityContext = tmpl.Spec.SecurityContext
+	pod.Spec.Hostname = tmpl.Spec.Hostname
+	pod.Spec.Subdomain = tmpl.Spec.Subdomain
+	pod.Spec.Affinity = tmpl.Spec.Affinity
+	pod.Spec.SchedulerName = tmpl.Spec.SchedulerName
+	pod.Spec.Tolerations = tmpl.Spec.Tolerations
+	pod.Spec.HostAliases = tmpl.Spec.HostAliases
+	pod.Spec.PriorityClassName = tmpl.Spec.PriorityClassName
+	pod.Spec.Priority = tmpl.Spec.Priority
+	pod.Spec.DNSConfig = tmpl.Spec.DNSConfig
+	pod.Spec.ReadinessGates = tmpl.Spec.ReadinessGates
+	pod.Spec.RuntimeClassName = tmpl.Spec.RuntimeClassName
+	pod.Spec.EnableServiceLinks = tmpl.Spec.EnableServiceLinks
+	pod.Spec.PreemptionPolicy = tmpl.Spec.PreemptionPolicy
+	pod.Spec.Overhead = tmpl.Spec.Overhead
+	pod.Spec.TopologySpreadConstraints = tmpl.Spec.TopologySpreadConstraints
+	pod.Spec.SetHostnameAsFQDN = tmpl.Spec.SetHostnameAsFQDN
+	pod.Spec.OS = tmpl.Spec.OS
+	pod.Spec.HostUsers = tmpl.Spec.HostUsers
+	pod.Spec.SchedulingGates = tmpl.Spec.SchedulingGates
+	pod.Spec.ResourceClaims = tmpl.Spec.ResourceClaims
+}
+
+func mergeListenerContainer(base, from *corev1.Container) {
+	// name should not be modified
+
+	if from.Image != "" {
+		base.Image = from.Image
+	}
+
+	if len(from.Command) > 0 {
+		base.Command = from.Command
+	}
+
+	for _, v := range from.Env {
+		if _, ok := reservedListenerContainerEnvKeys[v.Name]; !ok {
+			base.Env = append(base.Env, v)
+		}
+	}
+
+	if from.ImagePullPolicy != "" {
+		base.ImagePullPolicy = from.ImagePullPolicy
+	}
+
+	base.Args = append(base.Args, from.Args...)
+	base.WorkingDir = from.WorkingDir
+	base.Ports = append(base.Ports, from.Ports...)
+	base.EnvFrom = append(base.EnvFrom, from.EnvFrom...)
+	base.Resources = from.Resources
+	base.VolumeMounts = append(base.VolumeMounts, from.VolumeMounts...)
+	base.VolumeDevices = append(base.VolumeDevices, from.VolumeDevices...)
+	base.LivenessProbe = from.LivenessProbe
+	base.ReadinessProbe = from.ReadinessProbe
+	base.StartupProbe = from.StartupProbe
+	base.Lifecycle = from.Lifecycle
+	base.TerminationMessagePath = from.TerminationMessagePath
+	base.TerminationMessagePolicy = from.TerminationMessagePolicy
+	base.ImagePullPolicy = from.ImagePullPolicy
+	base.SecurityContext = from.SecurityContext
+	base.Stdin = from.Stdin
+	base.StdinOnce = from.StdinOnce
+	base.TTY = from.TTY
 }
 
 func (b *resourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {

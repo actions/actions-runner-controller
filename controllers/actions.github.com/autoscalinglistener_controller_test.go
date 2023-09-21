@@ -361,6 +361,150 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	})
 })
 
+var _ = Describe("Test AutoScalingListener customization", func() {
+	var ctx context.Context
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var autoscalingRunnerSet *actionsv1alpha1.AutoscalingRunnerSet
+	var configSecret *corev1.Secret
+	var autoscalingListener *actionsv1alpha1.AutoscalingListener
+
+	var runAsUser int64 = 1001
+
+	listenerPodTemplate := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:            "listener",
+					ImagePullPolicy: corev1.PullAlways,
+					SecurityContext: &corev1.SecurityContext{
+						RunAsUser: &runAsUser,
+					},
+				},
+				{
+					Name:            "sidecar",
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Image:           "busybox",
+				},
+			},
+			SecurityContext: &corev1.PodSecurityContext{
+				RunAsUser: &runAsUser,
+			},
+		},
+	}
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		controller := &AutoscalingListenerReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+		}
+		err := controller.SetupWithManager(mgr)
+		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet = &actionsv1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err = k8sClient.Create(ctx, autoscalingRunnerSet)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
+
+		autoscalingListener = &actionsv1alpha1.AutoscalingListener{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asltest",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: actionsv1alpha1.AutoscalingListenerSpec{
+				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigSecret:            configSecret.Name,
+				RunnerScaleSetId:              1,
+				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
+				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
+				EphemeralRunnerSetName:        "test-ers",
+				MaxRunners:                    10,
+				MinRunners:                    1,
+				Image:                         "ghcr.io/owner/repo",
+				Template:                      &listenerPodTemplate,
+			},
+		}
+
+		err = k8sClient.Create(ctx, autoscalingListener)
+		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingListener")
+
+		startManagers(GinkgoT(), mgr)
+	})
+
+	Context("When creating a new AutoScalingListener", func() {
+		It("It should create customized pod with applied configuration", func() {
+			// Check if finalizer is added
+			created := new(actionsv1alpha1.AutoscalingListener)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, created)
+					if err != nil {
+						return "", err
+					}
+					if len(created.Finalizers) == 0 {
+						return "", nil
+					}
+					return created.Finalizers[0], nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
+
+			// Check if pod is created
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			Expect(pod.Spec.SecurityContext.RunAsUser).To(Equal(&runAsUser), "Pod should have the correct security context")
+
+			Expect(pod.Spec.Containers[0].Name).NotTo(Equal("listener"), "Pod should have the correct container name")
+			Expect(pod.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(&runAsUser), "Pod should have the correct security context")
+			Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways), "Pod should have the correct image pull policy")
+
+			Expect(pod.Spec.Containers[1].Name).To(Equal("sidecar"), "Pod should have the correct container name")
+			Expect(pod.Spec.Containers[1].Image).To(Equal("busybox"), "Pod should have the correct image")
+			Expect(pod.Spec.Containers[1].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent), "Pod should have the correct image pull policy")
+		})
+	})
+})
+
 var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 	var ctx context.Context
 	var mgr ctrl.Manager

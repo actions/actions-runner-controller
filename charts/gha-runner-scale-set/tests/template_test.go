@@ -381,10 +381,10 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Equal(t, namespaceName, ars.Namespace)
-	assert.Equal(t, "test-runners", ars.Name)
+	assert.Equal(t, "test-runner-scale-set-name", ars.Name)
 
 	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
-	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, releaseName, ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
@@ -954,6 +954,50 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 1, "Template.Spec should have 1 volume")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[0].Name)
 	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[0].Ephemeral, "Template.Spec should have 1 ephemeral volume")
+}
+
+func TestTemplateRenderedAutoscalingRunnerSet_ListenerPodTemplate(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_listener_template.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	require.NotNil(t, ars.Spec.ListenerTemplate, "ListenerPodTemplate should not be nil")
+
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Hostname, "example")
+
+	require.Len(t, ars.Spec.ListenerTemplate.Spec.Containers, 2, "ListenerPodTemplate should have 2 containers")
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Containers[0].Name, "listener")
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Containers[0].Image, "listener:latest")
+	assert.ElementsMatch(t, ars.Spec.ListenerTemplate.Spec.Containers[0].Command, []string{"/path/to/entrypoint"})
+	assert.Len(t, ars.Spec.ListenerTemplate.Spec.Containers[0].VolumeMounts, 1, "VolumeMounts should be 1")
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Containers[0].VolumeMounts[0].Name, "work")
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Containers[0].VolumeMounts[0].MountPath, "/home/example")
+
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Containers[1].Name, "side-car")
+	assert.Equal(t, ars.Spec.ListenerTemplate.Spec.Containers[1].Image, "nginx:latest")
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) {
@@ -1666,6 +1710,53 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraContainers(t *testing.T) {
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be work")
 	assert.Equal(t, corev1.DNSNone, ars.Spec.Template.Spec.DNSPolicy, "DNS Policy should be None")
 	assert.Equal(t, "192.0.2.1", ars.Spec.Template.Spec.DNSConfig.Nameservers[0], "DNS Nameserver should be set")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_RestartPolicy(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, corev1.RestartPolicyNever, ars.Spec.Template.Spec.RestartPolicy, "RestartPolicy should be Never")
+
+	options = &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+			"template.spec.restartPolicy":        "Always",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, corev1.RestartPolicyAlways, ars.Spec.Template.Spec.RestartPolicy, "RestartPolicy should be Always")
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_ExtraPodSpec(t *testing.T) {

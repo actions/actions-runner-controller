@@ -15,6 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testUserAgent = actions.UserAgentInfo{
+	Version:    "test",
+	CommitSHA:  "test",
+	ScaleSetID: 1,
+}
+
 func TestNewGitHubAPIRequest(t *testing.T) {
 	ctx := context.Background()
 
@@ -62,13 +68,15 @@ func TestNewGitHubAPIRequest(t *testing.T) {
 	})
 
 	t.Run("sets user agent header if present", func(t *testing.T) {
-		client, err := actions.NewClient("http://localhost/my-org", nil, actions.WithUserAgent("my-agent"))
+		client, err := actions.NewClient("http://localhost/my-org", nil)
 		require.NoError(t, err)
+
+		client.SetUserAgent(testUserAgent)
 
 		req, err := client.NewGitHubAPIRequest(ctx, http.MethodGet, "/app/installations/123/access_tokens", nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, "my-agent", req.Header.Get("User-Agent"))
+		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
 	})
 
 	t.Run("sets the body we pass", func(t *testing.T) {
@@ -182,13 +190,15 @@ func TestNewActionsServiceRequest(t *testing.T) {
 	t.Run("populates header", func(t *testing.T) {
 		server := testserver.New(t, nil)
 
-		client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds, actions.WithUserAgent("my-agent"))
+		client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 		require.NoError(t, err)
+
+		client.SetUserAgent(testUserAgent)
 
 		req, err := client.NewActionsServiceRequest(ctx, http.MethodGet, "/my/path", nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, "my-agent", req.Header.Get("User-Agent"))
+		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
 		assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 	})
 }

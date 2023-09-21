@@ -374,7 +374,6 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
-
 	assert.Equal(t, "CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	assert.Equal(t, "IfNotPresent", deployment.Spec.Template.Spec.Containers[0].Env[2].Value) // default value. Needs to align with controllers/actions.github.com/resourcebuilder.go
 
@@ -510,14 +509,13 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "CONTROLLER_MANAGER_CONTAINER_IMAGE", deployment.Spec.Template.Spec.Containers[0].Env[0].Name)
 	assert.Equal(t, managerImage, deployment.Spec.Template.Spec.Containers[0].Env[0].Value)
 
+	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
+	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
 	assert.Equal(t, "CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	assert.Equal(t, "Always", deployment.Spec.Template.Spec.Containers[0].Env[2].Value) // default value. Needs to align with controllers/actions.github.com/resourcebuilder.go
 
 	assert.Equal(t, "ENV_VAR_NAME_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Name)
 	assert.Equal(t, "ENV_VAR_VALUE_1", deployment.Spec.Template.Spec.Containers[0].Env[3].Value)
-
-	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
-	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
 
 	assert.Equal(t, "500m", deployment.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String())
 	assert.True(t, *deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot)
@@ -770,7 +768,6 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 
 	assert.Equal(t, "CONTROLLER_MANAGER_POD_NAMESPACE", deployment.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "metadata.namespace", deployment.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath)
-
 	assert.Equal(t, "CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY", deployment.Spec.Template.Spec.Containers[0].Env[2].Name)
 	assert.Equal(t, "IfNotPresent", deployment.Spec.Template.Spec.Containers[0].Env[2].Value) // default value. Needs to align with controllers/actions.github.com/resourcebuilder.go
 

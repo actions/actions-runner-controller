@@ -70,7 +70,7 @@ rbac:
   {}
   # # This allows ARC to dynamically create a ServiceAccount and a Role for each Runner pod that uses "kubernetes" container mode,
   # # by extending ARC's manager role to have the same permissions required by the pod runs the runner agent in "kubernetes" container mode.
-  # # Without this, Kubernetes blocks ARC to create the role to prevent a priviledge escalation.
+  # # Without this, Kubernetes blocks ARC to create the role to prevent a privilege escalation.
   # # See https://github.com/actions/actions-runner-controller/pull/1268/files#r917327010
   # allowGrantingKubernetesContainerModePermissions: true
 
@@ -151,8 +151,7 @@ podDisruptionBudget:
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-env:
-  {}
+# env:
   # specify additional environment variables for the controller pod.
   # It's possible to specify either key vale pairs e.g.:
   # http_proxy: "proxy.com:8080"
@@ -303,7 +302,7 @@ githubWebhookServer:
   #       key: GITHUB_WEBHOOK_SECRET_TOKEN
   #       name: prod-gha-controller-webhook-token
   #       optional: true
-  env: {}
+  # env:
 
 actionsMetrics:
   serviceAnnotations: {}
@@ -322,6 +321,19 @@ actionsMetrics:
     image:
       repository: quay.io/brancz/kube-rbac-proxy
       tag: v0.13.1
+  # specify additional environment variables for the webhook server pod.
+  # It's possible to specify either key vale pairs e.g.:
+  # my_env_var: "some value"
+  # my_other_env_var: "other value"
+
+  # or a list of complete environment variable definitions e.g.:
+  # - name: GITHUB_WEBHOOK_SECRET_TOKEN
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: GITHUB_WEBHOOK_SECRET_TOKEN
+  #       name: prod-gha-controller-webhook-token
+  #       optional: true
+  # env:
 
 actionsMetricsServer:
   enabled: false

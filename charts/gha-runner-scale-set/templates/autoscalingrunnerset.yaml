@@ -7,7 +7,7 @@ metadata:
   {{- if gt (len .Release.Namespace) 63 }}
   {{ fail "Namespace must have up to 63 characters" }}
   {{- end }}
-  name: {{ .Release.Name }}
+  name: {{ .Values.runnerScaleSetName | default .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/component: "autoscaling-runner-set"
@@ -88,6 +88,11 @@ spec:
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
 
+  {{- with .Values.listenerTemplate}}
+  listenerTemplate:
+    {{- toYaml . | nindent 4}}
+  {{- end }}
+
   template:
     {{- with .Values.template.metadata }}
     metadata:
@@ -105,6 +110,9 @@ spec:
         {{- if and (ne $key "containers") (ne $key "volumes") (ne $key "initContainers") (ne $key "serviceAccountName") }}
       {{ $key }}: {{ $val | toYaml | nindent 8 }}
         {{- end }}
+      {{- end }}
+      {{- if not .Values.template.spec.restartPolicy }}
+      restartPolicy: Never
       {{- end }}
       {{- $containerMode := .Values.containerMode }}
       {{- if eq $containerMode.type "kubernetes" }}

@@ -888,8 +888,9 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				Log:                                logf.Log,
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-				ActionsClient:                      actions.NewMultiClient("test", logr.Discard()),
+				ActionsClient:                      actions.NewMultiClient(logr.Discard()),
 			}
+
 			err := controller.SetupWithManager(mgr)
 			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
@@ -1079,7 +1080,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 		})
 
 		It("should be able to make requests to a server using root CAs", func() {
-			controller.ActionsClient = actions.NewMultiClient("test", logr.Discard())
+			controller.ActionsClient = actions.NewMultiClient(logr.Discard())
 
 			certsFolder := filepath.Join(
 				"../../",
