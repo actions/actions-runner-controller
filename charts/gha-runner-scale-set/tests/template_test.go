@@ -361,6 +361,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
+	nameOverride := "test-runner-scale-set-name"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
@@ -368,7 +369,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
-			"runnerScaleSetName":                 "test-runner-scale-set-name",
+			"runnerScaleSetName":                 nameOverride,
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
 		},
@@ -381,12 +382,15 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Equal(t, namespaceName, ars.Namespace)
-	assert.Equal(t, "test-runner-scale-set-name", ars.Name)
+	assert.Equal(t, nameOverride, ars.Name)
 
 	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
-	assert.Equal(t, releaseName, ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, nameOverride, ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, nameOverride, ars.Labels["actions.github.com/scale-set-name"])
+	assert.Equal(t, namespaceName, ars.Labels["actions.github.com/scale-set-namespace"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, nameOverride+"-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
