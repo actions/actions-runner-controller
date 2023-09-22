@@ -74,8 +74,6 @@ jobs:
         with:
           go-version-file: 'go.mod'
       - run: make manifests
-      - name: "Ignore summerwind resources"
-        run: git checkout config/rbac/role.yaml && git checkout config/webhook && git checkout config/crd/bases/actions.summerwind.dev*
       - name: Check diff
         run: git diff --exit-code
       - name: Install kubebuilder
