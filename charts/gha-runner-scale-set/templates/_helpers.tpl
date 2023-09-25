@@ -97,19 +97,26 @@ image: docker:dind-rootless
 {{- else -}}
 image: docker:dind
 {{- end }}
+args:
+  - dockerd
+  - --host=unix:///run/docker/docker.sock
+  - --group=$(DOCKER_GROUP_GID)
+env:
+  - name: DOCKER_GROUP_GID
+    value: "123"
 securityContext:
   privileged: true
 volumeMounts:
   - name: work
     mountPath: /home/runner/_work
-  - name: dind-cert
-    mountPath: /certs/client
+  - name: dind-sock
+    mountPath: /run/docker
   - name: dind-externals
     mountPath: /home/runner/externals
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
-- name: dind-cert
+- name: dind-sock
   emptyDir: {}
 - name: dind-externals
   emptyDir: {}
@@ -189,8 +196,6 @@ volumeMounts:
       {{- end }}
     {{- end }}
     {{- $setDockerHost := 1 }}
-    {{- $setDockerTlsVerify := 1 }}
-    {{- $setDockerCertPath := 1 }}
     {{- $setRunnerWaitDocker := 1 }}
     {{- $setNodeExtraCaCerts := 0 }}
     {{- $setRunnerUpdateCaCerts := 0 }}
@@ -203,12 +208,6 @@ env:
       {{- range $i, $env := . }}
         {{- if eq $env.name "DOCKER_HOST" }}
           {{- $setDockerHost = 0 }}
-        {{- end }}
-        {{- if eq $env.name "DOCKER_TLS_VERIFY" }}
-          {{- $setDockerTlsVerify = 0 }}
-        {{- end }}
-        {{- if eq $env.name "DOCKER_CERT_PATH" }}
-          {{- $setDockerCertPath = 0 }}
         {{- end }}
         {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
           {{- $setRunnerWaitDocker = 0 }}
@@ -224,15 +223,7 @@ env:
     {{- end }}
     {{- if $setDockerHost }}
   - name: DOCKER_HOST
-    value: tcp://localhost:2376
-    {{- end }}
-    {{- if $setDockerTlsVerify }}
-  - name: DOCKER_TLS_VERIFY
-    value: "1"
-    {{- end }}
-    {{- if $setDockerCertPath }}
-  - name: DOCKER_CERT_PATH
-    value: /certs/client
+    value: unix:///run/docker/docker.sock
     {{- end }}
     {{- if $setRunnerWaitDocker }}
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
@@ -258,7 +249,7 @@ volumeMounts:
         {{- if eq $volMount.name "work" }}
           {{- $mountWork = 0 }}
         {{- end }}
-        {{- if eq $volMount.name "dind-cert" }}
+        {{- if eq $volMount.name "dind-sock" }}
           {{- $mountDindCert = 0 }}
         {{- end }}
         {{- if eq $volMount.name "github-server-tls-cert" }}
@@ -272,8 +263,8 @@ volumeMounts:
     mountPath: /home/runner/_work
     {{- end }}
     {{- if $mountDindCert }}
-  - name: dind-cert
-    mountPath: /certs/client
+  - name: dind-sock
+    mountPath: /run/docker
     readOnly: true
     {{- end }}
     {{- if $mountGitHubServerTLS }}
