@@ -126,6 +126,10 @@ spec:
       - name: init-dind-externals
         {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
         {{- end }}
+        {{- if and (eq $containerMode.type "dind") .Values.containerMode.rootless }}
+      - name: init-dind-rootless
+        {{- include "gha-runner-scale-set.dind-rootless-init-container" . | nindent 8 }}
+        {{- end }}
         {{- with .Values.template.spec.initContainers }}
       {{- toYaml . | nindent 6 }}
         {{- end }}
@@ -135,7 +139,11 @@ spec:
       - name: runner
         {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
       - name: dind
+        {{- if .Values.containerMode.rootless }}
+        {{- include "gha-runner-scale-set.dind-rootless-container" . | nindent 8 }}
+        {{- else }}
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
+        {{- end }}
       {{- include "gha-runner-scale-set.non-runner-non-dind-containers" . | nindent 6 }}
       {{- else if eq $containerMode.type "kubernetes" }}
       - name: runner
@@ -153,6 +161,9 @@ spec:
         {{- if eq $containerMode.type "dind" }}
           {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
           {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}
+          {{- if .Values.containerMode.rootless }}
+          {{- include "gha-runner-scale-set.dind-rootless-volume" . | nindent 6 }}
+          {{- end }}
           {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
         {{- else if eq $containerMode.type "kubernetes" }}
           {{- include "gha-runner-scale-set.kubernetes-mode-work-volume" . | nindent 6 }}

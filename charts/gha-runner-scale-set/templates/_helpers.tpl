@@ -91,12 +91,32 @@ volumeMounts:
 {{- end }}
 {{- end }}
 
-{{- define "gha-runner-scale-set.dind-container" -}}
-{{- if .Values.containerMode.rootless -}}
+{{- define "gha-runner-scale-set.dind-rootless-init-container" -}}
 image: docker:dind-rootless
-{{- else -}}
-image: docker:dind
+command:
+  - sh
+  - -c
+  - |
+    set -x
+    cp -a /etc/. /dind-etc/
+    echo 'runner:x:1001:1001:runner:/home/runner:/bin/ash' >> /dind-etc/passwd
+    echo 'runner:x:1001:' >> /dind-etc/group
+    echo 'runner:100000:65536' >> /dind-etc/subgid
+    echo 'runner:100000:65536' >>  /dind-etc/subuid
+    chmod 755 /dind-etc;
+    chmod u=rwx,g=rx+s,o=rx /dind-home
+    chown 1001:1001 /dind-home
+securityContext:
+  runAsUser: 0
+volumeMounts:
+  - mountPath: /dind-etc
+    name: dind-etc
+  - mountPath: /dind-home
+    name: dind-home
 {{- end }}
+
+{{- define "gha-runner-scale-set.dind-container" -}}
+image: docker:dind
 args:
   - dockerd
   - --host=unix:///run/docker/docker.sock
@@ -115,10 +135,39 @@ volumeMounts:
     mountPath: /home/runner/externals
 {{- end }}
 
+{{- define "gha-runner-scale-set.dind-rootless-container" -}}
+image: docker:dind-rootless
+args:
+  - dockerd
+  - --host=unix:///run/docker/docker.sock
+securityContext:
+  privileged: true
+  runAsUser: 1001
+  runAsGroup: 1001
+volumeMounts:
+  - name: work
+    mountPath: /home/runner/_work
+  - name: dind-sock
+    mountPath: /run/docker
+  - name: dind-externals
+    mountPath: /home/runner/externals
+  - name: dind-etc
+    mountPath: /etc
+  - name: dind-home
+    mountPath: /home/runner
+{{- end }}
+
 {{- define "gha-runner-scale-set.dind-volume" -}}
 - name: dind-sock
   emptyDir: {}
 - name: dind-externals
+  emptyDir: {}
+{{- end }}
+
+{{- define "gha-runner-scale-set.dind-rootless-volume" -}}
+- name: dind-etc
+  emptyDir: {}
+- name: dind-home
   emptyDir: {}
 {{- end }}
 
