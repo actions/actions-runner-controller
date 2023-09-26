@@ -317,7 +317,9 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 }
 
 func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec) {
-	// apply metadata
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
 	for k, v := range tmpl.Annotations {
 		if _, ok := pod.Annotations[k]; !ok {
 			pod.Annotations[k] = v
