@@ -103,3 +103,4 @@ func TestGitHubServerTLSConfig_ToCertPool(t *testing.T) {
 		assert.True(t, serverSuccessfullyCalled)
 	})
 }
+
