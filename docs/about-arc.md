@@ -6,7 +6,7 @@ This document provides a high-level overview of Actions Runner Controller (ARC).
 With this overview, you can get a foundation of basic scenarios and be capable of reviewing other advanced topics.
 
 ## GitHub Actions
-[GitHub Actions](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline. 
+[GitHub Actions](https://github.com/features/actions) is a continuous integration and continuous delivery (CI/CD) platform to automate your build, test, and deployment pipeline.
 
 You can create workflows that build and test every pull request to your repository, or deploy merged pull requests to production. Your workflow contains one or more jobs which can run in sequential order or in parallel. Each job will run inside its own runner and has one or more steps that either run a script that you define or run an action, which is a reusable extension that can simplify your workflow. To learn more about Actions - see "[Learn Github Actions](https://docs.github.com/en/actions/learn-github-actions)".
 
@@ -21,7 +21,7 @@ Self-hosted runners offer more control of hardware, operating system, and softwa
 
 ### Types of Self hosted runners
 Self-hosted runners can be physical, virtual, in a container, on-premises, or in a cloud.
-- Traditional Deployment is having a physical machine, with OS and apps on it. The runner runs on this machine and executes any jobs. It comes with the cost of owning and operating the hardware 24/7 even if it isn't in use that entire time. 
+- Traditional Deployment is having a physical machine, with OS and apps on it. The runner runs on this machine and executes any jobs. It comes with the cost of owning and operating the hardware 24/7 even if it isn't in use that entire time.
 - Virtualized deployments are simpler to manage. Each runner runs on a virtual machine (VM) that runs on a host. There could be multiple such VMs running on the same host. VMs are complete OS’s and might take time to bring up everytime a clean environment is needed to run workflows.
 - Containerized deployments are similar to VMs, but instead of bringing up entire VM’s, a container gets deployed. Kubernetes (K8s) provides a scalable and reproducible environment for containerized workloads. They are lightweight, loosely coupled, highly efficient and can be managed centrally. There are advantages to using Kubernetes (outlined "[here](https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/)."), but it is more complicated and less widely-understood than the other options. A managed provider makes this much simpler to run at scale.
 
@@ -37,7 +37,7 @@ We have a quick start guide that demonstrates how to easily deploy ARC into your
 ## ARC components
 ARC basically consists of a set of custom resources. An ARC deployment is applying these custom resources onto a K8s cluster. Once applied, it creates a set of Pods, with the Github Actions runner running within them. Github is now able to treat these Pods as self hosted runners and allocate jobs to them.
 
-### Custom resources 
+### Custom resources
 ARC consists of several custom resource definitions (Runner, Runner Set, Runner Deployment, Runner Replica Set and Horizontal Runner AutoScaler). For more information on CRDs, refer "[Kubernetes Custom Resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)."
 
 The helm command (in the QuickStart guide) installs the custom resources into the actions-runner-system namespace.
@@ -127,7 +127,7 @@ For more details - please see "[Pull Driven Scaling](automatically-scaling-runne
 *The period between polls is defined by the controller's `--sync-period` flag. If this flag isn't provided then the controller defaults to a sync period of `1m`, this can be configured in seconds or minutes.*
 
 ## Other Configurations
-ARC supports several different advanced configuration. 
+ARC supports several different advanced configuration.
 - support for alternate runners : Setting up runner pods with Docker-In-Docker configuration.
 - managing runner groups : Managing a set of running with runner groups thus making it easy to manage different groups within enterprise
 - Webhook driven scaling.
@@ -168,7 +168,7 @@ The virtual environments from GitHub contain a lot more software packages (diffe
 
 If there is a need to include packages in the runner image for which there is no setup action, then this can be achieved by building a custom container image for the runner. The easiest way is to start with the `summerwind/actions-runner` image and then install the extra dependencies directly in the docker image:
 
-```shell
+```Dockerfile
 FROM summerwind/actions-runner:latest
 
 RUN sudo apt-get update -y \
@@ -186,4 +186,19 @@ metadata:
 spec:
   repository: actions/actions-runner-controller
   image: YOUR_CUSTOM_RUNNER_IMAGE
+```
+
+**Extending the PATH**<br />
+:warning: If you modify the `PATH` environment variable, these changes will not persist for workflow runs.
+
+If you want to extend the path, do so in the Dockerfile with e.g.
+
+```Dockerfile
+ENV PATH=/usr/local/go/bin:${PATH}
+```
+
+to persist these changes for workflow runs, write the `PATH` variable to the `.env` file used by the runner.
+
+```Dockerfile
+RUN echo "PATH=$PATH" >> /runnertmp/.env
 ```
