@@ -1,7 +1,7 @@
 ---
-name: Feature request
+name: Feature request (actions.summerwind.net API group)
 about: Suggest an idea for this project
-labels: ["enhancement", "needs triage"]
+labels: ["enhancement", "needs triage", "community"]
 title: ''
 assignees: ''
 ---
