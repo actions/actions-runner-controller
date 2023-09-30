@@ -330,7 +330,7 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "autoscaling-runner-set", ars.Labels["app.kubernetes.io/component"])
@@ -361,6 +361,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
+	nameOverride := "test-runner-scale-set-name"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	options := &helm.Options{
@@ -368,7 +369,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
-			"runnerScaleSetName":                 "test-runner-scale-set-name",
+			"runnerScaleSetName":                 nameOverride,
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
 		},
@@ -381,12 +382,15 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Equal(t, namespaceName, ars.Namespace)
-	assert.Equal(t, "test-runner-scale-set-name", ars.Name)
+	assert.Equal(t, nameOverride, ars.Name)
 
-	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
-	assert.Equal(t, releaseName, ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, nameOverride, ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, nameOverride, ars.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, nameOverride, ars.Labels["actions.github.com/scale-set-name"])
+	assert.Equal(t, namespaceName, ars.Labels["actions.github.com/scale-set-namespace"])
+	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
-	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
+	assert.Equal(t, nameOverride+"-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
@@ -767,7 +771,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 5, "Volumes should be 5")
-	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-cert")
+	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-sock")
 	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Volumes[1].Name, "Volume name should be dind-externals")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[2].Name, "Volume name should be work")
 	assert.Equal(t, "/data", ars.Spec.Template.Spec.Volumes[2].HostPath.Path, "Volume host path should be /data")
@@ -840,7 +844,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
@@ -863,40 +867,36 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "Template.Spec should have 2 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
-	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 4, "The runner container should have 4 env vars, DOCKER_HOST, DOCKER_TLS_VERIFY, DOCKER_CERT_PATH and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS")
+	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 2, "The runner container should have 2 env vars, DOCKER_HOST and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS")
 	assert.Equal(t, "DOCKER_HOST", ars.Spec.Template.Spec.Containers[0].Env[0].Name)
-	assert.Equal(t, "tcp://localhost:2376", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
-	assert.Equal(t, "DOCKER_TLS_VERIFY", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
-	assert.Equal(t, "1", ars.Spec.Template.Spec.Containers[0].Env[1].Value)
-	assert.Equal(t, "DOCKER_CERT_PATH", ars.Spec.Template.Spec.Containers[0].Env[2].Name)
-	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].Env[2].Value)
-	assert.Equal(t, "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS", ars.Spec.Template.Spec.Containers[0].Env[3].Name)
-	assert.Equal(t, "120", ars.Spec.Template.Spec.Containers[0].Env[3].Value)
+	assert.Equal(t, "unix:///run/docker/docker.sock", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
+	assert.Equal(t, "120", ars.Spec.Template.Spec.Containers[0].Env[1].Value)
 
-	assert.Len(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, 2, "The runner container should have 2 volume mounts, dind-cert and work")
+	assert.Len(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts, 2, "The runner container should have 2 volume mounts, dind-sock and work")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
 	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
 	assert.False(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly)
 
-	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
-	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
+	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
+	assert.Equal(t, "/run/docker", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
 	assert.True(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly)
 
 	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name)
 	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
 	assert.True(t, *ars.Spec.Template.Spec.Containers[1].SecurityContext.Privileged)
-	assert.Len(t, ars.Spec.Template.Spec.Containers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-cert, work and externals")
+	assert.Len(t, ars.Spec.Template.Spec.Containers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-sock, work and externals")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name)
 	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
 
-	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
-	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
+	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
+	assert.Equal(t, "/run/docker", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
 
 	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
 	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
 
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 3, "Volumes should be 3")
-	assert.Equal(t, "dind-cert", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-cert")
+	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-sock")
 	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Volumes[1].Name, "Volume name should be dind-externals")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Volumes[2].Name, "Volume name should be work")
 	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[2].EmptyDir, "Volume work should be an emptyDir")
@@ -932,7 +932,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
@@ -1033,7 +1033,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) 
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
 
-	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
 	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
 	assert.Equal(t, "pre-defined-secrets", ars.Spec.GitHubConfigSecret)
@@ -1833,10 +1833,6 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
 	assert.Equal(t, "tcp://localhost:9999", ars.Spec.Template.Spec.Containers[0].Env[0].Value, "DOCKER_HOST should be set to `tcp://localhost:9999`")
 	assert.Equal(t, "MY_NODE_NAME", ars.Spec.Template.Spec.Containers[0].Env[1].Name, "MY_NODE_NAME should be set")
 	assert.Equal(t, "spec.nodeName", ars.Spec.Template.Spec.Containers[0].Env[1].ValueFrom.FieldRef.FieldPath, "MY_NODE_NAME should be set to `spec.nodeName`")
-	assert.Equal(t, "DOCKER_TLS_VERIFY", ars.Spec.Template.Spec.Containers[0].Env[2].Name, "DOCKER_TLS_VERIFY should be set")
-	assert.Equal(t, "1", ars.Spec.Template.Spec.Containers[0].Env[2].Value, "DOCKER_TLS_VERIFY should be set to `1`")
-	assert.Equal(t, "DOCKER_CERT_PATH", ars.Spec.Template.Spec.Containers[0].Env[3].Name, "DOCKER_CERT_PATH should be set")
-	assert.Equal(t, "/certs/client", ars.Spec.Template.Spec.Containers[0].Env[3].Value, "DOCKER_CERT_PATH should be set to `/certs/client`")
 	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name, "VolumeMount name should be work")
 	assert.Equal(t, "/work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /work")
 	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name, "VolumeMount name should be others")
