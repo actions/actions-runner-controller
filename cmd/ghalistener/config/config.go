@@ -1,8 +1,13 @@
 package config
 
 import (
+	"crypto/x509"
 	"fmt"
 
+	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/logging"
+	"github.com/go-logr/logr"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -22,6 +27,19 @@ type Config struct {
 	LogFormat                   string `split_words:"true"`
 	MetricsAddr                 string `split_words:"true"`
 	MetricsEndpoint             string `split_words:"true"`
+}
+
+func Read() (Config, error) {
+	var c Config
+	if err := envconfig.Process("github", &c); err != nil {
+		return Config{}, fmt.Errorf("failed to read config: %w", err)
+	}
+
+	if err := c.validate(); err != nil {
+		return Config{}, fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	return c, nil
 }
 
 func (c *Config) validate() error {
@@ -55,15 +73,62 @@ func (c *Config) validate() error {
 	return nil
 }
 
-func Read() (Config, error) {
-	var c Config
-	if err := envconfig.Process("github", &c); err != nil {
-		return Config{}, fmt.Errorf("failed to read config: %w", err)
+func (c *Config) Logger() (logr.Logger, error) {
+	logLevel := string(logging.LogLevelDebug)
+	if c.LogLevel != "" {
+		logLevel = c.LogLevel
 	}
 
-	if err := c.validate(); err != nil {
-		return Config{}, fmt.Errorf("failed to validate config: %w", err)
+	logFormat := string(logging.LogFormatText)
+	if c.LogFormat != "" {
+		logFormat = c.LogFormat
 	}
 
-	return c, nil
+	logger, err := logging.NewLogger(logLevel, logFormat)
+	if err != nil {
+		return logr.Logger{}, fmt.Errorf("NewLogger failed: %w", err)
+	}
+
+	return logger, nil
+}
+
+func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
+
+	var creds actions.ActionsAuth
+	switch c.Token {
+	case "":
+		creds.AppCreds = &actions.GitHubAppAuth{
+			AppID:             c.AppID,
+			AppInstallationID: c.AppInstallationID,
+			AppPrivateKey:     c.AppPrivateKey,
+		}
+	default:
+		creds.Token = c.Token
+	}
+
+	options := []actions.ClientOption{
+		actions.WithLogger(logger),
+		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
+	}
+
+	if c.ServerRootCA != "" {
+		systemPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load system cert pool: %w", err)
+		}
+		pool := systemPool.Clone()
+		ok := pool.AppendCertsFromPEM([]byte(c.ServerRootCA))
+		if !ok {
+			return nil, fmt.Errorf("failed to parse root certificate")
+		}
+
+		options = append(options, actions.WithRootCAs(pool))
+	}
+
+	client, err := actions.NewClient(c.ConfigureUrl, &creds, options...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create actions client: %w", err)
+	}
+
+	return client, nil
 }
