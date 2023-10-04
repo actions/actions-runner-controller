@@ -65,6 +65,7 @@ body:
     placeholder: A clear and concise description of what happened.
   validations:
     required: true
+
 - type: textarea
   id: expected-behavior
   attributes:
@@ -73,6 +74,19 @@ body:
     placeholder: A clear and concise description of what the expected behavior is.
   validations:
     required: true
+
+- type: textarea
+  id: additional-context
+  attributes:
+    label: Additional Context
+    render: yaml
+    description: |
+      Provide `values.yaml` files that are relevant for this issue. PLEASE REDACT ANY INFORMATION THAT SHOULD NOT BE PUBLICALY AVAILABLE, LIKE GITHUB TOKEN FOR EXAMPLE.
+    placeholder: |
+      PLEASE REDACT ANY INFORMATION THAT SHOULD NOT BE PUBLICALY AVAILABLE, LIKE GITHUB TOKEN FOR EXAMPLE.
+  validations:
+    required: true
+
 - type: textarea
   id: controller-logs
   attributes:
@@ -97,12 +111,4 @@ body:
       PROVIDE THE WHOLE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
   validations:
     required: true
-- type: textarea
-  id: additional-context
-  attributes:
-    label: Additional Context
-    description: |
-      Provide `values.yaml` files that are relevant for this issue. PLEASE REDACT ANY INFORMATION THAT SHOULD NOT BE PUBLICALY AVAILABLE, LIKE GITHUB TOKEN FOR EXAMPLE.
-    placeholder: |
-      PLEASE REDACT ANY INFORMATION THAT SHOULD NOT BE PUBLICALY AVAILABLE, LIKE GITHUB TOKEN FOR EXAMPLE.
 
