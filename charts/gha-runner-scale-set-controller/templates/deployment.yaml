@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/component: controller-manager
         app.kubernetes.io/version: {{ .Chart.Version }}
         {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}
-        {{- with .Values.podTemplateLabels }}
+        {{- with .Values.podLabels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
