@@ -48,7 +48,7 @@ spec:
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--default-scale-down-delay={{ .Values.defaultScaleDownDelay }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
-        - "--runner-image={{ .Values.image.actionsRunnerRepositoryAndTag }}"
+        - "--runner-image={{ .Values.runner.image.repository }}:{{.Values.runner.image.tag }}"
         {{- range .Values.image.actionsRunnerImagePullSecrets }}
         - "--runner-image-pull-secret={{ . }}"
         {{- end }}
@@ -67,7 +67,7 @@ spec:
         {{- if .Values.runner.statusUpdateHook.enabled }}
         - "--runner-status-update-hook"
         {{- end }}
-        {{- if .Values.logFormat  }}  
+        {{- if .Values.logFormat  }}
         - "--log-format={{ .Values.logFormat }}"
         {{- end }}
         {{- if .Values.dockerGID  }}
@@ -160,7 +160,7 @@ spec:
           name: cert
           readOnly: true
         {{- if .Values.additionalVolumeMounts }}
-          {{- toYaml .Values.additionalVolumeMounts | nindent 8 }} 
+          {{- toYaml .Values.additionalVolumeMounts | nindent 8 }}
         {{- end }}
       {{- if .Values.metrics.proxy.enabled }}
       - args:

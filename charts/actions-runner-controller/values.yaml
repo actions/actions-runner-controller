@@ -63,6 +63,9 @@ nameOverride: ""
 fullnameOverride: ""
 
 runner:
+  image:
+    repository: summerwind/actions-runner
+    tag: latest
   statusUpdateHook:
     enabled: false
 
