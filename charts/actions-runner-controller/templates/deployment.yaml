@@ -48,7 +48,7 @@ spec:
         - "--sync-period={{ .Values.syncPeriod }}"
         - "--default-scale-down-delay={{ .Values.defaultScaleDownDelay }}"
         - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
-        - "--runner-image={{ .Values.runner.image.repository }}:{{.Values.runner.image.tag }}"
+        - "--runner-image={{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag }}"
         {{- range .Values.image.actionsRunnerImagePullSecrets }}
         - "--runner-image-pull-secret={{ . }}"
         {{- end }}
