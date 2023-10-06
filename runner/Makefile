@@ -57,6 +57,7 @@ docker-build-set: check-target-platform
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
+          --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
 	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}" .
