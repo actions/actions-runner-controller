@@ -1,6 +1,6 @@
 module github.com/actions/actions-runner-controller
 
-go 1.21.1
+go 1.21.2
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.7.0
