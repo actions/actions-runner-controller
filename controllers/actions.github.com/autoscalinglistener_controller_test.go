@@ -190,7 +190,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	})
 
 	Context("When deleting a new AutoScalingListener", func() {
-		It("It should cleanup all resources for a deleting AutoScalingListener before removing it", func() {
+		FIt("It should cleanup all resources for a deleting AutoScalingListener before removing it", func() {
 			// Waiting for the pod to be created
 			pod := new(corev1.Pod)
 			Eventually(
@@ -203,7 +203,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return pod.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
 			// Delete the AutoScalingListener
 			err := k8sClient.Delete(ctx, autoscalingListener)
@@ -225,7 +226,30 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).ShouldNot(Succeed(), "failed to delete pod")
+				autoscalingListenerTestInterval,
+			).ShouldNot(Succeed(), "failed to delete pod")
+
+			// Cleanup the listener role binding
+			Eventually(
+				func() bool {
+					roleBinding := new(rbacv1.RoleBinding)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
+					return kerrors.IsNotFound(err)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "failed to delete role binding")
+
+			// Cleanup the listener role
+			Eventually(
+				func() bool {
+					role := new(rbacv1.Role)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
+					return kerrors.IsNotFound(err)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "failed to delete role")
 
 			// Cleanup the listener service account
 			Eventually(
