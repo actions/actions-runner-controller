@@ -40,7 +40,7 @@ body:
     label: Checks
     description: Please check all the boxes below before submitting
     options:
-    - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions/actions-runner-controller/discussions).
+    - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions/actions-runner-controller/discussions)).
       required: true
     - label: I've read the [Changelog](https://github.com/actions/actions-runner-controller/blob/master/docs/gha-runner-scale-set-controller/README.md#changelog) before submitting this issue and I'm sure it's not due to any recently-introduced backward-incompatible changes
       required: true
@@ -90,7 +90,7 @@ body:
 - type: textarea
   id: controller-logs
   attributes:
-    label: Whole Controller Logs
+    label: Controller Logs
     description: "NEVER EVER OMIT THIS! Include complete logs from `actions-runner-controller`'s controller-manager pod."
     render: shell
     placeholder: |
