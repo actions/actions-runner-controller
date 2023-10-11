@@ -13,7 +13,6 @@ body:
       required: true
 
     - label: I am using charts that are officially provided
-      required: true
 - type: input
   id: controller-version
   attributes:
