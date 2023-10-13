@@ -135,6 +135,14 @@ spec:
           {{- toYaml .Values.actionsMetricsServer.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.actionsMetricsServer.securityContext | nindent 12 }}
+      {{- if .Values.actionsMetricsServer.volumeMounts }}
+        volumeMounts:
+        {{- toYaml .Values.actionsMetricsServer.volumeMounts | nindent 10 }}
+      {{- end }}
+      {{- if .Values.actionsMetricsServer.volumes }}
+        volumes:
+        {{- toYaml .Values.actionsMetricsServer.volumes | nindent 10 }}
+      {{- end }}
       {{- if .Values.actionsMetrics.proxy.enabled }}
       - args:
         - "--secure-listen-address=0.0.0.0:{{ .Values.actionsMetrics.port }}"
