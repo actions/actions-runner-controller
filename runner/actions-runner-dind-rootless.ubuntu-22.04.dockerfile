@@ -29,6 +29,7 @@ RUN apt-get update -y \
     sudo \
     uidmap \
     unzip \
+    wget \
     zip \
     && rm -rf /var/lib/apt/lists/*
 

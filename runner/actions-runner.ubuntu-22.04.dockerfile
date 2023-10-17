@@ -23,6 +23,7 @@ RUN apt-get update -y \
     jq \
     sudo \
     unzip \
+    wget \
     zip \
     && rm -rf /var/lib/apt/lists/*
 

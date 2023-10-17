@@ -25,6 +25,7 @@ RUN apt-get update -y \
     software-properties-common \
     sudo \
     unzip \
+    wget \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
