@@ -306,6 +306,38 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		logger.Info("Listener proxy secret is deleted")
 	}
 
+	listenerRoleBinding := new(rbacv1.RoleBinding)
+	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRoleBinding)
+	switch {
+	case err == nil:
+		if listenerRoleBinding.ObjectMeta.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener role binding")
+			if err := r.Delete(ctx, listenerRoleBinding); err != nil {
+				return false, fmt.Errorf("failed to delete listener role binding: %v", err)
+			}
+		}
+		return false, nil
+	case err != nil && !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener role binding: %v", err)
+	}
+	logger.Info("Listener role binding is deleted")
+
+	listenerRole := new(rbacv1.Role)
+	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRole)
+	switch {
+	case err == nil:
+		if listenerRole.ObjectMeta.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener role")
+			if err := r.Delete(ctx, listenerRole); err != nil {
+				return false, fmt.Errorf("failed to delete listener role: %v", err)
+			}
+		}
+		return false, nil
+	case err != nil && !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener role: %v", err)
+	}
+	logger.Info("Listener role is deleted")
+
 	logger.Info("Cleaning up the listener service account")
 	listenerSa := new(corev1.ServiceAccount)
 	err = r.Get(ctx, types.NamespacedName{Name: scaleSetListenerServiceAccountName(autoscalingListener), Namespace: autoscalingListener.Namespace}, listenerSa)
