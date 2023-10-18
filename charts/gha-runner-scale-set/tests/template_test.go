@@ -742,6 +742,37 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraInitContainers(t *testin
 	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[2].Command[0], "InitContainers[2] Command[0] should be ls")
 }
 
+func TestTemplateRenderedKubernetesModeServiceAccountAnnotations(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_kubernetes_mode_service_account_annotations.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_serviceaccount.yaml"})
+
+	var sa corev1.ServiceAccount
+	helm.UnmarshalK8SYaml(t, output, &sa)
+
+	assert.Equal(t, "arn:aws:iam::123456789012:role/sample-role", sa.Annotations["eks.amazonaws.com/role-arn"], "Annotations should be arn:aws:iam::123456789012:role/sample-role")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
 	t.Parallel()
 

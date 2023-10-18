@@ -84,6 +84,8 @@ githubConfigSecret:
 #     resources:
 #       requests:
 #         storage: 1Gi
+#   kubernetesModeServiceAccount:
+#     annotations:
 
 ## template is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
