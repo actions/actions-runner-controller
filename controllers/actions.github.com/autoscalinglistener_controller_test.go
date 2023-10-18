@@ -1041,11 +1041,11 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get pod")
 
-					g.Expect(config.Data["config.json"]).ToNot(BeEmpty(), "config.json should not be empty")
+					g.Expect(config.Data["config.json"]).ToNot(BeEmpty(), "listener configuration file should not be empty")
 
 					var listenerConfig listenerconfig.Config
 					err = json.Unmarshal(config.Data["config.json"], &listenerConfig)
-					g.Expect(err).NotTo(HaveOccurred(), "failed to unmarshal config.json")
+					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
 
 					cert, err := os.ReadFile(filepath.Join(
 						"../../",
