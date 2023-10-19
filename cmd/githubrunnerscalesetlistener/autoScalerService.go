@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 )
@@ -30,7 +31,7 @@ type Service struct {
 	errs               []error
 }
 
-func WithPrometheusMetrics(conf RunnerScaleSetListenerConfig) func(*Service) {
+func WithPrometheusMetrics(conf config.Config) func(*Service) {
 	return func(svc *Service) {
 		parsedURL, err := actions.ParseGitHubConfigFromURL(conf.ConfigureUrl)
 		if err != nil {
