@@ -41,18 +41,6 @@ const labelValueKubernetesPartOf = "gha-runner-scale-set"
 var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
 var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
 
-var scaleSetListenerImagePullPolicy = DefaultScaleSetListenerImagePullPolicy
-
-func SetListenerImagePullPolicy(pullPolicy string) bool {
-	switch p := corev1.PullPolicy(pullPolicy); p {
-	case corev1.PullAlways, corev1.PullIfNotPresent, corev1.PullNever:
-		scaleSetListenerImagePullPolicy = p
-		return true
-	default:
-		return false
-	}
-}
-
 func SetListenerLoggingParameters(level string, format string) bool {
 	switch level {
 	case logging.LogLevelDebug, logging.LogLevelInfo, logging.LogLevelWarn, logging.LogLevelError:
@@ -233,10 +221,9 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ServiceAccountName: serviceAccount.Name,
 		Containers: []corev1.Container{
 			{
-				Name:            autoscalingListenerContainerName,
-				Image:           autoscalingListener.Spec.Image,
-				Env:             listenerEnv,
-				ImagePullPolicy: scaleSetListenerImagePullPolicy,
+				Name:  autoscalingListenerContainerName,
+				Image: autoscalingListener.Spec.Image,
+				Env:   listenerEnv,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
@@ -380,10 +367,7 @@ func mergeListenerContainer(base, from *corev1.Container) {
 
 	base.Env = append(base.Env, from.Env...)
 
-	if from.ImagePullPolicy != "" {
-		base.ImagePullPolicy = from.ImagePullPolicy
-	}
-
+	base.ImagePullPolicy = from.ImagePullPolicy
 	base.Args = append(base.Args, from.Args...)
 	base.WorkingDir = from.WorkingDir
 	base.Ports = append(base.Ports, from.Ports...)
