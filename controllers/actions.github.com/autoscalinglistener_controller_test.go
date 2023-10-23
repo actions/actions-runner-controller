@@ -2,6 +2,7 @@ package actionsgithubcom
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	listenerconfig "github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -103,6 +105,19 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 
 	Context("When creating a new AutoScalingListener", func() {
 		It("It should create/add all required resources for a new AutoScalingListener (finalizer, secret, service account, role, rolebinding, pod)", func() {
+			config := new(corev1.Secret)
+			Eventually(
+				func() error {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: configSecret.Namespace}, config)
+					if err != nil {
+						return err
+					}
+					return nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Config secret should be created")
+
 			// Check if finalizer is added
 			created := new(actionsv1alpha1.AutoscalingListener)
 			Eventually(
@@ -203,7 +218,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return pod.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
 			// Delete the AutoScalingListener
 			err := k8sClient.Delete(ctx, autoscalingListener)
@@ -225,7 +241,41 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).ShouldNot(Succeed(), "failed to delete pod")
+				autoscalingListenerTestInterval,
+			).ShouldNot(Succeed(), "failed to delete pod")
+
+			// Cleanup the listener role binding
+			Eventually(
+				func() bool {
+					roleBinding := new(rbacv1.RoleBinding)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
+					return kerrors.IsNotFound(err)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "failed to delete role binding")
+
+			// Cleanup the listener role
+			Eventually(
+				func() bool {
+					role := new(rbacv1.Role)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
+					return kerrors.IsNotFound(err)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "failed to delete role")
+
+			// Cleanup the listener config
+			Eventually(
+				func() bool {
+					config := new(corev1.Secret)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, config)
+					return kerrors.IsNotFound(err)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "failed to delete config secret")
 
 			// Cleanup the listener service account
 			Eventually(
@@ -476,6 +526,17 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 				},
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
+
+			// Check if config is created
+			config := new(corev1.Secret)
+			Eventually(
+				func() error {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, config)
+					return err
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Config secret should be created")
 
 			// Check if pod is created
 			pod := new(corev1.Pod)
@@ -965,31 +1026,26 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 	})
 
 	Context("When creating a new AutoScalingListener", func() {
-		It("It should set the certificates as an environment variable on the pod", func() {
-			pod := new(corev1.Pod)
+		It("It should set the certificates in the config of the pod", func() {
+			config := new(corev1.Secret)
 			Eventually(
 				func(g Gomega) {
 					err := k8sClient.Get(
 						ctx,
 						client.ObjectKey{
-							Name:      autoscalingListener.Name,
+							Name:      scaleSetListenerConfigName(autoscalingListener),
 							Namespace: autoscalingListener.Namespace,
 						},
-						pod,
+						config,
 					)
 
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get pod")
-					g.Expect(pod.Spec.Containers).NotTo(BeEmpty(), "pod should have containers")
-					g.Expect(pod.Spec.Containers[0].Env).NotTo(BeEmpty(), "pod should have env variables")
 
-					var env *corev1.EnvVar
-					for _, e := range pod.Spec.Containers[0].Env {
-						if e.Name == "GITHUB_SERVER_ROOT_CA" {
-							env = &e
-							break
-						}
-					}
-					g.Expect(env).NotTo(BeNil(), "pod should have an env variable named GITHUB_SERVER_ROOT_CA_PATH")
+					g.Expect(config.Data["config.json"]).ToNot(BeEmpty(), "listener configuration file should not be empty")
+
+					var listenerConfig listenerconfig.Config
+					err = json.Unmarshal(config.Data["config.json"], &listenerConfig)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
 
 					cert, err := os.ReadFile(filepath.Join(
 						"../../",
@@ -1000,7 +1056,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 					))
 					g.Expect(err).NotTo(HaveOccurred(), "failed to read rootCA.crt")
 
-					g.Expect(env.Value).To(
+					g.Expect(listenerConfig.ServerRootCA).To(
 						BeEquivalentTo(string(cert)),
 						"GITHUB_SERVER_ROOT_CA should be the rootCA.crt",
 					)

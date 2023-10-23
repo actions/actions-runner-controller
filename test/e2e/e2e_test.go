@@ -36,7 +36,8 @@ var (
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion = "2.309.0"
+	RunnerVersion               = "2.310.2"
+	RunnerContainerHooksVersion = "0.4.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -496,6 +497,10 @@ func buildVars(repo, ubuntuVer string) vars {
 					Name:  "RUNNER_VERSION",
 					Value: RunnerVersion,
 				},
+				{
+					Name:  "RUNNER_CONTAINER_HOOKS_VERSION",
+					Value: RunnerContainerHooksVersion,
+				},
 			},
 			Image:        runnerImage,
 			EnableBuildX: true,
@@ -507,6 +512,10 @@ func buildVars(repo, ubuntuVer string) vars {
 					Name:  "RUNNER_VERSION",
 					Value: RunnerVersion,
 				},
+				{
+					Name:  "RUNNER_CONTAINER_HOOKS_VERSION",
+					Value: RunnerContainerHooksVersion,
+				},
 			},
 			Image:        runnerDindImage,
 			EnableBuildX: true,
@@ -517,6 +526,10 @@ func buildVars(repo, ubuntuVer string) vars {
 				{
 					Name:  "RUNNER_VERSION",
 					Value: RunnerVersion,
+				},
+				{
+					Name:  "RUNNER_CONTAINER_HOOKS_VERSION",
+					Value: RunnerContainerHooksVersion,
 				},
 			},
 			Image:        runnerRootlessDindImage,

@@ -28,39 +28,26 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
-	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/sync/errgroup"
 )
 
-type RunnerScaleSetListenerConfig struct {
-	ConfigureUrl                string `split_words:"true"`
-	AppID                       int64  `split_words:"true"`
-	AppInstallationID           int64  `split_words:"true"`
-	AppPrivateKey               string `split_words:"true"`
-	Token                       string `split_words:"true"`
-	EphemeralRunnerSetNamespace string `split_words:"true"`
-	EphemeralRunnerSetName      string `split_words:"true"`
-	MaxRunners                  int    `split_words:"true"`
-	MinRunners                  int    `split_words:"true"`
-	RunnerScaleSetId            int    `split_words:"true"`
-	RunnerScaleSetName          string `split_words:"true"`
-	ServerRootCA                string `split_words:"true"`
-	LogLevel                    string `split_words:"true"`
-	LogFormat                   string `split_words:"true"`
-	MetricsAddr                 string `split_words:"true"`
-	MetricsEndpoint             string `split_words:"true"`
-}
-
 func main() {
-	var rc RunnerScaleSetListenerConfig
-	if err := envconfig.Process("github", &rc); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: processing environment variables for RunnerScaleSetListenerConfig: %v\n", err)
+	configPath, ok := os.LookupEnv("LISTENER_CONFIG_PATH")
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Error: LISTENER_CONFIG_PATH environment variable is not set\n")
+		os.Exit(1)
+	}
+
+	rc, err := config.Read(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: reading config from path(%q): %v\n", configPath, err)
 		os.Exit(1)
 	}
 
@@ -77,12 +64,6 @@ func main() {
 	logger, err := logging.NewLogger(logLevel, logFormat)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: creating logger: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Validate all inputs
-	if err := validateConfig(&rc); err != nil {
-		logger.Error(err, "Inputs validation failed")
 		os.Exit(1)
 	}
 
@@ -123,7 +104,7 @@ func main() {
 }
 
 type metricsServer struct {
-	rc     RunnerScaleSetListenerConfig
+	rc     config.Config
 	logger logr.Logger
 	srv    *http.Server
 }
@@ -173,7 +154,7 @@ type runOptions struct {
 	serviceOptions []func(*Service)
 }
 
-func run(ctx context.Context, rc RunnerScaleSetListenerConfig, logger logr.Logger, opts runOptions) error {
+func run(ctx context.Context, rc config.Config, logger logr.Logger, opts runOptions) error {
 	// Create root context and hook with sigint and sigterm
 	creds := &actions.ActionsAuth{}
 	if rc.Token != "" {
@@ -232,38 +213,7 @@ func run(ctx context.Context, rc RunnerScaleSetListenerConfig, logger logr.Logge
 	return nil
 }
 
-func validateConfig(config *RunnerScaleSetListenerConfig) error {
-	if len(config.ConfigureUrl) == 0 {
-		return fmt.Errorf("GitHubConfigUrl is not provided")
-	}
-
-	if len(config.EphemeralRunnerSetNamespace) == 0 || len(config.EphemeralRunnerSetName) == 0 {
-		return fmt.Errorf("EphemeralRunnerSetNamespace '%s' or EphemeralRunnerSetName '%s' is missing", config.EphemeralRunnerSetNamespace, config.EphemeralRunnerSetName)
-	}
-
-	if config.RunnerScaleSetId == 0 {
-		return fmt.Errorf("RunnerScaleSetId '%d' is missing", config.RunnerScaleSetId)
-	}
-
-	if config.MaxRunners < config.MinRunners {
-		return fmt.Errorf("MinRunners '%d' cannot be greater than MaxRunners '%d'", config.MinRunners, config.MaxRunners)
-	}
-
-	hasToken := len(config.Token) > 0
-	hasPrivateKeyConfig := config.AppID > 0 && config.AppPrivateKey != ""
-
-	if !hasToken && !hasPrivateKeyConfig {
-		return fmt.Errorf("GitHub auth credential is missing, token length: '%d', appId: '%d', installationId: '%d', private key length: '%d", len(config.Token), config.AppID, config.AppInstallationID, len(config.AppPrivateKey))
-	}
-
-	if hasToken && hasPrivateKeyConfig {
-		return fmt.Errorf("only one GitHub auth method supported at a time. Have both PAT and App auth: token length: '%d', appId: '%d', installationId: '%d', private key length: '%d", len(config.Token), config.AppID, config.AppInstallationID, len(config.AppPrivateKey))
-	}
-
-	return nil
-}
-
-func newActionsClientFromConfig(config RunnerScaleSetListenerConfig, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
+func newActionsClientFromConfig(config config.Config, creds *actions.ActionsAuth, options ...actions.ClientOption) (*actions.Client, error) {
 	if config.ServerRootCA != "" {
 		systemPool, err := x509.SystemCertPool()
 		if err != nil {

@@ -1,7 +1,7 @@
-name: Bug Report
-description: File a bug report
+name: Bug Report (actions.summerwind.net API group)
+description: File a bug report for actions.summerwind.net API group
 title: "<Please write what didn't work for you here>"
-labels: ["bug", "needs triage"]
+labels: ["bug", "needs triage", "community"]
 body:
 - type: checkboxes
   id: read-troubleshooting-guide
@@ -146,7 +146,7 @@ body:
     render: shell
     placeholder: |
       PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
-      
+
       To grab controller logs:
 
       # Set NS according to your setup
@@ -166,7 +166,7 @@ body:
     render: shell
     placeholder: |
       PROVIDE THE WHOLE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
-      
+
       To grab the runner pod logs:
 
       # Set NS according to your setup. It should match your RunnerDeployment's metadata.namespace.
@@ -177,7 +177,7 @@ body:
 
       kubectl -n $NS logs $POD_NAME -c runner > runnerpod_runner.log
       kubectl -n $NS logs $POD_NAME -c docker > runnerpod_docker.log
-      
+
       If any of the containers are getting terminated immediately, try adding `--previous` to the kubectl-logs command to obtain logs emitted before the termination.
   validations:
     required: true

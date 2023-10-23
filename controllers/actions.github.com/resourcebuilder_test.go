@@ -68,7 +68,7 @@ func TestLabelPropagation(t *testing.T) {
 			Name: "test",
 		},
 	}
-	listenerPod, err := b.newScaleSetListenerPod(listener, listenerServiceAccount, listenerSecret, nil)
+	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, listenerSecret, nil)
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
 

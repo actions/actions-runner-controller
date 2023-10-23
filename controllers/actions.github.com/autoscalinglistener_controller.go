@@ -287,6 +287,21 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	}
 	logger.Info("Listener pod is deleted")
 
+	var secret corev1.Secret
+	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &secret)
+	switch {
+	case err == nil:
+		if secret.ObjectMeta.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener config secret")
+			if err := r.Delete(ctx, &secret); err != nil {
+				return false, fmt.Errorf("failed to delete listener config secret: %v", err)
+			}
+		}
+		return false, nil
+	case err != nil && !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener config secret: %v", err)
+	}
+
 	if autoscalingListener.Spec.Proxy != nil {
 		logger.Info("Cleaning up the listener proxy secret")
 		proxySecret := new(corev1.Secret)
@@ -305,6 +320,38 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		}
 		logger.Info("Listener proxy secret is deleted")
 	}
+
+	listenerRoleBinding := new(rbacv1.RoleBinding)
+	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRoleBinding)
+	switch {
+	case err == nil:
+		if listenerRoleBinding.ObjectMeta.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener role binding")
+			if err := r.Delete(ctx, listenerRoleBinding); err != nil {
+				return false, fmt.Errorf("failed to delete listener role binding: %v", err)
+			}
+		}
+		return false, nil
+	case err != nil && !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener role binding: %v", err)
+	}
+	logger.Info("Listener role binding is deleted")
+
+	listenerRole := new(rbacv1.Role)
+	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRole)
+	switch {
+	case err == nil:
+		if listenerRole.ObjectMeta.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener role")
+			if err := r.Delete(ctx, listenerRole); err != nil {
+				return false, fmt.Errorf("failed to delete listener role: %v", err)
+			}
+		}
+		return false, nil
+	case err != nil && !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener role: %v", err)
+	}
+	logger.Info("Listener role is deleted")
 
 	logger.Info("Cleaning up the listener service account")
 	listenerSa := new(corev1.ServiceAccount)
@@ -386,13 +433,13 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 	}
 
+	cert := ""
 	if autoscalingListener.Spec.GitHubServerTLS != nil {
-		env, err := r.certificateEnvVarForListener(ctx, autoscalingRunnerSet, autoscalingListener)
+		var err error
+		cert, err = r.certificate(ctx, autoscalingRunnerSet, autoscalingListener)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %v", err)
 		}
-
-		envs = append(envs, env)
 	}
 
 	var metricsConfig *listenerMetricsServerConfig
@@ -403,7 +450,35 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 	}
 
-	newPod, err := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, serviceAccount, secret, metricsConfig, envs...)
+	var podConfig corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &podConfig); err != nil {
+		if !kerrors.IsNotFound(err) {
+			logger.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(autoscalingListener))
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		logger.Info("Creating listener config secret")
+
+		podConfig, err := r.resourceBuilder.newScaleSetListenerConfig(autoscalingListener, secret, metricsConfig, cert)
+		if err != nil {
+			logger.Error(err, "Failed to build listener config secret")
+			return ctrl.Result{}, err
+		}
+
+		if err := ctrl.SetControllerReference(autoscalingListener, podConfig, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set controller reference")
+			return ctrl.Result{}, err
+		}
+
+		if err := r.Create(ctx, podConfig); err != nil {
+			logger.Error(err, "Unable to create listener config secret", "namespace", podConfig.Namespace, "name", podConfig.Name)
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	newPod, err := r.resourceBuilder.newScaleSetListenerPod(autoscalingListener, &podConfig, serviceAccount, secret, metricsConfig, envs...)
 	if err != nil {
 		logger.Error(err, "Failed to build listener pod")
 		return ctrl.Result{}, err
@@ -424,13 +499,13 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingListenerReconciler) certificateEnvVarForListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener) (corev1.EnvVar, error) {
+func (r *AutoscalingListenerReconciler) certificate(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener) (string, error) {
 	if autoscalingListener.Spec.GitHubServerTLS.CertificateFrom == nil {
-		return corev1.EnvVar{}, fmt.Errorf("githubServerTLS.certificateFrom is not specified")
+		return "", fmt.Errorf("githubServerTLS.certificateFrom is not specified")
 	}
 
 	if autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef == nil {
-		return corev1.EnvVar{}, fmt.Errorf("githubServerTLS.certificateFrom.configMapKeyRef is not specified")
+		return "", fmt.Errorf("githubServerTLS.certificateFrom.configMapKeyRef is not specified")
 	}
 
 	var configmap corev1.ConfigMap
@@ -443,7 +518,7 @@ func (r *AutoscalingListenerReconciler) certificateEnvVarForListener(ctx context
 		&configmap,
 	)
 	if err != nil {
-		return corev1.EnvVar{}, fmt.Errorf(
+		return "", fmt.Errorf(
 			"failed to get configmap %s: %w",
 			autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Name,
 			err,
@@ -452,17 +527,14 @@ func (r *AutoscalingListenerReconciler) certificateEnvVarForListener(ctx context
 
 	certificate, ok := configmap.Data[autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Key]
 	if !ok {
-		return corev1.EnvVar{}, fmt.Errorf(
+		return "", fmt.Errorf(
 			"key %s is not found in configmap %s",
 			autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Key,
 			autoscalingListener.Spec.GitHubServerTLS.CertificateFrom.ConfigMapKeyRef.Name,
 		)
 	}
 
-	return corev1.EnvVar{
-		Name:  "GITHUB_SERVER_ROOT_CA",
-		Value: certificate,
-	}, nil
+	return certificate, nil
 }
 
 func (r *AutoscalingListenerReconciler) createSecretsForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {
