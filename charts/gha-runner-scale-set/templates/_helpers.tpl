@@ -14,6 +14,10 @@ gha-rs
 {{ .Values.runnerScaleSetName | default .Release.Name }}
 {{- end }}
 
+{{- define "gha-runner-scale-set.deployment-name" -}}
+{{ .Values.deploymentName | default (include "gha-runner-scale-set.scale-set-name" .) }}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
