@@ -23,10 +23,10 @@ version: 0.6.1
 # It is recommended to use it with quotes.
 appVersion: "0.6.1"
 
-home: https://github.com/actions/dev-arc
+home: https://github.com/actions/actions-runner-controller
 
 sources:
-  - "https://github.com/actions/dev-arc"
+  - "https://github.com/actions/actions-runner-controller"
 
 maintainers:
   - name: actions
