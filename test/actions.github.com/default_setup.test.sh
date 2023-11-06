@@ -4,25 +4,31 @@ DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 DIR="$(realpath "${DIR}")"
 
-ROOT_DIR="$(relpath "${DIR}/../..")"
+ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date + '%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
-
+ARC_NAME="arc"
+ARC_NAMESPACE="arc-systems"
 
 function install_scale_set() {
+    echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
         ${ROOT_DIR}/charts/gha-runner-scale-set \
+        --version="${VERSION}" \
         --debug
 
-    NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" wait_for_scale_set
+    if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
+        NAMESPACE="${ARC_NAMESPACE}" log_arc
+        return 1
+    fi
 }
 
 function run_workflow() {
@@ -52,11 +58,14 @@ function main() {
 
     build_image
     create_cluster
-    install_arc
+
+    NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" install_arc
 
     install_scale_set || failed+=("install_scale_set")
     run_workflow || failed+=("run_workflow")
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
+
+    delete_cluster
 
     if [[ "${#failed[@]}" -ne 0 ]]; then
         echo "----------------------------------"
@@ -64,8 +73,7 @@ function main() {
         for test in "${failed[@]}"; do
             echo "  - ${test}"
         done
-
-        exit 1
+        return 1
     fi
 }
 

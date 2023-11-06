@@ -4,15 +4,16 @@ DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 DIR="$(realpath "${DIR}")"
 
-ROOT_DIR="$(relpath "${DIR}/../..")"
+ROOT_DIR="$(realpath "${DIR}/../..")"
 
 export TARGET_ORG="${TARGET_ORG:-actions-runner-controller}"
 export TARGET_REPO="${TARGET_REPO:-arc_e2e_test_dummy}"
 export IMAGE_NAME="${IMAGE_NAME:-arc-test-image}"
-export IMAGE_VERSION="${IMAGE_VERSION:-$(yq .version < "${ROOT_DIR}/gha-runner-scale-set-controller/Chart.yaml")}"
+export VERSION="${VERSION:-$(yq .version < "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")}"
+export IMAGE_VERSION="${IMAGE_VERSION:-${VERSION}}"
 
 function build_image() {
-    echo "Building ARC image"
+    echo "Building ARC image ${IMAGE_NAME}:${IMAGE_VERSION}"
 
     cd ${ROOT_DIR}
 
@@ -23,10 +24,11 @@ function build_image() {
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		--build-arg VERSION=${VERSION} \
 		--build-arg COMMIT_SHA=${COMMIT_SHA} \
-		-t "${DOCKER_IMAGE_NAME}:${VERSION}" \
+		-t "${IMAGE_NAME}:${IMAGE_VERSION}" \
 		-f Dockerfile \
 		. --load
 
+    echo "Created image ${IMAGE_NAME}:${IMAGE_VERSION}"
     cd -
 }
 
@@ -38,39 +40,49 @@ function create_cluster() {
     minikube start
 
     echo "Loading image into minikube cluster"
-    minikube image load ${IMAGE}
+    minikube image load "${IMAGE_NAME}:${IMAGE_VERSION}"
+}
+
+function delete_cluster() {
+    echo "Deleting minikube cluster"
+    minikube delete
 }
 
 function install_arc() {
     echo "Installing ARC"
 
-    helm install ${INSTALLATION_NAME} \
+    helm install ${NAME} \
         --namespace ${NAMESPACE} \
         --create-namespace \
         --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${VERSION} \
+        --set image.tag=${IMAGE_VERSION} \
         ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
         --debug
 
     echo "Waiting for ARC to be ready"
     local count=0;
     while true; do
-        POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+        POD_NAME=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/name=gha-rs-controller -o name)
         if [ -n "$POD_NAME" ]; then
             echo "Pod found: $POD_NAME"
             break
         fi
         if [ "$count" -ge 60 ]; then
             echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
-            exit 1
+            return 1
         fi
         sleep 1
         count=$((count+1))
     done
 
-    kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-    kubectl get pod -n arc-systems
-    kubectl describe deployment arc-gha-rs-controller -n arc-systems
+    kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller
+    kubectl get pod -n "${NAMESPACE}"
+    kubectl describe deployment "${NAME}" -n "${NAMESPACE}"
+}
+
+function log_arc() {
+    echo "ARC logs"
+    kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller
 }
 
 function wait_for_scale_set() {
@@ -84,14 +96,14 @@ function wait_for_scale_set() {
 
         if [ "$count" -ge 60 ]; then
             echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=${NAME}"
-            exit 1
+            return 1
         fi
 
         sleep 1
         count=$((count+1))
     done
     kubectl wait --timeout=30s --for=condition=ready pod -n ${NAMESPACE} -l actions.github.com/scale-set-name=${NAME}
-    kubectl get pod -n arc-systems
+    kubectl get pod -n ${NAMESPACE}
 }
 
 function cleanup_scale_set() {
