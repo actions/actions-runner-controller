@@ -459,7 +459,7 @@ func buildVars(repo, ubuntuVer string) vars {
 		runnerRootlessDindImage     = testing.Img(runnerRootlessDindImageRepo, runnerImageTag)
 
 		dindSidecarImageRepo = "docker"
-		dindSidecarImageTag  = "20.10.23-dind"
+		dindSidecarImageTag  = "24.0.7-dind"
 		dindSidecarImage     = testing.Img(dindSidecarImageRepo, dindSidecarImageTag)
 	)
 
