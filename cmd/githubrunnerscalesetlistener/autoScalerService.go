@@ -82,6 +82,7 @@ func NewService(
 }
 
 func (s *Service) Start() error {
+	s.metricsExporter.publishStatic(s.settings.MaxRunners, s.settings.MinRunners)
 	for {
 		s.logger.Info("waiting for message...")
 		select {

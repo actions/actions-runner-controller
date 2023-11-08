@@ -297,6 +297,12 @@ func (m *metricsExporter) withBaseLabels(base baseLabels) {
 	m.baseLabels = base
 }
 
+func (m *metricsExporter) publishStatic(max, min int) {
+	l := m.scaleSetLabels()
+	maxRunners.With(l).Set(float64(max))
+	minRunners.With(l).Set(float64(min))
+}
+
 func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	l := m.scaleSetLabels()
 
