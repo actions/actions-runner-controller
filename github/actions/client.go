@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -835,8 +834,7 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationT
 	bearerToken := ""
 
 	if c.creds.Token != "" {
-		encodedToken := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("github:%v", c.creds.Token)))
-		bearerToken = fmt.Sprintf("Basic %v", encodedToken)
+		bearerToken = fmt.Sprintf("Bearer %v", c.creds.Token)
 	} else {
 		accessToken, err := c.fetchAccessToken(ctx, c.config.ConfigURL.String(), c.creds.AppCreds)
 		if err != nil {

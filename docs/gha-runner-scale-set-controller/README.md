@@ -43,6 +43,12 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.6.1
+1. Replace TLS dockerd connection with unix socket (#2833)[https://github.com/actions/actions-runner-controller/pull/2833]
+1. Fix name override labels when runnerScaleSetName value is set (#2915)[https://github.com/actions/actions-runner-controller/pull/2915]
+1. Fix nil map when annotations are applied (#2916)[https://github.com/actions/actions-runner-controller/pull/2916]
+1. Updates: container-hooks to v0.4.0 (#2928)[https://github.com/actions/actions-runner-controller/pull/2928]
+
 ### v0.6.0
 1. Fix parsing AcquireJob MessageQueueTokenExpiredError (#2837)[https://github.com/actions/actions-runner-controller/pull/2837]
 1. Set restart policy on the runner pod to Never if restartPolicy is not set in template (#2787)[https://github.com/actions/actions-runner-controller/pull/2787]

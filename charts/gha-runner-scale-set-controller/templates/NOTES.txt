@@ -2,4 +2,3 @@ Thank you for installing {{ .Chart.Name }}.
 
 Your release is named {{ .Release.Name }}.
 
-WARNING: value specified under image.pullPolicy will be ignored and no longer be applied to the listener pod spec as of gha-runner-scale-set-0.7.0. Please use the listenerTemplate in the gha-runner-scale-set chart to control the image pull policy of the listener.
