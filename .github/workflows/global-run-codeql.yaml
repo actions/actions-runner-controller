@@ -9,6 +9,7 @@ on:
       - master
   schedule:
     - cron: '30 1 * * 0'
+  workflow_dispatch:
 
 concurrency:
   # This will make sure we only apply the concurrency limits on pull requests 
@@ -32,8 +33,15 @@ jobs:
         with:
           languages: go
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v2
+      - name: Build
+        run: |
+          export GOOS="linux" GOARCH="amd64" VERSION="dev" && \
+          go build -trimpath -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=${VERSION}'" -o out/manager main.go && \
+          go build -trimpath -ldflags="-s -w" -o out/github-runnerscaleset-listener ./cmd/githubrunnerscalesetlistener && \
+          go build -trimpath -ldflags="-s -w" -o out/github-webhook-server ./cmd/githubwebhookserver && \
+          go build -trimpath -ldflags="-s -w" -o out/actions-metrics-server ./cmd/actionsmetricsserver && \
+          go build -trimpath -ldflags="-s -w" -o out/sleep ./cmd/sleep
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
+erdem3536
