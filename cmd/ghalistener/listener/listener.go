@@ -27,6 +27,7 @@ const (
 	messageTypeJobCompleted = "JobCompleted"
 )
 
+//go:generate mockery --name Client --output ./mocks --outpkg mocks --case underscore
 type Client interface {
 	GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error)
 	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error)
@@ -84,6 +85,7 @@ func New(config Config) (*Listener, error) {
 	return listener, nil
 }
 
+//go:generate mockery --name Handler --output ./mocks --outpkg mocks --case underscore
 type Handler interface {
 	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
 	HandleDesiredRunnerCount(ctx context.Context, desiredRunnerCount int) error
