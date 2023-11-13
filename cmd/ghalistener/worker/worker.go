@@ -41,7 +41,7 @@ type Worker struct {
 	logger    *logr.Logger
 }
 
-func NewKubernetesWorker(config Config, options ...Option) (*Worker, error) {
+func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
 		config:    config,
 		lastPatch: -1,

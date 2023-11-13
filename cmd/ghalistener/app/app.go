@@ -57,7 +57,7 @@ func New(config config.Config) (*App, error) {
 		})
 	}
 
-	worker, err := worker.NewKubernetesWorker(
+	worker, err := worker.New(
 		worker.Config{
 			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
 			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
@@ -74,6 +74,8 @@ func New(config config.Config) (*App, error) {
 	listener, err := listener.New(listener.Config{
 		Client:     actionsClient,
 		ScaleSetID: app.config.RunnerScaleSetId,
+		MinRunners: app.config.MinRunners,
+		MaxRunners: app.config.MaxRunners,
 		Logger:     app.logger.WithName("listener"),
 		Metrics:    app.metrics,
 	})

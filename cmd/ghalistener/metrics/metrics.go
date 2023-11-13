@@ -257,6 +257,7 @@ func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels
 }
 
 type Publisher interface {
+	PublishStatic(min, max int)
 	PublishStatistics(stats *actions.RunnerScaleSetStatistic)
 	PublishJobStarted(msg *actions.JobStarted)
 	PublishJobCompleted(msg *actions.JobCompleted)
@@ -339,6 +340,12 @@ func (e *exporter) ListenAndServe(ctx context.Context) error {
 	return e.srv.ListenAndServe()
 }
 
+func (m *exporter) PublishStatic(min, max int) {
+	l := m.scaleSetLabels()
+	maxRunners.With(l).Set(float64(max))
+	minRunners.With(l).Set(float64(min))
+}
+
 func (e *exporter) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	l := e.scaleSetLabels()
 
@@ -371,6 +378,7 @@ func (m *exporter) PublishDesiredRunners(count int) {
 
 type discard struct{}
 
+func (_ *discard) PublishStatic(_ int, _ int)                           {}
 func (_ *discard) PublishStatistics(_ *actions.RunnerScaleSetStatistic) {}
 func (_ *discard) PublishJobStarted(_ *actions.JobStarted)              {}
 func (_ *discard) PublishJobCompleted(_ *actions.JobCompleted)          {}

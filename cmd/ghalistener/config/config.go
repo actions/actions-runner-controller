@@ -2,44 +2,52 @@ package config
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
-	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
-	ConfigureUrl                string `split_words:"true"`
-	AppID                       int64  `split_words:"true"`
-	AppInstallationID           int64  `split_words:"true"`
-	AppPrivateKey               string `split_words:"true"`
-	Token                       string `split_words:"true"`
-	EphemeralRunnerSetNamespace string `split_words:"true"`
-	EphemeralRunnerSetName      string `split_words:"true"`
-	MaxRunners                  int    `split_words:"true"`
-	MinRunners                  int    `split_words:"true"`
-	RunnerScaleSetId            int    `split_words:"true"`
-	ServerRootCA                string `split_words:"true"`
-	LogLevel                    string `split_words:"true"`
-	LogFormat                   string `split_words:"true"`
-	MetricsAddr                 string `split_words:"true"`
-	MetricsEndpoint             string `split_words:"true"`
+	ConfigureUrl                string `json:"configureUrl"`
+	AppID                       int64  `json:"appID"`
+	AppInstallationID           int64  `json:"appInstallationID"`
+	AppPrivateKey               string `json:"appPrivateKey"`
+	Token                       string `json:"token"`
+	EphemeralRunnerSetNamespace string `json:"ephemeralRunnerSetNamespace"`
+	EphemeralRunnerSetName      string `json:"ephemeralRunnerSetName"`
+	MaxRunners                  int    `json:"maxRunners"`
+	MinRunners                  int    `json:"minRunners"`
+	RunnerScaleSetId            int    `json:"runnerScaleSetId"`
+	RunnerScaleSetName          string `json:"runnerScaleSetName"`
+	ServerRootCA                string `json:"serverRootCA"`
+	LogLevel                    string `json:"logLevel"`
+	LogFormat                   string `json:"logFormat"`
+	MetricsAddr                 string `json:"metricsAddr"`
+	MetricsEndpoint             string `json:"metricsEndpoint"`
 }
 
-func Read() (Config, error) {
-	var c Config
-	if err := envconfig.Process("github", &c); err != nil {
-		return Config{}, fmt.Errorf("failed to read config: %w", err)
+func Read(path string) (Config, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return Config{}, err
+	}
+	defer f.Close()
+
+	var config Config
+	if err := json.NewDecoder(f).Decode(&config); err != nil {
+		return Config{}, fmt.Errorf("failed to decode config: %w", err)
 	}
 
-	if err := c.validate(); err != nil {
+	if err := config.validate(); err != nil {
 		return Config{}, fmt.Errorf("failed to validate config: %w", err)
 	}
 
-	return c, nil
+	return config, nil
 }
 
 func (c *Config) validate() error {
@@ -108,7 +116,6 @@ func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
 
 	options := []actions.ClientOption{
 		actions.WithLogger(logger),
-		actions.WithUserAgent(fmt.Sprintf("actions-runner-controller/%s", build.Version)),
 	}
 
 	if c.ServerRootCA != "" {
@@ -129,6 +136,12 @@ func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create actions client: %w", err)
 	}
+
+	client.SetUserAgent(actions.UserAgentInfo{
+		Version:    build.Version,
+		CommitSHA:  build.CommitSHA,
+		ScaleSetID: c.RunnerScaleSetId,
+	})
 
 	return client, nil
 }

@@ -27,9 +27,20 @@ const (
 	messageTypeJobCompleted = "JobCompleted"
 )
 
+type Client interface {
+	GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error)
+	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error)
+	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*actions.RunnerScaleSetMessage, error)
+	DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error
+	AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error)
+	RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*actions.RunnerScaleSetSession, error)
+}
+
 type Config struct {
-	Client     *actions.Client
+	Client     Client
 	ScaleSetID int
+	MinRunners int
+	MaxRunners int
 	Logger     logr.Logger
 	Metrics    metrics.Publisher
 }
@@ -37,7 +48,7 @@ type Config struct {
 type Listener struct {
 	// configured fields
 	scaleSetID int
-	client     *actions.Client
+	client     Client
 	metrics    metrics.Publisher
 
 	// internal fields
@@ -60,6 +71,8 @@ func New(config Config) (*Listener, error) {
 	if config.Metrics != nil {
 		listener.metrics = config.Metrics
 	}
+
+	listener.metrics.PublishStatic(config.MinRunners, config.MaxRunners)
 
 	hostname, err := os.Hostname()
 	if err != nil {
