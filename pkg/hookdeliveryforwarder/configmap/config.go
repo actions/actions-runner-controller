@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 type Config struct {
@@ -28,7 +29,9 @@ func New(checkpointerConfig *Config) (*ConfigMapCheckpointer, manager.Manager, e
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:           checkpointerConfig.Scheme,
 		LeaderElectionID: "hookdeliveryforwarder",
-		Port:             9443,
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to start manager: %v", err)

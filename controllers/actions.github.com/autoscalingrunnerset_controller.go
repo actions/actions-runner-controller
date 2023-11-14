@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -774,8 +773,8 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AutoscalingRunnerSet{}).
 		Owns(&v1alpha1.EphemeralRunnerSet{}).
-		Watches(&source.Kind{Type: &v1alpha1.AutoscalingListener{}}, handler.EnqueueRequestsFromMapFunc(
-			func(o client.Object) []reconcile.Request {
+		Watches(&v1alpha1.AutoscalingListener{}, handler.EnqueueRequestsFromMapFunc(
+			func(_ context.Context, o client.Object) []reconcile.Request {
 				autoscalingListener := o.(*v1alpha1.AutoscalingListener)
 				return []reconcile.Request{
 					{

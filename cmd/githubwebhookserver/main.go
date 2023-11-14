@@ -39,6 +39,9 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -149,11 +152,19 @@ func main() {
 
 	syncPeriod := 10 * time.Minute
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		SyncPeriod:         &syncPeriod,
-		Namespace:          watchNamespace,
-		MetricsBindAddress: metricsAddr,
-		Port:               9443,
+		Scheme: scheme,
+		Cache: cache.Options{
+			SyncPeriod: &syncPeriod,
+			DefaultNamespaces: map[string]cache.Config{
+				watchNamespace: {},
+			},
+		},
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 	})
 	if err != nil {
 		logger.Error(err, "unable to start manager")
