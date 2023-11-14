@@ -13,12 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 )
@@ -143,8 +145,14 @@ func SetupDeploymentTest(ctx2 context.Context) *corev1.Namespace {
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          ns.Name,
-			MetricsBindAddress: "0",
+			Cache: cache.Options{
+				DefaultNamespaces: map[string]cache.Config{
+					ns.Name: {},
+				},
+			},
+			Metrics: metricsserver.Options{
+				BindAddress: "0",
+			},
 		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 

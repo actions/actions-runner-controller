@@ -23,6 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
@@ -48,20 +49,20 @@ func (r *Runner) Default() {
 var _ webhook.Validator = &Runner{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Runner) ValidateCreate() error {
+func (r *Runner) ValidateCreate() (admission.Warnings, error) {
 	runnerLog.Info("validate resource to be created", "name", r.Name)
-	return r.Validate()
+	return nil, r.Validate()
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Runner) ValidateUpdate(old runtime.Object) error {
+func (r *Runner) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	runnerLog.Info("validate resource to be updated", "name", r.Name)
-	return r.Validate()
+	return nil, r.Validate()
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Runner) ValidateDelete() error {
-	return nil
+func (r *Runner) ValidateDelete() (admission.Warnings, error) {
+	return nil, nil
 }
 
 // Validate validates resource spec.
