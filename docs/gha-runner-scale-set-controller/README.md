@@ -43,6 +43,20 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.7.0
+1. Add ResizePolicy and RestartPolicy on mergeListenerContainer (#3075)[https://github.com/actions/actions-runner-controller/pull/3075]
+1. feat: GHA controller Helm Chart quoted labels (#3061)[https://github.com/actions/actions-runner-controller/pull/3061]
+1. Update authorization for PAT to be Bearer as documented (#3039)[https://github.com/actions/actions-runner-controller/pull/3039]
+1. Metrics: set max and min runners during startup time (#3032)[https://github.com/actions/actions-runner-controller/pull/3032]
+1. Update Chart.yaml home URLs (#3013)[https://github.com/actions/actions-runner-controller/pull/3013]
+1. Remove inheritance of imagePullPolicy from manager to listeners (#3009)[https://github.com/actions/actions-runner-controller/pull/3009]
+1. Trim down metrics cardinality (#3003)[https://github.com/actions/actions-runner-controller/pull/3003]
+1. Fix role and rolebinding cleanup for the listener controller (#2970)[https://github.com/actions/actions-runner-controller/pull/2970]
+1. Configure listener pod with the secret instead of env (#2965)[https://github.com/actions/actions-runner-controller/pull/2965]
+1. Allow custom labels to be specified for controller pods (#2952)[https://github.com/actions/actions-runner-controller/pull/2952]
+1. Bump go version and all direct dependencies to newest for k8s compatibility (#2947)[https://github.com/actions/actions-runner-controller/pull/2947]
+1. chore: Service accounts in Kubernetes mode can now be annotated. (#2566)[https://github.com/actions/actions-runner-controller/pull/2566]
+
 ### v0.6.1
 1. Replace TLS dockerd connection with unix socket (#2833)[https://github.com/actions/actions-runner-controller/pull/2833]
 1. Fix name override labels when runnerScaleSetName value is set (#2915)[https://github.com/actions/actions-runner-controller/pull/2915]
