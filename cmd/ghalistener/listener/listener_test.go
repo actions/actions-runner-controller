@@ -321,3 +321,59 @@ func TestListener_refreshSession(t *testing.T) {
 		assert.Equal(t, oldSession, l.session)
 	})
 }
+
+func TestListener_deleteLastMessage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SuccessfullyDeletes", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.MatchedBy(func(lastMessageID any) bool {
+			return lastMessageID.(int64) == int64(5)
+		})).Return(nil).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{}
+		l.lastMessageID = 5
+
+		err = l.deleteLastMessage(ctx)
+		assert.Nil(t, err)
+	})
+
+	t.Run("FailsToDelete", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("error")).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{}
+		l.lastMessageID = 5
+
+		err = l.deleteLastMessage(ctx)
+		assert.NotNil(t, err)
+	})
+}
