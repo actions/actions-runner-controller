@@ -115,3 +115,209 @@ func TestListener_createSession(t *testing.T) {
 		assert.Equal(t, session, l.session)
 	})
 }
+
+func TestListener_getMessage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ReceivesMessage", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+		want := &actions.RunnerScaleSetMessage{
+			MessageId: 1,
+		}
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+		l.session = &actions.RunnerScaleSetSession{}
+
+		got, err := l.getMessage(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("NotExpiredError", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.HttpClientSideError{Code: http.StatusNotFound}).Once()
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{}
+
+		_, err = l.getMessage(ctx)
+		assert.NotNil(t, err)
+	})
+
+	t.Run("RefreshAndSucceeds", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
+
+		want := &actions.RunnerScaleSetMessage{
+			MessageId: 1,
+		}
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &uuid,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+
+		got, err := l.getMessage(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("RefreshAndFails", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Twice()
+
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &uuid,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+
+		got, err := l.getMessage(ctx)
+		assert.NotNil(t, err)
+		assert.Nil(t, got)
+	})
+}
+
+func TestListener_refreshSession(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SuccessfullyRefreshes", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		newUUID := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &newUUID,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		oldUUID := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &oldUUID,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+
+		err = l.refreshSession(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, session, l.session)
+	})
+
+	t.Run("FailsToRefresh", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		assert.Nil(t, err)
+
+		oldUUID := uuid.New()
+		oldSession := &actions.RunnerScaleSetSession{
+			SessionId:      &oldUUID,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+		l.session = oldSession
+
+		err = l.refreshSession(ctx)
+		assert.NotNil(t, err)
+		assert.Equal(t, oldSession, l.session)
+	})
+}
