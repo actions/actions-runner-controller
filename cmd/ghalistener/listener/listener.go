@@ -46,6 +46,28 @@ type Config struct {
 	Metrics    metrics.Publisher
 }
 
+func (c *Config) Validate() error {
+	if c.Client == nil {
+		return errors.New("client is required")
+	}
+	if c.ScaleSetID == 0 {
+		return errors.New("scaleSetID is required")
+	}
+	if c.MinRunners < 0 {
+		return errors.New("minRunners must be greater than or equal to 0")
+	}
+	if c.MaxRunners < 0 {
+		return errors.New("maxRunners must be greater than or equal to 0")
+	}
+	if c.MaxRunners > 0 && c.MinRunners > c.MaxRunners {
+		return errors.New("minRunners must be less than or equal to maxRunners")
+	}
+	if c.Metrics == nil {
+		return errors.New("metrics is required")
+	}
+	return nil
+}
+
 type Listener struct {
 	// configured fields
 	scaleSetID int
@@ -62,6 +84,10 @@ type Listener struct {
 }
 
 func New(config Config) (*Listener, error) {
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
 	listener := &Listener{
 		scaleSetID: config.ScaleSetID,
 		client:     config.Client,
@@ -175,7 +201,7 @@ func (l *Listener) createSession(ctx context.Context) error {
 		}
 
 		retries++
-		if retries > sessionCreationMaxRetries {
+		if retries >= sessionCreationMaxRetries {
 			return fmt.Errorf("failed to create session after %d retries: %w", retries, err)
 		}
 

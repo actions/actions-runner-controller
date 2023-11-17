@@ -256,6 +256,7 @@ func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels
 	return l
 }
 
+//go:generate mockery --name Publisher --output ./mocks --outpkg mocks --case underscore
 type Publisher interface {
 	PublishStatic(min, max int)
 	PublishStatistics(stats *actions.RunnerScaleSetStatistic)
