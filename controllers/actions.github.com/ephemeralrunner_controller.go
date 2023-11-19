@@ -424,12 +424,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	return false, multierr.Combine(errs...)
 }
 
-func (r *EphemeralRunnerReconciler) markAsFailed(
-	ctx context.Context,
-	ephemeralRunner *v1alpha1.EphemeralRunner,
-	errMessage string,
-	log logr.Logger,
-) error {
+func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Failed")
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodFailed
