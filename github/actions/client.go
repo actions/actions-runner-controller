@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/go-logr/logr"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
@@ -53,6 +53,8 @@ type ActionsService interface {
 	GetRunner(ctx context.Context, runnerId int64) (*RunnerReference, error)
 	GetRunnerByName(ctx context.Context, runnerName string) (*RunnerReference, error)
 	RemoveRunner(ctx context.Context, runnerId int64) error
+
+	SetUserAgent(info UserAgentInfo)
 }
 
 type Client struct {
@@ -72,7 +74,7 @@ type Client struct {
 	creds     *ActionsAuth
 	config    *GitHubConfig
 	logger    logr.Logger
-	userAgent string
+	userAgent UserAgentInfo
 
 	rootCAs               *x509.CertPool
 	tlsInsecureSkipVerify bool
@@ -84,10 +86,24 @@ type ProxyFunc func(req *http.Request) (*url.URL, error)
 
 type ClientOption func(*Client)
 
-func WithUserAgent(userAgent string) ClientOption {
-	return func(c *Client) {
-		c.userAgent = userAgent
+type UserAgentInfo struct {
+	Version    string
+	CommitSHA  string
+	ScaleSetID int
+}
+
+func (u UserAgentInfo) String() string {
+	var scaleSetID = "NA"
+	if u.ScaleSetID > 0 {
+		scaleSetID = strconv.Itoa(u.ScaleSetID)
 	}
+
+	return fmt.Sprintf(
+		"actions-runner-controller/%s CommitSHA/%s ScaleSetID/%s",
+		u.Version,
+		u.CommitSHA,
+		scaleSetID,
+	)
 }
 
 func WithLogger(logger logr.Logger) ClientOption {
@@ -140,6 +156,11 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 		// retryablehttp defaults
 		retryMax:     4,
 		retryWaitMax: 30 * time.Second,
+		userAgent: UserAgentInfo{
+			Version:    build.Version,
+			CommitSHA:  build.CommitSHA,
+			ScaleSetID: 0,
+		},
 	}
 
 	for _, option := range options {
@@ -178,6 +199,10 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	return ac, nil
 }
 
+func (c *Client) SetUserAgent(info UserAgentInfo) {
+	c.userAgent = info
+}
+
 // Identifier returns a string to help identify a client uniquely.
 // This is used for caching client instances and understanding when a config
 // change warrants creating a new client. Any changes to Client that would
@@ -186,7 +211,7 @@ func (c *Client) Identifier() string {
 	identifier := fmt.Sprintf("configURL:%q,", c.config.ConfigURL.String())
 
 	if c.creds.Token != "" {
-		identifier += fmt.Sprintf("token:%q", c.creds.Token)
+		identifier += fmt.Sprintf("token:%q,", c.creds.Token)
 	}
 
 	if c.creds.AppCreds != nil {
@@ -234,9 +259,7 @@ func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, b
 		return nil, err
 	}
 
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	return req, nil
 }
@@ -278,9 +301,7 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	return req, nil
 }
@@ -473,9 +494,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 
 	req.Header.Set("Accept", "application/json; api-version=6.0-preview")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -524,9 +543,7 @@ func (c *Client) DeleteMessage(ctx context.Context, messageQueueUrl, messageQueu
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -624,9 +641,7 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -819,8 +834,7 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationT
 	bearerToken := ""
 
 	if c.creds.Token != "" {
-		encodedToken := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("github:%v", c.creds.Token)))
-		bearerToken = fmt.Sprintf("Basic %v", encodedToken)
+		bearerToken = fmt.Sprintf("Bearer %v", c.creds.Token)
 	} else {
 		accessToken, err := c.fetchAccessToken(ctx, c.config.ConfigURL.String(), c.creds.AppCreds)
 		if err != nil {

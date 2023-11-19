@@ -40,6 +40,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -163,7 +165,12 @@ func main() {
 	ctrl.SetLogger(log)
 
 	managerNamespace := ""
-	var newCache cache.NewCacheFunc
+	var defaultNamespaces map[string]cache.Config
+	if namespace != "" {
+		defaultNamespaces = map[string]cache.Config{
+			namespace: {},
+		}
+	}
 
 	if autoScalingRunnerSetOnly {
 		managerNamespace = os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
@@ -173,7 +180,12 @@ func main() {
 		}
 
 		if len(watchSingleNamespace) > 0 {
-			newCache = cache.MultiNamespacedCacheBuilder([]string{managerNamespace, watchSingleNamespace})
+			if defaultNamespaces == nil {
+				defaultNamespaces = make(map[string]cache.Config)
+			}
+
+			defaultNamespaces[watchSingleNamespace] = cache.Config{}
+			defaultNamespaces[managerNamespace] = cache.Config{}
 		}
 
 		switch updateStrategy {
@@ -185,31 +197,38 @@ func main() {
 		}
 	}
 
-	listenerPullPolicy := os.Getenv("CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY")
-	if actionsgithubcom.SetListenerImagePullPolicy(listenerPullPolicy) {
-		log.Info("AutoscalingListener image pull policy changed", "ImagePullPolicy", listenerPullPolicy)
-	} else {
-		log.Info("Using default AutoscalingListener image pull policy", "ImagePullPolicy", actionsgithubcom.DefaultScaleSetListenerImagePullPolicy)
-	}
-
 	if actionsgithubcom.SetListenerLoggingParameters(logLevel, logFormat) {
 		log.Info("AutoscalingListener logging parameters changed", "LogLevel", logLevel, "LogFormat", logFormat)
 	} else {
 		log.Info("Using default AutoscalingListener logging parameters", "LogLevel", actionsgithubcom.DefaultScaleSetListenerLogLevel, "LogFormat", actionsgithubcom.DefaultScaleSetListenerLogFormat)
 	}
 
+	var webhookServer webhook.Server
+	if port != 0 {
+		webhookServer = webhook.NewServer(webhook.Options{
+			Port: port,
+		})
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		NewCache:           newCache,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   leaderElectionId,
-		Port:               port,
-		SyncPeriod:         &syncPeriod,
-		Namespace:          namespace,
-		ClientDisableCacheFor: []client.Object{
-			&corev1.Secret{},
-			&corev1.ConfigMap{},
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		Cache: cache.Options{
+			SyncPeriod:        &syncPeriod,
+			DefaultNamespaces: defaultNamespaces,
+		},
+		WebhookServer:    webhookServer,
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: leaderElectionId,
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{
+					&corev1.Secret{},
+					&corev1.ConfigMap{},
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -230,7 +249,6 @@ func main() {
 		}
 
 		actionsMultiClient := actions.NewMultiClient(
-			"actions-runner-controller/"+build.Version,
 			log.WithName("actions-clients"),
 		)
 

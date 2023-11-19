@@ -1,9 +1,9 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.7.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.13.0
   name: runners.actions.summerwind.dev
 spec:
   group: actions.summerwind.dev
@@ -118,6 +118,7 @@ spec:
                                       type: object
                                     type: array
                                 type: object
+                                x-kubernetes-map-type: atomic
                               weight:
                                 description: Weight associated with matching the corresponding nodeSelectorTerm, in the range 1-100.
                                 format: int32
@@ -178,10 +179,12 @@ spec:
                                       type: object
                                     type: array
                                 type: object
+                                x-kubernetes-map-type: atomic
                               type: array
                           required:
                             - nodeSelectorTerms
                           type: object
+                          x-kubernetes-map-type: atomic
                       type: object
                     podAffinity:
                       description: Describes pod affinity scheduling rules (e.g. co-locate this pod in the same node, zone, etc. as some other pod(s)).
@@ -224,6 +227,7 @@ spec:
                                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                         type: object
                                     type: object
+                                    x-kubernetes-map-type: atomic
                                   namespaceSelector:
                                     description: A label query over the set of namespaces that the term applies to. The term is applied to the union of the namespaces selected by this field and the ones listed in the namespaces field. null selector and null or empty namespaces list means "this pod's namespace". An empty selector ({}) matches all namespaces.
                                     properties:
@@ -254,6 +258,7 @@ spec:
                                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                         type: object
                                     type: object
+                                    x-kubernetes-map-type: atomic
                                   namespaces:
                                     description: namespaces specifies a static list of namespace names that the term applies to. The term is applied to the union of the namespaces listed in this field and the ones selected by namespaceSelector. null or empty namespaces list and null namespaceSelector means "this pod's namespace".
                                     items:
@@ -309,6 +314,7 @@ spec:
                                     description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                     type: object
                                 type: object
+                                x-kubernetes-map-type: atomic
                               namespaceSelector:
                                 description: A label query over the set of namespaces that the term applies to. The term is applied to the union of the namespaces selected by this field and the ones listed in the namespaces field. null selector and null or empty namespaces list means "this pod's namespace". An empty selector ({}) matches all namespaces.
                                 properties:
@@ -339,6 +345,7 @@ spec:
                                     description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                     type: object
                                 type: object
+                                x-kubernetes-map-type: atomic
                               namespaces:
                                 description: namespaces specifies a static list of namespace names that the term applies to. The term is applied to the union of the namespaces listed in this field and the ones selected by namespaceSelector. null or empty namespaces list and null namespaceSelector means "this pod's namespace".
                                 items:
@@ -393,6 +400,7 @@ spec:
                                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                         type: object
                                     type: object
+                                    x-kubernetes-map-type: atomic
                                   namespaceSelector:
                                     description: A label query over the set of namespaces that the term applies to. The term is applied to the union of the namespaces selected by this field and the ones listed in the namespaces field. null selector and null or empty namespaces list means "this pod's namespace". An empty selector ({}) matches all namespaces.
                                     properties:
@@ -423,6 +431,7 @@ spec:
                                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                         type: object
                                     type: object
+                                    x-kubernetes-map-type: atomic
                                   namespaces:
                                     description: namespaces specifies a static list of namespace names that the term applies to. The term is applied to the union of the namespaces listed in this field and the ones selected by namespaceSelector. null or empty namespaces list and null namespaceSelector means "this pod's namespace".
                                     items:
@@ -478,6 +487,7 @@ spec:
                                     description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                     type: object
                                 type: object
+                                x-kubernetes-map-type: atomic
                               namespaceSelector:
                                 description: A label query over the set of namespaces that the term applies to. The term is applied to the union of the namespaces selected by this field and the ones listed in the namespaces field. null selector and null or empty namespaces list means "this pod's namespace". An empty selector ({}) matches all namespaces.
                                 properties:
@@ -508,6 +518,7 @@ spec:
                                     description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                     type: object
                                 type: object
+                                x-kubernetes-map-type: atomic
                               namespaces:
                                 description: namespaces specifies a static list of namespace names that the term applies to. The term is applied to the union of the namespaces listed in this field and the ones selected by namespaceSelector. null or empty namespaces list and null namespaceSelector means "this pod's namespace".
                                 items:
@@ -569,6 +580,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 fieldRef:
                                   description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
                                   properties:
@@ -581,6 +593,7 @@ spec:
                                   required:
                                     - fieldPath
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 resourceFieldRef:
                                   description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
                                   properties:
@@ -600,6 +613,7 @@ spec:
                                   required:
                                     - resource
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 secretKeyRef:
                                   description: Selects a key of a secret in the pod's namespace
                                   properties:
@@ -615,6 +629,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                               type: object
                           required:
                             - name
@@ -635,6 +650,7 @@ spec:
                                   description: Specify whether the ConfigMap must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                             prefix:
                               description: An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.
                               type: string
@@ -648,6 +664,7 @@ spec:
                                   description: Specify whether the Secret must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                           type: object
                         type: array
                       image:
@@ -683,7 +700,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -748,7 +765,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -807,7 +824,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -831,7 +848,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -943,7 +960,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -967,7 +984,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -1028,11 +1045,28 @@ spec:
                             format: int32
                             type: integer
                         type: object
+                      resizePolicy:
+                        description: Resources resize policy for the container.
+                        items:
+                          description: ContainerResizePolicy represents resource resize policy for the container.
+                          properties:
+                            resourceName:
+                              description: 'Name of the resource to which this resource resize policy applies. Supported values: cpu, memory.'
+                              type: string
+                            restartPolicy:
+                              description: Restart policy to apply when specified resource is resized. If not specified, it defaults to NotRequired.
+                              type: string
+                          required:
+                            - resourceName
+                            - restartPolicy
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
                       resources:
                         description: 'Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         properties:
                           claims:
-                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                             items:
                               description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                               properties:
@@ -1059,9 +1093,12 @@ spec:
                                 - type: string
                               pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                               x-kubernetes-int-or-string: true
-                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                             type: object
                         type: object
+                      restartPolicy:
+                        description: 'RestartPolicy defines the restart behavior of individual containers in a pod. This field may only be set for init containers, and the only allowed value is "Always". For non-init containers or when this field is not specified, the restart behavior is defined by the Pod''s restart policy and the container type. Setting the RestartPolicy as "Always" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy "Always" will be shut down. This lifecycle differs from normal init containers and is often referred to as a "sidecar" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed.'
+                        type: string
                       securityContext:
                         description: 'SecurityContext defines the security options the container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/'
                         properties:
@@ -1124,7 +1161,7 @@ spec:
                             description: The seccomp options to use by this container. If seccomp options are provided at both the pod & container level, the container options override the pod options. Note that this field cannot be set when spec.os.name is windows.
                             properties:
                               localhostProfile:
-                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must only be set if type is "Localhost".
+                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is "Localhost". Must NOT be set for any other type.
                                 type: string
                               type:
                                 description: "type indicates which kind of seccomp profile will be applied. Valid options are: \n Localhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied."
@@ -1142,7 +1179,7 @@ spec:
                                 description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
                                 type: string
                               hostProcess:
-                                description: HostProcess determines if a container should be run as a 'Host Process' container. This field is alpha-level and will only be honored by components that enable the WindowsHostProcessContainers feature flag. Setting this field without the feature flag will result in errors when validating the Pod. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).  In addition, if HostProcess is true then HostNetwork must also be set to true.
+                                description: HostProcess determines if a container should be run as a 'Host Process' container. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers). In addition, if HostProcess is true then HostNetwork must also be set to true.
                                 type: boolean
                               runAsUserName:
                                 description: The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
@@ -1166,7 +1203,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -1190,7 +1227,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -1376,6 +1413,7 @@ spec:
                             required:
                               - key
                             type: object
+                            x-kubernetes-map-type: atomic
                           fieldRef:
                             description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
                             properties:
@@ -1388,6 +1426,7 @@ spec:
                             required:
                               - fieldPath
                             type: object
+                            x-kubernetes-map-type: atomic
                           resourceFieldRef:
                             description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
                             properties:
@@ -1407,6 +1446,7 @@ spec:
                             required:
                               - resource
                             type: object
+                            x-kubernetes-map-type: atomic
                           secretKeyRef:
                             description: Selects a key of a secret in the pod's namespace
                             properties:
@@ -1422,6 +1462,7 @@ spec:
                             required:
                               - key
                             type: object
+                            x-kubernetes-map-type: atomic
                         type: object
                     required:
                       - name
@@ -1469,7 +1510,7 @@ spec:
                   description: ResourceRequirements describes the compute resource requirements.
                   properties:
                     claims:
-                      description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                      description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                       items:
                         description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                         properties:
@@ -1496,7 +1537,7 @@ spec:
                           - type: string
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
-                      description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                      description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                       type: object
                   type: object
                 dockerdWithinRunnerContainer:
@@ -1534,6 +1575,7 @@ spec:
                             required:
                               - key
                             type: object
+                            x-kubernetes-map-type: atomic
                           fieldRef:
                             description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
                             properties:
@@ -1546,6 +1588,7 @@ spec:
                             required:
                               - fieldPath
                             type: object
+                            x-kubernetes-map-type: atomic
                           resourceFieldRef:
                             description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
                             properties:
@@ -1565,6 +1608,7 @@ spec:
                             required:
                               - resource
                             type: object
+                            x-kubernetes-map-type: atomic
                           secretKeyRef:
                             description: Selects a key of a secret in the pod's namespace
                             properties:
@@ -1580,6 +1624,7 @@ spec:
                             required:
                               - key
                             type: object
+                            x-kubernetes-map-type: atomic
                         type: object
                     required:
                       - name
@@ -1599,6 +1644,7 @@ spec:
                             description: Specify whether the ConfigMap must be defined
                             type: boolean
                         type: object
+                        x-kubernetes-map-type: atomic
                       prefix:
                         description: An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.
                         type: string
@@ -1612,6 +1658,7 @@ spec:
                             description: Specify whether the Secret must be defined
                             type: boolean
                         type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                   type: array
                 ephemeral:
@@ -1659,6 +1706,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 fieldRef:
                                   description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
                                   properties:
@@ -1671,6 +1719,7 @@ spec:
                                   required:
                                     - fieldPath
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 resourceFieldRef:
                                   description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
                                   properties:
@@ -1690,6 +1739,7 @@ spec:
                                   required:
                                     - resource
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 secretKeyRef:
                                   description: Selects a key of a secret in the pod's namespace
                                   properties:
@@ -1705,6 +1755,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                               type: object
                           required:
                             - name
@@ -1725,6 +1776,7 @@ spec:
                                   description: Specify whether the ConfigMap must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                             prefix:
                               description: An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.
                               type: string
@@ -1738,6 +1790,7 @@ spec:
                                   description: Specify whether the Secret must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                           type: object
                         type: array
                       image:
@@ -1773,7 +1826,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -1838,7 +1891,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -1897,7 +1950,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -1921,7 +1974,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -2033,7 +2086,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -2057,7 +2110,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -2118,11 +2171,28 @@ spec:
                             format: int32
                             type: integer
                         type: object
+                      resizePolicy:
+                        description: Resources resize policy for the container.
+                        items:
+                          description: ContainerResizePolicy represents resource resize policy for the container.
+                          properties:
+                            resourceName:
+                              description: 'Name of the resource to which this resource resize policy applies. Supported values: cpu, memory.'
+                              type: string
+                            restartPolicy:
+                              description: Restart policy to apply when specified resource is resized. If not specified, it defaults to NotRequired.
+                              type: string
+                          required:
+                            - resourceName
+                            - restartPolicy
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
                       resources:
                         description: Resources are not allowed for ephemeral containers. Ephemeral containers use spare resources already allocated to the pod.
                         properties:
                           claims:
-                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                             items:
                               description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                               properties:
@@ -2149,9 +2219,12 @@ spec:
                                 - type: string
                               pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                               x-kubernetes-int-or-string: true
-                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                             type: object
                         type: object
+                      restartPolicy:
+                        description: Restart policy for the container to manage the restart behavior of each container within a pod. This may only be set for init containers. You cannot set this field on ephemeral containers.
+                        type: string
                       securityContext:
                         description: 'Optional: SecurityContext defines the security options the ephemeral container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext.'
                         properties:
@@ -2214,7 +2287,7 @@ spec:
                             description: The seccomp options to use by this container. If seccomp options are provided at both the pod & container level, the container options override the pod options. Note that this field cannot be set when spec.os.name is windows.
                             properties:
                               localhostProfile:
-                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must only be set if type is "Localhost".
+                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is "Localhost". Must NOT be set for any other type.
                                 type: string
                               type:
                                 description: "type indicates which kind of seccomp profile will be applied. Valid options are: \n Localhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied."
@@ -2232,7 +2305,7 @@ spec:
                                 description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
                                 type: string
                               hostProcess:
-                                description: HostProcess determines if a container should be run as a 'Host Process' container. This field is alpha-level and will only be honored by components that enable the WindowsHostProcessContainers feature flag. Setting this field without the feature flag will result in errors when validating the Pod. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).  In addition, if HostProcess is true then HostNetwork must also be set to true.
+                                description: HostProcess determines if a container should be run as a 'Host Process' container. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers). In addition, if HostProcess is true then HostNetwork must also be set to true.
                                 type: boolean
                               runAsUserName:
                                 description: The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
@@ -2256,7 +2329,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -2280,7 +2353,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -2449,6 +2522,7 @@ spec:
                         description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                         type: string
                     type: object
+                    x-kubernetes-map-type: atomic
                   type: array
                 initContainers:
                   items:
@@ -2493,6 +2567,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 fieldRef:
                                   description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
                                   properties:
@@ -2505,6 +2580,7 @@ spec:
                                   required:
                                     - fieldPath
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 resourceFieldRef:
                                   description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
                                   properties:
@@ -2524,6 +2600,7 @@ spec:
                                   required:
                                     - resource
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 secretKeyRef:
                                   description: Selects a key of a secret in the pod's namespace
                                   properties:
@@ -2539,6 +2616,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                               type: object
                           required:
                             - name
@@ -2559,6 +2637,7 @@ spec:
                                   description: Specify whether the ConfigMap must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                             prefix:
                               description: An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.
                               type: string
@@ -2572,6 +2651,7 @@ spec:
                                   description: Specify whether the Secret must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                           type: object
                         type: array
                       image:
@@ -2607,7 +2687,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -2672,7 +2752,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -2731,7 +2811,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -2755,7 +2835,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -2867,7 +2947,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -2891,7 +2971,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -2952,11 +3032,28 @@ spec:
                             format: int32
                             type: integer
                         type: object
+                      resizePolicy:
+                        description: Resources resize policy for the container.
+                        items:
+                          description: ContainerResizePolicy represents resource resize policy for the container.
+                          properties:
+                            resourceName:
+                              description: 'Name of the resource to which this resource resize policy applies. Supported values: cpu, memory.'
+                              type: string
+                            restartPolicy:
+                              description: Restart policy to apply when specified resource is resized. If not specified, it defaults to NotRequired.
+                              type: string
+                          required:
+                            - resourceName
+                            - restartPolicy
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
                       resources:
                         description: 'Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         properties:
                           claims:
-                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                             items:
                               description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                               properties:
@@ -2983,9 +3080,12 @@ spec:
                                 - type: string
                               pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                               x-kubernetes-int-or-string: true
-                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                             type: object
                         type: object
+                      restartPolicy:
+                        description: 'RestartPolicy defines the restart behavior of individual containers in a pod. This field may only be set for init containers, and the only allowed value is "Always". For non-init containers or when this field is not specified, the restart behavior is defined by the Pod''s restart policy and the container type. Setting the RestartPolicy as "Always" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy "Always" will be shut down. This lifecycle differs from normal init containers and is often referred to as a "sidecar" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed.'
+                        type: string
                       securityContext:
                         description: 'SecurityContext defines the security options the container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/'
                         properties:
@@ -3048,7 +3148,7 @@ spec:
                             description: The seccomp options to use by this container. If seccomp options are provided at both the pod & container level, the container options override the pod options. Note that this field cannot be set when spec.os.name is windows.
                             properties:
                               localhostProfile:
-                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must only be set if type is "Localhost".
+                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is "Localhost". Must NOT be set for any other type.
                                 type: string
                               type:
                                 description: "type indicates which kind of seccomp profile will be applied. Valid options are: \n Localhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied."
@@ -3066,7 +3166,7 @@ spec:
                                 description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
                                 type: string
                               hostProcess:
-                                description: HostProcess determines if a container should be run as a 'Host Process' container. This field is alpha-level and will only be honored by components that enable the WindowsHostProcessContainers feature flag. Setting this field without the feature flag will result in errors when validating the Pod. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).  In addition, if HostProcess is true then HostNetwork must also be set to true.
+                                description: HostProcess determines if a container should be run as a 'Host Process' container. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers). In addition, if HostProcess is true then HostNetwork must also be set to true.
                                 type: boolean
                               runAsUserName:
                                 description: The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
@@ -3090,7 +3190,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -3114,7 +3214,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -3261,7 +3361,7 @@ spec:
                   description: ResourceRequirements describes the compute resource requirements.
                   properties:
                     claims:
-                      description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                      description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                       items:
                         description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                         properties:
@@ -3288,7 +3388,7 @@ spec:
                           - type: string
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
-                      description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                      description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                       type: object
                   type: object
                 runtimeClassName:
@@ -3335,7 +3435,7 @@ spec:
                       description: The seccomp options to use by the containers in this pod. Note that this field cannot be set when spec.os.name is windows.
                       properties:
                         localhostProfile:
-                          description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must only be set if type is "Localhost".
+                          description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is "Localhost". Must NOT be set for any other type.
                           type: string
                         type:
                           description: "type indicates which kind of seccomp profile will be applied. Valid options are: \n Localhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied."
@@ -3375,7 +3475,7 @@ spec:
                           description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
                           type: string
                         hostProcess:
-                          description: HostProcess determines if a container should be run as a 'Host Process' container. This field is alpha-level and will only be honored by components that enable the WindowsHostProcessContainers feature flag. Setting this field without the feature flag will result in errors when validating the Pod. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).  In addition, if HostProcess is true then HostNetwork must also be set to true.
+                          description: HostProcess determines if a container should be run as a 'Host Process' container. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers). In addition, if HostProcess is true then HostNetwork must also be set to true.
                           type: boolean
                         runAsUserName:
                           description: The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
@@ -3427,6 +3527,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 fieldRef:
                                   description: 'Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels[''<KEY>'']`, `metadata.annotations[''<KEY>'']`, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.'
                                   properties:
@@ -3439,6 +3540,7 @@ spec:
                                   required:
                                     - fieldPath
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 resourceFieldRef:
                                   description: 'Selects a resource of the container: only resources limits and requests (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.'
                                   properties:
@@ -3458,6 +3560,7 @@ spec:
                                   required:
                                     - resource
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 secretKeyRef:
                                   description: Selects a key of a secret in the pod's namespace
                                   properties:
@@ -3473,6 +3576,7 @@ spec:
                                   required:
                                     - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                               type: object
                           required:
                             - name
@@ -3493,6 +3597,7 @@ spec:
                                   description: Specify whether the ConfigMap must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                             prefix:
                               description: An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.
                               type: string
@@ -3506,6 +3611,7 @@ spec:
                                   description: Specify whether the Secret must be defined
                                   type: boolean
                               type: object
+                              x-kubernetes-map-type: atomic
                           type: object
                         type: array
                       image:
@@ -3541,7 +3647,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -3606,7 +3712,7 @@ spec:
                                       description: HTTPHeader describes a custom header to be used in HTTP probes
                                       properties:
                                         name:
-                                          description: The header field name
+                                          description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                           type: string
                                         value:
                                           description: The header field value
@@ -3665,7 +3771,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -3689,7 +3795,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -3801,7 +3907,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -3825,7 +3931,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -3886,11 +3992,28 @@ spec:
                             format: int32
                             type: integer
                         type: object
+                      resizePolicy:
+                        description: Resources resize policy for the container.
+                        items:
+                          description: ContainerResizePolicy represents resource resize policy for the container.
+                          properties:
+                            resourceName:
+                              description: 'Name of the resource to which this resource resize policy applies. Supported values: cpu, memory.'
+                              type: string
+                            restartPolicy:
+                              description: Restart policy to apply when specified resource is resized. If not specified, it defaults to NotRequired.
+                              type: string
+                          required:
+                            - resourceName
+                            - restartPolicy
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
                       resources:
                         description: 'Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         properties:
                           claims:
-                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                            description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                             items:
                               description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                               properties:
@@ -3917,9 +4040,12 @@ spec:
                                 - type: string
                               pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                               x-kubernetes-int-or-string: true
-                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                            description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                             type: object
                         type: object
+                      restartPolicy:
+                        description: 'RestartPolicy defines the restart behavior of individual containers in a pod. This field may only be set for init containers, and the only allowed value is "Always". For non-init containers or when this field is not specified, the restart behavior is defined by the Pod''s restart policy and the container type. Setting the RestartPolicy as "Always" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy "Always" will be shut down. This lifecycle differs from normal init containers and is often referred to as a "sidecar" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed.'
+                        type: string
                       securityContext:
                         description: 'SecurityContext defines the security options the container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/'
                         properties:
@@ -3982,7 +4108,7 @@ spec:
                             description: The seccomp options to use by this container. If seccomp options are provided at both the pod & container level, the container options override the pod options. Note that this field cannot be set when spec.os.name is windows.
                             properties:
                               localhostProfile:
-                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must only be set if type is "Localhost".
+                                description: localhostProfile indicates a profile defined in a file on the node should be used. The profile must be preconfigured on the node to work. Must be a descending path, relative to the kubelet's configured seccomp profile location. Must be set if type is "Localhost". Must NOT be set for any other type.
                                 type: string
                               type:
                                 description: "type indicates which kind of seccomp profile will be applied. Valid options are: \n Localhost - a profile defined in a file on the node should be used. RuntimeDefault - the container runtime default profile should be used. Unconfined - no profile should be applied."
@@ -4000,7 +4126,7 @@ spec:
                                 description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
                                 type: string
                               hostProcess:
-                                description: HostProcess determines if a container should be run as a 'Host Process' container. This field is alpha-level and will only be honored by components that enable the WindowsHostProcessContainers feature flag. Setting this field without the feature flag will result in errors when validating the Pod. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).  In addition, if HostProcess is true then HostNetwork must also be set to true.
+                                description: HostProcess determines if a container should be run as a 'Host Process' container. All of a Pod's containers must have the same effective HostProcess value (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers). In addition, if HostProcess is true then HostNetwork must also be set to true.
                                 type: boolean
                               runAsUserName:
                                 description: The UserName in Windows to run the entrypoint of the container process. Defaults to the user specified in image metadata if unspecified. May also be set in PodSecurityContext. If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
@@ -4024,7 +4150,7 @@ spec:
                             format: int32
                             type: integer
                           grpc:
-                            description: GRPC specifies an action involving a GRPC port. This is a beta field and requires enabling GRPCContainerProbe feature gate.
+                            description: GRPC specifies an action involving a GRPC port.
                             properties:
                               port:
                                 description: Port number of the gRPC service. Number must be in the range 1 to 65535.
@@ -4048,7 +4174,7 @@ spec:
                                   description: HTTPHeader describes a custom header to be used in HTTP probes
                                   properties:
                                     name:
-                                      description: The header field name
+                                      description: The header field name. This will be canonicalized upon output, so case-variant names will be understood as the same header.
                                       type: string
                                     value:
                                       description: The header field value
@@ -4234,8 +4360,9 @@ spec:
                             description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                             type: object
                         type: object
+                        x-kubernetes-map-type: atomic
                       matchLabelKeys:
-                        description: MatchLabelKeys is a set of pod label keys to select the pods over which spreading will be calculated. The keys are used to lookup values from the incoming pod labels, those key-value labels are ANDed with labelSelector to select the group of existing pods over which spreading will be calculated for the incoming pod. Keys that don't exist in the incoming pod labels will be ignored. A null or empty list means only match against labelSelector.
+                        description: "MatchLabelKeys is a set of pod label keys to select the pods over which spreading will be calculated. The keys are used to lookup values from the incoming pod labels, those key-value labels are ANDed with labelSelector to select the group of existing pods over which spreading will be calculated for the incoming pod. The same key is forbidden to exist in both MatchLabelKeys and LabelSelector. MatchLabelKeys cannot be set when LabelSelector isn't set. Keys that don't exist in the incoming pod labels will be ignored. A null or empty list means only match against labelSelector. \n This is a beta field and requires the MatchLabelKeysInPodTopologySpread feature gate to be enabled (enabled by default)."
                         items:
                           type: string
                         type: array
@@ -4258,7 +4385,7 @@ spec:
                         description: TopologyKey is the key of node labels. Nodes that have a label with this key and identical values are considered to be in the same topology. We consider each <key, value> as a "bucket", and try to put balanced number of pods into each bucket. We define a domain as a particular instance of a topology. Also, we define an eligible domain as a domain whose nodes meet the requirements of nodeAffinityPolicy and nodeTaintsPolicy. e.g. If TopologyKey is "kubernetes.io/hostname", each Node is a domain of that topology. And, if TopologyKey is "topology.kubernetes.io/zone", each zone is a domain of that topology. It's a required field.
                         type: string
                       whenUnsatisfiable:
-                        description: 'WhenUnsatisfiable indicates how to deal with a pod if it doesn''t satisfy the spread constraint. - DoNotSchedule (default) tells the scheduler not to schedule it. - ScheduleAnyway tells the scheduler to schedule the pod in any location,   but giving higher precedence to topologies that would help reduce the   skew. A constraint is considered "Unsatisfiable" for an incoming pod if and only if every possible node assignment for that pod would violate "MaxSkew" on some topology. For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same labelSelector spread as 3/1/1: | zone1 | zone2 | zone3 | | P P P |   P   |   P   | If WhenUnsatisfiable is set to DoNotSchedule, incoming pod can only be scheduled to zone2(zone3) to become 3/2/1(3/1/2) as ActualSkew(2-1) on zone2(zone3) satisfies MaxSkew(1). In other words, the cluster can still be imbalanced, but scheduler won''t make it *more* imbalanced. It''s a required field.'
+                        description: 'WhenUnsatisfiable indicates how to deal with a pod if it doesn''t satisfy the spread constraint. - DoNotSchedule (default) tells the scheduler not to schedule it. - ScheduleAnyway tells the scheduler to schedule the pod in any location, but giving higher precedence to topologies that would help reduce the skew. A constraint is considered "Unsatisfiable" for an incoming pod if and only if every possible node assignment for that pod would violate "MaxSkew" on some topology. For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same labelSelector spread as 3/1/1: | zone1 | zone2 | zone3 | | P P P |   P   |   P   | If WhenUnsatisfiable is set to DoNotSchedule, incoming pod can only be scheduled to zone2(zone3) to become 3/2/1(3/1/2) as ActualSkew(2-1) on zone2(zone3) satisfies MaxSkew(1). In other words, the cluster can still be imbalanced, but scheduler won''t make it *more* imbalanced. It''s a required field.'
                         type: string
                     required:
                       - maxSkew
@@ -4389,6 +4516,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           user:
                             description: 'user is optional: User is the rados user name, default is admin More info: https://examples.k8s.io/volumes/cephfs/README.md#how-to-use-it'
                             type: string
@@ -4411,6 +4539,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           volumeID:
                             description: 'volumeID used to identify the volume in cinder. More info: https://examples.k8s.io/mysql-cinder-pd/README.md'
                             type: string
@@ -4451,6 +4580,7 @@ spec:
                             description: optional specify whether the ConfigMap or its keys must be defined
                             type: boolean
                         type: object
+                        x-kubernetes-map-type: atomic
                       csi:
                         description: csi (Container Storage Interface) represents ephemeral storage that is handled by certain external CSI drivers (Beta feature).
                         properties:
@@ -4467,6 +4597,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           readOnly:
                             description: readOnly specifies a read-only configuration for the volume. Defaults to false (read/write).
                             type: boolean
@@ -4502,6 +4633,7 @@ spec:
                                   required:
                                     - fieldPath
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 mode:
                                   description: 'Optional: mode bits used to set permissions on this file, must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. If not specified, the volume defaultMode will be used. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.'
                                   format: int32
@@ -4528,6 +4660,7 @@ spec:
                                   required:
                                     - resource
                                   type: object
+                                  x-kubernetes-map-type: atomic
                               required:
                                 - path
                               type: object
@@ -4543,12 +4676,12 @@ spec:
                             anyOf:
                               - type: integer
                               - type: string
-                            description: 'sizeLimit is the total amount of local storage required for this EmptyDir volume. The size limit is also applicable for memory medium. The maximum usage on memory medium EmptyDir would be the minimum value between the SizeLimit specified here and the sum of memory limits of all containers in a pod. The default is nil which means that the limit is undefined. More info: http://kubernetes.io/docs/user-guide/volumes#emptydir'
+                            description: 'sizeLimit is the total amount of local storage required for this EmptyDir volume. The size limit is also applicable for memory medium. The maximum usage on memory medium EmptyDir would be the minimum value between the SizeLimit specified here and the sum of memory limits of all containers in a pod. The default is nil which means that the limit is undefined. More info: https://kubernetes.io/docs/concepts/storage/volumes#emptydir'
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
                         type: object
                       ephemeral:
-                        description: "ephemeral represents a volume that is handled by a cluster storage driver. The volume's lifecycle is tied to the pod that defines it - it will be created before the pod starts, and deleted when the pod is removed. \n Use this if: a) the volume is only needed while the pod runs, b) features of normal volumes like restoring from snapshot or capacity    tracking are needed, c) the storage driver is specified through a storage class, and d) the storage driver supports dynamic volume provisioning through    a PersistentVolumeClaim (see EphemeralVolumeSource for more    information on the connection between this volume type    and PersistentVolumeClaim). \n Use PersistentVolumeClaim or one of the vendor-specific APIs for volumes that persist for longer than the lifecycle of an individual pod. \n Use CSI for light-weight local ephemeral volumes if the CSI driver is meant to be used that way - see the documentation of the driver for more information. \n A pod can use both types of ephemeral volumes and persistent volumes at the same time."
+                        description: "ephemeral represents a volume that is handled by a cluster storage driver. The volume's lifecycle is tied to the pod that defines it - it will be created before the pod starts, and deleted when the pod is removed. \n Use this if: a) the volume is only needed while the pod runs, b) features of normal volumes like restoring from snapshot or capacity tracking are needed, c) the storage driver is specified through a storage class, and d) the storage driver supports dynamic volume provisioning through a PersistentVolumeClaim (see EphemeralVolumeSource for more information on the connection between this volume type and PersistentVolumeClaim). \n Use PersistentVolumeClaim or one of the vendor-specific APIs for volumes that persist for longer than the lifecycle of an individual pod. \n Use CSI for light-weight local ephemeral volumes if the CSI driver is meant to be used that way - see the documentation of the driver for more information. \n A pod can use both types of ephemeral volumes and persistent volumes at the same time."
                         properties:
                           volumeClaimTemplate:
                             description: "Will be used to create a stand-alone PVC to provision the volume. The pod in which this EphemeralVolumeSource is embedded will be the owner of the PVC, i.e. the PVC will be deleted together with the pod.  The name of the PVC will be `<pod name>-<volume name>` where `<volume name>` is the name from the `PodSpec.Volumes` array entry. Pod validation will reject the pod if the concatenated name is not valid for a PVC (for example, too long). \n An existing PVC with that name that is not owned by the pod will *not* be used for the pod to avoid using an unrelated volume by mistake. Starting the pod is then blocked until the unrelated PVC is removed. If such a pre-created PVC is meant to be used by the pod, the PVC has to updated with an owner reference to the pod once the pod exists. Normally this should not be necessary, but it may be useful when manually reconstructing a broken cluster. \n This field is read-only and no changes will be made by Kubernetes to the PVC after it has been created. \n Required, must not be nil."
@@ -4597,8 +4730,9 @@ spec:
                                       - kind
                                       - name
                                     type: object
+                                    x-kubernetes-map-type: atomic
                                   dataSourceRef:
-                                    description: 'dataSourceRef specifies the object from which to populate the volume with data, if a non-empty volume is desired. This may be any object from a non-empty API group (non core object) or a PersistentVolumeClaim object. When this field is specified, volume binding will only succeed if the type of the specified object matches some installed volume populator or dynamic provisioner. This field will replace the functionality of the dataSource field and as such if both fields are non-empty, they must have the same value. For backwards compatibility, when namespace isn''t specified in dataSourceRef, both fields (dataSource and dataSourceRef) will be set to the same value automatically if one of them is empty and the other is non-empty. When namespace is specified in dataSourceRef, dataSource isn''t set to the same value and must be empty. There are three important differences between dataSource and dataSourceRef: * While dataSource only allows two specific types of objects, dataSourceRef   allows any non-core object, as well as PersistentVolumeClaim objects. * While dataSource ignores disallowed values (dropping them), dataSourceRef   preserves all values, and generates an error if a disallowed value is   specified. * While dataSource only allows local objects, dataSourceRef allows objects   in any namespaces. (Beta) Using this field requires the AnyVolumeDataSource feature gate to be enabled. (Alpha) Using the namespace field of dataSourceRef requires the CrossNamespaceVolumeDataSource feature gate to be enabled.'
+                                    description: 'dataSourceRef specifies the object from which to populate the volume with data, if a non-empty volume is desired. This may be any object from a non-empty API group (non core object) or a PersistentVolumeClaim object. When this field is specified, volume binding will only succeed if the type of the specified object matches some installed volume populator or dynamic provisioner. This field will replace the functionality of the dataSource field and as such if both fields are non-empty, they must have the same value. For backwards compatibility, when namespace isn''t specified in dataSourceRef, both fields (dataSource and dataSourceRef) will be set to the same value automatically if one of them is empty and the other is non-empty. When namespace is specified in dataSourceRef, dataSource isn''t set to the same value and must be empty. There are three important differences between dataSource and dataSourceRef: * While dataSource only allows two specific types of objects, dataSourceRef allows any non-core object, as well as PersistentVolumeClaim objects. * While dataSource ignores disallowed values (dropping them), dataSourceRef preserves all values, and generates an error if a disallowed value is specified. * While dataSource only allows local objects, dataSourceRef allows objects in any namespaces. (Beta) Using this field requires the AnyVolumeDataSource feature gate to be enabled. (Alpha) Using the namespace field of dataSourceRef requires the CrossNamespaceVolumeDataSource feature gate to be enabled.'
                                     properties:
                                       apiGroup:
                                         description: APIGroup is the group for the resource being referenced. If APIGroup is not specified, the specified Kind must be in the core API group. For any other third-party types, APIGroup is required.
@@ -4620,7 +4754,7 @@ spec:
                                     description: 'resources represents the minimum resources the volume should have. If RecoverVolumeExpansionFailure feature is enabled users are allowed to specify resource requirements that are lower than previous value but must still be higher than capacity recorded in the status field of the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources'
                                     properties:
                                       claims:
-                                        description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                                        description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                                         items:
                                           description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                                           properties:
@@ -4647,7 +4781,7 @@ spec:
                                             - type: string
                                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                           x-kubernetes-int-or-string: true
-                                        description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                        description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                                         type: object
                                     type: object
                                   selector:
@@ -4680,6 +4814,7 @@ spec:
                                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                                         type: object
                                     type: object
+                                    x-kubernetes-map-type: atomic
                                   storageClassName:
                                     description: 'storageClassName is the name of the StorageClass required by the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#class-1'
                                     type: string
@@ -4742,6 +4877,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                         required:
                           - driver
                         type: object
@@ -4857,6 +4993,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           targetPortal:
                             description: targetPortal is iSCSI Target Portal. The Portal is either an IP or ip_addr:port if the port is other than default (typically TCP ports 860 and 3260).
                             type: string
@@ -4965,6 +5102,7 @@ spec:
                                       description: optional specify whether the ConfigMap or its keys must be defined
                                       type: boolean
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 downwardAPI:
                                   description: downwardAPI information about the downwardAPI data to project
                                   properties:
@@ -4985,6 +5123,7 @@ spec:
                                             required:
                                               - fieldPath
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                           mode:
                                             description: 'Optional: mode bits used to set permissions on this file, must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. YAML accepts both octal and decimal values, JSON requires decimal values for mode bits. If not specified, the volume defaultMode will be used. This might be in conflict with other options that affect the file mode, like fsGroup, and the result can be other mode bits set.'
                                             format: int32
@@ -5011,6 +5150,7 @@ spec:
                                             required:
                                               - resource
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                         required:
                                           - path
                                         type: object
@@ -5046,6 +5186,7 @@ spec:
                                       description: optional field specify whether the Secret or its key must be defined
                                       type: boolean
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 serviceAccountToken:
                                   description: serviceAccountToken is information about the serviceAccountToken data to project
                                   properties:
@@ -5120,6 +5261,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           user:
                             description: 'user is the rados user name. Default is admin. More info: https://examples.k8s.io/volumes/rbd/README.md#how-to-use-it'
                             type: string
@@ -5149,6 +5291,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           sslEnabled:
                             description: sslEnabled Flag enable/disable SSL communication with Gateway, default false
                             type: boolean
@@ -5219,6 +5362,7 @@ spec:
                                 description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
                                 type: string
                             type: object
+                            x-kubernetes-map-type: atomic
                           volumeName:
                             description: volumeName is the human-readable name of the StorageOS volume.  Volume names are only unique within a namespace.
                             type: string
@@ -5260,7 +5404,7 @@ spec:
                       description: ResourceRequirements describes the compute resource requirements.
                       properties:
                         claims:
-                          description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable."
+                          description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
                           items:
                             description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                             properties:
@@ -5287,7 +5431,7 @@ spec:
                               - type: string
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
-                          description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                          description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                           type: object
                       type: object
                     storageClassName:
@@ -5368,9 +5512,3 @@ spec:
       subresources:
         status: {}
   preserveUnknownFields: false
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

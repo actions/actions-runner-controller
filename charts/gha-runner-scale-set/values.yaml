@@ -84,8 +84,28 @@ githubConfigSecret:
 #     resources:
 #       requests:
 #         storage: 1Gi
+#   kubernetesModeServiceAccount:
+#     annotations:
+
+## template is the PodSpec for each listener Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
+# listenerTemplate:
+#   spec:
+#     containers:
+#     # Use this section to append additional configuration to the listener container.
+#     # If you change the name of the container, the configuration will not be applied to the listener,
+#     # and it will be treated as a side-car container.
+#     - name: listener
+#       securityContext:
+#         runAsUser: 1000
+#     # Use this section to add the configuration of a side-car container.
+#     # Comment it out or remove it if you don't need it.
+#     # Spec for this container will be applied as is without any modifications.
+#     - name: side-car
+#       image: example-sidecar
 
 ## template is the PodSpec for each runner Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:
   ## template.spec will be modified if you change the container mode
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
@@ -104,32 +124,35 @@ template:
   ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: DOCKER_HOST
-  ##           value: tcp://localhost:2376
-  ##         - name: DOCKER_TLS_VERIFY
-  ##           value: "1"
-  ##         - name: DOCKER_CERT_PATH
-  ##           value: /certs/client
+  ##           value: unix:///run/docker/docker.sock
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
-  ##         - name: dind-cert
-  ##           mountPath: /certs/client
+  ##         - name: dind-sock
+  ##           mountPath: /run/docker
   ##           readOnly: true
   ##     - name: dind
   ##       image: docker:dind
+  ##       args:
+  ##         - dockerd
+  ##         - --host=unix:///run/docker/docker.sock
+  ##         - --group=$(DOCKER_GROUP_GID)
+  ##       env:
+  ##         - name: DOCKER_GROUP_GID
+  ##           value: "123"
   ##       securityContext:
   ##         privileged: true
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
-  ##         - name: dind-cert
-  ##           mountPath: /certs/client
+  ##         - name: dind-sock
+  ##           mountPath: /run/docker
   ##         - name: dind-externals
   ##           mountPath: /home/runner/externals
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}
-  ##     - name: dind-cert
+  ##     - name: dind-sock
   ##       emptyDir: {}
   ##     - name: dind-externals
   ##       emptyDir: {}
@@ -165,9 +188,9 @@ template:
   ##                   storage: 1Gi
   spec:
     containers:
-    - name: runner
-      image: ghcr.io/actions/actions-runner:latest
-      command: ["/home/runner/run.sh"]
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.

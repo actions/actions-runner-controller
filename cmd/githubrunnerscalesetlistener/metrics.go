@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strconv"
-
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -18,8 +16,6 @@ const (
 	labelKeyJobWorkflowRef          = "job_workflow_ref"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
-	labelKeyRunnerID                = "runner_id"
-	labelKeyRunnerName              = "runner_name"
 )
 
 const githubScaleSetSubsystem = "gha"
@@ -43,10 +39,15 @@ var (
 		labelKeyEventName,
 	}
 
-	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
-	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult)
+	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult)
+	startedJobsTotalLabels     = jobLabels
+	jobStartupDurationLabels   = []string{
+		labelKeyRepository,
+		labelKeyOrganization,
+		labelKeyEnterprise,
+		labelKeyEventName,
+	}
 )
 
 // metrics
@@ -274,21 +275,32 @@ func (b *baseLabels) scaleSetLabels() prometheus.Labels {
 
 func (b *baseLabels) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
-	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
 	l[labelKeyJobResult] = msg.Result
-	l[labelKeyRunnerName] = msg.RunnerName
 	return l
 }
 
 func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
-	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
-	l[labelKeyRunnerName] = msg.RunnerName
 	return l
+}
+
+func (b *baseLabels) jobStartupDurationLabels(msg *actions.JobStarted) prometheus.Labels {
+	return prometheus.Labels{
+		labelKeyEnterprise:   b.enterprise,
+		labelKeyOrganization: b.organization,
+		labelKeyRepository:   b.repository,
+		labelKeyEventName:    msg.EventName,
+	}
 }
 
 func (m *metricsExporter) withBaseLabels(base baseLabels) {
 	m.baseLabels = base
+}
+
+func (m *metricsExporter) publishStatic(max, min int) {
+	l := m.scaleSetLabels()
+	maxRunners.With(l).Set(float64(max))
+	minRunners.With(l).Set(float64(min))
 }
 
 func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatistic) {
@@ -307,6 +319,7 @@ func (m *metricsExporter) publishJobStarted(msg *actions.JobStarted) {
 	l := m.startedJobLabels(msg)
 	startedJobsTotal.With(l).Inc()
 
+	l = m.jobStartupDurationLabels(msg)
 	startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
 	jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
 }

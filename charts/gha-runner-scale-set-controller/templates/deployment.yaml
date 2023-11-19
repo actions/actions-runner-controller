@@ -27,6 +27,9 @@ spec:
         app.kubernetes.io/component: controller-manager
         app.kubernetes.io/version: {{ .Chart.Version }}
         {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -91,8 +94,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY
-          value: "{{ .Values.image.pullPolicy | default "IfNotPresent" }}"
         {{- with .Values.env }}
           {{- if kindIs "slice" . }}
             {{- toYaml . | nindent 8 }}

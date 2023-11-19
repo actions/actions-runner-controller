@@ -753,7 +753,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			Log:           logf.Log,
-			ActionsClient: actions.NewMultiClient("test", logr.Discard()),
+			ActionsClient: actions.NewMultiClient(logr.Discard()),
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1052,7 +1052,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			Log:           logf.Log,
-			ActionsClient: actions.NewMultiClient("test", logr.Discard()),
+			ActionsClient: actions.NewMultiClient(logr.Discard()),
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")

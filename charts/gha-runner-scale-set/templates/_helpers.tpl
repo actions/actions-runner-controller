@@ -10,6 +10,10 @@ gha-rs
 {{- default (include "gha-base-name" .) .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "gha-runner-scale-set.scale-set-name" -}}
+{{ .Values.runnerScaleSetName | default .Release.Name }}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
@@ -17,7 +21,7 @@ If release name contains chart name it will be used as a full name.
 */}}
 {{- define "gha-runner-scale-set.fullname" -}}
 {{- $name := default (include "gha-base-name" .) }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-%s" (include "gha-runner-scale-set.scale-set-name" .) $name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -38,7 +42,7 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: gha-rs
-actions.github.com/scale-set-name: {{ .Release.Name }}
+actions.github.com/scale-set-name: {{ include "gha-runner-scale-set.scale-set-name" . }}
 actions.github.com/scale-set-namespace: {{ .Release.Namespace }}
 {{- end }}
 
@@ -46,8 +50,8 @@ actions.github.com/scale-set-namespace: {{ .Release.Namespace }}
 Selector labels
 */}}
 {{- define "gha-runner-scale-set.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "gha-runner-scale-set.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/name: {{ include "gha-runner-scale-set.scale-set-name" . }}
+app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.githubsecret" -}}
@@ -93,19 +97,26 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.dind-container" -}}
 image: docker:dind
+args:
+  - dockerd
+  - --host=unix:///run/docker/docker.sock
+  - --group=$(DOCKER_GROUP_GID)
+env:
+  - name: DOCKER_GROUP_GID
+    value: "123"
 securityContext:
   privileged: true
 volumeMounts:
   - name: work
     mountPath: /home/runner/_work
-  - name: dind-cert
-    mountPath: /certs/client
+  - name: dind-sock
+    mountPath: /run/docker
   - name: dind-externals
     mountPath: /home/runner/externals
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
-- name: dind-cert
+- name: dind-sock
   emptyDir: {}
 - name: dind-externals
   emptyDir: {}
@@ -185,8 +196,6 @@ volumeMounts:
       {{- end }}
     {{- end }}
     {{- $setDockerHost := 1 }}
-    {{- $setDockerTlsVerify := 1 }}
-    {{- $setDockerCertPath := 1 }}
     {{- $setRunnerWaitDocker := 1 }}
     {{- $setNodeExtraCaCerts := 0 }}
     {{- $setRunnerUpdateCaCerts := 0 }}
@@ -199,12 +208,6 @@ env:
       {{- range $i, $env := . }}
         {{- if eq $env.name "DOCKER_HOST" }}
           {{- $setDockerHost = 0 }}
-        {{- end }}
-        {{- if eq $env.name "DOCKER_TLS_VERIFY" }}
-          {{- $setDockerTlsVerify = 0 }}
-        {{- end }}
-        {{- if eq $env.name "DOCKER_CERT_PATH" }}
-          {{- $setDockerCertPath = 0 }}
         {{- end }}
         {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
           {{- $setRunnerWaitDocker = 0 }}
@@ -220,15 +223,7 @@ env:
     {{- end }}
     {{- if $setDockerHost }}
   - name: DOCKER_HOST
-    value: tcp://localhost:2376
-    {{- end }}
-    {{- if $setDockerTlsVerify }}
-  - name: DOCKER_TLS_VERIFY
-    value: "1"
-    {{- end }}
-    {{- if $setDockerCertPath }}
-  - name: DOCKER_CERT_PATH
-    value: /certs/client
+    value: unix:///run/docker/docker.sock
     {{- end }}
     {{- if $setRunnerWaitDocker }}
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
@@ -254,7 +249,7 @@ volumeMounts:
         {{- if eq $volMount.name "work" }}
           {{- $mountWork = 0 }}
         {{- end }}
-        {{- if eq $volMount.name "dind-cert" }}
+        {{- if eq $volMount.name "dind-sock" }}
           {{- $mountDindCert = 0 }}
         {{- end }}
         {{- if eq $volMount.name "github-server-tls-cert" }}
@@ -268,8 +263,8 @@ volumeMounts:
     mountPath: /home/runner/_work
     {{- end }}
     {{- if $mountDindCert }}
-  - name: dind-cert
-    mountPath: /certs/client
+  - name: dind-sock
+    mountPath: /run/docker
     readOnly: true
     {{- end }}
     {{- if $mountGitHubServerTLS }}

@@ -1,7 +1,9 @@
 package actionsgithubcom
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
+	listenerconfig "github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
@@ -34,19 +37,6 @@ var commonLabelKeys = [...]string{
 }
 
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
-
-// scaleSetListenerImagePullPolicy is applied to all listeners
-var scaleSetListenerImagePullPolicy = DefaultScaleSetListenerImagePullPolicy
-
-func SetListenerImagePullPolicy(pullPolicy string) bool {
-	switch p := corev1.PullPolicy(pullPolicy); p {
-	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
-		scaleSetListenerImagePullPolicy = p
-		return true
-	default:
-		return false
-	}
-}
 
 var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
 var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
@@ -115,10 +105,10 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			MinRunners:                    effectiveMinRunners,
 			MaxRunners:                    effectiveMaxRunners,
 			Image:                         image,
-			ImagePullPolicy:               scaleSetListenerImagePullPolicy,
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
+			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
 		},
 	}
 
@@ -130,147 +120,131 @@ type listenerMetricsServerConfig struct {
 	endpoint string
 }
 
-func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, envs ...corev1.EnvVar) (*corev1.Pod, error) {
+func (lm *listenerMetricsServerConfig) containerPort() (corev1.ContainerPort, error) {
+	_, portStr, err := net.SplitHostPort(lm.addr)
+	if err != nil {
+		return corev1.ContainerPort{}, err
+	}
+	port, err := strconv.ParseInt(portStr, 10, 32)
+	if err != nil {
+		return corev1.ContainerPort{}, err
+	}
+	return corev1.ContainerPort{
+		ContainerPort: int32(port),
+		Protocol:      corev1.ProtocolTCP,
+		Name:          "metrics",
+	}, nil
+}
+
+func (b *resourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
+	var (
+		metricsAddr     = ""
+		metricsEndpoint = ""
+	)
+	if metricsConfig != nil {
+		metricsAddr = metricsConfig.addr
+		metricsEndpoint = metricsConfig.endpoint
+	}
+
+	var appID int64
+	if id, ok := secret.Data["github_app_id"]; ok {
+		var err error
+		appID, err = strconv.ParseInt(string(id), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert github_app_id to int: %v", err)
+		}
+	}
+
+	var appInstallationID int64
+	if id, ok := secret.Data["github_app_installation_id"]; ok {
+		var err error
+		appInstallationID, err = strconv.ParseInt(string(id), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert github_app_installation_id to int: %v", err)
+		}
+	}
+
+	config := listenerconfig.Config{
+		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigUrl,
+		AppID:                       appID,
+		AppInstallationID:           appInstallationID,
+		AppPrivateKey:               string(secret.Data["github_app_private_key"]),
+		Token:                       string(secret.Data["github_token"]),
+		EphemeralRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+		EphemeralRunnerSetName:      autoscalingListener.Spec.EphemeralRunnerSetName,
+		MaxRunners:                  autoscalingListener.Spec.MaxRunners,
+		MinRunners:                  autoscalingListener.Spec.MinRunners,
+		RunnerScaleSetId:            autoscalingListener.Spec.RunnerScaleSetId,
+		RunnerScaleSetName:          autoscalingListener.Spec.AutoscalingRunnerSetName,
+		ServerRootCA:                cert,
+		LogLevel:                    scaleSetListenerLogLevel,
+		LogFormat:                   scaleSetListenerLogFormat,
+		MetricsAddr:                 metricsAddr,
+		MetricsEndpoint:             metricsEndpoint,
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(config); err != nil {
+		return nil, fmt.Errorf("failed to encode config: %w", err)
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scaleSetListenerConfigName(autoscalingListener),
+			Namespace: autoscalingListener.Namespace,
+		},
+		Data: map[string][]byte{
+			"config.json": buf.Bytes(),
+		},
+	}, nil
+}
+
+func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, podConfig *corev1.Secret, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, envs ...corev1.EnvVar) (*corev1.Pod, error) {
 	listenerEnv := []corev1.EnvVar{
 		{
-			Name:  "GITHUB_CONFIGURE_URL",
-			Value: autoscalingListener.Spec.GitHubConfigUrl,
-		},
-		{
-			Name:  "GITHUB_EPHEMERAL_RUNNER_SET_NAMESPACE",
-			Value: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-		},
-		{
-			Name:  "GITHUB_EPHEMERAL_RUNNER_SET_NAME",
-			Value: autoscalingListener.Spec.EphemeralRunnerSetName,
-		},
-		{
-			Name:  "GITHUB_MAX_RUNNERS",
-			Value: strconv.Itoa(autoscalingListener.Spec.MaxRunners),
-		},
-		{
-			Name:  "GITHUB_MIN_RUNNERS",
-			Value: strconv.Itoa(autoscalingListener.Spec.MinRunners),
-		},
-		{
-			Name:  "GITHUB_RUNNER_SCALE_SET_ID",
-			Value: strconv.Itoa(autoscalingListener.Spec.RunnerScaleSetId),
-		},
-		{
-			Name:  "GITHUB_RUNNER_SCALE_SET_NAME",
-			Value: autoscalingListener.Spec.AutoscalingRunnerSetName,
-		},
-		{
-			Name:  "GITHUB_RUNNER_LOG_LEVEL",
-			Value: scaleSetListenerLogLevel,
-		},
-		{
-			Name:  "GITHUB_RUNNER_LOG_FORMAT",
-			Value: scaleSetListenerLogFormat,
+			Name:  "LISTENER_CONFIG_PATH",
+			Value: "/etc/gha-listener/config.json",
 		},
 	}
 	listenerEnv = append(listenerEnv, envs...)
 
-	if _, ok := secret.Data["github_token"]; ok {
-		listenerEnv = append(listenerEnv, corev1.EnvVar{
-			Name: "GITHUB_TOKEN",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-					Key: "github_token",
-				},
-			},
-		})
-	}
-
-	if _, ok := secret.Data["github_app_id"]; ok {
-		listenerEnv = append(listenerEnv, corev1.EnvVar{
-			Name: "GITHUB_APP_ID",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-					Key: "github_app_id",
-				},
-			},
-		})
-	}
-
-	if _, ok := secret.Data["github_app_installation_id"]; ok {
-		listenerEnv = append(listenerEnv, corev1.EnvVar{
-			Name: "GITHUB_APP_INSTALLATION_ID",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-					Key: "github_app_installation_id",
-				},
-			},
-		})
-	}
-
-	if _, ok := secret.Data["github_app_private_key"]; ok {
-		listenerEnv = append(listenerEnv, corev1.EnvVar{
-			Name: "GITHUB_APP_PRIVATE_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-					Key: "github_app_private_key",
-				},
-			},
-		})
-	}
-
 	var ports []corev1.ContainerPort
 	if metricsConfig != nil && len(metricsConfig.addr) != 0 {
-		listenerEnv = append(
-			listenerEnv,
-			corev1.EnvVar{
-				Name:  "GITHUB_METRICS_ADDR",
-				Value: metricsConfig.addr,
-			},
-			corev1.EnvVar{
-				Name:  "GITHUB_METRICS_ENDPOINT",
-				Value: metricsConfig.endpoint,
-			},
-		)
-
-		_, portStr, err := net.SplitHostPort(metricsConfig.addr)
+		port, err := metricsConfig.containerPort()
 		if err != nil {
-			return nil, fmt.Errorf("failed to split host:port for metrics address: %v", err)
+			return nil, fmt.Errorf("failed to convert metrics server address to container port: %v", err)
 		}
-		port, err := strconv.ParseInt(portStr, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert port %q to int32: %v", portStr, err)
-		}
-		ports = append(
-			ports,
-			corev1.ContainerPort{
-				ContainerPort: int32(port),
-				Protocol:      corev1.ProtocolTCP,
-				Name:          "metrics",
-			},
-		)
+		ports = append(ports, port)
 	}
 
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: serviceAccount.Name,
 		Containers: []corev1.Container{
 			{
-				Name:            autoscalingListenerContainerName,
-				Image:           autoscalingListener.Spec.Image,
-				Env:             listenerEnv,
-				ImagePullPolicy: autoscalingListener.Spec.ImagePullPolicy,
+				Name:  autoscalingListenerContainerName,
+				Image: autoscalingListener.Spec.Image,
+				Env:   listenerEnv,
 				Command: []string{
 					"/github-runnerscaleset-listener",
 				},
 				Ports: ports,
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "listener-config",
+						MountPath: "/etc/gha-listener",
+						ReadOnly:  true,
+					},
+				},
+			},
+		},
+		Volumes: []corev1.Volume{
+			{
+				Name: "listener-config",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: podConfig.Name,
+					},
+				},
 			},
 		},
 		ImagePullSecrets: autoscalingListener.Spec.ImagePullSecrets,
@@ -295,7 +269,125 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		Spec: podSpec,
 	}
 
+	if autoscalingListener.Spec.Template != nil {
+		mergeListenerPodWithTemplate(newRunnerScaleSetListenerPod, autoscalingListener.Spec.Template)
+	}
+
 	return newRunnerScaleSetListenerPod, nil
+}
+
+func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec) {
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	for k, v := range tmpl.Annotations {
+		if _, ok := pod.Annotations[k]; !ok {
+			pod.Annotations[k] = v
+		}
+	}
+
+	for k, v := range tmpl.Labels {
+		if _, ok := pod.Labels[k]; !ok {
+			pod.Labels[k] = v
+		}
+	}
+
+	// apply spec
+
+	// apply container
+	listenerContainer := &pod.Spec.Containers[0] // if this panics, we have bigger problems
+	for i := range tmpl.Spec.Containers {
+		c := &tmpl.Spec.Containers[i]
+
+		switch c.Name {
+		case "listener":
+			mergeListenerContainer(listenerContainer, c)
+		default:
+			pod.Spec.Containers = append(pod.Spec.Containers, *c)
+		}
+	}
+
+	// apply pod related spec
+	// NOTE: fields that should be ignored
+	// - service account based fields
+
+	if tmpl.Spec.RestartPolicy != "" {
+		pod.Spec.RestartPolicy = tmpl.Spec.RestartPolicy
+	}
+
+	if tmpl.Spec.ImagePullSecrets != nil {
+		pod.Spec.ImagePullSecrets = tmpl.Spec.ImagePullSecrets
+	}
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes, tmpl.Spec.Volumes...)
+	pod.Spec.InitContainers = tmpl.Spec.InitContainers
+	pod.Spec.EphemeralContainers = tmpl.Spec.EphemeralContainers
+	pod.Spec.TerminationGracePeriodSeconds = tmpl.Spec.TerminationGracePeriodSeconds
+	pod.Spec.ActiveDeadlineSeconds = tmpl.Spec.ActiveDeadlineSeconds
+	pod.Spec.DNSPolicy = tmpl.Spec.DNSPolicy
+	pod.Spec.NodeSelector = tmpl.Spec.NodeSelector
+	pod.Spec.NodeName = tmpl.Spec.NodeName
+	pod.Spec.HostNetwork = tmpl.Spec.HostNetwork
+	pod.Spec.HostPID = tmpl.Spec.HostPID
+	pod.Spec.HostIPC = tmpl.Spec.HostIPC
+	pod.Spec.ShareProcessNamespace = tmpl.Spec.ShareProcessNamespace
+	pod.Spec.SecurityContext = tmpl.Spec.SecurityContext
+	pod.Spec.Hostname = tmpl.Spec.Hostname
+	pod.Spec.Subdomain = tmpl.Spec.Subdomain
+	pod.Spec.Affinity = tmpl.Spec.Affinity
+	pod.Spec.SchedulerName = tmpl.Spec.SchedulerName
+	pod.Spec.Tolerations = tmpl.Spec.Tolerations
+	pod.Spec.HostAliases = tmpl.Spec.HostAliases
+	pod.Spec.PriorityClassName = tmpl.Spec.PriorityClassName
+	pod.Spec.Priority = tmpl.Spec.Priority
+	pod.Spec.DNSConfig = tmpl.Spec.DNSConfig
+	pod.Spec.ReadinessGates = tmpl.Spec.ReadinessGates
+	pod.Spec.RuntimeClassName = tmpl.Spec.RuntimeClassName
+	pod.Spec.EnableServiceLinks = tmpl.Spec.EnableServiceLinks
+	pod.Spec.PreemptionPolicy = tmpl.Spec.PreemptionPolicy
+	pod.Spec.Overhead = tmpl.Spec.Overhead
+	pod.Spec.TopologySpreadConstraints = tmpl.Spec.TopologySpreadConstraints
+	pod.Spec.SetHostnameAsFQDN = tmpl.Spec.SetHostnameAsFQDN
+	pod.Spec.OS = tmpl.Spec.OS
+	pod.Spec.HostUsers = tmpl.Spec.HostUsers
+	pod.Spec.SchedulingGates = tmpl.Spec.SchedulingGates
+	pod.Spec.ResourceClaims = tmpl.Spec.ResourceClaims
+}
+
+func mergeListenerContainer(base, from *corev1.Container) {
+	// name should not be modified
+
+	if from.Image != "" {
+		base.Image = from.Image
+	}
+
+	if len(from.Command) > 0 {
+		base.Command = from.Command
+	}
+
+	base.Env = append(base.Env, from.Env...)
+
+	base.ImagePullPolicy = from.ImagePullPolicy
+	base.Args = append(base.Args, from.Args...)
+	base.WorkingDir = from.WorkingDir
+	base.Ports = append(base.Ports, from.Ports...)
+	base.EnvFrom = append(base.EnvFrom, from.EnvFrom...)
+	base.Resources = from.Resources
+	base.VolumeMounts = append(base.VolumeMounts, from.VolumeMounts...)
+	base.VolumeDevices = append(base.VolumeDevices, from.VolumeDevices...)
+	base.LivenessProbe = from.LivenessProbe
+	base.ReadinessProbe = from.ReadinessProbe
+	base.StartupProbe = from.StartupProbe
+	base.Lifecycle = from.Lifecycle
+	base.TerminationMessagePath = from.TerminationMessagePath
+	base.TerminationMessagePolicy = from.TerminationMessagePolicy
+	base.ImagePullPolicy = from.ImagePullPolicy
+	base.SecurityContext = from.SecurityContext
+	base.ResizePolicy = from.ResizePolicy
+	base.RestartPolicy = from.RestartPolicy
+	base.Stdin = from.Stdin
+	base.StdinOnce = from.StdinOnce
+	base.TTY = from.TTY
 }
 
 func (b *resourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
@@ -543,6 +635,10 @@ func (b *resourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 			jitTokenKey: []byte(ephemeralRunner.Status.RunnerJITConfig),
 		},
 	}
+}
+
+func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListener) string {
+	return fmt.Sprintf("%s-config", autoscalingListener.Name)
 }
 
 func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
