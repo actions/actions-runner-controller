@@ -383,6 +383,8 @@ func mergeListenerContainer(base, from *corev1.Container) {
 	base.TerminationMessagePolicy = from.TerminationMessagePolicy
 	base.ImagePullPolicy = from.ImagePullPolicy
 	base.SecurityContext = from.SecurityContext
+	base.ResizePolicy = from.ResizePolicy
+	base.RestartPolicy = from.RestartPolicy
 	base.Stdin = from.Stdin
 	base.StdinOnce = from.StdinOnce
 	base.TTY = from.TTY
