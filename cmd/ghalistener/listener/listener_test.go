@@ -413,4 +413,47 @@ func TestListener_Listen(t *testing.T) {
 		err = l.Listen(ctx, nil)
 		assert.NotNil(t, err)
 	})
+
+	t.Run("CallHandleRegardlessOfInitialMessage", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              &actions.RunnerScaleSetStatistic{},
+		}
+		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		var called bool
+		handler := listenermocks.NewHandler(t)
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+			Return(nil).
+			Run(
+				func(mock.Arguments) {
+					called = true
+					cancel()
+				},
+			).
+			Once()
+
+		err = l.Listen(ctx, handler)
+		assert.True(t, errors.Is(err, context.Canceled))
+		assert.True(t, called)
+	})
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
@@ -17,9 +18,20 @@ type App struct {
 	config config.Config
 	logger logr.Logger
 
-	listener *listener.Listener
-	worker   *worker.Worker
+	listener Listener
+	worker   Worker
 	metrics  metrics.ServerPublisher
+}
+
+//go:generate mockery --name Listener --output ./mocks --outpkg mocks --case underscore
+type Listener interface {
+	Listen(ctx context.Context, handler listener.Handler) error
+}
+
+//go:generate mockery --name Worker --output ./mocks --outpkg mocks --case underscore
+type Worker interface {
+	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
+	HandleDesiredRunnerCount(ctx context.Context, desiredRunnerCount int) error
 }
 
 func New(config config.Config) (*App, error) {
@@ -90,8 +102,15 @@ func New(config config.Config) (*App, error) {
 }
 
 func (app *App) Run(ctx context.Context) error {
-	if app.worker == nil || app.listener == nil {
-		panic("app not initialized")
+	var errs []error
+	if app.worker == nil {
+		errs = append(errs, fmt.Errorf("worker not initialized"))
+	}
+	if app.listener == nil {
+		errs = append(errs, fmt.Errorf("listener not initialized"))
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("app not initialized: %w", err)
 	}
 
 	g, ctx := errgroup.WithContext(ctx)

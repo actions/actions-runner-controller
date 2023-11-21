@@ -148,6 +148,12 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
+		default:
+		}
+
 		msg, err := l.getMessage(ctx)
 		if err != nil {
 			return fmt.Errorf("getMessage failed: %w", err)

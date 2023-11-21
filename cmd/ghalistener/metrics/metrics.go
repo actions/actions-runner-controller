@@ -265,6 +265,7 @@ type Publisher interface {
 	PublishDesiredRunners(count int)
 }
 
+//go:generate mockery --name ServerPublisher --output ./mocks --outpkg mocks --case underscore
 type ServerPublisher interface {
 	Publisher
 	ListenAndServe(ctx context.Context) error

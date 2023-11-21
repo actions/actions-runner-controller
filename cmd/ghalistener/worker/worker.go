@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	jsonpatch "github.com/evanphx/json-patch"
@@ -40,6 +41,8 @@ type Worker struct {
 	lastPatch int
 	logger    *logr.Logger
 }
+
+var _ listener.Handler = (*Worker)(nil)
 
 func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
