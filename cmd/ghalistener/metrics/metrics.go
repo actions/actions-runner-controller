@@ -379,11 +379,11 @@ func (m *exporter) PublishDesiredRunners(count int) {
 
 type discard struct{}
 
-func (_ *discard) PublishStatic(_ int, _ int)                           {}
-func (_ *discard) PublishStatistics(_ *actions.RunnerScaleSetStatistic) {}
-func (_ *discard) PublishJobStarted(_ *actions.JobStarted)              {}
-func (_ *discard) PublishJobCompleted(_ *actions.JobCompleted)          {}
-func (_ *discard) PublishDesiredRunners(_ int)                          {}
+func (*discard) PublishStatic(int, int)                             {}
+func (*discard) PublishStatistics(*actions.RunnerScaleSetStatistic) {}
+func (*discard) PublishJobStarted(*actions.JobStarted)              {}
+func (*discard) PublishJobCompleted(*actions.JobCompleted)          {}
+func (*discard) PublishDesiredRunners(int)                          {}
 
 type ServerConfig struct {
 	logger logr.Logger

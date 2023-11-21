@@ -14,9 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
-
-var _ = metricsmocks.Publisher{}
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -38,6 +37,23 @@ func TestNew(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotNil(t, l)
 	})
+
+	t.Run("SetStaticMetrics", func(t *testing.T) {
+		t.Parallel()
+
+		metrics := metricsmocks.NewPublisher(t)
+
+		metrics.On("PublishStatic", mock.Anything, mock.Anything).Once()
+
+		config := Config{
+			Client:     listenermocks.NewClient(t),
+			ScaleSetID: 1,
+			Metrics:    metrics,
+		}
+		l, err := New(config)
+		assert.Nil(t, err)
+		assert.NotNil(t, l)
+	})
 }
 
 func TestListener_createSession(t *testing.T) {
@@ -52,12 +68,11 @@ func TestListener_createSession(t *testing.T) {
 		}
 
 		client := listenermocks.NewClient(t)
-		client.On("CreateMessageSession", ctx, mock.AnythingOfType("int"), mock.AnythingOfType("string")).Return(nil, assert.AnError).Once()
+		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(nil, assert.AnError).Once()
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
-		assert.NotNil(t, l)
+		require.Nil(t, err)
 
 		err = l.createSession(ctx)
 		assert.NotNil(t, err)
@@ -74,13 +89,12 @@ func TestListener_createSession(t *testing.T) {
 		}
 
 		client := listenermocks.NewClient(t)
-		client.On("CreateMessageSession", ctx, mock.AnythingOfType("int"), mock.AnythingOfType("string")).Return(nil,
+		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(nil,
 			&actions.HttpClientSideError{Code: http.StatusConflict}).Once()
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
-		assert.NotNil(t, l)
+		require.Nil(t, err)
 
 		err = l.createSession(ctx)
 		assert.True(t, errors.Is(err, context.DeadlineExceeded))
@@ -108,7 +122,7 @@ func TestListener_createSession(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		err = l.createSession(context.Background())
 		assert.Nil(t, err)
@@ -136,7 +150,7 @@ func TestListener_getMessage(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 		l.session = &actions.RunnerScaleSetSession{}
 
 		got, err := l.getMessage(ctx)
@@ -158,7 +172,7 @@ func TestListener_getMessage(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		l.session = &actions.RunnerScaleSetSession{}
 
@@ -198,7 +212,7 @@ func TestListener_getMessage(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		l.session = &actions.RunnerScaleSetSession{
 			SessionId:      &uuid,
@@ -237,7 +251,7 @@ func TestListener_getMessage(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		l.session = &actions.RunnerScaleSetSession{
 			SessionId:      &uuid,
@@ -278,7 +292,7 @@ func TestListener_refreshSession(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		oldUUID := uuid.New()
 		l.session = &actions.RunnerScaleSetSession{
@@ -307,7 +321,7 @@ func TestListener_refreshSession(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		oldUUID := uuid.New()
 		oldSession := &actions.RunnerScaleSetSession{
@@ -343,7 +357,7 @@ func TestListener_deleteLastMessage(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		l.session = &actions.RunnerScaleSetSession{}
 		l.lastMessageID = 5
@@ -368,12 +382,35 @@ func TestListener_deleteLastMessage(t *testing.T) {
 		config.Client = client
 
 		l, err := New(config)
-		assert.Nil(t, err)
+		require.Nil(t, err)
 
 		l.session = &actions.RunnerScaleSetSession{}
 		l.lastMessageID = 5
 
 		err = l.deleteLastMessage(ctx)
+		assert.NotNil(t, err)
+	})
+}
+
+func TestListener_Listen(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CreateSessionFails", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(nil, assert.AnError).Once()
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		err = l.Listen(ctx, nil)
 		assert.NotNil(t, err)
 	})
 }
