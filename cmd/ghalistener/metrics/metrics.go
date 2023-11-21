@@ -385,12 +385,3 @@ func (*discard) PublishStatistics(*actions.RunnerScaleSetStatistic) {}
 func (*discard) PublishJobStarted(*actions.JobStarted)              {}
 func (*discard) PublishJobCompleted(*actions.JobCompleted)          {}
 func (*discard) PublishDesiredRunners(int)                          {}
-
-type ServerConfig struct {
-	logger logr.Logger
-	*http.Server
-}
-
-type Server struct {
-	publisher Publisher
-}
