@@ -62,9 +62,6 @@ func (c *Config) Validate() error {
 	if c.MaxRunners > 0 && c.MinRunners > c.MaxRunners {
 		return errors.New("minRunners must be less than or equal to maxRunners")
 	}
-	if c.Metrics == nil {
-		return errors.New("metrics is required")
-	}
 	return nil
 }
 

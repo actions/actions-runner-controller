@@ -457,3 +457,157 @@ func TestListener_Listen(t *testing.T) {
 		assert.True(t, called)
 	})
 }
+
+func TestListener_acquireAvailableJobs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("FailingToAcquireJobs", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, assert.AnError).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		uuid := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              &actions.RunnerScaleSetStatistic{},
+		}
+
+		_, err = l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		assert.Error(t, err)
+	})
+
+	t.Run("SuccessfullyAcquiresJobsOnFirstRun", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		jobIDs := []int64{1, 2, 3}
+
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(jobIDs, nil).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		uuid := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              &actions.RunnerScaleSetStatistic{},
+		}
+
+		acquiredJobIDs, err := l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		assert.NoError(t, err)
+		assert.Equal(t, jobIDs, acquiredJobIDs)
+	})
+
+	t.Run("RefreshAndSucceeds", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		// First call to AcquireJobs will fail with a token expired error
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
+
+		// Second call to AcquireJobs will succeed
+		want := []int64{1, 2, 3}
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &uuid,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+
+		got, err := l.acquireAvailableJobs(ctx, want)
+		assert.Nil(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("RefreshAndFails", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Twice()
+
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &uuid,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+
+		got, err := l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		assert.NotNil(t, err)
+		assert.Nil(t, got)
+	})
+}
