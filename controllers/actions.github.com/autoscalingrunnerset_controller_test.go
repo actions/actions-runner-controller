@@ -698,7 +698,7 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 						return "", err
 					}
 
-					if val, ok := ars.Annotations[runnerScaleSetNameAnnotationKey]; ok {
+					if val, ok := ars.Annotations[AnnotationKeyGitHubRunnerScaleSetName]; ok {
 						return val, nil
 					}
 
@@ -722,7 +722,7 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 						return "", err
 					}
 
-					if val, ok := ars.Annotations[runnerScaleSetNameAnnotationKey]; ok {
+					if val, ok := ars.Annotations[AnnotationKeyGitHubRunnerScaleSetName]; ok {
 						return val, nil
 					}
 
