@@ -191,7 +191,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		case len(ephemeralRunner.Status.Failures) > 5:
 			log.Info("EphemeralRunner has failed more than 5 times. Marking it as failed")
-			if err := r.markAsFailed(ctx, ephemeralRunner, log); err != nil {
+			errMessage := fmt.Sprintf("Pod has failed to start more than 5 times: %s", pod.Status.Message)
+			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, log); err != nil {
 				log.Error(err, "Failed to set ephemeral runner to phase Failed")
 				return ctrl.Result{}, err
 			}
@@ -423,12 +424,12 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	return false, multierr.Combine(errs...)
 }
 
-func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
+func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Failed")
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodFailed
 		obj.Status.Reason = "TooManyPodFailures"
-		obj.Status.Message = "Pod has failed to start more than 5 times"
+		obj.Status.Message = errMessage
 	}); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %v", err)
 	}
