@@ -7,9 +7,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -56,6 +56,28 @@ type ActionsService interface {
 
 	SetUserAgent(info UserAgentInfo)
 }
+
+type clientLogger struct {
+	logr.Logger
+}
+
+func (l *clientLogger) Info(msg string, keysAndValues ...interface{}) {
+	l.Logger.Info(msg, keysAndValues...)
+}
+
+func (l *clientLogger) Debug(msg string, keysAndValues ...interface{}) {
+	// discard debug log
+}
+
+func (l *clientLogger) Error(msg string, keysAndValues ...interface{}) {
+	l.Logger.Error(errors.New(msg), "Retryable client error", keysAndValues...)
+}
+
+func (l *clientLogger) Warn(msg string, keysAndValues ...interface{}) {
+	l.Logger.Info(msg, keysAndValues...)
+}
+
+var _ retryablehttp.LeveledLogger = &clientLogger{}
 
 type Client struct {
 	*http.Client
@@ -168,10 +190,12 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	}
 
 	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = log.New(io.Discard, "", log.LstdFlags)
+	retryClient.Logger = &clientLogger{Logger: ac.logger}
 
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax
+
+	retryClient.HTTPClient.Timeout = 5 * time.Minute // timeout must be > 1m to accomodate long polling
 
 	transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
 	if !ok {
