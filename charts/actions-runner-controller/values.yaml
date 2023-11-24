@@ -418,3 +418,9 @@ actionsMetricsServer:
     #      - chart-example.local
   terminationGracePeriodSeconds: 10
   lifecycle: {}
+  ## specify volumes to mount in the actions-metrics-server container, this can be used
+  ## to specify additional storage of material or to inject files from ConfigMaps
+  ## into the running container
+  volumes: []
+  ## specify where the additional volumes are mounted in the actions-metrics-server container
+  volumeMounts: []
