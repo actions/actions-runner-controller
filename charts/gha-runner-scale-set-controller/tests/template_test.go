@@ -404,6 +404,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		SetValues: map[string]string{
 			"labels.foo":                   "bar",
 			"labels.github":                "actions",
+			"labels.team":                  "GitHub Team",
+			"labels.teamMail":              "team@github.com",
 			"replicaCount":                 "1",
 			"image.pullPolicy":             "Always",
 			"image.tag":                    "dev",
@@ -445,6 +447,8 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "gha-rs-controller", deployment.Labels["app.kubernetes.io/part-of"])
 	assert.Equal(t, "bar", deployment.Labels["foo"])
 	assert.Equal(t, "actions", deployment.Labels["github"])
+	assert.Equal(t, "GitHub Team", deployment.Labels["team"])
+	assert.Equal(t, "team@github.com", deployment.Labels["teamMail"])
 
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
 

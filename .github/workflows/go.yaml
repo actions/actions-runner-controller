@@ -51,7 +51,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           only-new-issues: true
-          version: v1.51.1
+          version: v1.55.2
 
   generate:
     runs-on: ubuntu-latest
