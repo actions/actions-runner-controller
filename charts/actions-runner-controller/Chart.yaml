@@ -18,7 +18,7 @@ type: application
 version: 0.23.6
 
 # Used as the default manager tag value when no tag property is provided in the values.yaml
-appVersion: 0.27.6
+appVersion: 0.27.7
 
 home: https://github.com/actions/actions-runner-controller
 
