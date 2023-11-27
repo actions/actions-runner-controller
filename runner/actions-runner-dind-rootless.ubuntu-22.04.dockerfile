@@ -30,6 +30,7 @@ RUN apt-get update -y \
     uidmap \
     unzip \
     zip \
+    fuse-overlayfs \
     && rm -rf /var/lib/apt/lists/*
 
 # Download latest git-lfs version
