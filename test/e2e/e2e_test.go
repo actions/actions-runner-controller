@@ -37,7 +37,7 @@ var (
 	testResultCMNamePrefix = "test-result-"
 
 	RunnerVersion               = "2.311.0"
-	RunnerContainerHooksVersion = "0.4.0"
+	RunnerContainerHooksVersion = "0.5.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -459,7 +459,7 @@ func buildVars(repo, ubuntuVer string) vars {
 		runnerRootlessDindImage     = testing.Img(runnerRootlessDindImageRepo, runnerImageTag)
 
 		dindSidecarImageRepo = "docker"
-		dindSidecarImageTag  = "20.10.23-dind"
+		dindSidecarImageTag  = "24.0.7-dind"
 		dindSidecarImage     = testing.Img(dindSidecarImageRepo, dindSidecarImageTag)
 	)
 
@@ -1110,7 +1110,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.18.2",
+						GoVersion: "1.21.3",
 					},
 				},
 			)
@@ -1240,7 +1240,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			testing.Step{
 				Uses: "azure/setup-kubectl@v1",
 				With: &testing.With{
-					Version: "v1.20.2",
+					Version: "v1.21.3",
 				},
 			},
 			testing.Step{
