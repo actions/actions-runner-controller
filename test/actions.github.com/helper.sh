@@ -48,17 +48,12 @@ function delete_cluster() {
     minikube delete
 }
 
-function install_arc() {
-    echo "Installing ARC"
+function log_arc() {
+    echo "ARC logs"
+    kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller
+}
 
-    helm install ${NAME} \
-        --namespace ${NAMESPACE} \
-        --create-namespace \
-        --set image.repository=${IMAGE_NAME} \
-        --set image.tag=${IMAGE_VERSION} \
-        ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
-        --debug
-
+function wait_for_arc() {
     echo "Waiting for ARC to be ready"
     local count=0;
     while true; do
@@ -78,11 +73,6 @@ function install_arc() {
     kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller
     kubectl get pod -n "${NAMESPACE}"
     kubectl describe deployment "${NAME}" -n "${NAMESPACE}"
-}
-
-function log_arc() {
-    echo "ARC logs"
-    kubectl logs -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller
 }
 
 function wait_for_scale_set() {

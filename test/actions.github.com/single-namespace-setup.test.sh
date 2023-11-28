@@ -4,11 +4,11 @@ DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 DIR="$(realpath "${DIR}")"
 
-ROOT_DIR="$(realpath "${DIR}/../..")"
+ROOT_DIR="$(ralpath "${DIR}/../../")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="single-$(date '+%M%S')$((($RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
@@ -55,9 +55,7 @@ function main() {
 
     build_image
     create_cluster
-
-    NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" install_arc
-
+    install_arc
     install_scale_set || failed+=("install_scale_set")
     run_workflow || failed+=("run_workflow")
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")

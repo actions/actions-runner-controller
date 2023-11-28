@@ -1,30 +1,28 @@
 #!/bin/bash
 
-DIR="$(dirname "${BASH_SOURCE[0]}")"
+DIR="$(dirname "${BAASH_SOURCE[0]}")"
 
 DIR="$(realpath "${DIR}")"
 
-ROOT_DIR="$(realpath "${DIR}/../..")"
+ROOT_DIR="$(realpath "${DIR}/../../")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="dind-$(date +'%M%S')$(((${RANDOM} + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-workflow.yaml"
+WORKFLOW_FILE="example.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
 function install_arc() {
-    echo "Creating namespace ${ARC_NAMESPACE}"
-    kubectl create namespace "${SCALE_SET_NAMESPACE}"
-
     echo "Installing ARC"
+
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
         --set image.repository="${IMAGE_NAME}" \
         --set image.tag="${IMAGE_TAG}" \
-        ${ROOT_DIR}/charts/gha-rynner-scale-set-controller \
+        ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then
@@ -35,25 +33,24 @@ function install_arc() {
 
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
+
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
+        --set containerMode.type="dind" \
         ${ROOT_DIR}/charts/gha-runner-scale-set \
-        --version="${VERSION}" \
         --debug
 
-    if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
-        NAMESPACE="${ARC_NAMESPACE}" log_arc
-        return 1
-    fi
+    if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" wait_for_scale_set; then
+        NAMESPACE="${}"
 }
 
 function main() {
     local failed=()
 
-    build_image
+    builf_image
     create_cluster
 
     NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" install_arc
