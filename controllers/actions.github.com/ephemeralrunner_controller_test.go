@@ -189,6 +189,25 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
+		It("It should failed if a pod creation failed", func() {
+			invalideEphemeralRunner := newExampleRunner("invalid-ephemeral-runner", autoscalingNS.Name, configSecret.Name)
+			invalideEphemeralRunner.Spec.Spec.PriorityClassName = "notexist"
+
+			err := k8sClient.Create(ctx, invalideEphemeralRunner)
+			Expect(err).To(BeNil())
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Eventually(func() (corev1.PodPhase, error) {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: invalideEphemeralRunner.Name, Namespace: invalideEphemeralRunner.Namespace}, updated)
+				if err != nil {
+					return "", nil
+				}
+				return updated.Status.Phase, nil
+			}, timeout, interval).Should(BeEquivalentTo(corev1.PodFailed))
+			Expect(updated.Status.Reason).Should(Equal("CreationPodFailure"))
+			Expect(updated.Status.Message).Should(Equal("Pod has failed to create: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
+		})
+
 		It("It should clean up resources when deleted", func() {
 			// wait for pod to be created
 			pod := new(corev1.Pod)
