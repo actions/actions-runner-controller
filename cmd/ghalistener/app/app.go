@@ -14,10 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// App is responsible for initializing required components and running the app.
 type App struct {
+	// configured fields
 	config config.Config
 	logger logr.Logger
 
+	// initialized fields
 	listener Listener
 	worker   Worker
 	metrics  metrics.ServerPublisher

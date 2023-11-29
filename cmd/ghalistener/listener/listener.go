@@ -65,19 +65,21 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// The Listener's role is to manage all interactions with the actions service.
+// It receives messages and processes them using the given handler.
 type Listener struct {
 	// configured fields
-	scaleSetID int
-	client     Client
-	metrics    metrics.Publisher
+	scaleSetID int               // The ID of the scale set associated with the listener.
+	client     Client            // The client used to interact with the scale set.
+	metrics    metrics.Publisher // The publisher used to publish metrics.
 
 	// internal fields
-	logger   logr.Logger
-	hostname string
+	logger   logr.Logger // The logger used for logging.
+	hostname string      // The hostname of the listener.
 
 	// updated fields
-	lastMessageID int64
-	session       *actions.RunnerScaleSetSession
+	lastMessageID int64                          // The ID of the last processed message.
+	session       *actions.RunnerScaleSetSession // The session for managing the runner scale set.
 }
 
 func New(config Config) (*Listener, error) {
@@ -114,6 +116,11 @@ type Handler interface {
 	HandleDesiredRunnerCount(ctx context.Context, desiredRunnerCount int) error
 }
 
+// Listen listens for incoming messages and handles them using the provided handler.
+// It continuously listens for messages until the context is cancelled.
+// The initial message contains the current statistics and acquirable jobs, if any.
+// The handler is responsible for handling the initial message and subsequent messages.
+// If an error occurs during any step, Listen returns an error.
 func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 	if err := l.createSession(ctx); err != nil {
 		return fmt.Errorf("createSession failed: %w", err)
@@ -153,7 +160,7 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 
 		msg, err := l.getMessage(ctx)
 		if err != nil {
-			return fmt.Errorf("getMessage failed: %w", err)
+			return fmt.Errorf("failed to get message: %w", err)
 		}
 
 		if msg == nil {

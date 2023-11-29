@@ -35,6 +35,8 @@ type Config struct {
 	MinRunners                  int
 }
 
+// The Worker's role is to process the messages it receives from the listener.
+// It then initiates Kubernetes API requests to carry out the necessary actions.
 type Worker struct {
 	clientset *kubernetes.Clientset
 	config    Config
@@ -86,6 +88,11 @@ func (w *Worker) applyDefaults() error {
 	return nil
 }
 
+// HandleJobStarted updates the job information for the ephemeral runner when a job is started.
+// It takes a context and a jobInfo parameter which contains the details of the started job.
+// This update marks the ephemeral runner so that the controller would have more context
+// about the ephemeral runner that should not be deleted when scaling down.
+// It returns an error if there is any issue with updating the job information.
 func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
@@ -143,6 +150,13 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 	return nil
 }
 
+// HandleDesiredRunnerCount handles the desired runner count by scaling the ephemeral runner set.
+// The function calculates the target runner count based on the minimum and maximum runner count configuration.
+// If the target runner count is the same as the last patched count, it skips patching and returns nil.
+// Otherwise, it creates a merge patch JSON for updating the ephemeral runner set with the desired count.
+// The function then scales the ephemeral runner set by applying the merge patch.
+// Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
+// If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error {
 	targetRunnerCount := int(math.Max(math.Min(float64(w.config.MaxRunners), float64(count)), float64(w.config.MinRunners)))
 
