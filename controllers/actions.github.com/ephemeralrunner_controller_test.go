@@ -204,8 +204,8 @@ var _ = Describe("EphemeralRunner", func() {
 				}
 				return updated.Status.Phase, nil
 			}, timeout, interval).Should(BeEquivalentTo(corev1.PodFailed))
-			Expect(updated.Status.Reason).Should(Equal("TooManyPodFailures"))
-			Expect(updated.Status.Message).Should(Equal("Pod has failed to start more than 5 times: Failed to create the pod: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
+			Expect(updated.Status.Reason).Should(Equal("CreationPodFailure"))
+			Expect(updated.Status.Message).Should(Equal("Pod has failed to create: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
 		})
 
 		It("It should clean up resources when deleted", func() {
