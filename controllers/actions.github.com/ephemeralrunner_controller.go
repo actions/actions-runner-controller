@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -192,7 +193,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		case len(ephemeralRunner.Status.Failures) > 5:
 			log.Info("EphemeralRunner has failed more than 5 times. Marking it as failed")
 			errMessage := fmt.Sprintf("Pod has failed to start more than 5 times: %s", pod.Status.Message)
-			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, "TooManyPodFailures", log); err != nil {
+			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonTooManyPodFailures, log); err != nil {
 				log.Error(err, "Failed to set ephemeral runner to phase Failed")
 				return ctrl.Result{}, err
 			}
@@ -202,14 +203,31 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// Pod was not found. Create if the pod has never been created
 			log.Info("Creating new EphemeralRunner pod.")
 			result, err := r.createPod(ctx, ephemeralRunner, secret, log)
-			if err != nil {
-				errMessage := fmt.Sprintf("Pod has failed to create: %v", err)
-				if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, "CreationPodFailure", log); err != nil {
+			switch {
+			case err == nil:
+				return result, nil
+			case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
+				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
+				if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
 					log.Error(err, "Failed to set ephemeral runner to phase Failed")
 					return ctrl.Result{}, err
 				}
+				return result, err
+			default:
+				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
+				log.Info("Failed to create the pod", "error", err)
+				if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+					if obj.Status.Failures == nil {
+						obj.Status.Failures = make(map[string]bool)
+					}
+					obj.Status.Failures[strconv.Itoa(len(ephemeralRunner.Status.Failures))] = true
+					obj.Status.Ready = false
+					obj.Status.Message = errMessage
+				}); err != nil {
+					log.Error(err, "failed to update ephemeral runner status: failed attempts")
+				}
+				return result, err
 			}
-			return result, nil
 		}
 	}
 

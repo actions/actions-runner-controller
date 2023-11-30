@@ -189,7 +189,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
-		It("It should failed if a pod creation failed", func() {
+		It("It should failed if a pod template is invalid", func() {
 			invalideEphemeralRunner := newExampleRunner("invalid-ephemeral-runner", autoscalingNS.Name, configSecret.Name)
 			invalideEphemeralRunner.Spec.Spec.PriorityClassName = "notexist"
 
@@ -204,8 +204,8 @@ var _ = Describe("EphemeralRunner", func() {
 				}
 				return updated.Status.Phase, nil
 			}, timeout, interval).Should(BeEquivalentTo(corev1.PodFailed))
-			Expect(updated.Status.Reason).Should(Equal("CreationPodFailure"))
-			Expect(updated.Status.Message).Should(Equal("Pod has failed to create: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
+			Expect(updated.Status.Reason).Should(Equal("InvalidPod"))
+			Expect(updated.Status.Message).Should(Equal("Failed to create the pod: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
 		})
 
 		It("It should clean up resources when deleted", func() {
