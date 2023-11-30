@@ -111,6 +111,7 @@ metrics:
   serviceAnnotations: {}
   serviceMonitor:
     enable: false
+    namespace: ""
     timeout: 30s
     interval: 1m
   serviceMonitorLabels: {}
@@ -312,6 +313,7 @@ actionsMetrics:
   # to deploy the actions-metrics-server whose k8s service is referenced by the service monitor.
   serviceMonitor:
     enable: false
+    namespace: ""
     timeout: 30s
     interval: 1m
   serviceMonitorLabels: {}
