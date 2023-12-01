@@ -102,7 +102,7 @@ flags:
 
   ## Defines how the controller should handle upgrades while having running jobs.
   ##
-  ## The srategies available are:
+  ## The strategies available are:
   ## - "immediate": (default) The controller will immediately apply the change causing the
   ##   recreation of the listener and ephemeral runner set. This can lead to an
   ##   overprovisioning of runners, if there are pending / running jobs. This should not

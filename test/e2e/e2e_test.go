@@ -37,7 +37,7 @@ var (
 	testResultCMNamePrefix = "test-result-"
 
 	RunnerVersion               = "2.311.0"
-	RunnerContainerHooksVersion = "0.4.0"
+	RunnerContainerHooksVersion = "0.5.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -459,7 +459,7 @@ func buildVars(repo, ubuntuVer string) vars {
 		runnerRootlessDindImage     = testing.Img(runnerRootlessDindImageRepo, runnerImageTag)
 
 		dindSidecarImageRepo = "docker"
-		dindSidecarImageTag  = "20.10.23-dind"
+		dindSidecarImageTag  = "24.0.7-dind"
 		dindSidecarImage     = testing.Img(dindSidecarImageRepo, dindSidecarImageTag)
 	)
 
