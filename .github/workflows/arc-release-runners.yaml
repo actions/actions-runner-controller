@@ -17,7 +17,7 @@ env:
   PUSH_TO_REGISTRIES: true
   TARGET_ORG: actions-runner-controller
   TARGET_WORKFLOW: release-runners.yaml
-  DOCKER_VERSION: 20.10.23
+  DOCKER_VERSION: 24.0.7
 
 concurrency:
   group: ${{ github.workflow }}
