@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -214,19 +213,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				}
 				return ctrl.Result{}, err
 			default:
-				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
-				log.Info("Failed to create the pod", "error", err)
-				if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-					if obj.Status.Failures == nil {
-						obj.Status.Failures = make(map[string]bool)
-					}
-					obj.Status.Failures[strconv.Itoa(len(ephemeralRunner.Status.Failures))] = true
-					obj.Status.Ready = false
-					obj.Status.Message = errMessage
-				}); err != nil {
-					log.Error(err, "failed to update ephemeral runner status: failed attempts")
-				}
-				return result, err
+				log.Error(err, "Failed to create the pod")
+				return ctrl.Result{}, err
 			}
 		}
 	}
