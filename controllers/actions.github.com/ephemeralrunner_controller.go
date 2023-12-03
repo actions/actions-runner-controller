@@ -212,7 +212,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					log.Error(err, "Failed to set ephemeral runner to phase Failed")
 					return ctrl.Result{}, err
 				}
-				return result, err
+				return ctrl.Result{}, err
 			default:
 				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
 				log.Info("Failed to create the pod", "error", err)
