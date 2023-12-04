@@ -62,12 +62,7 @@ function main() {
 
     delete_cluster
 
-    if [[ "${#failed[@]}" -ne 0 ]]; then
-        echo "----------------------------------"
-        echo "The following tests failed:"
-        for test in "${failed[@]}"; do
-            echo "  - ${test}"
-        done
-        return 1
-    fi
+    print_results "${failed[@]}"
 }
+
+main

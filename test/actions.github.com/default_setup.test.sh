@@ -56,7 +56,7 @@ function main() {
     build_image
     create_cluster
 
-    NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" install_arc
+    install_arc
 
     install_scale_set || failed+=("install_scale_set")
     run_workflow || failed+=("run_workflow")
@@ -64,14 +64,7 @@ function main() {
 
     delete_cluster
 
-    if [[ "${#failed[@]}" -ne 0 ]]; then
-        echo "----------------------------------"
-        echo "The following tests failed:"
-        for test in "${failed[@]}"; do
-            echo "  - ${test}"
-        done
-        return 1
-    fi
+    print_results "${failed[@]}"
 }
 
 main

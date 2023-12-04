@@ -108,3 +108,19 @@ function install_openebs() {
     helm repo update
     helm install openebs openebs/openebs --namespace openebs --create-namespace
 }
+
+function print_results() {
+    local failed=("$@")
+
+    if [[ "${#failed[@]}" -ne 0 ]]; then
+        echo "----------------------------------"
+        echo "The following tests failed:"
+        for test in "${failed[@]}"; do
+            echo "  - ${test}"
+        done
+        return 1
+    else
+        echo "----------------------------------"
+        echo "All tests passed!"
+    fi
+}
