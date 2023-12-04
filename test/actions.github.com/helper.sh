@@ -101,3 +101,10 @@ function cleanup_scale_set() {
 
     kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}" --ignore-not-found
 }
+
+function install_openebs() {
+    echo "Install openebs/dynamic-localpv-provisioner"
+    helm repo add openebs https://openebs.github.io/charts
+    helm repo update
+    helm install openebs openebs/openebs --namespace openebs --create-namespace
+}
