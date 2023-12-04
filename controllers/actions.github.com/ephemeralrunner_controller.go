@@ -206,12 +206,13 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			case err == nil:
 				return result, nil
 			case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
+				log.Error(err, "Failed to create a pod due to unrecoverable failure")
 				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
 				if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
 					log.Error(err, "Failed to set ephemeral runner to phase Failed")
 					return ctrl.Result{}, err
 				}
-				return ctrl.Result{}, err
+				return ctrl.Result{}, nil
 			default:
 				log.Error(err, "Failed to create the pod")
 				return ctrl.Result{}, err
