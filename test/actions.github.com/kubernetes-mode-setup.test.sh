@@ -10,6 +10,7 @@ source "${DIR}/helper.sh"
 
 SCALE_SET_NAME="kube-mode-$(date '%M%S')$((($RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
+WORKFLOW_FILE="arc-test-kubernetes-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 

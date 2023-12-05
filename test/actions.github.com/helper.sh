@@ -126,18 +126,16 @@ function print_results() {
 }
 
 function run_workflow() {
-    local workflow_file="$1"
-
     echo "Checking if the workflow file exists"
     gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${workflow_file}" || return 1
 
     echo "Getting run count before a new run"
-    local target_run_count=$(($(gh run list -R "${TARGET_ORG}/${TARGET_REPO}" --workflow "${workflow_file}" --limit 1 --jq '. | length') + 1))
+    local target_run_count=$(($(gh run list -R "${TARGET_ORG}/${TARGET_REPO}" --workflow "${WORKFLOW_FILE}" --limit 1 --jq '. | length') + 1))
 
     local queue_time=$(date +%FT%TZ)
 
     echo "Running workflow ${workflow_file}"
-    gh workflow run -R "${TARGET_ORG}/${TARGET_REPO}" "${workflow_file}" --ref main -f arc_name="${SCALE_SET_NAME}" || return 1
+    gh workflow run -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" --ref main -f arc_name="${SCALE_SET_NAME}" || return 1
 
     echo "Waiting for run to start"
     local count=0
@@ -148,7 +146,7 @@ function run_workflow() {
             return 1
         fi
 
-        run_id=$(gh run list -R "${TARGET_ORG}/${TARGET_REPO} --workflow ${workflow_file} --created ">${queue_time}" --json name,databaseId --jq '.[] | select(.name | contains("${SCALE_SET_NAME}"))'")
+        run_id=$(gh run list -R "${TARGET_ORG}/${TARGET_REPO} --workflow ${WORKFLOW_FILE} --created ">${queue_time}" --json name,databaseId --jq '.[] | select(.name | contains("${SCALE_SET_NAME}"))'")
         if [ -n "$run_id" ]; then
             echo "Run found: $run_id"
             break

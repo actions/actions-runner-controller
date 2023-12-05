@@ -24,7 +24,7 @@ function install_arc() {
         --create-namespace \
         --set image.repository="${IMAGE_NAME}" \
         --set image.tag="${IMAGE_TAG}" \
-        ${ROOT_DIR}/charts/gha-rynner-scale-set-controller \
+        ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then

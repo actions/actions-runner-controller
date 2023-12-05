@@ -10,7 +10,7 @@ source "${DIR}/helper.sh"
 
 SCALE_SET_NAME="update-strategy-$(date '+%M%S')$((($RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-workflow.yaml"
+WORKFLOW_FILE="arc-test-sleepy-matrix.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
@@ -23,7 +23,7 @@ function install_arc() {
         --set image.repository="${IMAGE_NAME}" \
         --set image.tag="${IMAGE_TAG}" \
         --set flags.updateStrategy="eventual" \
-        ${ROOT_DIR}/charts/gha-rynner-scale-set-controller \
+        ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then

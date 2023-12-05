@@ -18,6 +18,23 @@ function set_targets() {
     echo $TARGETS
 }
 
+function env_test() {
+    if [[ -z "${GITHUB_TOKEN}" ]]; then
+        echo "Error: GITHUB_TOKEN is not set"
+        exit 1
+    fi
+
+    if [[ -z "${TARGET_ORG}" ]]; then
+        echo "Error: TARGET_ORG is not set"
+        exit 1
+    fi
+
+    if [[ -z "${TARGET_REPO}" ]]; then
+        echo "Error: TARGET_REPO is not set"
+        exit 1
+    fi
+}
+
 function main() {
     local failed=()
 
@@ -52,5 +69,7 @@ function main() {
 }
 
 set_targets
+
+env_test
 
 main
