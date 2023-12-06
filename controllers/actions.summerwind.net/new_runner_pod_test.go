@@ -95,7 +95,7 @@ func TestNewRunnerPod(t *testing.T) {
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{
 							Medium:    corev1.StorageMediumMemory,
-							SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+							SizeLimit: resource.NewScaledQuantity(5, resource.Mega),
 						},
 					},
 				},
@@ -547,7 +547,7 @@ func TestNewRunnerPod(t *testing.T) {
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
-								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+								SizeLimit: resource.NewScaledQuantity(5, resource.Mega),
 							},
 						},
 					},
@@ -591,7 +591,7 @@ func TestNewRunnerPod(t *testing.T) {
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
-								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+								SizeLimit: resource.NewScaledQuantity(5, resource.Mega),
 							},
 						},
 					},
@@ -680,7 +680,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{
 							Medium:    corev1.StorageMediumMemory,
-							SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+							SizeLimit: resource.NewScaledQuantity(5, resource.Mega),
 						},
 					},
 				},
@@ -1223,7 +1223,7 @@ func TestNewRunnerPodFromRunnerController(t *testing.T) {
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								Medium:    corev1.StorageMediumMemory,
-								SizeLimit: resource.NewScaledQuantity(1, resource.Mega),
+								SizeLimit: resource.NewScaledQuantity(5, resource.Mega),
 							},
 						},
 					},
