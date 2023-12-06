@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 DIR="$(dirname "${BAASH_SOURCE[0]}")"
 
 DIR="$(realpath "${DIR}")"
