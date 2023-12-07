@@ -300,8 +300,8 @@ acceptance/runner/startup:
 e2e:
 	go test -count=1 -v -timeout 600s -run '^TestE2E$$' ./test/e2e
 
-.PHONY: e2e-gha
-e2e-gha:
+.PHONY: gha-e2e
+gha-e2e:
 	bash hack/e2e-test.sh
 
 # Upload release file to GitHub.
