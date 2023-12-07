@@ -48,7 +48,7 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/part-of: gha-rs-controller
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- range $k, $v := .Values.labels }}
-{{ $k }}: {{ $v }}
+{{ $k }}: {{ $v | quote }}
 {{- end }}
 {{- end }}
 

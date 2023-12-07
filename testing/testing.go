@@ -21,6 +21,9 @@ var images = map[string]string{
 	"1.22": "kindest/node:v1.22.9@sha256:8135260b959dfe320206eb36b3aeda9cffcb262f4b44cda6b33f7bb73f453105",
 	"1.23": "kindest/node:v1.23.6@sha256:b1fa224cc6c7ff32455e0b1fd9cbfd3d3bc87ecaa8fcb06961ed1afb3db0f9ae",
 	"1.24": "kindest/node:v1.24.0@sha256:0866296e693efe1fed79d5e6c7af8df71fc73ae45e3679af05342239cdc5bc8e",
+	"1.25": "kindest/node:v1.25.11@sha256:227fa11ce74ea76a0474eeefb84cb75d8dad1b08638371ecf0e86259b35be0c8",
+	"1.26": "kindest/node:v1.26.6@sha256:6e2d8b28a5b601defe327b98bd1c2d1930b49e5d8c512e1895099e4504007adb",
+	"1.27": "kindest/node:v1.27.3@sha256:3966ac761ae0136263ffdb6cfd4db23ef8a83cba8a463690e98317add2c9ba72",
 }
 
 func Img(repo, tag string) ContainerImage {
@@ -335,7 +338,10 @@ func (k *Kind) Start(ctx context.Context, k8sMinorVer string) error {
 			return err
 		}
 
-		image := images[k8sMinorVer]
+		image, ok := images[k8sMinorVer]
+		if !ok {
+			return fmt.Errorf("no kind image found for k8s minor version %q", k8sMinorVer)
+		}
 
 		kindConfig := []byte(fmt.Sprintf(`kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4

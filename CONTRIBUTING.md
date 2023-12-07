@@ -73,7 +73,7 @@ To make your development cycle faster, use the below command to update deploy an
 # Makefile
 VERSION=controller1 \
   RUNNER_TAG=runner1 \
-  make acceptance/pull acceptance/kind docker-build acceptance/load acceptance/deploy
+  make acceptance/pull acceptance/kind docker-buildx acceptance/load acceptance/deploy
 ```
 
 If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
