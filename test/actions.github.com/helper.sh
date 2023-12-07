@@ -127,7 +127,7 @@ function print_results() {
 
 function run_workflow() {
     echo "Checking if the workflow file exists"
-    gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" || return 1
+    gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" &> /dev/null || return 1
 
     local queue_time="$(date -u +%FT%TZ)"
 
@@ -145,7 +145,7 @@ function run_workflow() {
         run_id=$(gh run list -R "${TARGET_ORG}/${TARGET_REPO}" --workflow "${WORKFLOW_FILE}" --created ">${queue_time}" --json "name,databaseId" --jq ".[] | select(.name | contains(\"${SCALE_SET_NAME}\")) | .databaseId")
         echo "Run ID: ${run_id}"
         if [ -n "$run_id" ]; then
-            echo "Run found: $run_id"
+            echo "Run found!"
             break
         fi
 
@@ -155,7 +155,7 @@ function run_workflow() {
     done
 
     echo "Waiting for run to complete"
-    local code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status)
+    local code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status &> /dev/null)
     if [[ "${code}" -ne 0 ]]; then
         echo "Run failed with exit code ${code}"
         return 1

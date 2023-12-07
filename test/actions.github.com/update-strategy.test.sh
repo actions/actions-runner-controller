@@ -125,15 +125,16 @@ function main() {
     build_image
     create_cluster
     install_arc
+    install_scale_set
 
-    install_scale_set || failed+=("install_scale_set")
-    run_workflow || failed+=("run_workflow_1")
+    WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
 
     upgrade_scale_set || failed+=("upgrade_scale_set")
     assert_listener_deleted || failed+=("assert_listener_deleted")
     assert_listener_recreated || failed+=("assert_listener_recreated")
 
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
+
     NAMESPACE="${ARC_NAMESPACE}" arc_logs
 
     delete_cluster

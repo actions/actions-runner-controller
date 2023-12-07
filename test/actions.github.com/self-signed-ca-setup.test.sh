@@ -110,17 +110,23 @@ function run_mitmproxy() {
 }
 
 function main() {
+    if [[ ! -x "$(which mitmdump)" ]]; then
+        echo "mitmdump is not installed"
+        return 1
+    fi
+
     local failed=()
 
     build_image
     create_cluster
     install_arc
+    run_mitmproxy
+    install_scale_set
 
-    run_mitmproxy || failed+=("run_mitmproxy")
-    install_scale_set || failed+=("install_scale_set")
-    run_workflow || failed+=("run_workflow")
+    WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
 
+    NAMESPACE="${ARC_NAMESPACE}" arc_logs
     delete_cluster
 
     print_results "${failed[@]}"
