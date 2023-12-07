@@ -35,8 +35,29 @@ function env_test() {
     fi
 }
 
+function usage() {
+    echo "Usage: $0 [test_name]"
+    echo "  test_name: the name of the test to run"
+    echo "    if not specified, all tests will be run"
+    echo "    test_name should be the name of the test file without the .test.sh suffix"
+    echo ""
+    exit 1
+}
+
 function main() {
     local failed=()
+
+    env_test
+
+    if [[ -z "${1}" ]]; then
+        echo "Running all tests"
+        set_targets
+    elif [[ -f "${TEST_DIR}/${1}.test.sh" ]]; then
+        echo "Running test ${1}"
+        TARGETS=("${1}.test.sh")
+    else
+        usage
+    fi
 
     for target in "${TARGETS[@]}"; do
         echo "============================================================"
@@ -68,8 +89,4 @@ function main() {
     fi
 }
 
-set_targets
-
-env_test
-
-main
+main $@

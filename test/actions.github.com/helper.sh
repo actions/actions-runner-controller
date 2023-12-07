@@ -99,7 +99,7 @@ function wait_for_scale_set() {
 function cleanup_scale_set() {
     helm uninstall "${INSTALLATION_NAME}" --namespace "${NAMESPACE}" --debug
 
-    kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}" --ignore-not-found
+    kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}"
 }
 
 function install_openebs() {
@@ -127,12 +127,9 @@ function print_results() {
 
 function run_workflow() {
     echo "Checking if the workflow file exists"
-    gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${workflow_file}" || return 1
+    gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" || return 1
 
-    echo "Getting run count before a new run"
-    local target_run_count=$(($(gh run list -R "${TARGET_ORG}/${TARGET_REPO}" --workflow "${WORKFLOW_FILE}" --limit 1 --jq '. | length') + 1))
-
-    local queue_time=$(date +%FT%TZ)
+    local queue_time="$(date -u +%FT%TZ)"
 
     echo "Running workflow ${workflow_file}"
     gh workflow run -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" --ref main -f arc_name="${SCALE_SET_NAME}" || return 1
@@ -145,16 +142,24 @@ function run_workflow() {
             echo "Timeout waiting for run to start"
             return 1
         fi
-
-        run_id=$(gh run list -R "${TARGET_ORG}/${TARGET_REPO} --workflow ${WORKFLOW_FILE} --created ">${queue_time}" --json name,databaseId --jq '.[] | select(.name | contains("${SCALE_SET_NAME}"))'")
+        run_id=$(gh run list -R "${TARGET_ORG}/${TARGET_REPO}" --workflow "${WORKFLOW_FILE}" --created ">${queue_time}" --json "name,databaseId" --jq ".[] | select(.name | contains(\"${SCALE_SET_NAME}\")) | .databaseId")
+        echo "Run ID: ${run_id}"
         if [ -n "$run_id" ]; then
             echo "Run found: $run_id"
             break
         fi
+
+        echo "Run not found yet, waiting 5 seconds"
         sleep 5
         count=$((count+1))
     done
 
     echo "Waiting for run to complete"
-    gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status
+    local code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status)
+    if [[ "${code}" -ne 0 ]]; then
+        echo "Run failed with exit code ${code}"
+        return 1
+    fi
+
+    echo "Run completed successfully"
 }
