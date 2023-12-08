@@ -10,6 +10,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/go-logr/logr"
+	"golang.org/x/net/http/httpproxy"
 )
 
 type Config struct {
@@ -101,7 +102,6 @@ func (c *Config) Logger() (logr.Logger, error) {
 }
 
 func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
-
 	var creds actions.ActionsAuth
 	switch c.Token {
 	case "":
@@ -141,7 +141,14 @@ func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
 		Version:    build.Version,
 		CommitSHA:  build.CommitSHA,
 		ScaleSetID: c.RunnerScaleSetId,
+		HasProxy:   hasProxy(),
+		Subsystem:  "ghalistener",
 	})
 
 	return client, nil
+}
+
+func hasProxy() bool {
+	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
+	return proxyFunc != nil
 }
