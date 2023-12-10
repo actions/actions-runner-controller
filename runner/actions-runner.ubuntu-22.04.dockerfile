@@ -92,8 +92,8 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && docker compose version
 
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && if [ "$ARCH" = "arm64" ]; then export ARCH=arm64 ; fi \
+    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=amd64 ; fi \
     && mkdir -p /usr/libexec/docker/cli-plugins \
     && curl -fLo /usr/libexec/docker/cli-plugins/docker-buildx \
         "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-${ARCH}" \
