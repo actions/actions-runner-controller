@@ -880,3 +880,98 @@ jobs:
           helm uninstall "${{ steps.install_arc.outputs.ARC_NAME }}" --namespace "arc-runners" --debug
           kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${{ steps.install_arc.outputs.ARC_NAME }}" -l app.kubernetes.io/instance="${{ steps.install_arc.outputs.ARC_NAME }}"
           kubectl logs deployment/arc-gha-rs-controller -n "arc-systems"
+
+  init-with-min-runners:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      WORKFLOW_FILE: arc-test-workflow.yaml
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: ./.github/actions/setup-arc-e2e
+        id: setup
+        with:
+          app-id: ${{secrets.E2E_TESTS_ACCESS_APP_ID}}
+          app-pk: ${{secrets.E2E_TESTS_ACCESS_PK}}
+          image-name: ${{env.IMAGE_NAME}}
+          image-tag: ${{env.IMAGE_VERSION}}
+          target-org: ${{env.TARGET_ORG}}
+
+      - name: Install gha-runner-scale-set-controller
+        id: install_arc_controller
+        run: |
+          helm install arc \
+          --namespace "arc-systems" \
+          --create-namespace \
+          --set image.repository=${{ env.IMAGE_NAME }} \
+          --set image.tag=${{ env.IMAGE_VERSION }} \
+          --set flags.updateStrategy="eventual" \
+          ./charts/gha-runner-scale-set-controller \
+          --debug
+          count=0
+          while true; do
+            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            if [ -n "$POD_NAME" ]; then
+              echo "Pod found: $POD_NAME"
+              break
+            fi
+            if [ "$count" -ge 60 ]; then
+              echo "Timeout waiting for controller pod with label app.kubernetes.io/name=gha-rs-controller"
+              exit 1
+            fi
+            sleep 1
+            count=$((count+1))
+          done
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-systems
+          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+
+      - name: Install gha-runner-scale-set
+        id: install_arc
+        run: |
+          ARC_NAME=${{github.job}}-$(date +'%M%S')$((($RANDOM + 100) % 100 + 1))
+          helm install "$ARC_NAME" \
+          --namespace "arc-runners" \
+          --create-namespace \
+          --set githubConfigUrl="https://github.com/${{ env.TARGET_ORG }}/${{env.TARGET_REPO}}" \
+          --set githubConfigSecret.github_token="${{ steps.setup.outputs.token }}" \
+          --set minRunners=5 \
+          ./charts/gha-runner-scale-set \
+          --debug
+          echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
+          count=0
+          while true; do
+            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            if [ -n "$POD_NAME" ]; then
+              echo "Pod found: $POD_NAME"
+              break
+            fi
+            if [ "$count" -ge 60 ]; then
+              echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=$ARC_NAME"
+              exit 1
+            fi
+            sleep 1
+            count=$((count+1))
+          done
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-systems
+      - name: Ensure 5 runners are up
+        run: |
+          count=0
+          while true; do
+            pod_count=$(kubectl get pods -n arc-runners --no-headers | wc -l)
+            if [[ "$pod_count" = 5 ]]; then
+              echo "5 pods are up!"
+              break
+            fi
+            if [[ "$count" -ge 12 ]]; then
+              echo "Timeout waiting for 5 pods to be created"
+              exit 1
+            fi
+            sleep 1
+            count=$((count+1))
+          done
