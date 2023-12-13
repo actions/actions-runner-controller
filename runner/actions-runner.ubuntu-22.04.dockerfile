@@ -24,6 +24,7 @@ RUN apt-get update -y \
     sudo \
     unzip \
     zip \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Download latest git-lfs version
