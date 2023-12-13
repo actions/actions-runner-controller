@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
@@ -158,7 +157,9 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error {
-	targetRunnerCount := int(math.Max(math.Min(float64(w.config.MaxRunners), float64(count)), float64(w.config.MinRunners)))
+	// Max runners should always be set by the resource builder either to the configured value,
+	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
+	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
 
 	logValues := []any{
 		"assigned job", count,
@@ -187,7 +188,7 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error 
 	patch, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
-				Replicas: count,
+				Replicas: targetRunnerCount,
 			},
 		},
 	)

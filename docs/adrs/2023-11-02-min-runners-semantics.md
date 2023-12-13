@@ -1,6 +1,6 @@
 # Changing semantics of the `minRunners` field
 
-**Status**: Proposed
+**Status**: Accepted
 
 ## Context
 
