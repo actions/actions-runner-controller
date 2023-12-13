@@ -30,6 +30,8 @@ RUN apt-get update -y \
     uidmap \
     unzip \
     zip \
+    make \
+    wget \
     fuse-overlayfs \
     && rm -rf /var/lib/apt/lists/*
 
