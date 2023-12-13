@@ -193,7 +193,7 @@ runs:
       shell: bash
       run: |
         helm uninstall ${{ inputs.arc-name }} --namespace ${{inputs.arc-namespace}} --debug
-        kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n ${{inputs.arc-name}} -l app.kubernetes.io/instance=${{ inputs.arc-name }}
+        kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n ${{inputs.arc-namespace}} -l app.kubernetes.io/instance=${{ inputs.arc-name }}
 
     - name: Gather logs and cleanup
       shell: bash
