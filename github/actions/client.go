@@ -109,23 +109,31 @@ type ProxyFunc func(req *http.Request) (*url.URL, error)
 type ClientOption func(*Client)
 
 type UserAgentInfo struct {
-	Version    string
-	CommitSHA  string
+	// Version is the version of the controller
+	Version string
+	// CommitSHA is the git commit SHA of the controller
+	CommitSHA string
+	// ScaleSetID is the ID of the scale set
 	ScaleSetID int
+	// HasProxy is true if the controller is running behind a proxy
+	HasProxy bool
+	// Subsystem is the subsystem such as listener, controller, etc.
+	// Each system may pick its own subsystem name.
+	Subsystem string
 }
 
 func (u UserAgentInfo) String() string {
-	var scaleSetID = "NA"
+	scaleSetID := "NA"
 	if u.ScaleSetID > 0 {
 		scaleSetID = strconv.Itoa(u.ScaleSetID)
 	}
 
-	return fmt.Sprintf(
-		"actions-runner-controller/%s CommitSHA/%s ScaleSetID/%s",
-		u.Version,
-		u.CommitSHA,
-		scaleSetID,
-	)
+	proxy := "Proxy/disabled"
+	if u.HasProxy {
+		proxy = "Proxy/enabled"
+	}
+
+	return fmt.Sprintf("actions-runner-controller/%s (%s; %s) ScaleSetID/%s (%s)", u.Version, u.CommitSHA, u.Subsystem, scaleSetID, proxy)
 }
 
 func WithLogger(logger logr.Logger) ClientOption {

@@ -38,6 +38,7 @@ RUN --mount=target=. \
   export GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} && \
   go build -trimpath -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=${VERSION}' -X 'github.com/actions/actions-runner-controller/build.CommitSHA=${COMMIT_SHA}'" -o /out/manager main.go && \
   go build -trimpath -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=${VERSION}' -X 'github.com/actions/actions-runner-controller/build.CommitSHA=${COMMIT_SHA}'" -o /out/github-runnerscaleset-listener ./cmd/githubrunnerscalesetlistener && \
+  go build -trimpath -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=${VERSION}' -X 'github.com/actions/actions-runner-controller/build.CommitSHA=${COMMIT_SHA}'" -o /out/ghalistener ./cmd/ghalistener && \
   go build -trimpath -ldflags="-s -w" -o /out/github-webhook-server ./cmd/githubwebhookserver && \
   go build -trimpath -ldflags="-s -w" -o /out/actions-metrics-server ./cmd/actionsmetricsserver && \
   go build -trimpath -ldflags="-s -w" -o /out/sleep ./cmd/sleep
@@ -52,6 +53,7 @@ COPY --from=builder /out/manager .
 COPY --from=builder /out/github-webhook-server .
 COPY --from=builder /out/actions-metrics-server .
 COPY --from=builder /out/github-runnerscaleset-listener .
+COPY --from=builder /out/ghalistener .
 COPY --from=builder /out/sleep .
 
 USER 65532:65532

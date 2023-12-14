@@ -466,6 +466,8 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		Version:    build.Version,
 		CommitSHA:  build.CommitSHA,
 		ScaleSetID: runnerScaleSet.Id,
+		HasProxy:   autoscalingRunnerSet.Spec.Proxy != nil,
+		Subsystem:  "controller",
 	})
 
 	logger.Info("Created/Reused a runner scale set", "id", runnerScaleSet.Id, "runnerGroupName", runnerScaleSet.RunnerGroupName)
