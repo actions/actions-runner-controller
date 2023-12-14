@@ -397,7 +397,7 @@ func TestProcessMessage_MultipleMessages(t *testing.T) {
 	require.NoError(t, err)
 
 	mockRsClient.On("AcquireJobsForRunnerScaleSet", ctx, mock.MatchedBy(func(ids []int64) bool { return ids[0] == 3 && ids[1] == 4 })).Return(nil).Once()
-	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
+	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 3).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
 	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
@@ -523,9 +523,9 @@ func TestScaleForAssignedJobCount_ScaleWithinMinMax(t *testing.T) {
 	require.NoError(t, err)
 
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 1).Return(nil).Once()
-	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 3).Return(nil).Once()
+	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 4).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(nil).Once()
-	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 1).Return(nil).Once()
+	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Return(nil).Once()
 	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(nil).Once()
 
 	err = service.scaleForAssignedJobCount(0)
@@ -569,7 +569,7 @@ func TestScaleForAssignedJobCount_ScaleFailed(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Return(fmt.Errorf("error"))
+	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 3).Return(fmt.Errorf("error"))
 
 	err = service.scaleForAssignedJobCount(2)
 
@@ -605,8 +605,23 @@ func TestProcessMessage_JobStartedMessage(t *testing.T) {
 
 	service.currentRunnerCount = 1
 
-	mockKubeManager.On("UpdateEphemeralRunnerWithJobInfo", ctx, service.settings.Namespace, "runner1", "owner1", "repo1", ".github/workflows/ci.yaml", "job1", int64(100), int64(3)).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
+	mockKubeManager.On(
+		"UpdateEphemeralRunnerWithJobInfo",
+		ctx,
+		service.settings.Namespace,
+		"runner1",
+		"owner1",
+		"repo1",
+		".github/workflows/ci.yaml",
+		"job1",
+		int64(100),
+		int64(3),
+	).Run(
+		func(_ mock.Arguments) { cancel() },
+	).Return(nil).Once()
+
 	mockRsClient.On("AcquireJobsForRunnerScaleSet", ctx, mock.MatchedBy(func(ids []int64) bool { return len(ids) == 0 })).Return(nil).Once()
+	mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 2).Return(nil)
 
 	err = service.processMessage(&actions.RunnerScaleSetMessage{
 		MessageId:   1,

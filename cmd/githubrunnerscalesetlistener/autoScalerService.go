@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
@@ -206,7 +205,9 @@ func (s *Service) processMessage(message *actions.RunnerScaleSetMessage) error {
 }
 
 func (s *Service) scaleForAssignedJobCount(count int) error {
-	targetRunnerCount := int(math.Max(math.Min(float64(s.settings.MaxRunners), float64(count)), float64(s.settings.MinRunners)))
+	// Max runners should always be set by the resource builder either to the configured value,
+	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
+	targetRunnerCount := min(s.settings.MinRunners+count, s.settings.MaxRunners)
 	s.metricsExporter.publishDesiredRunners(targetRunnerCount)
 	if targetRunnerCount != s.currentRunnerCount {
 		s.logger.Info("try scale runner request up/down base on assigned job count",
