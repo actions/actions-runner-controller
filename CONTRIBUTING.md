@@ -214,7 +214,7 @@ The process would look like the below:
 
 - Clone this repository locally
 - Checkout the branch. If you use the `gh` command, run `gh pr checkout $PR_NUMBER`
-- Run `NAME=$DOCKER_USER/actions-runner-controller VERSION=canary make docker-build docker-push` for a custom container image build
+- Run `NAME=$DOCKER_USER/actions-runner-controller VERSION=canary make docker-buildx docker-push` for a custom container image build
 - Update your actions-runner-controller's controller-manager deployment to use the new image, `$DOCKER_USER/actions-runner-controller:canary`
 
 Please also note that you need to replace `$DOCKER_USER` with your own DockerHub account name.

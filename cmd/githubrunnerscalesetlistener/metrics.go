@@ -52,23 +52,23 @@ var (
 
 // metrics
 var (
-	// availableJobs = prometheus.NewGaugeVec(
-	// 	prometheus.GaugeOpts{
-	// 		Subsystem: githubScaleSetSubsystem,
-	// 		Name:      "available_jobs",
-	// 		Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned to the runner scale set.",
-	// 	},
-	// 	scaleSetLabels,
-	// )
-	//
-	// acquiredJobs = prometheus.NewGaugeVec(
-	// 	prometheus.GaugeOpts{
-	// 		Subsystem: githubScaleSetSubsystem,
-	// 		Name:      "acquired_jobs",
-	// 		Help:      "Number of jobs acquired by the scale set.",
-	// 	},
-	// 	scaleSetLabels,
-	// )
+	availableJobs = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "available_jobs",
+			Help:      "Number of jobs with `runs-on` matching the runner scale set name. Jobs are not yet assigned to the runner scale set.",
+		},
+		scaleSetLabels,
+	)
+
+	acquiredJobs = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "acquired_jobs",
+			Help:      "Number of jobs acquired by the scale set.",
+		},
+		scaleSetLabels,
+	)
 
 	assignedJobs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -306,8 +306,8 @@ func (m *metricsExporter) publishStatic(max, min int) {
 func (m *metricsExporter) publishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	l := m.scaleSetLabels()
 
-	// availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
-	// acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
+	availableJobs.With(l).Set(float64(stats.TotalAvailableJobs))
+	acquiredJobs.With(l).Set(float64(stats.TotalAcquiredJobs))
 	assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
 	runningJobs.With(l).Set(float64(stats.TotalRunningJobs))
 	registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
