@@ -203,6 +203,8 @@ func main() {
 		log.Info("Using default AutoscalingListener logging parameters", "LogLevel", actionsgithubcom.DefaultScaleSetListenerLogLevel, "LogFormat", actionsgithubcom.DefaultScaleSetListenerLogFormat)
 	}
 
+	actionsgithubcom.SetListenerEntrypoint(os.Getenv("LISTENER_ENTRYPOINT"))
+
 	var webhookServer webhook.Server
 	if port != 0 {
 		webhookServer = webhook.NewServer(webhook.Options{

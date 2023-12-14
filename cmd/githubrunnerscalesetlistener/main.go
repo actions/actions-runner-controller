@@ -176,6 +176,8 @@ func run(ctx context.Context, rc config.Config, logger logr.Logger, opts runOpti
 		Version:    build.Version,
 		CommitSHA:  build.CommitSHA,
 		ScaleSetID: rc.RunnerScaleSetId,
+		HasProxy:   hasProxy(),
+		Subsystem:  "githubrunnerscalesetlistener",
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create an Actions Service client: %w", err)
@@ -234,4 +236,9 @@ func newActionsClientFromConfig(config config.Config, creds *actions.ActionsAuth
 	}))
 
 	return actions.NewClient(config.ConfigureUrl, creds, options...)
+}
+
+func hasProxy() bool {
+	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
+	return proxyFunc != nil
 }

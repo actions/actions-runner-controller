@@ -38,8 +38,11 @@ var commonLabelKeys = [...]string{
 
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
 
-var scaleSetListenerLogLevel = DefaultScaleSetListenerLogLevel
-var scaleSetListenerLogFormat = DefaultScaleSetListenerLogFormat
+var (
+	scaleSetListenerLogLevel   = DefaultScaleSetListenerLogLevel
+	scaleSetListenerLogFormat  = DefaultScaleSetListenerLogFormat
+	scaleSetListenerEntrypoint = "/ghalistener"
+)
 
 func SetListenerLoggingParameters(level string, format string) bool {
 	switch level {
@@ -57,6 +60,12 @@ func SetListenerLoggingParameters(level string, format string) bool {
 	scaleSetListenerLogLevel = level
 	scaleSetListenerLogFormat = format
 	return true
+}
+
+func SetListenerEntrypoint(entrypoint string) {
+	if entrypoint != "" {
+		scaleSetListenerEntrypoint = entrypoint
+	}
 }
 
 type resourceBuilder struct{}
@@ -225,7 +234,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Image: autoscalingListener.Spec.Image,
 				Env:   listenerEnv,
 				Command: []string{
-					"/github-runnerscaleset-listener",
+					scaleSetListenerEntrypoint,
 				},
 				Ports: ports,
 				VolumeMounts: []corev1.VolumeMount{
