@@ -21,6 +21,7 @@ func TestLabelPropagation(t *testing.T) {
 			Labels: map[string]string{
 				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
 				LabelKeyKubernetesVersion: "0.2.0",
+				"arbitrary-label":         "random-value",
 			},
 			Annotations: map[string]string{
 				runnerScaleSetIdAnnotationKey:         "1",
@@ -47,6 +48,7 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
+	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
 
 	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
@@ -59,6 +61,7 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
 	assert.Equal(t, "org", listener.Labels[LabelKeyGitHubOrganization])
 	assert.Equal(t, "repo", listener.Labels[LabelKeyGitHubRepository])
+	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], listener.Labels["arbitrary-label"])
 
 	listenerServiceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
