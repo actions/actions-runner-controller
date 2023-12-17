@@ -425,7 +425,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:            "listener",
+					Name:            autoscalingListenerContainerName,
 					ImagePullPolicy: corev1.PullAlways,
 					SecurityContext: &corev1.SecurityContext{
 						RunAsUser: &runAsUser,
