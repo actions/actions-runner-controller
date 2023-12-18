@@ -43,6 +43,14 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.7.1
+1. Change minRunners behavior and fix the new listener min runners [#3139](https://github.com/actions/actions-runner-controller/pull/3139)
+1. Modify user agent format with subsystem and is proxy configured information [#3116](https://github.com/actions/actions-runner-controller/pull/3116)
+1. Record the error when the creation pod fails [#3112](https://github.com/actions/actions-runner-controller/pull/3112)
+1. Set actions client timeout to 5 minutes, add logging to client [#3103](https://github.com/actions/actions-runner-controller/pull/3103)
+1. Refactoring listener app with configurable fallback [#3091](https://github.com/actions/actions-runner-controller/pull/3096)
+1. Record a reason for pod failure in EphemeralRunner [#3074](https://github.com/actions/actions-runner-controller/pull/3074)
+
 ### v0.7.0
 1. Add ResizePolicy and RestartPolicy on mergeListenerContainer [#3075](https://github.com/actions/actions-runner-controller/pull/3075)
 1. feat: GHA controller Helm Chart quoted labels [#3061](https://github.com/actions/actions-runner-controller/pull/3061)
