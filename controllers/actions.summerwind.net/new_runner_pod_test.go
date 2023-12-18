@@ -223,6 +223,91 @@ func TestNewRunnerPod(t *testing.T) {
 		},
 	}
 
+	baseKubernetesMode := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"actions-runner-controller/inject-registration-token": "true",
+				"actions-runner": "",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				workGenericEphemeralVolume,
+				{
+					Name: "runner",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			Containers: []corev1.Container{
+				{
+					Name:  "runner",
+					Image: "default-runner-image",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "RUNNER_ORG",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_REPO",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_ENTERPRISE",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_LABELS",
+							Value: "",
+						},
+						{
+							Name:  "RUNNER_GROUP",
+							Value: "",
+						},
+						{
+							Name:  "DOCKER_ENABLED",
+							Value: "false",
+						},
+						{
+							Name:  "DOCKERD_IN_RUNNER",
+							Value: "false",
+						},
+						{
+							Name:  "GITHUB_URL",
+							Value: "api.github.com",
+						},
+						{
+							Name:  "RUNNER_WORKDIR",
+							Value: "/runner/_work",
+						},
+						{
+							Name:  "RUNNER_EPHEMERAL",
+							Value: "true",
+						},
+						{
+							Name:  "RUNNER_STATUS_UPDATE_HOOK",
+							Value: "false",
+						},
+						{
+							Name:  "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT",
+							Value: "actions-runner-controller/NA",
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "runner",
+							MountPath: "/runner",
+						},
+					},
+					ImagePullPolicy: corev1.PullAlways,
+					SecurityContext: &corev1.SecurityContext{},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyNever,
+		},
+	}
+
 	boolPtr := func(v bool) *bool {
 		return &v
 	}
@@ -610,9 +695,8 @@ func TestNewRunnerPod(t *testing.T) {
 			config: arcv1alpha1.RunnerConfig{
 				ContainerMode:   "kubernetes",
 				PodTemplateName: "example-template",
-				WorkDir:         "",
 			},
-			want: newTestPod(base, func(p *corev1.Pod) {
+			want: newTestPod(baseKubernetesMode, func(p *corev1.Pod) {
 				envVars := []corev1.EnvVar{
 					{
 						Name:  "ACTIONS_RUNNER_CONTAINER_HOOKS",
@@ -671,6 +755,10 @@ func TestNewRunnerPod(t *testing.T) {
 				DockerGID:                 "1234",
 				UseRunnerStatusUpdateHook: false,
 			})
+
+			if tc.description == "it should set podTemplateName as an env var when containerMode is kubernetes" {
+				print("hello")
+			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
