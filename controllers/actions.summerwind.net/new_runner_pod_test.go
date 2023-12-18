@@ -16,7 +16,7 @@ import (
 )
 
 func newRunnerPod(template corev1.Pod, runnerSpec arcv1alpha1.RunnerConfig, githubBaseURL string, d RunnerPodDefaults) (corev1.Pod, error) {
-	return newRunnerPodWithContainerMode("", template, runnerSpec, githubBaseURL, d)
+	return newRunnerPodWithContainerMode(runnerSpec.ContainerMode, template, runnerSpec, githubBaseURL, d)
 }
 
 func setEnv(c *corev1.Container, name, value string) {
@@ -596,6 +596,58 @@ func TestNewRunnerPod(t *testing.T) {
 						},
 					},
 				}
+			}),
+		},
+		{
+			description: "it should set podTemplateName as an env var when containerMode is kubernetes",
+			template: corev1.Pod{
+				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{
+						workGenericEphemeralVolume,
+					},
+				},
+			},
+			config: arcv1alpha1.RunnerConfig{
+				ContainerMode:   "kubernetes",
+				PodTemplateName: "example-template",
+				WorkDir:         "",
+			},
+			want: newTestPod(base, func(p *corev1.Pod) {
+				envVars := []corev1.EnvVar{
+					{
+						Name:  "ACTIONS_RUNNER_CONTAINER_HOOKS",
+						Value: defaultRunnerHookPath,
+					},
+					{
+						Name:  "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER",
+						Value: "true",
+					},
+					{
+						Name: "ACTIONS_RUNNER_POD_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
+					{
+						Name: "ACTIONS_RUNNER_JOB_NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.namespace",
+							},
+						},
+					},
+					{
+						Name:  "ACTIONS_RUNNER_REQUIRE_SAME_NODE",
+						Value: "true",
+					},
+					{
+						Name:  "ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE",
+						Value: "/templates/example-template.yaml",
+					},
+				}
+				p.Spec.Containers[0].Env = append(p.Spec.Containers[0].Env, envVars...)
 			}),
 		},
 	}

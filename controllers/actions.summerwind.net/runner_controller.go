@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
@@ -730,13 +731,13 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	return updated
 }
 
-func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
+func runnerHookEnvs(pod *corev1.Pod, podTemplateName string) ([]corev1.EnvVar, error) {
 	isRequireSameNode, err := isRequireSameNode(pod)
 	if err != nil {
 		return nil, err
 	}
 
-	return []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{
 			Name:  "ACTIONS_RUNNER_CONTAINER_HOOKS",
 			Value: defaultRunnerHookPath,
@@ -765,7 +766,16 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 			Name:  "ACTIONS_RUNNER_REQUIRE_SAME_NODE",
 			Value: strconv.FormatBool(isRequireSameNode),
 		},
-	}, nil
+	}
+
+	if podTemplateName != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE",
+			Value: "/templates/" + podTemplateName + ".yaml",
+		})
+	}
+
+	return envVars, nil
 }
 
 func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, githubBaseURL string, d RunnerPodDefaults) (corev1.Pod, error) {
@@ -934,7 +944,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 	runnerContainer.Env = append(runnerContainer.Env, env...)
 	if containerMode == "kubernetes" {
-		hookEnvs, err := runnerHookEnvs(&template)
+		hookEnvs, err := runnerHookEnvs(&template, runnerSpec.PodTemplateName)
 		if err != nil {
 			return corev1.Pod{}, err
 		}
