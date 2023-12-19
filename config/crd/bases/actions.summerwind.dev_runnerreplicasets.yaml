@@ -3400,6 +3400,8 @@ spec:
                         organization:
                           pattern: ^[^/]+$
                           type: string
+                        podTemplateName:
+                          type: string
                         priorityClassName:
                           type: string
                         repository:
