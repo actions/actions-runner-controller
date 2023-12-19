@@ -127,6 +127,8 @@ spec:
                     spec:
                       description: RunnerSpec defines the desired state of Runner
                       properties:
+                        PodTemplateFile:
+                          type: string
                         affinity:
                           description: Affinity is a group of affinity scheduling rules.
                           properties:
@@ -3417,8 +3419,6 @@ spec:
                           type: object
                         organization:
                           pattern: ^[^/]+$
-                          type: string
-                        podTemplateName:
                           type: string
                         priorityClassName:
                           type: string

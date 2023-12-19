@@ -684,7 +684,7 @@ func TestNewRunnerPod(t *testing.T) {
 			}),
 		},
 		{
-			description: "it should set podTemplateName as an env var when containerMode is kubernetes",
+			description: "it should set container hook file as an env var when PodTemplateFile is set",
 			template: corev1.Pod{
 				Spec: corev1.PodSpec{
 					Volumes: []corev1.Volume{
@@ -694,7 +694,7 @@ func TestNewRunnerPod(t *testing.T) {
 			},
 			config: arcv1alpha1.RunnerConfig{
 				ContainerMode:   "kubernetes",
-				PodTemplateName: "example-template",
+				PodTemplateFile: "example-template",
 			},
 			want: newTestPod(baseKubernetesMode, func(p *corev1.Pod) {
 				envVars := []corev1.EnvVar{
@@ -756,9 +756,6 @@ func TestNewRunnerPod(t *testing.T) {
 				UseRunnerStatusUpdateHook: false,
 			})
 
-			if tc.description == "it should set podTemplateName as an env var when containerMode is kubernetes" {
-				print("hello")
-			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})

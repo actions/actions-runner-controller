@@ -80,7 +80,7 @@ type RunnerConfig struct {
 	ContainerMode string `json:"containerMode,omitempty"`
 
 	// +optional
-	PodTemplateName string `json:"podTemplateName,omitempty"`
+	PodTemplateFile string `json:"PodTemplateFile,omitempty"`
 
 	GitHubAPICredentialsFrom *GitHubAPICredentialsFrom `json:"githubAPICredentialsFrom,omitempty"`
 }
