@@ -694,7 +694,7 @@ func TestNewRunnerPod(t *testing.T) {
 			},
 			config: arcv1alpha1.RunnerConfig{
 				ContainerMode:   "kubernetes",
-				PodTemplateFile: "example-template",
+				PodTemplateFile: "/templates/example-template.yaml",
 			},
 			want: newTestPod(baseKubernetesMode, func(p *corev1.Pod) {
 				envVars := []corev1.EnvVar{

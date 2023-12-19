@@ -771,7 +771,7 @@ func runnerHookEnvs(pod *corev1.Pod, podTemplateFile string) ([]corev1.EnvVar, e
 	if podTemplateFile != "" {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  "ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE",
-			Value: "/templates/" + podTemplateFile + ".yaml",
+			Value: podTemplateFile,
 		})
 	}
 
