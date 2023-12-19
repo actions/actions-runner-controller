@@ -2017,3 +2017,75 @@ func TestTemplateRenderedAutoscalingRunnerSetAnnotation_KubernetesModeCleanup(t 
 		assert.Equal(t, value, autoscalingRunnerSet.Annotations[annotation], fmt.Sprintf("Annotation %q does not match the expected value", annotation))
 	}
 }
+
+func TestRunnerContainerEnvNotEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	type testModel struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Containers []map[string]any `yaml:"containers"`
+				} `yaml:"spec"`
+			} `yaml:"template"`
+		} `yaml:"spec"`
+	}
+
+	var m testModel
+	helm.UnmarshalK8SYaml(t, output, &m)
+	_, ok := m.Spec.Template.Spec.Containers[0]["env"]
+	assert.False(t, ok, "env should not be set")
+}
+
+func TestRunnerContainerVolumeNotEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	type testModel struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Containers []map[string]any `yaml:"containers"`
+				} `yaml:"spec"`
+			} `yaml:"template"`
+		} `yaml:"spec"`
+	}
+
+	var m testModel
+	helm.UnmarshalK8SYaml(t, output, &m)
+	_, ok := m.Spec.Template.Spec.Containers[0]["volumeMounts"]
+	assert.False(t, ok, "volumeMounts should not be set")
+}
