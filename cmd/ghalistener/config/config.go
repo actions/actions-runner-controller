@@ -4,6 +4,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/actions/actions-runner-controller/build"
@@ -101,7 +103,7 @@ func (c *Config) Logger() (logr.Logger, error) {
 	return logger, nil
 }
 
-func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
+func (c *Config) ActionsClient(logger logr.Logger, clientOptions ...actions.ClientOption) (*actions.Client, error) {
 	var creds actions.ActionsAuth
 	switch c.Token {
 	case "":
@@ -114,9 +116,9 @@ func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
 		creds.Token = c.Token
 	}
 
-	options := []actions.ClientOption{
+	options := append([]actions.ClientOption{
 		actions.WithLogger(logger),
-	}
+	}, clientOptions...)
 
 	if c.ServerRootCA != "" {
 		systemPool, err := x509.SystemCertPool()
@@ -131,6 +133,11 @@ func (c *Config) ActionsClient(logger logr.Logger) (*actions.Client, error) {
 
 		options = append(options, actions.WithRootCAs(pool))
 	}
+
+	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
+	options = append(options, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
+		return proxyFunc(req.URL)
+	}))
 
 	client, err := actions.NewClient(c.ConfigureUrl, &creds, options...)
 	if err != nil {
