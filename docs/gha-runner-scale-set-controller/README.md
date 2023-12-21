@@ -43,6 +43,9 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.8.1
+1. Fix proxy issue in new listener client [#3181](https://github.com/actions/actions-runner-controller/pull/3181)
+
 ### v0.8.0
 1. Change listener container name [#3167](https://github.com/actions/actions-runner-controller/pull/3167)
 1. Fix empty env and volumeMounts object on default setup [#3166](https://github.com/actions/actions-runner-controller/pull/3166)
