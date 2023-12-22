@@ -167,27 +167,36 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 			continue
 		}
 
-		statistics, jobsStarted, err := l.parseMessage(ctx, msg)
-		if err != nil {
-			return fmt.Errorf("failed to parse message: %w", err)
-		}
-
-		l.lastMessageID = msg.MessageId
-
-		if err := l.deleteLastMessage(ctx); err != nil {
-			return fmt.Errorf("failed to delete message: %w", err)
-		}
-
-		for _, jobStarted := range jobsStarted {
-			if err := handler.HandleJobStarted(ctx, jobStarted); err != nil {
-				return fmt.Errorf("failed to handle job started: %w", err)
-			}
-		}
-
-		if err := handler.HandleDesiredRunnerCount(ctx, statistics.TotalAssignedJobs); err != nil {
-			return fmt.Errorf("failed to handle desired runner count: %w", err)
+		// New context is created to avoid cancelation during message handling.
+		if err := l.handleMessage(context.Background(), handler, msg); err != nil {
+			return fmt.Errorf("failed to handle message: %w", err)
 		}
 	}
+}
+
+func (l *Listener) handleMessage(ctx context.Context, handler Handler, msg *actions.RunnerScaleSetMessage) error {
+	statistics, jobsStarted, err := l.parseMessage(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	l.lastMessageID = msg.MessageId
+
+	if err := l.deleteLastMessage(ctx); err != nil {
+		return fmt.Errorf("failed to delete message: %w", err)
+	}
+
+	for _, jobStarted := range jobsStarted {
+		if err := handler.HandleJobStarted(ctx, jobStarted); err != nil {
+			return fmt.Errorf("failed to handle job started: %w", err)
+		}
+	}
+
+	if err := handler.HandleDesiredRunnerCount(ctx, statistics.TotalAssignedJobs); err != nil {
+		return fmt.Errorf("failed to handle desired runner count: %w", err)
+	}
+
+	return nil
 }
 
 func (l *Listener) createSession(ctx context.Context) error {
