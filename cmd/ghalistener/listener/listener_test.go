@@ -456,6 +456,70 @@ func TestListener_Listen(t *testing.T) {
 		assert.True(t, errors.Is(err, context.Canceled))
 		assert.True(t, called)
 	})
+
+	t.Run("CancelContextAfterGetMessage", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              &actions.RunnerScaleSetStatistic{},
+		}
+		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerScaleSetJobMessages",
+			Statistics:  &actions.RunnerScaleSetStatistic{},
+		}
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).
+			Return(msg, nil).
+			Run(
+				func(mock.Arguments) {
+					cancel()
+				},
+			).
+			Once()
+
+			// Ensure delete message is called with background context
+		client.On("DeleteMessage", context.Background(), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+		config.Client = client
+
+		handler := listenermocks.NewHandler(t)
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+			Return(nil).
+			Once()
+
+		var called bool
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+			Return(nil).
+			Run(
+				func(mock.Arguments) {
+					called = true
+				},
+			).
+			Once()
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		err = l.Listen(ctx, handler)
+		assert.ErrorIs(t, context.Canceled, err)
+		assert.True(t, called)
+	})
 }
 
 func TestListener_acquireAvailableJobs(t *testing.T) {

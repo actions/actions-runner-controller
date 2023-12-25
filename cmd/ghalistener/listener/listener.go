@@ -154,7 +154,7 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context cancelled: %w", ctx.Err())
+			return ctx.Err()
 		default:
 		}
 
