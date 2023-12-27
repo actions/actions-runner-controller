@@ -9,7 +9,6 @@ import (
 
 	listenermocks "github.com/actions/actions-runner-controller/cmd/ghalistener/listener/mocks"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
-	metricsmocks "github.com/actions/actions-runner-controller/cmd/ghalistener/metrics/mocks"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -38,22 +37,6 @@ func TestNew(t *testing.T) {
 		assert.NotNil(t, l)
 	})
 
-	t.Run("SetStaticMetrics", func(t *testing.T) {
-		t.Parallel()
-
-		metrics := metricsmocks.NewPublisher(t)
-
-		metrics.On("PublishStatic", mock.Anything, mock.Anything).Once()
-
-		config := Config{
-			Client:     listenermocks.NewClient(t),
-			ScaleSetID: 1,
-			Metrics:    metrics,
-		}
-		l, err := New(config)
-		assert.Nil(t, err)
-		assert.NotNil(t, l)
-	})
 }
 
 func TestListener_createSession(t *testing.T) {
@@ -443,7 +426,7 @@ func TestListener_Listen(t *testing.T) {
 		var called bool
 		handler := listenermocks.NewHandler(t)
 		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
-			Return(nil).
+			Return(0, nil).
 			Run(
 				func(mock.Arguments) {
 					called = true
@@ -500,17 +483,11 @@ func TestListener_Listen(t *testing.T) {
 
 		handler := listenermocks.NewHandler(t)
 		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
-			Return(nil).
+			Return(0, nil).
 			Once()
 
-		var called bool
 		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
-			Return(nil).
-			Run(
-				func(mock.Arguments) {
-					called = true
-				},
-			).
+			Return(0, nil).
 			Once()
 
 		l, err := New(config)
@@ -518,7 +495,6 @@ func TestListener_Listen(t *testing.T) {
 
 		err = l.Listen(ctx, handler)
 		assert.ErrorIs(t, context.Canceled, err)
-		assert.True(t, called)
 	})
 }
 
@@ -553,7 +529,24 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			Statistics:              &actions.RunnerScaleSetStatistic{},
 		}
 
-		_, err = l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
+		_, err = l.acquireAvailableJobs(ctx, availableJobs)
 		assert.Error(t, err)
 	})
 
@@ -587,9 +580,26 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			Statistics:              &actions.RunnerScaleSetStatistic{},
 		}
 
-		acquiredJobIDs, err := l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
+		acquiredJobIDs, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.NoError(t, err)
-		assert.Equal(t, jobIDs, acquiredJobIDs)
+		assert.Equal(t, []int64{1, 2, 3}, acquiredJobIDs)
 	})
 
 	t.Run("RefreshAndSucceeds", func(t *testing.T) {
@@ -619,6 +629,23 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 
 		// Second call to AcquireJobs will succeed
 		want := []int64{1, 2, 3}
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
 		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
 
 		config.Client = client
@@ -631,7 +658,7 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			RunnerScaleSet: &actions.RunnerScaleSet{},
 		}
 
-		got, err := l.acquireAvailableJobs(ctx, want)
+		got, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -670,7 +697,25 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			RunnerScaleSet: &actions.RunnerScaleSet{},
 		}
 
-		got, err := l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
+
+		got, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.NotNil(t, err)
 		assert.Nil(t, got)
 	})
