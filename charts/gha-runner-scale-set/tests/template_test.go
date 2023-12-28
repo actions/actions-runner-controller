@@ -2117,9 +2117,10 @@ func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
 
 	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
-	assert.NotEmpty(t, autoscalingRunnerSet.Annotations[valuesHash])
 
 	firstHash := autoscalingRunnerSet.Annotations["actions.github.com/values-hash"]
+	assert.NotEmpty(t, firstHash)
+	assert.LessOrEqual(t, len(firstHash), 63)
 
 	helmChartPath, err = filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
@@ -2138,6 +2139,8 @@ func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
 
 	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
-	assert.NotEmpty(t, autoscalingRunnerSet.Annotations[valuesHash])
-	assert.NotEqual(t, firstHash, autoscalingRunnerSet.Annotations[valuesHash])
+	secondHash := autoscalingRunnerSet.Annotations[valuesHash]
+	assert.NotEmpty(t, secondHash)
+	assert.NotEqual(t, firstHash, secondHash)
+	assert.LessOrEqual(t, len(secondHash), 63)
 }
