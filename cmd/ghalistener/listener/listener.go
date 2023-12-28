@@ -297,17 +297,17 @@ type parsedMessage struct {
 }
 
 func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSetMessage) (*parsedMessage, error) {
+	if msg.MessageType != "RunnerScaleSetJobMessages" {
+		l.logger.Info("Skipping message", "messageType", msg.MessageType)
+		return nil, fmt.Errorf("invalid message type: %s", msg.MessageType)
+	}
+
 	l.logger.Info("Processing message", "messageId", msg.MessageId, "messageType", msg.MessageType)
 	if msg.Statistics == nil {
 		return nil, fmt.Errorf("invalid message: statistics is nil")
 	}
 
 	l.logger.Info("New runner scale set statistics.", "statistics", msg.Statistics)
-
-	if msg.MessageType != "RunnerScaleSetJobMessages" {
-		l.logger.Info("Skipping message", "messageType", msg.MessageType)
-		return nil, fmt.Errorf("invalid message type: %s", msg.MessageType)
-	}
 
 	var batchedMessages []json.RawMessage
 	if len(msg.Body) > 0 {
@@ -359,6 +359,7 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 			}
 
 			l.logger.Info("Job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
+			parsedMsg.jobsCompleted = append(parsedMsg.jobsCompleted, &jobCompleted)
 
 		default:
 			l.logger.Info("unknown job message type.", "messageType", messageType.MessageType)

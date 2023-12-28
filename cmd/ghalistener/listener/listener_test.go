@@ -2,6 +2,7 @@ package listener
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -718,5 +719,144 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		got, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.NotNil(t, err)
 		assert.Nil(t, got)
+	})
+}
+
+func TestListener_parseMessage(t *testing.T) {
+	t.Run("FailOnEmptyStatistics", func(t *testing.T) {
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerScaleSetJobMessages",
+			Statistics:  nil,
+		}
+
+		l := &Listener{}
+		parsedMsg, err := l.parseMessage(context.Background(), msg)
+		assert.Error(t, err)
+		assert.Nil(t, parsedMsg)
+	})
+
+	t.Run("FailOnIncorrectMessageType", func(t *testing.T) {
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerMessages", // arbitrary message type
+			Statistics:  &actions.RunnerScaleSetStatistic{},
+		}
+
+		l := &Listener{}
+		parsedMsg, err := l.parseMessage(context.Background(), msg)
+		assert.Error(t, err)
+		assert.Nil(t, parsedMsg)
+	})
+
+	t.Run("ParseAll", func(t *testing.T) {
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerScaleSetJobMessages",
+			Body:        "",
+			Statistics: &actions.RunnerScaleSetStatistic{
+				TotalAvailableJobs:     1,
+				TotalAcquiredJobs:      2,
+				TotalAssignedJobs:      3,
+				TotalRunningJobs:       4,
+				TotalRegisteredRunners: 5,
+				TotalBusyRunners:       6,
+				TotalIdleRunners:       7,
+			},
+		}
+
+		var batchedMessages []any
+		jobsAvailable := []*actions.JobAvailable{
+			{
+				AcquireJobUrl: "https://github.com/example",
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAvailable,
+					},
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				AcquireJobUrl: "https://github.com/example",
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAvailable,
+					},
+					RunnerRequestId: 2,
+				},
+			},
+		}
+		for _, msg := range jobsAvailable {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		jobsAssigned := []*actions.JobAssigned{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAssigned,
+					},
+					RunnerRequestId: 3,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAssigned,
+					},
+					RunnerRequestId: 4,
+				},
+			},
+		}
+		for _, msg := range jobsAssigned {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		jobsStarted := []*actions.JobStarted{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobStarted,
+					},
+					RunnerRequestId: 5,
+				},
+				RunnerId:   2,
+				RunnerName: "runner2",
+			},
+		}
+		for _, msg := range jobsStarted {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		jobsCompleted := []*actions.JobCompleted{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobCompleted,
+					},
+					RunnerRequestId: 6,
+				},
+				Result:     "success",
+				RunnerId:   1,
+				RunnerName: "runner1",
+			},
+		}
+		for _, msg := range jobsCompleted {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		b, err := json.Marshal(batchedMessages)
+		require.NoError(t, err)
+
+		msg.Body = string(b)
+
+		l := &Listener{}
+		parsedMsg, err := l.parseMessage(context.Background(), msg)
+		require.NoError(t, err)
+
+		assert.Equal(t, msg.Statistics, parsedMsg.statistics)
+		assert.Equal(t, jobsAvailable, parsedMsg.jobsAvailable)
+		assert.Equal(t, jobsStarted, parsedMsg.jobsStarted)
+		assert.Equal(t, jobsCompleted, parsedMsg.jobsCompleted)
 	})
 }
