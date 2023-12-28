@@ -498,6 +498,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// Patch the AutoScalingRunnerSet image which should trigger
 			// the recreation of the Listener and EphemeralRunnerSet
 			patched := autoscalingRunnerSet.DeepCopy()
+			if patched.ObjectMeta.Annotations == nil {
+				patched.ObjectMeta.Annotations = make(map[string]string)
+			}
+			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "testgroup2"
 			patched.Spec.Template.Spec = corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
@@ -506,7 +510,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					},
 				},
 			}
-			// patched.Spec.Template.Spec.PriorityClassName = "test-priority-class"
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 			autoscalingRunnerSet = patched.DeepCopy()
