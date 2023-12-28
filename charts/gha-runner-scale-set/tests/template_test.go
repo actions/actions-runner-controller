@@ -2089,3 +2089,55 @@ func TestRunnerContainerVolumeNotEmptyMap(t *testing.T) {
 	_, ok := m.Spec.Template.Spec.Containers[0]["volumeMounts"]
 	assert.False(t, ok, "volumeMounts should not be set")
 }
+
+func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
+	t.Parallel()
+
+	const valuesHash = "actions.github.com/values-hash"
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+	assert.NotEmpty(t, autoscalingRunnerSet.Annotations[valuesHash])
+
+	firstHash := autoscalingRunnerSet.Annotations["actions.github.com/values-hash"]
+
+	helmChartPath, err = filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	options = &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token1234567890",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+	assert.NotEmpty(t, autoscalingRunnerSet.Annotations[valuesHash])
+	assert.NotEqual(t, firstHash, autoscalingRunnerSet.Annotations[valuesHash])
+}

@@ -91,7 +91,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-scale-set-listener",
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
-		labelKeyRunnerSpecHash:          autoscalingRunnerSet.ListenerSpecHash(),
+		labelKeyRunnerSpecHash:          autoscalingRunnerSet.Annotations[annotationKeyValuesHash],
 	}
 
 	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {

@@ -46,6 +46,10 @@ const (
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdAnnotationKey     = "runner-scale-set-id"
 	runnerScaleSetNameAnnotationKey   = "runner-scale-set-name"
+	// annotationKeyValuesHash is hash of the entire values json.
+	// This is used to determine if the values have changed, so we can
+	// re-create listener.
+	annotationKeyValuesHash = "actions.github.com/values-hash"
 )
 
 type UpdateStrategy string
@@ -250,7 +254,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
-	if listenerFound && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
+	listenerVersionChanged := listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.Annotations[annotationKeyValuesHash]
+	if listenerFound && listenerVersionChanged {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
 			if kerrors.IsNotFound(err) {

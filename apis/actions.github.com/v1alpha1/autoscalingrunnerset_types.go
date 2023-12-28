@@ -250,12 +250,6 @@ type AutoscalingRunnerSetStatus struct {
 	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 }
 
-func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
-	arsSpec := ars.Spec.DeepCopy()
-	spec := arsSpec
-	return hash.ComputeTemplateHash(&spec)
-}
-
 func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	type runnerSetSpec struct {
 		GitHubConfigUrl    string

@@ -280,6 +280,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// This should trigger re-creation of EphemeralRunnerSet and Listener
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.PriorityClassName = "test-priority-class"
+			if patched.ObjectMeta.Annotations == nil {
+				patched.ObjectMeta.Annotations = make(map[string]string)
+			}
+			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "test-hash"
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 			autoscalingRunnerSet = patched.DeepCopy()
@@ -331,6 +335,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			patched = autoscalingRunnerSet.DeepCopy()
 			min := 10
 			patched.Spec.MinRunners = &min
+			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "hash-changes"
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 
