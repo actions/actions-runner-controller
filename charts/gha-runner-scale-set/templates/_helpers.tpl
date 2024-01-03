@@ -389,6 +389,9 @@ volumeMounts:
     {{- $setNodeExtraCaCerts = 1 }}
     {{- $setRunnerUpdateCaCerts = 1 }}
   {{- end }}
+
+  {{- $mountGitHubServerTLS := 0 }}
+  {{- if or $container.env $setNodeExtraCaCerts $setRunnerUpdateCaCerts }}
   env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -409,10 +412,12 @@ volumeMounts:
     - name: RUNNER_UPDATE_CA_CERTS
       value: "1"
     {{- end }}
-    {{- $mountGitHubServerTLS := 0 }}
     {{- if $tlsConfig.runnerMountPath }}
       {{- $mountGitHubServerTLS = 1 }}
     {{- end }}
+  {{- end }}
+
+  {{- if or $container.volumeMounts $mountGitHubServerTLS }}
   volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
@@ -427,6 +432,7 @@ volumeMounts:
       mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
       subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
     {{- end }}
+  {{- end}}
 {{- end }}
 {{- end }}
 {{- end }}
