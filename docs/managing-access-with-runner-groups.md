@@ -1,5 +1,8 @@
 # Managing access with runner groups
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer [autoscaling runner scale sets](https://github.com/actions/actions-runner-controller/discussions/2775), it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
+
 ## Runner Groups
 
 Runner groups can be used to limit which repositories are able to use the GitHub Runner at an organization level. Runner groups have to be [created in GitHub first](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/managing-access-to-self-hosted-runners-using-groups) before they can be referenced.

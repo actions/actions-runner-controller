@@ -1,5 +1,8 @@
 # Automatically scaling runners
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer [autoscaling runner scale sets](https://github.com/actions/actions-runner-controller/discussions/2775), it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
+
 ## Overview
 
 > If you are using controller version < [v0.22.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so you can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.

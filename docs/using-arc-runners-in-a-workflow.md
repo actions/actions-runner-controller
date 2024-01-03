@@ -1,5 +1,8 @@
 # Using ARC runners in a workflow
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer [autoscaling runner scale sets](https://github.com/actions/actions-runner-controller/discussions/2775), it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
+
 ## Runner Labels
 
 To run a workflow job on a self-hosted runner, you can use the following syntax in your workflow:

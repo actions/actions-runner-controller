@@ -1,5 +1,8 @@
 # Deploying ARC runners
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer [autoscaling runner scale sets](https://github.com/actions/actions-runner-controller/discussions/2775), it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
+
 ## Deploying runners with RunnerDeployments
 
 In our previous examples we were deploying a single runner via the `RunnerDeployment` kind, the amount of runners deployed can be statically set via the `replicas:` field, we can increase this value to deploy additional sets of runners instead:

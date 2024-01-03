@@ -1,5 +1,8 @@
 # About ARC
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer [autoscaling runner scale sets](https://github.com/actions/actions-runner-controller/discussions/2775), it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
+
 ## Introduction
 This document provides a high-level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes (K8s) clusters.
 
