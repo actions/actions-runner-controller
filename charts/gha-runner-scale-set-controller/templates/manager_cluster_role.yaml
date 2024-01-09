@@ -109,36 +109,65 @@ rules:
   resources:
   - ephemeralrunners/status
   verbs:
+  - create
+  - delete
   - get
+  - list
+  - watch
   - patch
-  - update
 - apiGroups:
   - ""
   resources:
   - pods
   verbs:
+  - create
+  - delete
+  - get
   - list
   - watch
+  - patch
 - apiGroups:
   - ""
   resources:
   - serviceaccounts
   verbs:
+  - create
+  - delete
+  - get
   - list
   - watch
+  - patch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
   verbs:
+  - create
+  - delete
+  - get
   - list
   - watch
+  - patch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - roles
   verbs:
+  - create
+  - delete
+  - get
   - list
   - watch
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
 {{- end }}
