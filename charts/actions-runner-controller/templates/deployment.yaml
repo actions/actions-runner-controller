@@ -148,6 +148,15 @@ spec:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- if .Values.startupProbe }}
+        startupProbe: {{ .Values.startupProbe }}
+        {{- end }}
+        {{- if .Values.livenessProbe }}
+        livenessProbe: {{ .Values.livenessProbe }}
+        {{- end }}
+        {{- if .Values.readinessProbe }}
+        readinessProbe: {{ .Values.readinessProbe }}
+        {{- end }}
         volumeMounts:
         {{- if .Values.authSecret.enabled }}
         - mountPath: "/etc/actions-runner-controller"
@@ -180,6 +189,9 @@ spec:
           {{- toYaml .Values.securityContext | nindent 12 }}
       {{- end }}
       terminationGracePeriodSeconds: 10
+      {{- if .Values.minReadySeconds }}
+      minReadySeconds: {{ .Values.minReadySeconds }}
+      {{- end }}
       volumes:
       {{- if .Values.authSecret.enabled }}
       - name: secret
