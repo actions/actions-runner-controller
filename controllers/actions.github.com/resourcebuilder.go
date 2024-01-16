@@ -309,7 +309,7 @@ func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec)
 		c := &tmpl.Spec.Containers[i]
 
 		switch c.Name {
-		case "listener":
+		case autoscalingListenerContainerName:
 			mergeListenerContainer(listenerContainer, c)
 		default:
 			pod.Spec.Containers = append(pod.Spec.Containers, *c)

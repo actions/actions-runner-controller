@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	autoscalingListenerContainerName = "autoscaler"
+	autoscalingListenerContainerName = "listener"
 	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
 )
 
