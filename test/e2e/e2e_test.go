@@ -36,7 +36,7 @@ var (
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion               = "2.311.0"
+	RunnerVersion               = "2.312.0"
 	RunnerContainerHooksVersion = "0.5.0"
 )
 
