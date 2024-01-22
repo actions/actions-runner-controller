@@ -11,6 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/go-logr/logr"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -141,6 +142,10 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 		Do(ctx).
 		Into(patchedStatus)
 	if err != nil {
+		if kerrors.IsNotFound(err) {
+			w.logger.Info("Ephemeral runner not found, skipping patching of ephemeral runner status", "runnerName", jobInfo.RunnerName)
+			return nil
+		}
 		return fmt.Errorf("could not patch ephemeral runner status, patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
