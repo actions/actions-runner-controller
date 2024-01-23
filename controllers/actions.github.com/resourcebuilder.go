@@ -17,6 +17,7 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	resource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -226,8 +227,19 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ports = append(ports, port)
 	}
 
+	var (
+		runAsUser    int64 = 65532
+		runAsNonRoot bool  = true
+	)
+
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: serviceAccount.Name,
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsNonRoot: &runAsNonRoot,
+			RunAsUser:    &runAsUser,
+			RunAsGroup:   &runAsUser,
+			FSGroup:      &runAsUser,
+		},
 		Containers: []corev1.Container{
 			{
 				Name:  autoscalingListenerContainerName,
@@ -235,6 +247,12 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Env:   listenerEnv,
 				Command: []string{
 					scaleSetListenerEntrypoint,
+				},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("10m"),
+						corev1.ResourceMemory: resource.MustParse("32Mi"),
+					},
 				},
 				Ports: ports,
 				VolumeMounts: []corev1.VolumeMount{
