@@ -149,13 +149,13 @@ spec:
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
         {{- if .Values.startupProbe }}
-        startupProbe: {{ .Values.startupProbe }}
+        startupProbe: {{ toYaml .Values.startupProbe | nindent 12 }}
         {{- end }}
         {{- if .Values.livenessProbe }}
-        livenessProbe: {{ .Values.livenessProbe }}
+        livenessProbe: {{ toYaml .Values.livenessProbe | nindent 12 }}
         {{- end }}
         {{- if .Values.readinessProbe }}
-        readinessProbe: {{ .Values.readinessProbe }}
+        readinessProbe: {{ toYaml .Values.readinessProbe | nindent 12 }}
         {{- end }}
         volumeMounts:
         {{- if .Values.authSecret.enabled }}
