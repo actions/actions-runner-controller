@@ -82,6 +82,7 @@ func TestInitialMetrics(t *testing.T) {
 
 		client := listenermocks.NewClient(t)
 		client.On("CreateMessageSession", mock.Anything, mock.Anything, mock.Anything).Return(session, nil).Once()
+		client.On("DeleteMessageSession", mock.Anything, session.RunnerScaleSet.Id, session.SessionId).Return(nil).Once()
 		config.Client = client
 
 		handler := listenermocks.NewHandler(t)
