@@ -2,6 +2,7 @@ package listener
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -9,7 +10,6 @@ import (
 
 	listenermocks "github.com/actions/actions-runner-controller/cmd/ghalistener/listener/mocks"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
-	metricsmocks "github.com/actions/actions-runner-controller/cmd/ghalistener/metrics/mocks"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -38,22 +38,6 @@ func TestNew(t *testing.T) {
 		assert.NotNil(t, l)
 	})
 
-	t.Run("SetStaticMetrics", func(t *testing.T) {
-		t.Parallel()
-
-		metrics := metricsmocks.NewPublisher(t)
-
-		metrics.On("PublishStatic", mock.Anything, mock.Anything).Once()
-
-		config := Config{
-			Client:     listenermocks.NewClient(t),
-			ScaleSetID: 1,
-			Metrics:    metrics,
-		}
-		l, err := New(config)
-		assert.Nil(t, err)
-		assert.NotNil(t, l)
-	})
 }
 
 func TestListener_createSession(t *testing.T) {
@@ -443,7 +427,7 @@ func TestListener_Listen(t *testing.T) {
 		var called bool
 		handler := listenermocks.NewHandler(t)
 		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
-			Return(nil).
+			Return(0, nil).
 			Run(
 				func(mock.Arguments) {
 					called = true
@@ -455,6 +439,63 @@ func TestListener_Listen(t *testing.T) {
 		err = l.Listen(ctx, handler)
 		assert.True(t, errors.Is(err, context.Canceled))
 		assert.True(t, called)
+	})
+
+	t.Run("CancelContextAfterGetMessage", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+		uuid := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &uuid,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              &actions.RunnerScaleSetStatistic{},
+		}
+		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerScaleSetJobMessages",
+			Statistics:  &actions.RunnerScaleSetStatistic{},
+		}
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).
+			Return(msg, nil).
+			Run(
+				func(mock.Arguments) {
+					cancel()
+				},
+			).
+			Once()
+
+			// Ensure delete message is called with background context
+		client.On("DeleteMessage", context.Background(), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+		config.Client = client
+
+		handler := listenermocks.NewHandler(t)
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+			Return(0, nil).
+			Once()
+
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+			Return(0, nil).
+			Once()
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		err = l.Listen(ctx, handler)
+		assert.ErrorIs(t, context.Canceled, err)
 	})
 }
 
@@ -489,7 +530,24 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			Statistics:              &actions.RunnerScaleSetStatistic{},
 		}
 
-		_, err = l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
+		_, err = l.acquireAvailableJobs(ctx, availableJobs)
 		assert.Error(t, err)
 	})
 
@@ -523,9 +581,26 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			Statistics:              &actions.RunnerScaleSetStatistic{},
 		}
 
-		acquiredJobIDs, err := l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
+		acquiredJobIDs, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.NoError(t, err)
-		assert.Equal(t, jobIDs, acquiredJobIDs)
+		assert.Equal(t, []int64{1, 2, 3}, acquiredJobIDs)
 	})
 
 	t.Run("RefreshAndSucceeds", func(t *testing.T) {
@@ -555,6 +630,23 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 
 		// Second call to AcquireJobs will succeed
 		want := []int64{1, 2, 3}
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
 		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
 
 		config.Client = client
@@ -567,7 +659,7 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			RunnerScaleSet: &actions.RunnerScaleSet{},
 		}
 
-		got, err := l.acquireAvailableJobs(ctx, want)
+		got, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -606,8 +698,165 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			RunnerScaleSet: &actions.RunnerScaleSet{},
 		}
 
-		got, err := l.acquireAvailableJobs(ctx, []int64{1, 2, 3})
+		availableJobs := []*actions.JobAvailable{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 2,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					RunnerRequestId: 3,
+				},
+			},
+		}
+
+		got, err := l.acquireAvailableJobs(ctx, availableJobs)
 		assert.NotNil(t, err)
 		assert.Nil(t, got)
+	})
+}
+
+func TestListener_parseMessage(t *testing.T) {
+	t.Run("FailOnEmptyStatistics", func(t *testing.T) {
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerScaleSetJobMessages",
+			Statistics:  nil,
+		}
+
+		l := &Listener{}
+		parsedMsg, err := l.parseMessage(context.Background(), msg)
+		assert.Error(t, err)
+		assert.Nil(t, parsedMsg)
+	})
+
+	t.Run("FailOnIncorrectMessageType", func(t *testing.T) {
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerMessages", // arbitrary message type
+			Statistics:  &actions.RunnerScaleSetStatistic{},
+		}
+
+		l := &Listener{}
+		parsedMsg, err := l.parseMessage(context.Background(), msg)
+		assert.Error(t, err)
+		assert.Nil(t, parsedMsg)
+	})
+
+	t.Run("ParseAll", func(t *testing.T) {
+		msg := &actions.RunnerScaleSetMessage{
+			MessageId:   1,
+			MessageType: "RunnerScaleSetJobMessages",
+			Body:        "",
+			Statistics: &actions.RunnerScaleSetStatistic{
+				TotalAvailableJobs:     1,
+				TotalAcquiredJobs:      2,
+				TotalAssignedJobs:      3,
+				TotalRunningJobs:       4,
+				TotalRegisteredRunners: 5,
+				TotalBusyRunners:       6,
+				TotalIdleRunners:       7,
+			},
+		}
+
+		var batchedMessages []any
+		jobsAvailable := []*actions.JobAvailable{
+			{
+				AcquireJobUrl: "https://github.com/example",
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAvailable,
+					},
+					RunnerRequestId: 1,
+				},
+			},
+			{
+				AcquireJobUrl: "https://github.com/example",
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAvailable,
+					},
+					RunnerRequestId: 2,
+				},
+			},
+		}
+		for _, msg := range jobsAvailable {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		jobsAssigned := []*actions.JobAssigned{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAssigned,
+					},
+					RunnerRequestId: 3,
+				},
+			},
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobAssigned,
+					},
+					RunnerRequestId: 4,
+				},
+			},
+		}
+		for _, msg := range jobsAssigned {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		jobsStarted := []*actions.JobStarted{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobStarted,
+					},
+					RunnerRequestId: 5,
+				},
+				RunnerId:   2,
+				RunnerName: "runner2",
+			},
+		}
+		for _, msg := range jobsStarted {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		jobsCompleted := []*actions.JobCompleted{
+			{
+				JobMessageBase: actions.JobMessageBase{
+					JobMessageType: actions.JobMessageType{
+						MessageType: messageTypeJobCompleted,
+					},
+					RunnerRequestId: 6,
+				},
+				Result:     "success",
+				RunnerId:   1,
+				RunnerName: "runner1",
+			},
+		}
+		for _, msg := range jobsCompleted {
+			batchedMessages = append(batchedMessages, msg)
+		}
+
+		b, err := json.Marshal(batchedMessages)
+		require.NoError(t, err)
+
+		msg.Body = string(b)
+
+		l := &Listener{}
+		parsedMsg, err := l.parseMessage(context.Background(), msg)
+		require.NoError(t, err)
+
+		assert.Equal(t, msg.Statistics, parsedMsg.statistics)
+		assert.Equal(t, jobsAvailable, parsedMsg.jobsAvailable)
+		assert.Equal(t, jobsStarted, parsedMsg.jobsStarted)
+		assert.Equal(t, jobsCompleted, parsedMsg.jobsCompleted)
 	})
 }
