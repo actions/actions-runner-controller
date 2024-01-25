@@ -104,6 +104,8 @@ args:
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
+  - name: DOCKER_IPTABLES_LEGACY
+    value: "1"
 securityContext:
   privileged: true
 volumeMounts:
