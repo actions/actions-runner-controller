@@ -419,6 +419,7 @@ func TestListener_Listen(t *testing.T) {
 			Statistics:              &actions.RunnerScaleSetStatistic{},
 		}
 		client.On("CreateMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+		client.On("DeleteMessageSession", mock.Anything, session.RunnerScaleSet.Id, session.SessionId).Return(nil).Once()
 		config.Client = client
 
 		l, err := New(config)

@@ -35,6 +35,7 @@ type Client interface {
 	DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error
 	AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error)
 	RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*actions.RunnerScaleSetSession, error)
+	DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error
 }
 
 type Config struct {
@@ -125,6 +126,12 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 	if err := l.createSession(ctx); err != nil {
 		return fmt.Errorf("createSession failed: %w", err)
 	}
+
+	defer func() {
+		if err := l.deleteMessageSession(); err != nil {
+			l.logger.Error(err, "failed to delete message session")
+		}
+	}()
 
 	initialMessage := &actions.RunnerScaleSetMessage{
 		MessageId:   0,
@@ -407,5 +414,18 @@ func (l *Listener) refreshSession(ctx context.Context) error {
 	}
 
 	l.session = session
+	return nil
+}
+
+func (l *Listener) deleteMessageSession() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	l.logger.Info("Deleting message session")
+
+	if err := l.client.DeleteMessageSession(ctx, l.session.RunnerScaleSet.Id, l.session.SessionId); err != nil {
+		return fmt.Errorf("failed to delete message session: %w", err)
+	}
+
 	return nil
 }
