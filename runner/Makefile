@@ -7,7 +7,7 @@ OS_IMAGE ?= ubuntu-22.04
 TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.312.0
-RUNNER_CONTAINER_HOOKS_VERSION ?= 0.5.0
+RUNNER_CONTAINER_HOOKS_VERSION ?= 0.5.1
 DOCKER_VERSION ?= 24.0.7
 
 # default list of platforms for which multiarch image is built
