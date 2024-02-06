@@ -35,7 +35,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(s.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		got, err := client.GetMessage(ctx, s.URL, token, 0)
+		got, err := client.GetMessage(ctx, s.URL, token, 0, 10)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -52,7 +52,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(s.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		got, err := client.GetMessage(ctx, s.URL, token, 1)
+		got, err := client.GetMessage(ctx, s.URL, token, 1, 10)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -76,7 +76,7 @@ func TestGetMessage(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		assert.NotNil(t, err)
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
 	})
@@ -89,7 +89,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		require.NotNil(t, err)
 
 		var expectedErr *actions.MessageQueueTokenExpiredError
@@ -108,7 +108,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		require.NotNil(t, err)
 		assert.Equal(t, want.Error(), err.Error())
 	})
@@ -122,8 +122,19 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		assert.NotNil(t, err)
+	})
+
+	t.Run("Error when maxCapacity is 0", func(t *testing.T) {
+		client, err := actions.NewClient("https://github.com/my-org", auth)
+		require.NoError(t, err)
+
+		_, err = client.GetMessage(ctx, "https://github.com", token, 0, -1)
+		assert.NotNil(t, err)
+
+		_, err = client.GetMessage(ctx, "https://github.com", token, 0, 0)
+		assert.NoError(t, err)
 	})
 }
 

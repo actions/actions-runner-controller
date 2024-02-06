@@ -29,13 +29,13 @@ func (_m *MockRunnerScaleSetClient) AcquireJobsForRunnerScaleSet(ctx context.Con
 	return r0
 }
 
-// GetRunnerScaleSetMessage provides a mock function with given fields: ctx, handler
-func (_m *MockRunnerScaleSetClient) GetRunnerScaleSetMessage(ctx context.Context, handler func(*actions.RunnerScaleSetMessage) error) error {
-	ret := _m.Called(ctx, handler)
+// GetRunnerScaleSetMessage provides a mock function with given fields: ctx, handler, maxCapacity
+func (_m *MockRunnerScaleSetClient) GetRunnerScaleSetMessage(ctx context.Context, handler func(*actions.RunnerScaleSetMessage) error, maxCapacity int) error {
+	ret := _m.Called(ctx, handler, maxCapacity)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, func(*actions.RunnerScaleSetMessage) error) error); ok {
-		r0 = rf(ctx, handler)
+	if rf, ok := ret.Get(0).(func(context.Context, func(*actions.RunnerScaleSetMessage) error, int) error); ok {
+		r0 = rf(ctx, handler, maxCapacity)
 	} else {
 		r0 = ret.Error(0)
 	}

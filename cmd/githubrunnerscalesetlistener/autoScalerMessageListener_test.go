@@ -317,7 +317,7 @@ func TestGetRunnerScaleSetMessage(t *testing.T) {
 		Statistics: &actions.RunnerScaleSetStatistic{},
 	}
 	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything).Return(session, nil)
-	mockSessionClient.On("GetMessage", ctx, int64(0)).Return(&actions.RunnerScaleSetMessage{
+	mockSessionClient.On("GetMessage", ctx, int64(0), mock.Anything).Return(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "test",
 		Body:        "test",
@@ -332,7 +332,7 @@ func TestGetRunnerScaleSetMessage(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 
 	assert.NoError(t, err, "Error getting message")
 	assert.Equal(t, int64(0), asClient.lastMessageId, "Initial message")
@@ -340,7 +340,7 @@ func TestGetRunnerScaleSetMessage(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 
 	assert.NoError(t, err, "Error getting message")
 	assert.Equal(t, int64(1), asClient.lastMessageId, "Last message id should be updated")
@@ -368,7 +368,7 @@ func TestGetRunnerScaleSetMessage_HandleFailed(t *testing.T) {
 		Statistics: &actions.RunnerScaleSetStatistic{},
 	}
 	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything).Return(session, nil)
-	mockSessionClient.On("GetMessage", ctx, int64(0)).Return(&actions.RunnerScaleSetMessage{
+	mockSessionClient.On("GetMessage", ctx, int64(0), mock.Anything).Return(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "test",
 		Body:        "test",
@@ -383,14 +383,14 @@ func TestGetRunnerScaleSetMessage_HandleFailed(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 
 	assert.NoError(t, err, "Error getting message")
 
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return fmt.Errorf("error")
-	})
+	}, 10)
 
 	assert.ErrorContains(t, err, "handle message failed. error", "Error getting message")
 	assert.Equal(t, int64(0), asClient.lastMessageId, "Last message id should not be updated")
@@ -419,7 +419,7 @@ func TestGetRunnerScaleSetMessage_HandleInitialMessage(t *testing.T) {
 			TotalAssignedJobs:  2,
 		},
 	}
-	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything).Return(session, nil)
+	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything, mock.Anything).Return(session, nil)
 	mockActionsClient.On("GetAcquirableJobs", ctx, 1).Return(&actions.AcquirableJobList{
 		Count: 1,
 		Jobs: []actions.AcquirableJob{
@@ -439,7 +439,7 @@ func TestGetRunnerScaleSetMessage_HandleInitialMessage(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 
 	assert.NoError(t, err, "Error getting message")
 	assert.Nil(t, asClient.initialMessage, "Initial message should be nil")
@@ -488,7 +488,7 @@ func TestGetRunnerScaleSetMessage_HandleInitialMessageFailed(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return fmt.Errorf("error")
-	})
+	}, 10)
 
 	assert.ErrorContains(t, err, "fail to process initial message. error", "Error getting message")
 	assert.NotNil(t, asClient.initialMessage, "Initial message should be nil")
@@ -516,8 +516,8 @@ func TestGetRunnerScaleSetMessage_RetryUntilGetMessage(t *testing.T) {
 		Statistics: &actions.RunnerScaleSetStatistic{},
 	}
 	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything).Return(session, nil)
-	mockSessionClient.On("GetMessage", ctx, int64(0)).Return(nil, nil).Times(3)
-	mockSessionClient.On("GetMessage", ctx, int64(0)).Return(&actions.RunnerScaleSetMessage{
+	mockSessionClient.On("GetMessage", ctx, int64(0), mock.Anything).Return(nil, nil).Times(3)
+	mockSessionClient.On("GetMessage", ctx, int64(0), mock.Anything).Return(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "test",
 		Body:        "test",
@@ -532,13 +532,13 @@ func TestGetRunnerScaleSetMessage_RetryUntilGetMessage(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 	assert.NoError(t, err, "Error getting initial message")
 
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 
 	assert.NoError(t, err, "Error getting message")
 	assert.Equal(t, int64(1), asClient.lastMessageId, "Last message id should be updated")
@@ -565,7 +565,7 @@ func TestGetRunnerScaleSetMessage_ErrorOnGetMessage(t *testing.T) {
 		Statistics: &actions.RunnerScaleSetStatistic{},
 	}
 	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything).Return(session, nil)
-	mockSessionClient.On("GetMessage", ctx, int64(0)).Return(nil, fmt.Errorf("error"))
+	mockSessionClient.On("GetMessage", ctx, int64(0), mock.Anything).Return(nil, fmt.Errorf("error"))
 
 	asClient, err := NewAutoScalerClient(ctx, mockActionsClient, &logger, 1, func(asc *AutoScalerClient) {
 		asc.client = mockSessionClient
@@ -575,12 +575,12 @@ func TestGetRunnerScaleSetMessage_ErrorOnGetMessage(t *testing.T) {
 	// process initial message
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		return nil
-	})
+	}, 10)
 	assert.NoError(t, err, "Error getting initial message")
 
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		return fmt.Errorf("Should not be called")
-	})
+	}, 10)
 
 	assert.ErrorContains(t, err, "get message failed from refreshing client. error", "Error should be returned")
 	assert.Equal(t, int64(0), asClient.lastMessageId, "Last message id should be updated")
@@ -608,7 +608,7 @@ func TestDeleteRunnerScaleSetMessage_Error(t *testing.T) {
 		Statistics: &actions.RunnerScaleSetStatistic{},
 	}
 	mockActionsClient.On("CreateMessageSession", ctx, 1, mock.Anything).Return(session, nil)
-	mockSessionClient.On("GetMessage", ctx, int64(0)).Return(&actions.RunnerScaleSetMessage{
+	mockSessionClient.On("GetMessage", ctx, int64(0), mock.Anything).Return(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "test",
 		Body:        "test",
@@ -623,13 +623,13 @@ func TestDeleteRunnerScaleSetMessage_Error(t *testing.T) {
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 	assert.NoError(t, err, "Error getting initial message")
 
 	err = asClient.GetRunnerScaleSetMessage(ctx, func(msg *actions.RunnerScaleSetMessage) error {
 		logger.Info("Message received", "messageId", msg.MessageId, "messageType", msg.MessageType, "body", msg.Body)
 		return nil
-	})
+	}, 10)
 
 	assert.ErrorContains(t, err, "delete message failed from refreshing client. error", "Error getting message")
 	assert.Equal(t, int64(1), asClient.lastMessageId, "Last message id should be updated")

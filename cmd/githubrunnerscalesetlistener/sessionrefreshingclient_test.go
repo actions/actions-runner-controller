@@ -31,17 +31,17 @@ func TestGetMessage(t *testing.T) {
 		},
 	}
 
-	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0)).Return(nil, nil).Once()
-	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0)).Return(&actions.RunnerScaleSetMessage{MessageId: 1}, nil).Once()
+	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0), 10).Return(nil, nil).Once()
+	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0), 10).Return(&actions.RunnerScaleSetMessage{MessageId: 1}, nil).Once()
 
 	client := newSessionClient(mockActionsClient, &logger, session)
 
-	msg, err := client.GetMessage(ctx, 0)
+	msg, err := client.GetMessage(ctx, 0, 10)
 	require.NoError(t, err, "GetMessage should not return an error")
 
 	assert.Nil(t, msg, "GetMessage should return nil message")
 
-	msg, err = client.GetMessage(ctx, 0)
+	msg, err = client.GetMessage(ctx, 0, 10)
 	require.NoError(t, err, "GetMessage should not return an error")
 
 	assert.Equal(t, int64(1), msg.MessageId, "GetMessage should return a message with id 1")
@@ -146,11 +146,11 @@ func TestGetMessage_Error(t *testing.T) {
 		},
 	}
 
-	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0)).Return(nil, fmt.Errorf("error")).Once()
+	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0), 10).Return(nil, fmt.Errorf("error")).Once()
 
 	client := newSessionClient(mockActionsClient, &logger, session)
 
-	msg, err := client.GetMessage(ctx, 0)
+	msg, err := client.GetMessage(ctx, 0, 10)
 	assert.ErrorContains(t, err, "get message failed. error", "GetMessage should return an error")
 	assert.Nil(t, msg, "GetMessage should return nil message")
 	assert.True(t, mockActionsClient.AssertExpectations(t), "All expected calls to mockActionsClient should have been made")
@@ -227,8 +227,8 @@ func TestGetMessage_RefreshToken(t *testing.T) {
 			Id: 1,
 		},
 	}
-	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0)).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
-	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, "token2", int64(0)).Return(&actions.RunnerScaleSetMessage{
+	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0), 10).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
+	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, "token2", int64(0), 10).Return(&actions.RunnerScaleSetMessage{
 		MessageId:   1,
 		MessageType: "test",
 		Body:        "test",
@@ -243,7 +243,7 @@ func TestGetMessage_RefreshToken(t *testing.T) {
 	}, nil).Once()
 
 	client := newSessionClient(mockActionsClient, &logger, session)
-	msg, err := client.GetMessage(ctx, 0)
+	msg, err := client.GetMessage(ctx, 0, 10)
 	assert.NoError(t, err, "Error getting message")
 	assert.Equal(t, int64(1), msg.MessageId, "message id should be updated")
 	assert.Equal(t, "token2", client.session.MessageQueueAccessToken, "Message queue access token should be updated")
@@ -340,11 +340,11 @@ func TestGetMessage_RefreshToken_Failed(t *testing.T) {
 			Id: 1,
 		},
 	}
-	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0)).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
+	mockActionsClient.On("GetMessage", ctx, session.MessageQueueUrl, session.MessageQueueAccessToken, int64(0), 10).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
 	mockActionsClient.On("RefreshMessageSession", ctx, session.RunnerScaleSet.Id, session.SessionId).Return(nil, fmt.Errorf("error"))
 
 	client := newSessionClient(mockActionsClient, &logger, session)
-	msg, err := client.GetMessage(ctx, 0)
+	msg, err := client.GetMessage(ctx, 0, 10)
 	assert.ErrorContains(t, err, "refresh message session failed. error", "Error should be returned")
 	assert.Nil(t, msg, "Message should be nil")
 	assert.Equal(t, "token", client.session.MessageQueueAccessToken, "Message queue access token should not be updated")

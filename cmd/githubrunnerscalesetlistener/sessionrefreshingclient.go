@@ -24,8 +24,12 @@ func newSessionClient(client actions.ActionsService, logger *logr.Logger, sessio
 	}
 }
 
-func (m *SessionRefreshingClient) GetMessage(ctx context.Context, lastMessageId int64) (*actions.RunnerScaleSetMessage, error) {
-	message, err := m.client.GetMessage(ctx, m.session.MessageQueueUrl, m.session.MessageQueueAccessToken, lastMessageId)
+func (m *SessionRefreshingClient) GetMessage(ctx context.Context, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error) {
+	if maxCapacity < 0 {
+		return nil, fmt.Errorf("maxCapacity must be greater than or equal to 0")
+	}
+
+	message, err := m.client.GetMessage(ctx, m.session.MessageQueueUrl, m.session.MessageQueueAccessToken, lastMessageId, maxCapacity)
 	if err == nil {
 		return message, nil
 	}
@@ -42,7 +46,7 @@ func (m *SessionRefreshingClient) GetMessage(ctx context.Context, lastMessageId 
 	}
 
 	m.session = session
-	message, err = m.client.GetMessage(ctx, m.session.MessageQueueUrl, m.session.MessageQueueAccessToken, lastMessageId)
+	message, err = m.client.GetMessage(ctx, m.session.MessageQueueUrl, m.session.MessageQueueAccessToken, lastMessageId, maxCapacity)
 	if err != nil {
 		return nil, fmt.Errorf("delete message failed after refresh message session. %w", err)
 	}
