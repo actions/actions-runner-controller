@@ -111,14 +111,14 @@ spec:
         - mountPath: /tmp
           name: tmp
         {{- range .Values.volumeMounts }}
-        - {{ toJson . }}
+        - {{ toYaml . | nindent 10 }}
         {{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
       - name: tmp
         emptyDir: {}
       {{- range .Values.volumes }}
-      - {{ toJson . }}
+      - {{ toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
