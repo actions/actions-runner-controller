@@ -424,10 +424,14 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"tolerations[0].key":           "foo",
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key":      "foo",
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator": "bar",
-			"priorityClassName":    "test-priority-class",
-			"flags.updateStrategy": "eventual",
-			"flags.logLevel":       "info",
-			"flags.logFormat":      "json",
+			"priorityClassName":         "test-priority-class",
+			"flags.updateStrategy":      "eventual",
+			"flags.logLevel":            "info",
+			"flags.logFormat":           "json",
+			"volumes[0].name":           "customMount",
+			"volumes[0].emptyDir":       "{}",
+			"volumeMounts[0].name":      "customMount",
+			"volumeMounts[0].mountPath": "/my/mount/path",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -470,9 +474,11 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, int64(1000), *deployment.Spec.Template.Spec.SecurityContext.FSGroup)
 	assert.Equal(t, "test-priority-class", deployment.Spec.Template.Spec.PriorityClassName)
 	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
-	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
+	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 2)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.Equal(t, "customMount", deployment.Spec.Template.Spec.Volumes[1].Name)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[1].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 1)
 	assert.Equal(t, "bar", deployment.Spec.Template.Spec.NodeSelector["foo"])
@@ -521,9 +527,11 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.True(t, *deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot)
 	assert.Equal(t, int64(1000), *deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
 
-	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 1)
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 2)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
 	assert.Equal(t, "/tmp", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
+	assert.Equal(t, "customMount", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
+	assert.Equal(t, "/my/mount/path", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
 }
 
 func TestTemplate_EnableLeaderElectionRole(t *testing.T) {
