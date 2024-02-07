@@ -429,7 +429,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"flags.logLevel":            "info",
 			"flags.logFormat":           "json",
 			"volumes[0].name":           "customMount",
-			"volumes[0].emptyDir":       "{}",
+			"volumes[0].configMap.name": "my-configmap",
 			"volumeMounts[0].name":      "customMount",
 			"volumeMounts[0].mountPath": "/my/mount/path",
 		},
@@ -478,7 +478,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
 	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 	assert.Equal(t, "customMount", deployment.Spec.Template.Spec.Volumes[1].Name)
-	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[1].EmptyDir)
+	assert.Equal(t, "my-configmap", deployment.Spec.Template.Spec.Volumes[1].ConfigMap.Name)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 1)
 	assert.Equal(t, "bar", deployment.Spec.Template.Spec.NodeSelector["foo"])
