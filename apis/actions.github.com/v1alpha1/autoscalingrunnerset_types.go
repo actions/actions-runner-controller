@@ -32,6 +32,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 //+kubebuilder:object:root=true
+//+kubebuilder:resource:shortName=ars
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
 //+kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer

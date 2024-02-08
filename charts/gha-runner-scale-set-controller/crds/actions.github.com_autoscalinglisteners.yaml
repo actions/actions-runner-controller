@@ -11,6 +11,8 @@ spec:
     kind: AutoscalingListener
     listKind: AutoscalingListenerList
     plural: autoscalinglisteners
+    shortNames:
+      - asl
     singular: autoscalinglistener
   scope: Namespaced
   versions:
