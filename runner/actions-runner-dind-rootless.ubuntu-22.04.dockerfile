@@ -131,10 +131,10 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "aarch64" ]; then export ARCH=arm64 ; fi \
     && if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=amd64 ; fi \
-    && mkdir -p /usr/libexec/docker/cli-plugins \
-    && curl -fLo /usr/libexec/docker/cli-plugins/docker-buildx \
+    && mkdir -p /home/runner/.docker/cli-plugins \
+    && curl -fLo /home/runner/.docker/cli-plugins/docker-buildx \
         "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-${ARCH}" \
-    && chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+    && chmod +x /home/runner/.docker/cli-plugins/docker-buildx
 
 # Create folder structure here to avoid permission issues
 # when mounting the daemon.json file from a configmap.
