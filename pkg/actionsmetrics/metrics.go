@@ -5,14 +5,49 @@
 package actionsmetrics
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-func init() {
+type BucketsSlice []float64
+
+func (i *BucketsSlice) String() string {
+	return fmt.Sprintf("%v", *i)
+}
+
+func (i *BucketsSlice) Set(value string) error {
+	valuesStr := strings.Split(value, ",")
+	for _, str := range valuesStr {
+		// Convert the string to float64.
+		val, err := strconv.ParseFloat(str, 64)
+		if err != nil {
+			return err
+		}
+		*i = append(*i, val)
+	}
+	return nil
+}
+
+var githubWorkflowJobQueueHistogram *prometheus.HistogramVec
+var githubWorkflowJobRunHistogram *prometheus.HistogramVec
+
+func initMetrics(runBuckets, queueBuckets []float64) {
+	githubWorkflowJobRunHistogram = githubWorkflowJobRunDurationSeconds(runBuckets)
+	githubWorkflowJobQueueHistogram = githubWorkflowJobQueueDurationSeconds(queueBuckets)
+
+	if len(runBuckets) == 0 {
+		githubWorkflowJobRunHistogram = githubWorkflowJobRunDurationSeconds(DefaultRuntimeBuckets)
+	}
+	if len(queueBuckets) == 0 {
+		githubWorkflowJobQueueHistogram = githubWorkflowJobQueueDurationSeconds(DefaultRuntimeBuckets)
+	}
 	metrics.Registry.MustRegister(
-		githubWorkflowJobQueueDurationSeconds,
-		githubWorkflowJobRunDurationSeconds,
+		githubWorkflowJobQueueHistogram,
+		githubWorkflowJobRunHistogram,
 		githubWorkflowJobConclusionsTotal,
 		githubWorkflowJobsQueuedTotal,
 		githubWorkflowJobsStartedTotal,
@@ -21,8 +56,35 @@ func init() {
 	)
 }
 
+func githubWorkflowJobQueueDurationSeconds(buckets []float64) *prometheus.HistogramVec {
+	return prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "github_workflow_job_queue_duration_seconds",
+			Help:    "Queue times for workflow jobs in seconds",
+			Buckets: buckets,
+		},
+		metricLabels(),
+	)
+}
+
+func githubWorkflowJobRunDurationSeconds(buckets []float64) *prometheus.HistogramVec {
+	return prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "github_workflow_job_run_duration_seconds",
+			Help:    "Run times for workflow jobs in seconds",
+			Buckets: buckets,
+		},
+		metricLabels("job_conclusion"),
+	)
+
+}
+
+func InitializeMetrics(runBuckets, queueBuckets []float64) {
+	initMetrics(runBuckets, queueBuckets)
+}
+
 var (
-	runtimeBuckets []float64 = []float64{
+	DefaultRuntimeBuckets = []float64{
 		0.01,
 		0.05,
 		0.1,
@@ -76,23 +138,7 @@ func metricLabels(extras ...string) []string {
 }
 
 var (
-	commonLabels                          = []string{"runs_on", "job_name", "organization", "repository", "repository_full_name", "owner", "workflow_name", "head_branch"}
-	githubWorkflowJobQueueDurationSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "github_workflow_job_queue_duration_seconds",
-			Help:    "Queue times for workflow jobs in seconds",
-			Buckets: runtimeBuckets,
-		},
-		metricLabels(),
-	)
-	githubWorkflowJobRunDurationSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "github_workflow_job_run_duration_seconds",
-			Help:    "Run times for workflow jobs in seconds",
-			Buckets: runtimeBuckets,
-		},
-		metricLabels("job_conclusion"),
-	)
+	commonLabels                      = []string{"runs_on", "job_name", "organization", "repository", "repository_full_name", "owner", "workflow_name", "head_branch"}
 	githubWorkflowJobConclusionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "github_workflow_job_conclusions_total",
