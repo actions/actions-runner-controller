@@ -157,6 +157,13 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	status.DesiredReplicas = &newDesiredReplicas
 	status.Replicas = &statusReplicas
 	status.UpdatedReplicas = &updatedReplicas
+	selector, err := metav1.LabelSelectorAsSelector(runnerSet.Spec.Selector)
+	if err != nil {
+		log.Error(err, "Failed to retrieve pod labels")
+
+		return ctrl.Result{}, err
+	}
+	status.Selector = selector.String()
 
 	if !reflect.DeepEqual(runnerSet.Status, status) {
 		updated := runnerSet.DeepCopy()
