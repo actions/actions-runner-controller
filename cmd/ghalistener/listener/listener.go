@@ -384,9 +384,9 @@ func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*ac
 
 	l.logger.Info("Acquiring jobs", "count", len(ids), "requestIds", fmt.Sprint(ids))
 
-	ids, err := l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
+	idsAcquired, err := l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
 	if err == nil { // if NO errors
-		return ids, nil
+		return idsAcquired, nil
 	}
 
 	expiredError := &actions.MessageQueueTokenExpiredError{}
@@ -398,12 +398,12 @@ func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*ac
 		return nil, err
 	}
 
-	ids, err = l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
+	idsAcquired, err = l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire jobs after session refresh: %w", err)
 	}
 
-	return ids, nil
+	return idsAcquired, nil
 }
 
 func (l *Listener) refreshSession(ctx context.Context) error {
