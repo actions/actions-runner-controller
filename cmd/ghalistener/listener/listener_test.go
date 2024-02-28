@@ -37,7 +37,6 @@ func TestNew(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotNil(t, l)
 	})
-
 }
 
 func TestListener_createSession(t *testing.T) {
@@ -657,7 +656,7 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 			Return(nil, &actions.MessageQueueTokenExpiredError{}).
 			Once()
 
-		// First call to AcquireJobs will fail with a token expired error
+		// Second call should succeed
 		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) {
 				ids := args.Get(3).([]int64)
