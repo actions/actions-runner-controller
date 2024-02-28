@@ -124,17 +124,25 @@ jobs:
       - name: New branch
         run: git checkout -b update-runner-"$(date +%Y-%m-%d)"
       
-      - name: Update files
+      - name: Update runner version
         run: |
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/VERSION
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/Makefile
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" Makefile
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" test/e2e/e2e_test.go
-          
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" runner/VERSION
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" runner/Makefile
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" Makefile
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" test/e2e/e2e_test.go
+          if [ "$RUNNER_CURRENT_VERSION" != "$RUNNER_LATEST_VERSION" ]
+          then
+            sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/VERSION
+            sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/Makefile
+            sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" Makefile
+            sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" test/e2e/e2e_test.go
+          fi
+      
+      - name: Update container hook version
+        run: |
+          if [ "$CONTAINER_HOOKS_CURRENT_VERSION" != "$CONTAINER_HOOKS_LATEST_VERSION" ]
+          then
+            sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" runner/VERSION
+            sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" runner/Makefile
+            sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" Makefile
+            sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" test/e2e/e2e_test.go
+          fi
 
       - name: Commit changes
         run: |
