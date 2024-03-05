@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
+  {{- with .Values.minReadySeconds }}
+  minReadySeconds: {{ . }}
+  {{- end }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -189,9 +192,6 @@ spec:
           {{- toYaml .Values.securityContext | nindent 12 }}
       {{- end }}
       terminationGracePeriodSeconds: 10
-      {{- if .Values.minReadySeconds }}
-      minReadySeconds: {{ .Values.minReadySeconds }}
-      {{- end }}
       volumes:
       {{- if .Values.authSecret.enabled }}
       - name: secret
