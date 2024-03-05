@@ -640,8 +640,11 @@ func (c *Client) doSessionRequest(ctx context.Context, method, path string, requ
 		return err
 	}
 
-	if resp.StatusCode == expectedResponseStatusCode && responseUnmarshalTarget != nil {
-		return json.NewDecoder(resp.Body).Decode(responseUnmarshalTarget)
+	if resp.StatusCode == expectedResponseStatusCode {
+		if responseUnmarshalTarget != nil {
+			return json.NewDecoder(resp.Body).Decode(responseUnmarshalTarget)
+		}
+		return nil
 	}
 
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {

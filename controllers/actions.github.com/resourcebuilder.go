@@ -226,6 +226,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ports = append(ports, port)
 	}
 
+	terminationGracePeriodSeconds := int64(60)
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: serviceAccount.Name,
 		Containers: []corev1.Container{
@@ -256,8 +257,9 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				},
 			},
 		},
-		ImagePullSecrets: autoscalingListener.Spec.ImagePullSecrets,
-		RestartPolicy:    corev1.RestartPolicyNever,
+		ImagePullSecrets:              autoscalingListener.Spec.ImagePullSecrets,
+		RestartPolicy:                 corev1.RestartPolicyNever,
+		TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 	}
 
 	labels := make(map[string]string, len(autoscalingListener.Labels))

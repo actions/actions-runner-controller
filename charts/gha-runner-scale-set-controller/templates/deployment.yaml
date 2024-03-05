@@ -110,10 +110,16 @@ spec:
         volumeMounts:
         - mountPath: /tmp
           name: tmp
+        {{- range .Values.volumeMounts }}
+        - {{ toYaml . | nindent 10 }}
+        {{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
       - name: tmp
         emptyDir: {}
+      {{- range .Values.volumes }}
+      - {{ toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
