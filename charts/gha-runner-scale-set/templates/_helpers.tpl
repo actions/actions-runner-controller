@@ -96,14 +96,23 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "dind" }}
+image: {{ $container.image }}
+  {{- else }}
 image: docker:dind
+  {{- end }}
 args:
   - dockerd
   - --host=unix:///run/docker/docker.sock
   - --group=$(DOCKER_GROUP_GID)
 env:
+  {{- if hasKey $container "env" }}
+  {{- toYaml $container.env | nindent 2 }}
+  {{- else }}
   - name: DOCKER_GROUP_GID
     value: "123"
+  {{- end }}
 securityContext:
   privileged: true
 volumeMounts:
@@ -113,6 +122,7 @@ volumeMounts:
     mountPath: /run/docker
   - name: dind-externals
     mountPath: /home/runner/externals
+{{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
