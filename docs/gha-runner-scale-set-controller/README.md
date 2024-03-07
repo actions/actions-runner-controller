@@ -43,6 +43,11 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.8.3
+1. Expose volumeMounts and volumes in gha-runner-scale-set-controller [#3260](https://github.com/actions/actions-runner-controller/pull/3260)
+1. Refer to the correct variable in discovery error message [#3296](https://github.com/actions/actions-runner-controller/pull/3296)
+1. Fix acquire jobs after session refresh ghalistener [#3307](https://github.com/actions/actions-runner-controller/pull/3307)
+
 ### v0.8.2
 1. Add listener graceful termination period and background context after the message is received [#3187](https://github.com/actions/actions-runner-controller/pull/3187)
 1. Publish metrics in the new ghalistener [#3193](https://github.com/actions/actions-runner-controller/pull/3193)

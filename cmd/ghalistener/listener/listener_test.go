@@ -628,9 +628,6 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		}
 		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
 
-		// First call to AcquireJobs will fail with a token expired error
-		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
-
 		// Second call to AcquireJobs will succeed
 		want := []int64{1, 2, 3}
 		availableJobs := []*actions.JobAvailable{
@@ -650,7 +647,24 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 				},
 			},
 		}
-		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+
+		// First call to AcquireJobs will fail with a token expired error
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				ids := args.Get(3).([]int64)
+				assert.Equal(t, want, ids)
+			}).
+			Return(nil, &actions.MessageQueueTokenExpiredError{}).
+			Once()
+
+		// First call to AcquireJobs will fail with a token expired error
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				ids := args.Get(3).([]int64)
+				assert.Equal(t, want, ids)
+			}).
+			Return(want, nil).
+			Once()
 
 		config.Client = client
 
