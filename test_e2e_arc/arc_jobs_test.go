@@ -24,7 +24,7 @@ type podCountsByType struct {
 }
 
 func getPodsByType(clientset *kubernetes.Clientset) podCountsByType {
-	arc_namespace := "arc-systems"
+	arc_namespace := "arc-system"
 	availableArcPods, err := clientset.CoreV1().Pods(arc_namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
