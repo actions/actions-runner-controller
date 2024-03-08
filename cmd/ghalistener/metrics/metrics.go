@@ -221,10 +221,21 @@ type baseLabels struct {
 }
 
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
+	organization := b.organization
+	repository := b.repository
+
+	if organization == "" { // Runner configured for an enterprise will have empty organization
+		organization = jobBase.OwnerName
+	}
+
+	if repository == "" { // Runner configured for an enterprise/organization will have empty repository
+		repository = jobBase.RepositoryName
+	}
+
 	return prometheus.Labels{
 		labelKeyEnterprise:     b.enterprise,
-		labelKeyOrganization:   b.organization,
-		labelKeyRepository:     b.repository,
+		labelKeyOrganization:   organization,
+		labelKeyRepository:     repository,
 		labelKeyJobName:        jobBase.JobDisplayName,
 		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
 		labelKeyEventName:      jobBase.EventName,
