@@ -6957,9 +6957,14 @@ spec:
                         - containers
                       type: object
                   type: object
+                patchID:
+                  description: PatchID is unique identifier for the patch issued by the listener app
+                  type: integer
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
                   type: integer
+              required:
+                - patchID
               type: object
             status:
               description: EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet

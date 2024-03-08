@@ -557,6 +557,7 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	for key, val := range ephemeralRunnerSet.Annotations {
 		annotations[key] = val
 	}
+	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 	return &v1alpha1.EphemeralRunner{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
