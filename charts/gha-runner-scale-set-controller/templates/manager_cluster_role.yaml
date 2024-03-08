@@ -131,6 +131,7 @@ rules:
   resources:
   - rolebindings
   verbs:
+  - delete
   - list
   - watch
 - apiGroups:
