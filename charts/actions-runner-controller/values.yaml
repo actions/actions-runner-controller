@@ -323,6 +323,7 @@ actionsMetrics:
     image:
       repository: quay.io/brancz/kube-rbac-proxy
       tag: v0.13.1
+    resources: {}
   # specify additional environment variables for the webhook server pod.
   # It's possible to specify either key vale pairs e.g.:
   # my_env_var: "some value"
