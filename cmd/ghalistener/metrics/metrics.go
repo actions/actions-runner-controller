@@ -223,7 +223,7 @@ type baseLabels struct {
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
 		labelKeyEnterprise:     b.enterprise,
-		labelKeyOrganization:   b.organization,
+		labelKeyOrganization:   jobBase.OwnerName,
 		labelKeyRepository:     jobBase.RepositoryName,
 		labelKeyJobName:        jobBase.JobDisplayName,
 		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
