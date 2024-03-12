@@ -1,3 +1,4 @@
+{{- if eq .Values.flags.skipRbacSetup false }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -11,3 +12,4 @@ subjects:
 - kind: ServiceAccount
   name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
+{{- end }}

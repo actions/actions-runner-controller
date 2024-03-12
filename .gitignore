@@ -36,3 +36,5 @@ bin
 
 /test-assets
 /.tools
+
+*.tgz

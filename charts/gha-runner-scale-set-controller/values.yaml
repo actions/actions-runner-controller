@@ -35,7 +35,7 @@ serviceAccount:
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
+  # If not set and create is true, a nwame is generated using the fullname template
   # You can not use the default service account for this.
   name: ""
 
@@ -121,3 +121,14 @@ flags:
   ##   This can lead to a longer time to apply the change but it will ensure
   ##   that you don't have any overprovisioning of runners.
   updateStrategy: "immediate"
+
+  # Skip any RBAC setup for the controller (includes roles and rolebindings) assuming all setup upfront
+  # This will be applied in both modes: watchSingleNamespace and global
+  skipRbacSetup: false
+
+  # Require service account for the listener pods provided via Autoscaling Runner Set spec,
+  # If not set, the default service account will be created and used
+  skipListenerSaCreation: false
+
+  # Skip setting up the Role and RoleBinding for the created/used listeners, assuming all is done upfront
+  skipRbacSetupForListeners: false

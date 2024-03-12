@@ -94,6 +94,18 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- if eq .Values.flags.skipRbacSetup true }}
+        - name: SKIP_RBAC_SETUP_FOR_CONTROLLER
+          value: "true"
+        {{- end }}
+        {{- if eq .Values.flags.skipListenerSaCreation true }}
+        - name: SKIP_LISTENERS_SA_CREATION
+          value: "true"
+        {{- end }}
+        {{- if eq .Values.flags.skipRbacSetupForListeners true }}
+        - name: SKIP_RBAC_SETUP_FOR_LISTENERS
+          value: "true"
+        {{- end }}
         {{- with .Values.env }}
           {{- if kindIs "slice" . }}
             {{- toYaml . | nindent 8 }}

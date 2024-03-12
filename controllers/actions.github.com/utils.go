@@ -2,6 +2,7 @@ package actionsgithubcom
 
 import (
 	"k8s.io/apimachinery/pkg/util/rand"
+	"os"
 )
 
 func FilterLabels(labels map[string]string, filter string) map[string]string {
@@ -24,4 +25,16 @@ func RandStringRunes(n int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
+}
+
+func ShouldSkipRbac() bool {
+	return os.Getenv(SkipRbacSetupForController) == "true"
+}
+
+func ShouldSkipListenerRbacSetup() bool {
+	return os.Getenv(SkipRbacSetupForListeners) == "true"
+}
+
+func ShouldSkipListenerSaCreation() bool {
+	return os.Getenv(RequireListenerSAProvided) == "true"
 }
