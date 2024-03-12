@@ -24,6 +24,30 @@ RUN apt-get update -y \
     sudo \
     unzip \
     zip \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+#ASDF Plugin Deps
+RUN apt-get update -y \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+    build-essential \
+    g++ \
+    python3 \
+    python3-pip \
+    make \
+    libsqlite3-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libffi-dev \
+    libssl-dev \
+    zlib1g-dev \
+    libreadline-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Download latest git-lfs version

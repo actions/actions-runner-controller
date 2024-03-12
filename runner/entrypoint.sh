@@ -27,4 +27,6 @@ if [ -f /runner/.runner ]; then
   rm -f /runner/.runner
 fi
 
+eval "$(ssh-agent -c)"
+
 trap - TERM
