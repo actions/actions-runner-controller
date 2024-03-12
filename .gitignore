@@ -36,3 +36,7 @@ bin
 
 
 /.tools
+
+*.tgz
+internal
+internal/

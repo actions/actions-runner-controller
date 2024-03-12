@@ -12,6 +12,8 @@ spec:
     listKind: EphemeralRunnerSetList
     plural: ephemeralrunnersets
     singular: ephemeralrunnerset
+    shortNames:
+      - gharcephemeralrunnerset
   scope: Namespaced
   versions:
     - additionalPrinterColumns:

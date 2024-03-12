@@ -12,6 +12,8 @@ spec:
     listKind: AutoscalingListenerList
     plural: autoscalinglisteners
     singular: autoscalinglistener
+    shortNames:
+      - gharclistener
   scope: Namespaced
   versions:
   - additionalPrinterColumns:

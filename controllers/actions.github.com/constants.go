@@ -82,4 +82,14 @@ const resourceOwnerKey = ".metadata.controller"
 const (
 	ReasonTooManyPodFailures = "TooManyPodFailures"
 	ReasonInvalidPodFailure  = "InvalidPod"
+	ReasonQuotaExceeded      = "QuotaExceeded"
+)
+
+// Rbac managing envs flags
+const (
+	SkipRbacSetupForController = "SKIP_RBAC_SETUP_FOR_CONTROLLER"
+
+	RequireListenerSAProvided = "SKIP_LISTENERS_SA_CREATION"
+
+	SkipRbacSetupForListeners = "SKIP_RBAC_SETUP_FOR_LISTENERS"
 )

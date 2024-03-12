@@ -136,9 +136,21 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
-# Overrides the default `.Release.Namespace` for all resources in this chart.
-namespaceOverride: ""
-
 ## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20
   # k8sClientRateLimiterBurst: 30
+
+# Additional flags
+  # Skip any RBAC setup for the controller (includes roles and rolebindings) assuming all setup upfront
+  # This will be applied in both modes: watchSingleNamespace and global
+  skipRbacSetup: false
+
+  # Require service account for the listener pods provided via Autoscaling Runner Set spec,
+  # If not set, the default service account will be created and used
+  skipListenerSaCreation: false
+
+  # Skip setting up the Role and RoleBinding for the created/used listeners, assuming all is done upfront
+  skipRbacSetupForListeners: false
+
+# Overrides the default `.Release.Namespace` for all resources in this chart.
+namespaceOverride: ""

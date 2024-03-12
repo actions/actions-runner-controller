@@ -1,4 +1,5 @@
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.managerRole) }}
+{{- if eq .Values.flags.skipRbacSetup false }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -97,4 +98,5 @@ rules:
   - configmaps
   verbs:
   - get
+{{- end }}
 {{- end }}

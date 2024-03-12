@@ -12,6 +12,8 @@ spec:
     listKind: AutoscalingRunnerSetList
     plural: autoscalingrunnersets
     singular: autoscalingrunnerset
+    shortNames:
+      - gharcrunnerset
   scope: Namespaced
   versions:
     - additionalPrinterColumns:

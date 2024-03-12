@@ -1,3 +1,4 @@
+{{- if eq .Values.flags.skipRbacSetup false }}
 {{- if .Values.flags.watchSingleNamespace }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -122,4 +123,5 @@ rules:
   - list
   - watch
   - patch
+{{- end }}
 {{- end }}

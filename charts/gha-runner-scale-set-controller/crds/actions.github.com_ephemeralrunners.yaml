@@ -12,6 +12,8 @@ spec:
     listKind: EphemeralRunnerList
     plural: ephemeralrunners
     singular: ephemeralrunner
+    shortNames:
+      - gharcephemeralrunner
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
