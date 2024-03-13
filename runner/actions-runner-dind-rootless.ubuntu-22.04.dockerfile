@@ -33,6 +33,31 @@ RUN apt-get update -y \
     fuse-overlayfs \
     && rm -rf /var/lib/apt/lists/*
 
+#ASDF Plugin Deps
+RUN apt-get update -y \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+    awscli \
+    build-essential \
+    g++ \
+    python3 \
+    python3-pip \
+    make \
+    libsqlite3-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libffi-dev \
+    libssl-dev \
+    zlib1g-dev \
+    libreadline-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
 # Download latest git-lfs version
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
     apt-get install -y --no-install-recommends git-lfs
@@ -97,6 +122,9 @@ COPY docker-shim.sh /usr/local/bin/docker
 
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
+
+# Add GitHub Known Hosts
+COPY --chmod=655 known_hosts /home/runner/.ssh/known_hosts
 
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin:/home/runner/bin"
