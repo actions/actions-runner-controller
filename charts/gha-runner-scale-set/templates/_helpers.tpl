@@ -99,7 +99,7 @@ volumeMounts:
 image: docker:dind
 args:
   - dockerd
-  - --host=unix:///run/docker/docker.sock
+  - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
 env:
   - name: DOCKER_GROUP_GID
@@ -110,7 +110,7 @@ volumeMounts:
   - name: work
     mountPath: /home/runner/_work
   - name: dind-sock
-    mountPath: /run/docker
+    mountPath: /var/run
   - name: dind-externals
     mountPath: /home/runner/externals
 {{- end }}
@@ -223,7 +223,7 @@ env:
     {{- end }}
     {{- if $setDockerHost }}
   - name: DOCKER_HOST
-    value: unix:///run/docker/docker.sock
+    value: unix:///var/run/docker.sock
     {{- end }}
     {{- if $setRunnerWaitDocker }}
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
@@ -264,8 +264,7 @@ volumeMounts:
     {{- end }}
     {{- if $mountDindCert }}
   - name: dind-sock
-    mountPath: /run/docker
-    readOnly: true
+    mountPath: /var/run
     {{- end }}
     {{- if $mountGitHubServerTLS }}
   - name: github-server-tls-cert
