@@ -301,10 +301,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
 					}
 
-					return runnerSetList.Items[0].Labels[labelKeyRunnerSpecHash], nil
+					return runnerSetList.Items[0].Annotations[annotationKeyRunnerSpecHash], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Labels[labelKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
+				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Annotations[annotationKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
 
 			// We should create a new listener
 			Eventually(
