@@ -93,7 +93,7 @@ func TestE2E(t *testing.T) {
 		os.Getenv("UBUNTU_VERSION"),
 	)
 
-	var testedVersions = []struct {
+	testedVersions := []struct {
 		label                     string
 		controller, controllerVer string
 		chart, chartVer           string
@@ -154,9 +154,7 @@ func TestE2E(t *testing.T) {
 			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
 		}
 
-		var (
-			testID string
-		)
+		var testID string
 
 		t.Run("get or generate test ID", func(t *testing.T) {
 			testID = env.GetOrGenerateTestID(t)
@@ -268,9 +266,7 @@ func TestE2E(t *testing.T) {
 			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
 		}
 
-		var (
-			testID string
-		)
+		var testID string
 
 		t.Run("get or generate test ID", func(t *testing.T) {
 			testID = env.GetOrGenerateTestID(t)
@@ -1110,7 +1106,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.21.3",
+						GoVersion: "1.22.1",
 					},
 				},
 			)
@@ -1240,7 +1236,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			testing.Step{
 				Uses: "azure/setup-kubectl@v1",
 				With: &testing.With{
-					Version: "v1.21.3",
+					Version: "v1.22.1",
 				},
 			},
 			testing.Step{
