@@ -223,8 +223,8 @@ type baseLabels struct {
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
 		labelKeyEnterprise:     b.enterprise,
-		labelKeyOrganization:   b.organization,
-		labelKeyRepository:     b.repository,
+		labelKeyOrganization:   jobBase.OwnerName,
+		labelKeyRepository:     jobBase.RepositoryName,
 		labelKeyJobName:        jobBase.JobDisplayName,
 		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
 		labelKeyEventName:      jobBase.EventName,
@@ -271,8 +271,10 @@ type ServerPublisher interface {
 	ListenAndServe(ctx context.Context) error
 }
 
-var _ Publisher = &discard{}
-var _ ServerPublisher = &exporter{}
+var (
+	_ Publisher       = &discard{}
+	_ ServerPublisher = &exporter{}
+)
 
 var Discard Publisher = &discard{}
 
