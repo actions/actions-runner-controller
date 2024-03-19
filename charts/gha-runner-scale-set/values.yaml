@@ -125,7 +125,7 @@ template:
   ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: DOCKER_HOST
-  ##           value: unix:///run/docker/docker.sock
+  ##           value: unix:///var/run/docker.sock
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
@@ -136,7 +136,7 @@ template:
   ##       image: docker:dind
   ##       args:
   ##         - dockerd
-  ##         - --host=unix:///run/docker/docker.sock
+  ##         - --host=unix:///var/run/docker.sock
   ##         - --group=$(DOCKER_GROUP_GID)
   ##       env:
   ##         - name: DOCKER_GROUP_GID
