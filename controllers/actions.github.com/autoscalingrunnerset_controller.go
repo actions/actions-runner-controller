@@ -43,10 +43,10 @@ import (
 
 const (
 	annotationKeyRunnerSpecHash = "actions.github.com/runner-spec-hash"
-  // annotationKeyValuesHash is hash of the entire values json.
+	// annotationKeyValuesHash is hash of the entire values json.
 	// This is used to determine if the values have changed, so we can
 	// re-create listener.
-	annotationKeyValuesHash     = "actions.github.com/values-hash"
+	annotationKeyValuesHash = "actions.github.com/values-hash"
 
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdAnnotationKey     = "runner-scale-set-id"
