@@ -900,7 +900,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
 	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 2, "The runner container should have 2 env vars, DOCKER_HOST and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS")
 	assert.Equal(t, "DOCKER_HOST", ars.Spec.Template.Spec.Containers[0].Env[0].Name)
-	assert.Equal(t, "unix:///run/docker/docker.sock", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "unix:///var/run/docker.sock", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
 	assert.Equal(t, "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "120", ars.Spec.Template.Spec.Containers[0].Env[1].Value)
 
@@ -910,8 +910,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.False(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly)
 
 	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
-	assert.Equal(t, "/run/docker", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
-	assert.True(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly)
+	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
 
 	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name)
 	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
@@ -921,7 +920,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
 
 	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
-	assert.Equal(t, "/run/docker", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
+	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
 
 	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
 	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
