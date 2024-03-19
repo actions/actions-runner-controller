@@ -335,6 +335,54 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			patched = autoscalingRunnerSet.DeepCopy()
 			min := 10
 			patched.Spec.MinRunners = &min
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+
+			// We should not re-create a new EphemeralRunnerSet
+			Consistently(
+				func() (string, error) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					if err != nil {
+						return "", err
+					}
+
+					if len(runnerSetList.Items) != 1 {
+						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
+					}
+
+					return string(runnerSetList.Items[0].UID), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
+
+			// We should only re-create a new listener
+			Eventually(
+				func() (string, error) {
+					listener := new(v1alpha1.AutoscalingListener)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+					if err != nil {
+						return "", err
+					}
+
+					return string(listener.UID), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
+
+			// Only update the values hash for the autoscaling runner set
+			// This should trigger re-creation of the Listener only
+			runnerSetList = new(v1alpha1.EphemeralRunnerSetList)
+			err = k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+			Expect(len(runnerSetList.Items)).To(Equal(1), "There should be 1 EphemeralRunnerSet")
+			runnerSet = runnerSetList.Items[0]
+
+			listener = new(v1alpha1.AutoscalingListener)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+			Expect(err).NotTo(HaveOccurred(), "failed to get Listener")
+
+			patched = autoscalingRunnerSet.DeepCopy()
 			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "hash-changes"
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
