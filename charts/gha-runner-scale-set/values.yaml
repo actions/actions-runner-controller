@@ -130,8 +130,7 @@ template:
   ##         - name: work
   ##           mountPath: /home/runner/_work
   ##         - name: dind-sock
-  ##           mountPath: /run/docker
-  ##           readOnly: true
+  ##           mountPath: /var/run
   ##     - name: dind
   ##       image: docker:dind
   ##       args:
@@ -147,7 +146,7 @@ template:
   ##         - name: work
   ##           mountPath: /home/runner/_work
   ##         - name: dind-sock
-  ##           mountPath: /run/docker
+  ##           mountPath: /var/run
   ##         - name: dind-externals
   ##           mountPath: /home/runner/externals
   ##     volumes:

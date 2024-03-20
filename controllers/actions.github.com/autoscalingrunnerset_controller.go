@@ -42,7 +42,12 @@ import (
 )
 
 const (
-	labelKeyRunnerSpecHash            = "runner-spec-hash"
+	annotationKeyRunnerSpecHash = "actions.github.com/runner-spec-hash"
+	// annotationKeyValuesHash is hash of the entire values json.
+	// This is used to determine if the values have changed, so we can
+	// re-create listener.
+	annotationKeyValuesHash = "actions.github.com/values-hash"
+
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdAnnotationKey     = "runner-scale-set-id"
 )
@@ -230,9 +235,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
 	}
 
-	desiredSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 	for _, runnerSet := range existingRunnerSets.all() {
-		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Labels[labelKeyRunnerSpecHash])
+		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Annotations[annotationKeyRunnerSpecHash])
 	}
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
@@ -249,7 +253,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
-	if listenerFound && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
+	listenerValuesHashChanged := listener.Annotations[annotationKeyValuesHash] != autoscalingRunnerSet.Annotations[annotationKeyValuesHash]
+	listenerSpecHashChanged := listener.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()
+	if listenerFound && (listenerValuesHashChanged || listenerSpecHashChanged) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
 			if kerrors.IsNotFound(err) {
@@ -263,7 +269,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
+	if latestRunnerSet.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.RunnerSetSpecHash() {
 		if r.drainingJobs(&latestRunnerSet.Status) {
 			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
 			log.Info("Scaling down the number of desired replicas to 0")
