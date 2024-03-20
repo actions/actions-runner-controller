@@ -6958,7 +6958,7 @@ spec:
                       type: object
                   type: object
                 patchID:
-                  description: PatchID is unique identifier for the patch issued by the listener app
+                  description: PatchID is the unique identifier for the patch issued by the listener app
                   type: integer
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
