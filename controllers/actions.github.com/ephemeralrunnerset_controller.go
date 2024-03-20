@@ -192,7 +192,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	total := ephemeralRunnerState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnerState.latestPatchID {
-		defer r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnerState.finished, log)
+		defer func() {
+			if err := r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnerState.finished, log); err != nil {
+				log.Error(err, "failed to cleanup finished ephemeral runners")
+			}
+		}()
+
 		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
 		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
@@ -253,13 +258,7 @@ func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx conte
 		}
 	}
 
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to delete finished ephemeral runners")
-		return mergedErrs
-	}
-
-	return nil
+	return multierr.Combine(errs...)
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
