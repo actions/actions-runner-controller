@@ -78,7 +78,7 @@ jobs:
         run: |
           RUNNER_MESSAGE="runner to v${RUNNER_LATEST_VERSION}"
           CONTAINER_HOOKS_MESSAGE="container-hooks to v${CONTAINER_HOOKS_LATEST_VERSION}"
-          
+
           PR_NAME="Updates:"
           if [ "$RUNNER_CURRENT_VERSION" != "$RUNNER_LATEST_VERSION" ]
           then
@@ -88,7 +88,7 @@ jobs:
           then
             PR_NAME="$PR_NAME $CONTAINER_HOOKS_MESSAGE"
           fi
-          
+
           result=$(gh pr list --search "$PR_NAME" --json number --jq ".[].number" --limit 1)
           if [ -z "$result" ]
           then
@@ -120,21 +120,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: New branch
         run: git checkout -b update-runner-"$(date +%Y-%m-%d)"
-      
+
       - name: Update files
         run: |
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/VERSION
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" runner/Makefile
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" Makefile
-          sed -i "s/$RUNNER_CURRENT_VERSION/$RUNNER_LATEST_VERSION/g" test/e2e/e2e_test.go
-          
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" runner/VERSION
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" runner/Makefile
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" Makefile
-          sed -i "s/$CONTAINER_HOOKS_CURRENT_VERSION/$CONTAINER_HOOKS_LATEST_VERSION/g" test/e2e/e2e_test.go
+          CURRENT_VERSION="${RUNNER_CURRENT_VERSION//./\\.}"
+          LATEST_VERSION="${RUNNER_LATEST_VERSION//./\\.}"
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/VERSION
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/Makefile
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" Makefile
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" test/e2e/e2e_test.go
+
+          CURRENT_VERSION="${CONTAINER_HOOKS_CURRENT_VERSION//./\\.}"
+          LATEST_VERSION="${CONTAINER_HOOKS_LATEST_VERSION//./\\.}"
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/VERSION
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/Makefile
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" Makefile
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" test/e2e/e2e_test.go
 
       - name: Commit changes
         run: |

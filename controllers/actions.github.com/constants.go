@@ -39,7 +39,10 @@ const (
 // Finalizer used to protect resources from deletion while AutoscalingRunnerSet is running
 const AutoscalingRunnerSetCleanupFinalizerName = "actions.github.com/cleanup-protection"
 
-const AnnotationKeyGitHubRunnerGroupName = "actions.github.com/runner-group-name"
+const (
+	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
+	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
+)
 
 // Labels applied to listener roles
 const (

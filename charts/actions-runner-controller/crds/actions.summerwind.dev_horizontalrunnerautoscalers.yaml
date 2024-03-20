@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.13.0
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: horizontalrunnerautoscalers.actions.summerwind.dev
 spec:
   group: actions.summerwind.dev
@@ -35,10 +35,19 @@ spec:
           description: HorizontalRunnerAutoscaler is the Schema for the horizontalrunnerautoscaler API
           properties:
             apiVersion:
-              description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
               type: string
             kind:
-              description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
               type: string
             metadata:
               type: object
@@ -47,7 +56,9 @@ spec:
               properties:
                 capacityReservations:
                   items:
-                    description: CapacityReservation specifies the number of replicas temporarily added to the scale target until ExpirationTime.
+                    description: |-
+                      CapacityReservation specifies the number of replicas temporarily added
+                      to the scale target until ExpirationTime.
                     properties:
                       effectiveTime:
                         format: date-time
@@ -79,30 +90,46 @@ spec:
                   items:
                     properties:
                       repositoryNames:
-                        description: RepositoryNames is the list of repository names to be used for calculating the metric. For example, a repository name is the REPO part of `github.com/USER/REPO`.
+                        description: |-
+                          RepositoryNames is the list of repository names to be used for calculating the metric.
+                          For example, a repository name is the REPO part of `github.com/USER/REPO`.
                         items:
                           type: string
                         type: array
                       scaleDownAdjustment:
-                        description: ScaleDownAdjustment is the number of runners removed on scale-down. You can only specify either ScaleDownFactor or ScaleDownAdjustment.
+                        description: |-
+                          ScaleDownAdjustment is the number of runners removed on scale-down.
+                          You can only specify either ScaleDownFactor or ScaleDownAdjustment.
                         type: integer
                       scaleDownFactor:
-                        description: ScaleDownFactor is the multiplicative factor applied to the current number of runners used to determine how many pods should be removed.
+                        description: |-
+                          ScaleDownFactor is the multiplicative factor applied to the current number of runners used
+                          to determine how many pods should be removed.
                         type: string
                       scaleDownThreshold:
-                        description: ScaleDownThreshold is the percentage of busy runners less than which will trigger the hpa to scale the runners down.
+                        description: |-
+                          ScaleDownThreshold is the percentage of busy runners less than which will
+                          trigger the hpa to scale the runners down.
                         type: string
                       scaleUpAdjustment:
-                        description: ScaleUpAdjustment is the number of runners added on scale-up. You can only specify either ScaleUpFactor or ScaleUpAdjustment.
+                        description: |-
+                          ScaleUpAdjustment is the number of runners added on scale-up.
+                          You can only specify either ScaleUpFactor or ScaleUpAdjustment.
                         type: integer
                       scaleUpFactor:
-                        description: ScaleUpFactor is the multiplicative factor applied to the current number of runners used to determine how many pods should be added.
+                        description: |-
+                          ScaleUpFactor is the multiplicative factor applied to the current number of runners used
+                          to determine how many pods should be added.
                         type: string
                       scaleUpThreshold:
-                        description: ScaleUpThreshold is the percentage of busy runners greater than which will trigger the hpa to scale runners up.
+                        description: |-
+                          ScaleUpThreshold is the percentage of busy runners greater than which will
+                          trigger the hpa to scale runners up.
                         type: string
                       type:
-                        description: Type is the type of metric to be used for autoscaling. It can be TotalNumberOfQueuedAndInProgressWorkflowRuns or PercentageRunnersBusy.
+                        description: |-
+                          Type is the type of metric to be used for autoscaling.
+                          It can be TotalNumberOfQueuedAndInProgressWorkflowRuns or PercentageRunnersBusy.
                         type: string
                     type: object
                   type: array
@@ -110,7 +137,9 @@ spec:
                   description: MinReplicas is the minimum number of replicas the deployment is allowed to scale
                   type: integer
                 scaleDownDelaySecondsAfterScaleOut:
-                  description: ScaleDownDelaySecondsAfterScaleUp is the approximate delay for a scale down followed by a scale up Used to prevent flapping (down->up->down->... loop)
+                  description: |-
+                    ScaleDownDelaySecondsAfterScaleUp is the approximate delay for a scale down followed by a scale up
+                    Used to prevent flapping (down->up->down->... loop)
                   type: integer
                 scaleTargetRef:
                   description: ScaleTargetRef is the reference to scaled resource like RunnerDeployment
@@ -126,7 +155,18 @@ spec:
                       type: string
                   type: object
                 scaleUpTriggers:
-                  description: "ScaleUpTriggers is an experimental feature to increase the desired replicas by 1 on each webhook requested received by the webhookBasedAutoscaler. \n This feature requires you to also enable and deploy the webhookBasedAutoscaler onto your cluster. \n Note that the added runners remain until the next sync period at least, and they may or may not be used by GitHub Actions depending on the timing. They are intended to be used to gain \"resource slack\" immediately after you receive a webhook from GitHub, so that you can loosely expect MinReplicas runners to be always available."
+                  description: |-
+                    ScaleUpTriggers is an experimental feature to increase the desired replicas by 1
+                    on each webhook requested received by the webhookBasedAutoscaler.
+
+
+                    This feature requires you to also enable and deploy the webhookBasedAutoscaler onto your cluster.
+
+
+                    Note that the added runners remain until the next sync period at least,
+                    and they may or may not be used by GitHub Actions depending on the timing.
+                    They are intended to be used to gain "resource slack" immediately after you
+                    receive a webhook from GitHub, so that you can loosely expect MinReplicas runners to be always available.
                   items:
                     properties:
                       amount:
@@ -139,12 +179,18 @@ spec:
                             description: https://docs.github.com/en/actions/reference/events-that-trigger-workflows#check_run
                             properties:
                               names:
-                                description: Names is a list of GitHub Actions glob patterns. Any check_run event whose name matches one of patterns in the list can trigger autoscaling. Note that check_run name seem to equal to the job name you've defined in your actions workflow yaml file. So it is very likely that you can utilize this to trigger depending on the job.
+                                description: |-
+                                  Names is a list of GitHub Actions glob patterns.
+                                  Any check_run event whose name matches one of patterns in the list can trigger autoscaling.
+                                  Note that check_run name seem to equal to the job name you've defined in your actions workflow yaml file.
+                                  So it is very likely that you can utilize this to trigger depending on the job.
                                 items:
                                   type: string
                                 type: array
                               repositories:
-                                description: Repositories is a list of GitHub repositories. Any check_run event whose repository matches one of repositories in the list can trigger autoscaling.
+                                description: |-
+                                  Repositories is a list of GitHub repositories.
+                                  Any check_run event whose repository matches one of repositories in the list can trigger autoscaling.
                                 items:
                                   type: string
                                 type: array
@@ -169,7 +215,9 @@ spec:
                                 type: array
                             type: object
                           push:
-                            description: PushSpec is the condition for triggering scale-up on push event Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
+                            description: |-
+                              PushSpec is the condition for triggering scale-up on push event
+                              Also see https://docs.github.com/en/actions/reference/events-that-trigger-workflows#push
                             type: object
                           workflowJob:
                             description: https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads#workflow_job
@@ -178,23 +226,33 @@ spec:
                     type: object
                   type: array
                 scheduledOverrides:
-                  description: ScheduledOverrides is the list of ScheduledOverride. It can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule. The earlier a scheduled override is, the higher it is prioritized.
+                  description: |-
+                    ScheduledOverrides is the list of ScheduledOverride.
+                    It can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
+                    The earlier a scheduled override is, the higher it is prioritized.
                   items:
-                    description: ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule. A schedule can optionally be recurring, so that the corresponding override happens every day, week, month, or year.
+                    description: |-
+                      ScheduledOverride can be used to override a few fields of HorizontalRunnerAutoscalerSpec on schedule.
+                      A schedule can optionally be recurring, so that the corresponding override happens every day, week, month, or year.
                     properties:
                       endTime:
                         description: EndTime is the time at which the first override ends.
                         format: date-time
                         type: string
                       minReplicas:
-                        description: MinReplicas is the number of runners while overriding. If omitted, it doesn't override minReplicas.
+                        description: |-
+                          MinReplicas is the number of runners while overriding.
+                          If omitted, it doesn't override minReplicas.
                         minimum: 0
                         nullable: true
                         type: integer
                       recurrenceRule:
                         properties:
                           frequency:
-                            description: Frequency is the name of a predefined interval of each recurrence. The valid values are "Daily", "Weekly", "Monthly", and "Yearly". If empty, the corresponding override happens only once.
+                            description: |-
+                              Frequency is the name of a predefined interval of each recurrence.
+                              The valid values are "Daily", "Weekly", "Monthly", and "Yearly".
+                              If empty, the corresponding override happens only once.
                             enum:
                               - Daily
                               - Weekly
@@ -202,7 +260,9 @@ spec:
                               - Yearly
                             type: string
                           untilTime:
-                            description: UntilTime is the time of the final recurrence. If empty, the schedule recurs forever.
+                            description: |-
+                              UntilTime is the time of the final recurrence.
+                              If empty, the schedule recurs forever.
                             format: date-time
                             type: string
                         type: object
@@ -231,18 +291,24 @@ spec:
                     type: object
                   type: array
                 desiredReplicas:
-                  description: DesiredReplicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
+                  description: |-
+                    DesiredReplicas is the total number of desired, non-terminated and latest pods to be set for the primary RunnerSet
+                    This doesn't include outdated pods while upgrading the deployment and replacing the runnerset.
                   type: integer
                 lastSuccessfulScaleOutTime:
                   format: date-time
                   nullable: true
                   type: string
                 observedGeneration:
-                  description: ObservedGeneration is the most recent generation observed for the target. It corresponds to e.g. RunnerDeployment's generation, which is updated on mutation by the API Server.
+                  description: |-
+                    ObservedGeneration is the most recent generation observed for the target. It corresponds to e.g.
+                    RunnerDeployment's generation, which is updated on mutation by the API Server.
                   format: int64
                   type: integer
                 scheduledOverridesSummary:
-                  description: ScheduledOverridesSummary is the summary of active and upcoming scheduled overrides to be shown in e.g. a column of a `kubectl get hra` output for observability.
+                  description: |-
+                    ScheduledOverridesSummary is the summary of active and upcoming scheduled overrides to be shown in e.g. a column of a `kubectl get hra` output
+                    for observability.
                   type: string
               type: object
           type: object
