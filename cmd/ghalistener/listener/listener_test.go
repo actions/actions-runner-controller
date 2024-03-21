@@ -427,7 +427,7 @@ func TestListener_Listen(t *testing.T) {
 
 		var called bool
 		handler := listenermocks.NewHandler(t)
-		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 0).
 			Return(0, nil).
 			Run(
 				func(mock.Arguments) {
@@ -485,11 +485,11 @@ func TestListener_Listen(t *testing.T) {
 		config.Client = client
 
 		handler := listenermocks.NewHandler(t)
-		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 0).
 			Return(0, nil).
 			Once()
 
-		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 0).
 			Return(0, nil).
 			Once()
 

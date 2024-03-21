@@ -114,7 +114,7 @@ func New(config Config) (*Listener, error) {
 //go:generate mockery --name Handler --output ./mocks --outpkg mocks --case underscore
 type Handler interface {
 	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
-	HandleDesiredRunnerCount(ctx context.Context, count int) (int, error)
+	HandleDesiredRunnerCount(ctx context.Context, count, jobsCompleted int) (int, error)
 }
 
 // Listen listens for incoming messages and handles them using the provided handler.
@@ -145,7 +145,7 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 	}
 	l.metrics.PublishStatistics(initialMessage.Statistics)
 
-	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, initialMessage.Statistics.TotalAssignedJobs)
+	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, initialMessage.Statistics.TotalAssignedJobs, 0)
 	if err != nil {
 		return fmt.Errorf("handling initial message failed: %w", err)
 	}
@@ -207,7 +207,7 @@ func (l *Listener) handleMessage(ctx context.Context, handler Handler, msg *acti
 		l.metrics.PublishJobStarted(jobStarted)
 	}
 
-	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, parsedMsg.statistics.TotalAssignedJobs)
+	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, parsedMsg.statistics.TotalAssignedJobs, len(parsedMsg.jobsCompleted))
 	if err != nil {
 		return fmt.Errorf("failed to handle desired runner count: %w", err)
 	}
@@ -284,7 +284,6 @@ func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessa
 	}
 
 	return msg, nil
-
 }
 
 func (l *Listener) deleteLastMessage(ctx context.Context) error {

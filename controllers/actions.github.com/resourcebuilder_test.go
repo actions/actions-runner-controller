@@ -23,8 +23,9 @@ func TestLabelPropagation(t *testing.T) {
 				LabelKeyKubernetesVersion: "0.2.0",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:      "1",
-				AnnotationKeyGitHubRunnerGroupName: "test-group",
+				runnerScaleSetIdAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -38,20 +39,21 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Labels[labelKeyRunnerSpecHash])
+	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyRunnerSpecHash])
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
 	assert.Equal(t, "org", ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization])
 	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
+	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
 
 	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Labels[labelKeyRunnerSpecHash])
+	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyRunnerSpecHash])
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -83,6 +85,7 @@ func TestLabelPropagation(t *testing.T) {
 	}
 	assert.Equal(t, "runner", ephemeralRunner.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunner.Annotations[AnnotationKeyGitHubRunnerGroupName])
+	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
 
 	runnerSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -109,8 +112,9 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 				LabelKeyKubernetesVersion: "0.2.0",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:      "1",
-				AnnotationKeyGitHubRunnerGroupName: "test-group",
+				runnerScaleSetIdAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 			},
 		},
 	}
