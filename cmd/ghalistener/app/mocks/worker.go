@@ -15,23 +15,23 @@ type Worker struct {
 	mock.Mock
 }
 
-// HandleDesiredRunnerCount provides a mock function with given fields: ctx, count
-func (_m *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
-	ret := _m.Called(ctx, count)
+// HandleDesiredRunnerCount provides a mock function with given fields: ctx, count, acquireCount
+func (_m *Worker) HandleDesiredRunnerCount(ctx context.Context, count int, acquireCount int) (int, error) {
+	ret := _m.Called(ctx, count, acquireCount)
 
 	var r0 int
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int) (int, error)); ok {
-		return rf(ctx, count)
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) (int, error)); ok {
+		return rf(ctx, count, acquireCount)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int) int); ok {
-		r0 = rf(ctx, count)
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) int); ok {
+		r0 = rf(ctx, count, acquireCount)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
-		r1 = rf(ctx, count)
+	if rf, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
+		r1 = rf(ctx, count, acquireCount)
 	} else {
 		r1 = ret.Error(1)
 	}

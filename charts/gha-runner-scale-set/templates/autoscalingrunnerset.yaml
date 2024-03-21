@@ -13,6 +13,7 @@ metadata:
     app.kubernetes.io/component: "autoscaling-runner-set"
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
   annotations:
+    actions.github.com/values-hash: {{ toJson .Values | sha256sum | trunc 63 }}
     {{- $containerMode := .Values.containerMode }}
     {{- if not (kindIs "string" .Values.githubConfigSecret) }}
     actions.github.com/cleanup-github-secret-name: {{ include "gha-runner-scale-set.githubsecret" . }}

@@ -38,18 +38,20 @@ type Config struct {
 // The Worker's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
 type Worker struct {
-	clientset *kubernetes.Clientset
-	config    Config
-	lastPatch int
-	logger    *logr.Logger
+	clientset   *kubernetes.Clientset
+	config      Config
+	lastPatch   int
+	lastPatchID int
+	logger      *logr.Logger
 }
 
 var _ listener.Handler = (*Worker)(nil)
 
 func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
-		config:    config,
-		lastPatch: -1,
+		config:      config,
+		lastPatch:   -1,
+		lastPatchID: -1,
 	}
 
 	conf, err := rest.InClusterConfig()
@@ -161,7 +163,7 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // The function then scales the ephemeral runner set by applying the merge patch.
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
-func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
+func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error) {
 	// Max runners should always be set by the resource builder either to the configured value,
 	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
 	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
@@ -172,17 +174,22 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		"min", w.config.MinRunners,
 		"max", w.config.MaxRunners,
 		"currentRunnerCount", w.lastPatch,
+		"jobsCompleted", jobsCompleted,
 	}
 
-	if targetRunnerCount == w.lastPatch {
-		w.logger.Info("Skipping patching of EphemeralRunnerSet as the desired count has not changed", logValues...)
+	if w.lastPatch == targetRunnerCount && jobsCompleted == 0 {
+		w.logger.Info("Skipping patch", logValues...)
 		return targetRunnerCount, nil
 	}
+
+	w.lastPatchID++
+	w.lastPatch = targetRunnerCount
 
 	original, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: -1,
+				PatchID:  -1,
 			},
 		},
 	)
@@ -194,6 +201,7 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: targetRunnerCount,
+				PatchID:  w.lastPatchID,
 			},
 		},
 	)
