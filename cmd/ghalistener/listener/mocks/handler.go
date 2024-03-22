@@ -15,18 +15,28 @@ type Handler struct {
 	mock.Mock
 }
 
-// HandleDesiredRunnerCount provides a mock function with given fields: ctx, desiredRunnerCount
-func (_m *Handler) HandleDesiredRunnerCount(ctx context.Context, desiredRunnerCount int) error {
-	ret := _m.Called(ctx, desiredRunnerCount)
+// HandleDesiredRunnerCount provides a mock function with given fields: ctx, count, jobsCompleted
+func (_m *Handler) HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error) {
+	ret := _m.Called(ctx, count, jobsCompleted)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int) error); ok {
-		r0 = rf(ctx, desiredRunnerCount)
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) (int, error)); ok {
+		return rf(ctx, count, jobsCompleted)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) int); ok {
+		r0 = rf(ctx, count, jobsCompleted)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(int)
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
+		r1 = rf(ctx, count, jobsCompleted)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // HandleJobStarted provides a mock function with given fields: ctx, jobInfo

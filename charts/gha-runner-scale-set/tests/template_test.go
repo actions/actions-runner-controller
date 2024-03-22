@@ -900,7 +900,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
 	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 2, "The runner container should have 2 env vars, DOCKER_HOST and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS")
 	assert.Equal(t, "DOCKER_HOST", ars.Spec.Template.Spec.Containers[0].Env[0].Name)
-	assert.Equal(t, "unix:///run/docker/docker.sock", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "unix:///var/run/docker.sock", ars.Spec.Template.Spec.Containers[0].Env[0].Value)
 	assert.Equal(t, "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS", ars.Spec.Template.Spec.Containers[0].Env[1].Name)
 	assert.Equal(t, "120", ars.Spec.Template.Spec.Containers[0].Env[1].Value)
 
@@ -910,8 +910,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.False(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].ReadOnly)
 
 	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
-	assert.Equal(t, "/run/docker", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
-	assert.True(t, ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly)
+	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
 
 	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name)
 	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
@@ -921,7 +920,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
 
 	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
-	assert.Equal(t, "/run/docker", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
+	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
 
 	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
 	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
@@ -2088,4 +2087,59 @@ func TestRunnerContainerVolumeNotEmptyMap(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &m)
 	_, ok := m.Spec.Template.Spec.Containers[0]["volumeMounts"]
 	assert.False(t, ok, "volumeMounts should not be set")
+}
+
+func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
+	t.Parallel()
+
+	const valuesHash = "actions.github.com/values-hash"
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	firstHash := autoscalingRunnerSet.Annotations["actions.github.com/values-hash"]
+	assert.NotEmpty(t, firstHash)
+	assert.LessOrEqual(t, len(firstHash), 63)
+
+	helmChartPath, err = filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	options = &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token1234567890",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+	secondHash := autoscalingRunnerSet.Annotations[valuesHash]
+	assert.NotEmpty(t, secondHash)
+	assert.NotEqual(t, firstHash, secondHash)
+	assert.LessOrEqual(t, len(secondHash), 63)
 }

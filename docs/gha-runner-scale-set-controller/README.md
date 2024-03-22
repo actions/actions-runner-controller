@@ -43,6 +43,40 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.8.3
+1. Expose volumeMounts and volumes in gha-runner-scale-set-controller [#3260](https://github.com/actions/actions-runner-controller/pull/3260)
+1. Refer to the correct variable in discovery error message [#3296](https://github.com/actions/actions-runner-controller/pull/3296)
+1. Fix acquire jobs after session refresh ghalistener [#3307](https://github.com/actions/actions-runner-controller/pull/3307)
+
+### v0.8.2
+1. Add listener graceful termination period and background context after the message is received [#3187](https://github.com/actions/actions-runner-controller/pull/3187)
+1. Publish metrics in the new ghalistener [#3193](https://github.com/actions/actions-runner-controller/pull/3193)
+1. Delete message session when listener.Listen returns [#3240](https://github.com/actions/actions-runner-controller/pull/3240)
+
+### v0.8.1
+1. Fix proxy issue in new listener client [#3181](https://github.com/actions/actions-runner-controller/pull/3181)
+
+### v0.8.0
+1. Change listener container name [#3167](https://github.com/actions/actions-runner-controller/pull/3167)
+1. Fix empty env and volumeMounts object on default setup [#3166](https://github.com/actions/actions-runner-controller/pull/3166)
+1. Fix override listener pod spec [#3161](https://github.com/actions/actions-runner-controller/pull/3161)
+1. Change minRunners behavior and fix the new listener min runners [#3139](https://github.com/actions/actions-runner-controller/pull/3139)
+1. Update user agent for new ghalistener [#3138](https://github.com/actions/actions-runner-controller/pull/3138)
+1. Bump golang.org/x/oauth2 from 0.14.0 to 0.15.0 [#3127](https://github.com/actions/actions-runner-controller/pull/3127)
+1. Bump golang.org.x.net from 0.18.0 to 0.19.0 [#3126](https://github.com/actions/actions-runner-controller/pull/3126)
+1. Bump k8s.io/client-go from 0.28.3 to 0.28.4 [#3125](https://github.com/actions/actions-runner-controller/pull/3125)
+1. Modify user agent format with subsystem and is proxy configured information [#3116](https://github.com/actions/actions-runner-controller/pull/3116)
+1. Record the error when the creation pod fails [#3112](https://github.com/actions/actions-runner-controller/pull/3112)
+1. Fix typo in helm chart comment [#3104](https://github.com/actions/actions-runner-controller/pull/3104)
+1. Set actions client timeout to 5 minutes, add logging to client [#3103](https://github.com/actions/actions-runner-controller/pull/3103)
+1. Refactor listener app with configurable fallback [#3096](https://github.com/actions/actions-runner-controller/pull/3096)
+1. Bump github.com/onsi/gomega from 1.29.0 to 1.30.0 [#3094](https://github.com/actions/actions-runner-controller/pull/3094)
+1. Bump k8s.io/api from 0.28.3 to 0.28.4 [#3093](https://github.com/actions/actions-runner-controller/pull/3093)
+1. Bump k8s.io/apimachinery from 0.28.3 to 0.28.4 [#3092](https://github.com/actions/actions-runner-controller/pull/3092)
+1. Bump github.com/gruntwork-io/terratest from 0.41.24 to 0.46.7 [#3091](https://github.com/actions/actions-runner-controller/pull/3091)
+1. Record a reason for pod failure in EphemeralRunner [#3074](https://github.com/actions/actions-runner-controller/pull/3074)
+1. ADR: Changing semantics of min runners to be min idle runners [#3040](https://github.com/actions/actions-runner-controller/pull/3040)
+
 ### v0.7.0
 1. Add ResizePolicy and RestartPolicy on mergeListenerContainer [#3075](https://github.com/actions/actions-runner-controller/pull/3075)
 1. feat: GHA controller Helm Chart quoted labels [#3061](https://github.com/actions/actions-runner-controller/pull/3061)

@@ -11,6 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/go-logr/logr"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -37,18 +38,20 @@ type Config struct {
 // The Worker's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
 type Worker struct {
-	clientset *kubernetes.Clientset
-	config    Config
-	lastPatch int
-	logger    *logr.Logger
+	clientset   *kubernetes.Clientset
+	config      Config
+	lastPatch   int
+	lastPatchID int
+	logger      *logr.Logger
 }
 
 var _ listener.Handler = (*Worker)(nil)
 
 func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
-		config:    config,
-		lastPatch: -1,
+		config:      config,
+		lastPatch:   -1,
+		lastPatchID: -1,
 	}
 
 	conf, err := rest.InClusterConfig()
@@ -141,6 +144,10 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 		Do(ctx).
 		Into(patchedStatus)
 	if err != nil {
+		if kerrors.IsNotFound(err) {
+			w.logger.Info("Ephemeral runner not found, skipping patching of ephemeral runner status", "runnerName", jobInfo.RunnerName)
+			return nil
+		}
 		return fmt.Errorf("could not patch ephemeral runner status, patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
@@ -156,7 +163,7 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // The function then scales the ephemeral runner set by applying the merge patch.
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
-func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error {
+func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error) {
 	// Max runners should always be set by the resource builder either to the configured value,
 	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
 	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
@@ -167,39 +174,45 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error 
 		"min", w.config.MinRunners,
 		"max", w.config.MaxRunners,
 		"currentRunnerCount", w.lastPatch,
+		"jobsCompleted", jobsCompleted,
 	}
 
-	if targetRunnerCount == w.lastPatch {
-		w.logger.Info("Skipping patching of EphemeralRunnerSet as the desired count has not changed", logValues...)
-		return nil
+	if w.lastPatch == targetRunnerCount && jobsCompleted == 0 {
+		w.logger.Info("Skipping patch", logValues...)
+		return targetRunnerCount, nil
 	}
+
+	w.lastPatchID++
+	w.lastPatch = targetRunnerCount
 
 	original, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: -1,
+				PatchID:  -1,
 			},
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to marshal empty ephemeral runner set: %w", err)
+		return 0, fmt.Errorf("failed to marshal empty ephemeral runner set: %w", err)
 	}
 
 	patch, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: targetRunnerCount,
+				PatchID:  w.lastPatchID,
 			},
 		},
 	)
 	if err != nil {
 		w.logger.Error(err, "could not marshal patch ephemeral runner set")
-		return err
+		return 0, err
 	}
 
 	mergePatch, err := jsonpatch.CreateMergePatch(original, patch)
 	if err != nil {
-		return fmt.Errorf("failed to create merge patch json for ephemeral runner set: %w", err)
+		return 0, fmt.Errorf("failed to create merge patch json for ephemeral runner set: %w", err)
 	}
 
 	w.logger.Info("Created merge patch json for EphemeralRunnerSet update", "json", string(mergePatch))
@@ -217,7 +230,7 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error 
 		Do(ctx).
 		Into(patchedEphemeralRunnerSet)
 	if err != nil {
-		return fmt.Errorf("could not patch ephemeral runner set , patch JSON: %s, error: %w", string(mergePatch), err)
+		return 0, fmt.Errorf("could not patch ephemeral runner set , patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
 	w.logger.Info("Ephemeral runner set scaled.",
@@ -225,5 +238,5 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) error 
 		"name", w.config.EphemeralRunnerSetName,
 		"replicas", patchedEphemeralRunnerSet.Spec.Replicas,
 	)
-	return nil
+	return targetRunnerCount, nil
 }

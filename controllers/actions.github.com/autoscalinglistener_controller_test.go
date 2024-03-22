@@ -555,7 +555,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 
 			Expect(pod.Spec.SecurityContext.RunAsUser).To(Equal(&runAsUser), "Pod should have the correct security context")
 
-			Expect(pod.Spec.Containers[0].Name).NotTo(Equal("listener"), "Pod should have the correct container name")
+			Expect(pod.Spec.Containers[0].Name).To(Equal(autoscalingListenerContainerName), "Pod should have the correct container name")
 			Expect(pod.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(&runAsUser), "Pod should have the correct security context")
 			Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways), "Pod should have the correct image pull policy")
 
@@ -854,7 +854,7 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name:            "listener",
+						Name:            autoscalingListenerContainerName,
 						ImagePullPolicy: corev1.PullAlways,
 						SecurityContext: &corev1.SecurityContext{
 							RunAsUser: &runAsUser1001,

@@ -2,3 +2,4 @@ Thank you for installing {{ .Chart.Name }}.
 
 Your release is named {{ .Release.Name }}.
 
+WARNING: Older version of the listener (githubrunnerscalesetlistener) is deprecated and will be removed in the future gha-runner-scale-set-0.10.0 release. If you are using environment variable override to force the old listener, please remove the environment variable and use the new listener (ghalistener) instead.

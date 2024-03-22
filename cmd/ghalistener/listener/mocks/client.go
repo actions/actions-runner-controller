@@ -83,6 +83,20 @@ func (_m *Client) DeleteMessage(ctx context.Context, messageQueueUrl string, mes
 	return r0
 }
 
+// DeleteMessageSession provides a mock function with given fields: ctx, runnerScaleSetId, sessionId
+func (_m *Client) DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error {
+	ret := _m.Called(ctx, runnerScaleSetId, sessionId)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int, *uuid.UUID) error); ok {
+		r0 = rf(ctx, runnerScaleSetId, sessionId)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetAcquirableJobs provides a mock function with given fields: ctx, runnerScaleSetId
 func (_m *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error) {
 	ret := _m.Called(ctx, runnerScaleSetId)

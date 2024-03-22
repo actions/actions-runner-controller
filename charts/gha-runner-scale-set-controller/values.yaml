@@ -72,6 +72,10 @@ tolerations: []
 
 affinity: {}
 
+# Mount volumes in the container.
+volumes: []
+volumeMounts: []
+
 # Leverage a PriorityClass to ensure your pods survive resource shortages
 # ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 # PriorityClass: system-cluster-critical
