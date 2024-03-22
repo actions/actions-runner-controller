@@ -42,10 +42,14 @@ import (
 )
 
 const (
-	labelKeyRunnerSpecHash            = "runner-spec-hash"
+	annotationKeyRunnerSpecHash = "actions.github.com/runner-spec-hash"
+	// annotationKeyValuesHash is hash of the entire values json.
+	// This is used to determine if the values have changed, so we can
+	// re-create listener.
+	annotationKeyValuesHash = "actions.github.com/values-hash"
+
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIdAnnotationKey     = "runner-scale-set-id"
-	runnerScaleSetNameAnnotationKey   = "runner-scale-set-name"
 )
 
 type UpdateStrategy string
@@ -205,7 +209,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Make sure the runner scale set name is up to date
-	currentRunnerScaleSetName, ok := autoscalingRunnerSet.Annotations[runnerScaleSetNameAnnotationKey]
+	currentRunnerScaleSetName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName]
 	if !ok || (len(autoscalingRunnerSet.Spec.RunnerScaleSetName) > 0 && !strings.EqualFold(currentRunnerScaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetName)) {
 		log.Info("AutoScalingRunnerSet runner scale set name changed. Updating the runner scale set.")
 		return r.updateRunnerScaleSetName(ctx, autoscalingRunnerSet, log)
@@ -231,9 +235,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
 	}
 
-	desiredSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 	for _, runnerSet := range existingRunnerSets.all() {
-		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Labels[labelKeyRunnerSpecHash])
+		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Annotations[annotationKeyRunnerSpecHash])
 	}
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
@@ -250,7 +253,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
-	if listenerFound && (listener.Labels[labelKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()) {
+	listenerValuesHashChanged := listener.Annotations[annotationKeyValuesHash] != autoscalingRunnerSet.Annotations[annotationKeyValuesHash]
+	listenerSpecHashChanged := listener.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()
+	if listenerFound && (listenerValuesHashChanged || listenerSpecHashChanged) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
 			if kerrors.IsNotFound(err) {
@@ -264,7 +269,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if desiredSpecHash != latestRunnerSet.Labels[labelKeyRunnerSpecHash] {
+	if latestRunnerSet.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.RunnerSetSpecHash() {
 		if r.drainingJobs(&latestRunnerSet.Status) {
 			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
 			log.Info("Scaling down the number of desired replicas to 0")
@@ -480,7 +485,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 
 	logger.Info("Adding runner scale set ID, name and runner group name as an annotation and url labels")
 	if err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-		obj.Annotations[runnerScaleSetNameAnnotationKey] = runnerScaleSet.Name
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = runnerScaleSet.Name
 		obj.Annotations[runnerScaleSetIdAnnotationKey] = strconv.Itoa(runnerScaleSet.Id)
 		obj.Annotations[AnnotationKeyGitHubRunnerGroupName] = runnerScaleSet.RunnerGroupName
 		if err := applyGitHubURLLabels(obj.Spec.GitHubConfigUrl, obj.Labels); err != nil { // should never happen
@@ -528,9 +533,10 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx con
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Updating runner scale set runner group name as an annotation")
+	logger.Info("Updating runner scale set name and runner group name as annotations")
 	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
 		obj.Annotations[AnnotationKeyGitHubRunnerGroupName] = updatedRunnerScaleSet.RunnerGroupName
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = updatedRunnerScaleSet.Name
 	}); err != nil {
 		logger.Error(err, "Failed to update runner group name annotation")
 		return ctrl.Result{}, err
@@ -566,7 +572,7 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 
 	logger.Info("Updating runner scale set name as an annotation")
 	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-		obj.Annotations[runnerScaleSetNameAnnotationKey] = updatedRunnerScaleSet.Name
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = updatedRunnerScaleSet.Name
 	}); err != nil {
 		logger.Error(err, "Failed to update runner scale set name annotation")
 		return ctrl.Result{}, err
