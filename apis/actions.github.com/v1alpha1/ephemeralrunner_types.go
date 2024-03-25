@@ -42,6 +42,10 @@ type EphemeralRunner struct {
 	Status EphemeralRunnerStatus `json:"status,omitempty"`
 }
 
+func (er *EphemeralRunner) IsDone() bool {
+	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
+}
+
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
