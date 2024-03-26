@@ -975,21 +975,18 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 
 	c.logger.Info("getting Actions tenant URL and JWT", "registrationURL", req.URL.String())
 
+	var resp *http.Response
 	retry := 0
 	for {
-		resp, err := c.Do(req)
+		var err error
+		resp, err = c.Do(req)
 		if err != nil {
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
-			var actionsServiceAdminConnection *ActionsServiceAdminConnection
-			if err := json.NewDecoder(resp.Body).Decode(&actionsServiceAdminConnection); err != nil {
-				return nil, err
-			}
-
-			return actionsServiceAdminConnection, nil
+			break
 		}
 
 		errStr := fmt.Sprintf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
@@ -1010,6 +1007,13 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		}
 		time.Sleep(1 * time.Second)
 	}
+
+	var actionsServiceAdminConnection *ActionsServiceAdminConnection
+	if err := json.NewDecoder(resp.Body).Decode(&actionsServiceAdminConnection); err != nil {
+		return nil, err
+	}
+
+	return actionsServiceAdminConnection, nil
 }
 
 func createRegistrationTokenPath(config *GitHubConfig) (string, error) {
