@@ -215,7 +215,7 @@ docker-buildx:
 	docker buildx build --platform ${PLATFORMS} \
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		--build-arg VERSION=0.8.3 \
+		--build-arg VERSION=${VERSION} \
 		--build-arg COMMIT_SHA=${COMMIT_SHA} \
 		-t "${DOCKER_IMAGE_NAME}:${VERSION}" \
 		-f Dockerfile \
