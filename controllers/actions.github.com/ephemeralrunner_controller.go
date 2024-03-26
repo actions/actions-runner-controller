@@ -685,7 +685,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		return nil
 	}
 
-	log.Info("Updating ephemeral runner status with pod phase", "phase", pod.Status.Phase, "reason", pod.Status.Reason, "message", pod.Status.Message)
+	log.Info("Updating ephemeral runner status with pod phase", "statusPhase", pod.Status.Phase, "statusReason", pod.Status.Reason, "statusMessage", pod.Status.Message)
 	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = pod.Status.Phase
 		obj.Status.Ready = obj.Status.Ready || (pod.Status.Phase == corev1.PodRunning)
