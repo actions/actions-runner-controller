@@ -995,7 +995,7 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		errStr := fmt.Sprintf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			err = fmt.Errorf("%s - %v", errStr, err)
+			err = fmt.Errorf("%s - %w", errStr, err)
 		} else {
 			err = fmt.Errorf("%s - %v", errStr, string(body))
 		}
