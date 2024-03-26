@@ -977,7 +977,6 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 
 	retry := 0
 	for {
-
 		resp, err := c.Do(req)
 		if err != nil {
 			return nil, err
@@ -993,7 +992,7 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 			return actionsServiceAdminConnection, nil
 		}
 
-		errStr := fmt.Errorf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
+		errStr := fmt.Sprintf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			err = fmt.Errorf("%s - %v", errStr, err)
