@@ -1005,7 +1005,8 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		if retry > 3 {
 			return nil, fmt.Errorf("unable to register runner after 3 retries: %v", err)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Duration(500 * int(time.Millisecond) * (retry + 1)))
+
 	}
 
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
