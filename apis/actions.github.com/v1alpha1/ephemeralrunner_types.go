@@ -22,6 +22,7 @@ import (
 )
 
 //+kubebuilder:object:root=true
+//+kubebuilder:resource:shortName=er
 //+kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.runnerId",name=RunnerId,type=number

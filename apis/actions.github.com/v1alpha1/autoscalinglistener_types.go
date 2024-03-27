@@ -69,6 +69,7 @@ type AutoscalingListenerSpec struct {
 type AutoscalingListenerStatus struct{}
 
 //+kubebuilder:object:root=true
+//+kubebuilder:resource:shortName=asl
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name=GitHub Configure URL,type=string
 //+kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetNamespace",name=AutoscalingRunnerSet Namespace,type=string

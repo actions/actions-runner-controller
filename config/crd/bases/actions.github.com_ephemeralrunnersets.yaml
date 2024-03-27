@@ -11,6 +11,8 @@ spec:
     kind: EphemeralRunnerSet
     listKind: EphemeralRunnerSetList
     plural: ephemeralrunnersets
+    shortNames:
+      - ers
     singular: ephemeralrunnerset
   scope: Namespaced
   versions:

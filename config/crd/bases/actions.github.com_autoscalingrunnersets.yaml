@@ -11,6 +11,8 @@ spec:
     kind: AutoscalingRunnerSet
     listKind: AutoscalingRunnerSetList
     plural: autoscalingrunnersets
+    shortNames:
+      - ars
     singular: autoscalingrunnerset
   scope: Namespaced
   versions:
