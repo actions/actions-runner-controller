@@ -149,6 +149,8 @@ template:
   ##           mountPath: /var/run
   ##         - name: dind-externals
   ##           mountPath: /home/runner/externals
+  ##         - name: pod-scratch
+  ##           mountPath: /var/lib/docker
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}
@@ -156,6 +158,15 @@ template:
   ##       emptyDir: {}
   ##     - name: dind-externals
   ##       emptyDir: {}
+  ##     # Store docker image layers in PVC to avoid pod eviction due to exceeding node storage limits
+  ##     - name: pod-scratch
+  ##       ephemeral:
+  ##         volumeClaimTemplate:
+  ##           spec:
+  ##             accessModes: [ "ReadWriteOnce" ]
+  ##             resources:
+  ##               requests:
+  ##                 storage: 100Gi    # Adjust based on expected docker image size
   ######################################################################################################
   ## with containerMode.type=kubernetes, we will populate the template.spec with following pod spec
   ## template:
