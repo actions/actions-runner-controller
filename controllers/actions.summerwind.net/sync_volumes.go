@@ -173,17 +173,15 @@ func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv
 	}
 
 	// If ReclaimPolicy is not "Delete", we proceed to clean up the ClaimRef.
-	if pv.Status.Phase == corev1.VolumeReleased {
-		pvCopy := pv.DeepCopy()
-		delete(pvCopy.Labels, labelKeyCleanup)
-		pvCopy.Spec.ClaimRef = nil
-		log.V(2).Info("Unsetting PV's claimRef", "pv", pv.Name)
-		if err := c.Update(ctx, pvCopy); err != nil {
-			return nil, err
-		}
-
-		log.Info("PV should be Available now")
+	pvCopy := pv.DeepCopy()
+	delete(pvCopy.Labels, labelKeyCleanup)
+	pvCopy.Spec.ClaimRef = nil
+	log.V(2).Info("Unsetting PV's claimRef", "pv", pv.Name)
+	if err := c.Update(ctx, pvCopy); err != nil {
+		return nil, err
 	}
+
+	log.Info("PV should be Available now")
 
 	return nil, nil
 }
