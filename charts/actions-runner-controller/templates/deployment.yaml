@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
+  {{- with .Values.minReadySeconds }}
+  minReadySeconds: {{ . }}
+  {{- end }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -148,6 +151,15 @@ spec:
           {{- toYaml .Values.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- if .Values.startupProbe }}
+        startupProbe: {{ toYaml .Values.startupProbe | nindent 12 }}
+        {{- end }}
+        {{- if .Values.livenessProbe }}
+        livenessProbe: {{ toYaml .Values.livenessProbe | nindent 12 }}
+        {{- end }}
+        {{- if .Values.readinessProbe }}
+        readinessProbe: {{ toYaml .Values.readinessProbe | nindent 12 }}
+        {{- end }}
         volumeMounts:
         {{- if .Values.authSecret.enabled }}
         - mountPath: "/etc/actions-runner-controller"
