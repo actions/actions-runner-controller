@@ -10,6 +10,7 @@ on:
     - 'charts/**'
     - '.github/workflows/arc-publish-chart.yaml'
     - '!charts/actions-runner-controller/docs/**'
+    - '!charts/actions-runner-controller-crds/**'
     - '!charts/gha-runner-scale-set-controller/**'
     - '!charts/gha-runner-scale-set/**'
     - '!**.md'

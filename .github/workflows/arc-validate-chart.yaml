@@ -9,6 +9,7 @@ on:
       - '.github/workflows/arc-validate-chart.yaml'
       - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
+      - '!charts/actions-runner-controller-crds/**'
       - '!charts/gha-runner-scale-set-controller/**'
       - '!charts/gha-runner-scale-set/**'
   push:
@@ -17,6 +18,7 @@ on:
       - '.github/workflows/arc-validate-chart.yaml'
       - '!charts/actions-runner-controller/docs/**'
       - '!**.md'
+      - '!charts/actions-runner-controller-crds/**'
       - '!charts/gha-runner-scale-set-controller/**'
       - '!charts/gha-runner-scale-set/**'
   workflow_dispatch:
@@ -99,5 +101,7 @@ jobs:
 
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
+        # We exclude the CRDs chart because the CRDs are already installed by actions-runner-controller chart.
         run: |
-          ct install --config charts/.ci/ct-config.yaml
+          ct install --config charts/.ci/ct-config.yaml \
+            --excluded-charts actions-runner-crds
