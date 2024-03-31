@@ -133,6 +133,23 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	if ephemeralRunner.IsDone() {
+		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
+		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up ephemeral runner owned resources")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for ephemeral runner owned resources to be deleted")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		// Stop reconciling on this object.
+		// The EphemeralRunnerSet is responsible for cleaning it up.
+		log.Info("EphemeralRunner has already finished. Stopping reconciliation and waiting for EphemeralRunnerSet to clean it up", "phase", ephemeralRunner.Status.Phase)
+		return ctrl.Result{}, nil
+	}
+
 	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
 		log.Info("Adding runner registration finalizer")
 		err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
@@ -156,13 +173,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		log.Info("Successfully added finalizer")
-		return ctrl.Result{}, nil
-	}
-
-	if ephemeralRunner.Status.Phase == corev1.PodSucceeded || ephemeralRunner.Status.Phase == corev1.PodFailed {
-		// Stop reconciling on this object.
-		// The EphemeralRunnerSet is responsible for cleaning it up.
-		log.Info("EphemeralRunner has already finished. Stopping reconciliation and waiting for EphemeralRunnerSet to clean it up", "phase", ephemeralRunner.Status.Phase)
 		return ctrl.Result{}, nil
 	}
 
@@ -324,7 +334,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
+	case !kerrors.IsNotFound(err):
 		return false, err
 	}
 	log.Info("Pod is deleted")
@@ -341,7 +351,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
+	case !kerrors.IsNotFound(err):
 		return false, err
 	}
 	log.Info("Secret is deleted")
@@ -675,7 +685,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		return nil
 	}
 
-	log.Info("Updating ephemeral runner status with pod phase", "phase", pod.Status.Phase, "reason", pod.Status.Reason, "message", pod.Status.Message)
+	log.Info("Updating ephemeral runner status with pod phase", "statusPhase", pod.Status.Phase, "statusReason", pod.Status.Reason, "statusMessage", pod.Status.Message)
 	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = pod.Status.Phase
 		obj.Status.Ready = obj.Status.Ready || (pod.Status.Phase == corev1.PodRunning)

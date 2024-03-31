@@ -91,7 +91,11 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-scale-set-listener",
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
-		labelKeyRunnerSpecHash:          autoscalingRunnerSet.ListenerSpecHash(),
+	}
+
+	annotations := map[string]string{
+		annotationKeyRunnerSpecHash: autoscalingRunnerSet.ListenerSpecHash(),
+		annotationKeyValuesHash:     autoscalingRunnerSet.Annotations[annotationKeyValuesHash],
 	}
 
 	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
@@ -100,9 +104,10 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 
 	autoscalingListener := &v1alpha1.AutoscalingListener{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerName(autoscalingRunnerSet),
-			Namespace: namespace,
-			Labels:    labels,
+			Name:        scaleSetListenerName(autoscalingRunnerSet),
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
@@ -498,7 +503,6 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	runnerSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 
 	labels := map[string]string{
-		labelKeyRunnerSpecHash:          runnerSpecHash,
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-set",
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
@@ -511,7 +515,10 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	}
 
 	newAnnotations := map[string]string{
-		AnnotationKeyGitHubRunnerGroupName: autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
+
+		AnnotationKeyGitHubRunnerGroupName:    autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
+		AnnotationKeyGitHubRunnerScaleSetName: autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName],
+		annotationKeyRunnerSpecHash:           runnerSpecHash,
 	}
 
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
@@ -556,6 +563,7 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	for key, val := range ephemeralRunnerSet.Annotations {
 		annotations[key] = val
 	}
+	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 	return &v1alpha1.EphemeralRunner{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
