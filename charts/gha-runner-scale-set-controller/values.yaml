@@ -72,6 +72,8 @@ tolerations: []
 
 affinity: {}
 
+topologySpreadConstraints: {}
+
 # Mount volumes in the container.
 volumes: []
 volumeMounts: []
@@ -81,9 +83,9 @@ volumeMounts: []
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-## If `metrics:` object is not provided, or commented out, the following flags 
-## will be applied the controller-manager and listener pods with empty values: 
-## `--metrics-addr`, `--listener-metrics-addr`, `--listener-metrics-endpoint`. 
+## If `metrics:` object is not provided, or commented out, the following flags
+## will be applied the controller-manager and listener pods with empty values:
+## `--metrics-addr`, `--listener-metrics-addr`, `--listener-metrics-endpoint`.
 ## This will disable metrics.
 ##
 ## To enable metrics, uncomment the following lines.

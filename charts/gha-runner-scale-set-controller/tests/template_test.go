@@ -345,6 +345,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
+	assert.Len(t, deployment.Spec.Template.Spec.TopologySpreadConstraints, 0)
 	assert.Len(t, deployment.Spec.Template.Spec.Tolerations, 0)
 
 	managerImage := "ghcr.io/actions/gha-runner-scale-set-controller:dev"
@@ -424,6 +425,9 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"tolerations[0].key":           "foo",
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key":      "foo",
 			"affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator": "bar",
+			"topologySpreadConstraints[0].labelSelector.matchLabels.foo": "bar",
+			"topologySpreadConstraints[0].maxSkew": "1",
+			"topologySpreadConstraints[0].topologyKey": "foo",
 			"priorityClassName":         "test-priority-class",
 			"flags.updateStrategy":      "eventual",
 			"flags.logLevel":            "info",
@@ -486,6 +490,11 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.NotNil(t, deployment.Spec.Template.Spec.Affinity.NodeAffinity)
 	assert.Equal(t, "foo", deployment.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions[0].Key)
 	assert.Equal(t, "bar", string(deployment.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions[0].Operator))
+
+	assert.Len(t, deployment.Spec.Template.Spec.TopologySpreadConstraints, 1)
+	assert.Equal(t, "bar", deployment.Spec.Template.Spec.TopologySpreadConstraints[0].LabelSelector.MatchLabels["foo"])
+	assert.Equal(t, int32(1), deployment.Spec.Template.Spec.TopologySpreadConstraints[0].MaxSkew)
+	assert.Equal(t, "foo", deployment.Spec.Template.Spec.TopologySpreadConstraints[0].TopologyKey)
 
 	assert.Len(t, deployment.Spec.Template.Spec.Tolerations, 1)
 	assert.Equal(t, "foo", deployment.Spec.Template.Spec.Tolerations[0].Key)
@@ -745,6 +754,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
+	assert.Len(t, deployment.Spec.Template.Spec.TopologySpreadConstraints, 0)
 	assert.Len(t, deployment.Spec.Template.Spec.Tolerations, 0)
 
 	managerImage := "ghcr.io/actions/gha-runner-scale-set-controller:dev"
