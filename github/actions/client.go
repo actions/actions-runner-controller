@@ -975,20 +975,38 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 
 	c.logger.Info("getting Actions tenant URL and JWT", "registrationURL", req.URL.String())
 
-	resp, err := c.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	var resp *http.Response
+	retry := 0
+	for {
+		var err error
+		resp, err = c.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		registrationErr := fmt.Errorf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
+		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+			break
+		}
 
+		errStr := fmt.Sprintf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("%v - %v", registrationErr, err)
+			err = fmt.Errorf("%s - %w", errStr, err)
+		} else {
+			err = fmt.Errorf("%s - %v", errStr, string(body))
 		}
-		return nil, fmt.Errorf("%v - %v", registrationErr, string(body))
+
+		if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
+			return nil, err
+		}
+
+		retry++
+		if retry > 3 {
+			return nil, fmt.Errorf("unable to register runner after 3 retries: %v", err)
+		}
+		time.Sleep(time.Duration(500 * int(time.Millisecond) * (retry + 1)))
+
 	}
 
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
