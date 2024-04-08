@@ -5,7 +5,7 @@ go 1.22.1
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.8.0
 	github.com/davecgh/go-spew v1.1.1
-	github.com/evanphx/json-patch v5.7.0+incompatible
+	github.com/evanphx/json-patch v5.9.0+incompatible
 	github.com/go-logr/logr v1.4.1
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/go-cmp v0.6.0
