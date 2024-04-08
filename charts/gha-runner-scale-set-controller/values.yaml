@@ -72,7 +72,7 @@ tolerations: []
 
 affinity: {}
 
-topologySpreadConstraints: {}
+topologySpreadConstraints: []
 
 # Mount volumes in the container.
 volumes: []
