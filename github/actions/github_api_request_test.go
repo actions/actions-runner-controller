@@ -2,6 +2,7 @@ package actions_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -150,6 +151,43 @@ func TestNewActionsServiceRequest(t *testing.T) {
 			assert.Contains(t, err.Error(), errMessage)
 			assert.Equal(t, client.ActionsServiceAdminToken, expiringToken)
 			assert.Equal(t, client.ActionsServiceAdminTokenExpiresAt, expiresAt)
+		})
+
+		t.Run("admin token refresh retry", func(t *testing.T) {
+			newToken := defaultActionsToken(t)
+			errMessage := `{"message":"test"}`
+
+			srv := "http://github.com/my-org"
+			resp := &actions.ActionsServiceAdminConnection{
+				AdminToken:        &newToken,
+				ActionsServiceUrl: &srv,
+			}
+			failures := 0
+			unauthorizedHandler := func(w http.ResponseWriter, r *http.Request) {
+				if failures < 2 {
+					failures++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(errMessage))
+					return
+				}
+
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(resp)
+			}
+			server := testserver.New(t, nil, testserver.WithActionsToken("random-token"), testserver.WithActionsToken(newToken), testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler))
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
+			require.NoError(t, err)
+			expiringToken := "expiring-token"
+			expiresAt := time.Now().Add(59 * time.Second)
+			client.ActionsServiceAdminToken = expiringToken
+			client.ActionsServiceAdminTokenExpiresAt = expiresAt
+
+			_, err = client.NewActionsServiceRequest(ctx, http.MethodGet, "my-path", nil)
+			require.NoError(t, err)
+			assert.Equal(t, client.ActionsServiceAdminToken, newToken)
+			assert.Equal(t, client.ActionsServiceURL, srv)
+			assert.NotEqual(t, client.ActionsServiceAdminTokenExpiresAt, expiresAt)
 		})
 
 		t.Run("token is currently valid", func(t *testing.T) {
