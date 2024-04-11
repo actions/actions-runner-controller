@@ -164,6 +164,11 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 		}
 
 		if msg == nil {
+			_, err := handler.HandleDesiredRunnerCount(ctx, 0, 0)
+			if err != nil {
+				return fmt.Errorf("handling nil message failed: %w", err)
+			}
+
 			continue
 		}
 

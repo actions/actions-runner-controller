@@ -197,7 +197,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				log.Error(err, "failed to cleanup finished ephemeral runners")
 			}
 		}()
-
 		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
 		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
@@ -208,8 +207,16 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, err
 			}
 
-		case total > ephemeralRunnerSet.Spec.Replicas: // Handle scale down scenario.
+		case ephemeralRunnerSet.Spec.PatchID > 0 && total >= ephemeralRunnerSet.Spec.Replicas: // Handle scale down scenario.
+			// If ephemeral runner did not yet update the phase to succeeded, but the scale down
+			// request is issued, we should ignore the scale down request.
+			// Eventually, the ephemeral runner will be cleaned up on the next patch request, which happens
+			// on the next batch
+		case ephemeralRunnerSet.Spec.PatchID == 0 && total > ephemeralRunnerSet.Spec.Replicas:
 			count := total - ephemeralRunnerSet.Spec.Replicas
+			if count <= 0 {
+				break
+			}
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
 			if err := r.deleteIdleEphemeralRunners(
 				ctx,
@@ -428,6 +435,9 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 // When this happens, the next reconcile loop will try to delete the remaining ephemeral runners
 // after we get notified by any of the `v1alpha1.EphemeralRunner.Status` updates.
 func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, pendingEphemeralRunners, runningEphemeralRunners []*v1alpha1.EphemeralRunner, count int, log logr.Logger) error {
+	if count <= 0 {
+		return nil
+	}
 	runners := newEphemeralRunnerStepper(pendingEphemeralRunners, runningEphemeralRunners)
 	if runners.len() == 0 {
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
