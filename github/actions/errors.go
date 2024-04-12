@@ -25,6 +25,10 @@ func (e *GitHubAPIError) Error() string {
 	return fmt.Sprintf("github api error: StatusCode %d, RequestID %q: %v", e.StatusCode, e.RequestID, e.Err)
 }
 
+func (e *GitHubAPIError) Unwrap() error {
+	return e.Err
+}
+
 type ActionsError struct {
 	ActivityID string
 	StatusCode int
@@ -33,6 +37,18 @@ type ActionsError struct {
 
 func (e *ActionsError) Error() string {
 	return fmt.Sprintf("actions error: StatusCode %d, AcivityId %q: %v", e.StatusCode, e.ActivityID, e.Err)
+}
+
+func (e *ActionsError) Unwrap() error {
+	return e.Err
+}
+
+func (e *ActionsError) IsException(target string) bool {
+	if exception, ok := e.Err.(*ActionsExceptionError); ok {
+		return exception.ExceptionName == target
+	}
+
+	return false
 }
 
 type ActionsExceptionError struct {
