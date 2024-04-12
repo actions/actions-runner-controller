@@ -44,8 +44,8 @@ func (e *ActionsError) Unwrap() error {
 }
 
 func (e *ActionsError) IsException(target string) bool {
-	if exception, ok := e.Err.(*ActionsExceptionError); ok {
-		return exception.ExceptionName == target
+	if ex, ok := e.Err.(*ActionsExceptionError); ok {
+		return strings.Contains(ex.ExceptionName, target)
 	}
 
 	return false
