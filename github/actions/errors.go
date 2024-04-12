@@ -39,10 +39,6 @@ func (e *ActionsError) Error() string {
 	return fmt.Sprintf("actions error: StatusCode %d, AcivityId %q: %v", e.StatusCode, e.ActivityID, e.Err)
 }
 
-func (e *ActionsError) Unwrap() error {
-	return e.Err
-}
-
 func (e *ActionsError) IsException(target string) bool {
 	if ex, ok := e.Err.(*ActionsExceptionError); ok {
 		return strings.Contains(ex.ExceptionName, target)
