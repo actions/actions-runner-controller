@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -126,15 +127,30 @@ func TestGetMessage(t *testing.T) {
 		assert.NotNil(t, err)
 	})
 
-	t.Run("Error when maxCapacity is 0", func(t *testing.T) {
-		client, err := actions.NewClient("https://github.com/my-org", auth)
+	t.Run("Capacity error handling", func(t *testing.T) {
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hc := r.Header.Get(actions.HeaderScaleSetMaxCapacity)
+			c, err := strconv.Atoi(hc)
+			require.NoError(t, err)
+			assert.GreaterOrEqual(t, c, 0)
+
+			w.WriteHeader(http.StatusBadRequest)
+			w.Header().Set("Content-Type", "text/plain")
+		}))
+
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, "https://github.com", token, 0, -1)
-		assert.NotNil(t, err)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, -1)
+		require.Error(t, err)
+		// Ensure we don't send requests with negative capacity
+		assert.False(t, errors.Is(err, &actions.ActionsError{}))
 
-		_, err = client.GetMessage(ctx, "https://github.com", token, 0, 0)
-		assert.NoError(t, err)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 0)
+		assert.Error(t, err)
+		var expectedErr *actions.ActionsError
+		assert.ErrorAs(t, err, &expectedErr)
+		assert.Equal(t, http.StatusBadRequest, expectedErr.StatusCode)
 	})
 }
 

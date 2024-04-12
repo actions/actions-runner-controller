@@ -29,6 +29,9 @@ const (
 	apiVersionQueryParam = "api-version=6.0-preview"
 )
 
+// Header used to propagate capacity information to the back-end
+const HeaderScaleSetMaxCapacity = "X-ScaleSetMaxCapacity"
+
 //go:generate mockery --inpackage --name=ActionsService
 type ActionsService interface {
 	GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*RunnerScaleSet, error)
@@ -569,7 +572,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 	req.Header.Set("Accept", "application/json; api-version=6.0-preview")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
 	req.Header.Set("User-Agent", c.userAgent.String())
-	req.Header.Set("X-ScaleSetMaxCapacity", strconv.Itoa(maxCapacity))
+	req.Header.Set(HeaderScaleSetMaxCapacity, strconv.Itoa(maxCapacity))
 
 	resp, err := c.Do(req)
 	if err != nil {
