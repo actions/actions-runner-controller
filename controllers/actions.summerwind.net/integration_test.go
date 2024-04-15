@@ -8,7 +8,7 @@ import (
 	"time"
 
 	github2 "github.com/actions/actions-runner-controller/github"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 
 	"github.com/actions/actions-runner-controller/github/fake"
 
@@ -16,7 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -69,8 +71,14 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Namespace:          ns.Name,
-			MetricsBindAddress: "0",
+			Cache: cache.Options{
+				DefaultNamespaces: map[string]cache.Config{
+					ns.Name: {},
+				},
+			},
+			Metrics: metricsserver.Options{
+				BindAddress: "0",
+			},
 		})
 		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
@@ -105,12 +113,14 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Log:                         logf.Log,
 			Recorder:                    mgr.GetEventRecorderFor("runnerreplicaset-controller"),
 			GitHubClient:                multiClient,
-			RunnerImage:                 "example/runner:test",
-			DockerImage:                 "example/docker:test",
 			Name:                        controllerName("runner"),
 			RegistrationRecheckInterval: time.Millisecond * 100,
 			RegistrationRecheckJitter:   time.Millisecond * 10,
 			UnregistrationRetryDelay:    1 * time.Second,
+			RunnerPodDefaults: RunnerPodDefaults{
+				RunnerImage: "example/runner:test",
+				DockerImage: "example/docker:test",
+			},
 		}
 		err = runnerController.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup runner controller")

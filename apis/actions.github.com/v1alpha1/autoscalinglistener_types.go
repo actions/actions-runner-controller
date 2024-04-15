@@ -60,6 +60,9 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener

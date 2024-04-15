@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/testing"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -31,17 +31,13 @@ var (
 	// https://cert-manager.io/docs/installation/supported-releases/
 	certManagerVersion = "v1.8.2"
 
-	images = []testing.ContainerImage{
-		testing.Img("docker", "dind"),
-		testing.Img("quay.io/brancz/kube-rbac-proxy", "v0.10.0"),
-		testing.Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
-		testing.Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
-		testing.Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
-	}
+	arcStableImageRepo = "summerwind/actions-runner-controller"
+	arcStableImageTag  = "v0.25.2"
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion = "2.303.0"
+	RunnerVersion               = "2.315.0"
+	RunnerContainerHooksVersion = "0.6.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -97,7 +93,7 @@ func TestE2E(t *testing.T) {
 		os.Getenv("UBUNTU_VERSION"),
 	)
 
-	var testedVersions = []struct {
+	testedVersions := []struct {
 		label                     string
 		controller, controllerVer string
 		chart, chartVer           string
@@ -105,8 +101,8 @@ func TestE2E(t *testing.T) {
 	}{
 		{
 			label:         "stable",
-			controller:    "summerwind/actions-runner-controller",
-			controllerVer: "v0.25.2",
+			controller:    arcStableImageRepo,
+			controllerVer: arcStableImageTag,
 			chart:         "actions-runner-controller/actions-runner-controller",
 			// 0.20.2 accidentally added support for runner-status-update which isn't supported by ARC 0.25.2.
 			// With some chart values, the controller end up with crashlooping with `flag provided but not defined: -runner-status-update-hook`.
@@ -158,9 +154,7 @@ func TestE2E(t *testing.T) {
 			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
 		}
 
-		var (
-			testID string
-		)
+		var testID string
 
 		t.Run("get or generate test ID", func(t *testing.T) {
 			testID = env.GetOrGenerateTestID(t)
@@ -272,9 +266,7 @@ func TestE2E(t *testing.T) {
 			t.Skip("RunnerSets test has been skipped due to ARC_E2E_SKIP_RUNNERSETS")
 		}
 
-		var (
-			testID string
-		)
+		var testID string
 
 		t.Run("get or generate test ID", func(t *testing.T) {
 			testID = env.GetOrGenerateTestID(t)
@@ -423,6 +415,7 @@ type env struct {
 	admissionWebhooksTimeout                    string
 	imagePullSecretName                         string
 	imagePullPolicy                             string
+	dindSidecarRepositoryAndTag                 string
 	watchNamespace                              string
 
 	vars          vars
@@ -435,6 +428,8 @@ type vars struct {
 	runnerImageRepo             string
 	runnerDindImageRepo         string
 	runnerRootlessDindImageRepo string
+
+	dindSidecarImageRepo, dindSidecarImageTag string
 
 	prebuildImages []testing.ContainerImage
 	builds         []testing.DockerBuild
@@ -458,6 +453,10 @@ func buildVars(repo, ubuntuVer string) vars {
 		runnerImage                 = testing.Img(runnerImageRepo, runnerImageTag)
 		runnerDindImage             = testing.Img(runnerDindImageRepo, runnerImageTag)
 		runnerRootlessDindImage     = testing.Img(runnerRootlessDindImageRepo, runnerImageTag)
+
+		dindSidecarImageRepo = "docker"
+		dindSidecarImageTag  = "24.0.7-dind"
+		dindSidecarImage     = testing.Img(dindSidecarImageRepo, dindSidecarImageTag)
 	)
 
 	var vs vars
@@ -467,6 +466,9 @@ func buildVars(repo, ubuntuVer string) vars {
 	vs.runnerRootlessDindImageRepo = runnerRootlessDindImageRepo
 	vs.runnerImageRepo = runnerImageRepo
 
+	vs.dindSidecarImageRepo = dindSidecarImageRepo
+	vs.dindSidecarImageTag = dindSidecarImageTag
+
 	// vs.controllerImage, vs.controllerImageTag
 
 	vs.prebuildImages = []testing.ContainerImage{
@@ -474,6 +476,7 @@ func buildVars(repo, ubuntuVer string) vars {
 		runnerImage,
 		runnerDindImage,
 		runnerRootlessDindImage,
+		dindSidecarImage,
 	}
 
 	vs.builds = []testing.DockerBuild{
@@ -490,6 +493,10 @@ func buildVars(repo, ubuntuVer string) vars {
 					Name:  "RUNNER_VERSION",
 					Value: RunnerVersion,
 				},
+				{
+					Name:  "RUNNER_CONTAINER_HOOKS_VERSION",
+					Value: RunnerContainerHooksVersion,
+				},
 			},
 			Image:        runnerImage,
 			EnableBuildX: true,
@@ -501,6 +508,10 @@ func buildVars(repo, ubuntuVer string) vars {
 					Name:  "RUNNER_VERSION",
 					Value: RunnerVersion,
 				},
+				{
+					Name:  "RUNNER_CONTAINER_HOOKS_VERSION",
+					Value: RunnerContainerHooksVersion,
+				},
 			},
 			Image:        runnerDindImage,
 			EnableBuildX: true,
@@ -511,6 +522,10 @@ func buildVars(repo, ubuntuVer string) vars {
 				{
 					Name:  "RUNNER_VERSION",
 					Value: RunnerVersion,
+				},
+				{
+					Name:  "RUNNER_CONTAINER_HOOKS_VERSION",
+					Value: RunnerContainerHooksVersion,
 				},
 			},
 			Image:        runnerRootlessDindImage,
@@ -558,6 +573,8 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.remoteKubeconfig = testing.Getenv(t, "ARC_E2E_REMOTE_KUBECONFIG", "")
 	e.admissionWebhooksTimeout = testing.Getenv(t, "ARC_E2E_ADMISSION_WEBHOOKS_TIMEOUT", "")
 	e.imagePullSecretName = testing.Getenv(t, "ARC_E2E_IMAGE_PULL_SECRET_NAME", "")
+	// This should be the default for Ubuntu 20.04 based runner images
+	e.dindSidecarRepositoryAndTag = vars.dindSidecarImageRepo + ":" + vars.dindSidecarImageTag
 	e.vars = vars
 
 	if e.remoteKubeconfig != "" {
@@ -569,6 +586,17 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 	e.watchNamespace = testing.Getenv(t, "TEST_WATCH_NAMESPACE", "")
 
 	if e.remoteKubeconfig == "" {
+		images := []testing.ContainerImage{
+			testing.Img(vars.dindSidecarImageRepo, vars.dindSidecarImageTag),
+			testing.Img("quay.io/brancz/kube-rbac-proxy", "v0.10.0"),
+			testing.Img("quay.io/jetstack/cert-manager-controller", certManagerVersion),
+			testing.Img("quay.io/jetstack/cert-manager-cainjector", certManagerVersion),
+			testing.Img("quay.io/jetstack/cert-manager-webhook", certManagerVersion),
+			// Otherwise kubelet would fail to pull images from DockerHub due too rate limit:
+			//   Warning  Failed     19s                kubelet            Failed to pull image "summerwind/actions-runner-controller:v0.25.2": rpc error: code = Unknown desc = failed to pull and unpack image "docker.io/summerwind/actions-runner-controller:v0.25.2": failed to copy: httpReadSeeker: failed open: unexpected status code https://registry-1.docker.io/v2/summerwind/actions-runner-controller/manifests/sha256:92faf7e9f7f09a6240cdb5eb82eaf448852bdddf2fb77d0a5669fd8e5062b97b: 429 Too Many Requests - Server message: toomanyrequests: You have reached your pull rate limit. You may increase the limit by authenticating and upgrading: https://www.docker.com/increase-rate-limit
+			testing.Img(arcStableImageRepo, arcStableImageTag),
+		}
+
 		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
 		e.Env.Kubeconfig = e.Kind.Kubeconfig()
 	} else {
@@ -750,6 +778,7 @@ func (e *env) installActionsRunnerController(t *testing.T, repo, tag, testID, ch
 		"ADMISSION_WEBHOOKS_TIMEOUT=" + e.admissionWebhooksTimeout,
 		"IMAGE_PULL_SECRET=" + e.imagePullSecretName,
 		"IMAGE_PULL_POLICY=" + e.imagePullPolicy,
+		"DIND_SIDECAR_REPOSITORY_AND_TAG=" + e.dindSidecarRepositoryAndTag,
 		"WATCH_NAMESPACE=" + e.watchNamespace,
 	}
 
@@ -1077,8 +1106,19 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.18.2",
+						GoVersion: "1.22.1",
 					},
+				},
+			)
+
+			// Ensure both the alias and the full command work after
+			// https://github.com/actions/actions-runner-controller/pull/2326
+			steps = append(steps,
+				testing.Step{
+					Run: "docker-compose version",
+				},
+				testing.Step{
+					Run: "docker compose version",
 				},
 			)
 		}
@@ -1145,9 +1185,20 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 						With: setupBuildXActionWith,
 					},
 					testing.Step{
-						Run: "docker buildx build --platform=linux/amd64 " +
+						Run: "docker buildx build --platform=linux/amd64 -t test1 --load " +
 							dockerBuildCache +
 							fmt.Sprintf("-f %s .", dockerfile),
+					},
+					testing.Step{
+						Run: "docker run --rm test1",
+					},
+					testing.Step{
+						Uses: "addnab/docker-run-action@v3",
+						With: &testing.With{
+							Image: "test1",
+							Run:   "hello",
+							Shell: "sh",
+						},
 					},
 				)
 
@@ -1185,7 +1236,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			testing.Step{
 				Uses: "azure/setup-kubectl@v1",
 				With: &testing.With{
-					Version: "v1.20.2",
+					Version: "v1.22.1",
 				},
 			},
 			testing.Step{

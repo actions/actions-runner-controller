@@ -1,0 +1,191 @@
+name: Bug Report (actions.summerwind.net API group)
+description: File a bug report for actions.summerwind.net API group
+title: "<Please write what didn't work for you here>"
+labels: ["bug", "needs triage", "community"]
+body:
+- type: checkboxes
+  id: read-troubleshooting-guide
+  attributes:
+    label: Checks
+    description: Please check all the boxes below before submitting
+    options:
+    - label: I've already read https://github.com/actions/actions-runner-controller/blob/master/TROUBLESHOOTING.md and I'm sure my issue is not covered in the troubleshooting guide.
+      required: true
+    - label: I'm not using a custom entrypoint in my runner image
+      required: true
+- type: input
+  id: controller-version
+  attributes:
+    label: Controller Version
+    description: Refer to semver-like release tags for controller versions. Any release tags prefixed with `actions-runner-controller-` are for chart releases
+    placeholder: ex. 0.18.2 or git commit ID
+  validations:
+    required: true
+- type: input
+  id: chart-version
+  attributes:
+    label: Helm Chart Version
+    description: Run `helm list` and see what's shown under CHART VERSION. Any release tags prefixed with `actions-runner-controller-` are for chart releases
+    placeholder: ex. 0.11.0
+- type: input
+  id: cert-manager-version
+  attributes:
+    label: CertManager Version
+    description: Run `kubectl get po -o yaml $CERT_MANAGER_POD` and see the image tag, or run `helm list` and see what's shown under APP VERSION for your cert-manager Helm release.
+    placeholder: ex. 1.8
+- type: dropdown
+  id: deployment-method
+  attributes:
+    label: Deployment Method
+    description: Which deployment method did you use to install ARC?
+    options:
+      - Helm
+      - Kustomize
+      - ArgoCD
+      - Other
+  validations:
+    required: true
+- type: textarea
+  id: cert-manager
+  attributes:
+    label: cert-manager installation
+    description: Confirm that you've installed cert-manager correctly by answering a few questions
+    placeholder: |
+      - Did you follow https://github.com/actions/actions-runner-controller#installation? If not, describe the installation process so that we can reproduce your environment.
+      - Are you sure you've installed cert-manager from an official source?
+      (Note that we won't provide user support for cert-manager itself. Make sure cert-manager is fully working before testing ARC or reporting a bug
+  validations:
+    required: true
+- type: checkboxes
+  id: checks
+  attributes:
+    label: Checks
+    description: Please check all the boxes below before submitting
+    options:
+    - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions/actions-runner-controller/discussions). It might also be a good idea to contract with any of contributors and maintainers if your business is so critical and therefore you need priority support
+      required: true
+    - label: I've read [releasenotes](https://github.com/actions/actions-runner-controller/tree/master/docs/releasenotes) before submitting this issue and I'm sure it's not due to any recently-introduced backward-incompatible changes
+      required: true
+    - label: My actions-runner-controller version (v0.x.y) does support the feature
+      required: true
+    - label: I've already upgraded ARC (including the CRDs, see charts/actions-runner-controller/docs/UPGRADING.md for details) to the latest and it didn't fix the issue
+      required: true
+    - label: I've migrated to the workflow job webhook event (if you using webhook driven scaling)
+      required: true
+- type: textarea
+  id: resource-definitions
+  attributes:
+    label: Resource Definitions
+    description: "Add copy(s) of your resource definition(s) (RunnerDeployment or RunnerSet, and HorizontalRunnerAutoscaler. If RunnerSet, also include the StorageClass being used)"
+    render: yaml
+    placeholder: |
+      apiVersion: actions.summerwind.dev/v1alpha1
+      kind: RunnerDeployment
+      metadata:
+        name: example
+      spec:
+        #snip
+      ---
+      apiVersion: actions.summerwind.dev/v1alpha1
+      kind: RunnerSet
+      metadata:
+        name: example
+      spec:
+        #snip
+      ---
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: example
+      provisioner: ...
+      reclaimPolicy: ...
+      volumeBindingMode: ...
+      ---
+      apiVersion: actions.summerwind.dev/v1alpha1
+      kind: HorizontalRunnerAutoscaler
+      metadata:
+        name:
+      spec:
+        #snip
+  validations:
+    required: true
+- type: textarea
+  id: reproduction-steps
+  attributes:
+    label: To Reproduce
+    description: "Steps to reproduce the behavior"
+    render: markdown
+    placeholder: |
+      1. Go to '...'
+      2. Click on '....'
+      3. Scroll down to '....'
+      4. See error
+  validations:
+    required: true
+- type: textarea
+  id: actual-behavior
+  attributes:
+    label: Describe the bug
+    description: Also tell us, what did happen?
+    placeholder: A clear and concise description of what happened.
+  validations:
+    required: true
+- type: textarea
+  id: expected-behavior
+  attributes:
+    label: Describe the expected behavior
+    description: Also tell us, what did you expect to happen?
+    placeholder: A clear and concise description of what the expected behavior is.
+  validations:
+    required: true
+- type: textarea
+  id: controller-logs
+  attributes:
+    label: Whole Controller Logs
+    description: "NEVER EVER OMIT THIS! Include logs from `actions-runner-controller`'s controller-manager pod. Don't omit the parts you think irrelevant!"
+    render: shell
+    placeholder: |
+      PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+
+      To grab controller logs:
+
+      # Set NS according to your setup
+      NS=actions-runner-system
+
+      # Grab the pod name and set it to $POD_NAME
+      kubectl -n $NS get po
+
+      kubectl -n $NS logs $POD_NAME > arc.log
+  validations:
+    required: true
+- type: textarea
+  id: runner-pod-logs
+  attributes:
+    label: Whole Runner Pod Logs
+    description: "Include logs from runner pod(s). Please don't omit the parts you think irrelevant!"
+    render: shell
+    placeholder: |
+      PROVIDE THE WHOLE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+
+      To grab the runner pod logs:
+
+      # Set NS according to your setup. It should match your RunnerDeployment's metadata.namespace.
+      NS=default
+
+      # Grab the name of the problematic runner pod and set it to $POD_NAME
+      kubectl -n $NS get po
+
+      kubectl -n $NS logs $POD_NAME -c runner > runnerpod_runner.log
+      kubectl -n $NS logs $POD_NAME -c docker > runnerpod_docker.log
+
+      If any of the containers are getting terminated immediately, try adding `--previous` to the kubectl-logs command to obtain logs emitted before the termination.
+  validations:
+    required: true
+- type: textarea
+  id: additional-context
+  attributes:
+    label: Additional Context
+    description: |
+      Add any other context about the problem here.
+
+      Tip: You can attach images or log files by clicking this area to highlight it and then dragging files in.

@@ -1,4 +1,4 @@
-{{- if .Values.metrics.serviceMonitor }}
+{{- if .Values.metrics.serviceMonitor.enable }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -19,6 +19,8 @@ spec:
       tlsConfig:
         insecureSkipVerify: true
       {{- end }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.timeout }}
   selector:
     matchLabels:
       {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}

@@ -19,8 +19,7 @@ type multiClient struct {
 	mu      sync.Mutex
 	clients map[ActionsClientKey]*Client
 
-	logger    logr.Logger
-	userAgent string
+	logger logr.Logger
 }
 
 type GitHubAppAuth struct {
@@ -42,12 +41,11 @@ type ActionsClientKey struct {
 	Namespace  string
 }
 
-func NewMultiClient(userAgent string, logger logr.Logger) MultiClient {
+func NewMultiClient(logger logr.Logger) MultiClient {
 	return &multiClient{
-		mu:        sync.Mutex{},
-		clients:   make(map[ActionsClientKey]*Client),
-		logger:    logger,
-		userAgent: userAgent,
+		mu:      sync.Mutex{},
+		clients: make(map[ActionsClientKey]*Client),
+		logger:  logger,
 	}
 }
 
@@ -66,7 +64,6 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 		githubConfigURL,
 		&creds,
 		append([]ClientOption{
-			WithUserAgent(m.userAgent),
 			WithLogger(m.logger),
 		}, options...)...,
 	)

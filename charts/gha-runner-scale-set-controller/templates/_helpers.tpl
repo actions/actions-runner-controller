@@ -1,8 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
+
+
+{{- define "gha-base-name" -}}
+gha-rs-controller
+{{- end }}
+
 {{- define "gha-runner-scale-set-controller.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- default (include "gha-base-name" .) .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -14,7 +20,7 @@ If release name contains chart name it will be used as a full name.
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
+{{- $name := default (include "gha-base-name" .) .Values.nameOverride }}
 {{- if contains $name .Release.Name }}
 {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -27,7 +33,7 @@ If release name contains chart name it will be used as a full name.
 Create chart name and version as used by the chart label.
 */}}
 {{- define "gha-runner-scale-set-controller.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-%s" (include "gha-base-name" .) .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -39,10 +45,10 @@ helm.sh/chart: {{ include "gha-runner-scale-set-controller.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
-app.kubernetes.io/part-of: gha-runner-scale-set-controller
+app.kubernetes.io/part-of: gha-rs-controller
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- range $k, $v := .Values.labels }}
-{{ $k }}: {{ $v }}
+{{ $k }}: {{ $v | quote }}
 {{- end }}
 {{- end }}
 
@@ -51,6 +57,7 @@ Selector labels
 */}}
 {{- define "gha-runner-scale-set-controller.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "gha-runner-scale-set-controller.name" . }}
+app.kubernetes.io/namespace: {{ .Release.Namespace }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
@@ -73,35 +80,43 @@ Create the name of the service account to use
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerClusterRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerClusterRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-cluster-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerSingleNamespaceRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-single-namespace-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.managerSingleNamespaceWatchRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace-watch
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.managerSingleNamespaceWatchRoleBinding" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-single-namespace-watch
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerListenerRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-listener
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.managerListenerRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-manager-listener-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-listener
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election-role
+{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleBinding" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election-rolebinding
+{{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
 
 {{- define "gha-runner-scale-set-controller.imagePullSecretsNames" -}}
@@ -110,4 +125,8 @@ Create the name of the service account to use
   {{- $names = append $names $v.name }}
 {{- end }}
 {{- $names | join ","}}
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.serviceMonitorName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-service-monitor
 {{- end }}

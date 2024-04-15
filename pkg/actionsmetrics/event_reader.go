@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v50/github"
+	gogithub "github.com/google/go-github/v52/github"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/actions/actions-runner-controller/github"
@@ -98,13 +98,19 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	labels["organization"] = org
 
 	var wn string
+	var hb string
 	if e.WorkflowJob != nil {
 		if n := e.WorkflowJob.WorkflowName; n != nil {
 			wn = *n
 			keysAndValues = append(keysAndValues, "workflow_name", *n)
 		}
+		if n := e.WorkflowJob.HeadBranch; n != nil {
+			hb = *n
+			keysAndValues = append(keysAndValues, "head_branch", *n)
+		}
 	}
 	labels["workflow_name"] = wn
+	labels["head_branch"] = hb
 
 	log := reader.Log.WithValues(keysAndValues...)
 
@@ -136,12 +142,27 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 		// job_conclusion -> (neutral, success, skipped, cancelled, timed_out, action_required, failure)
 		githubWorkflowJobConclusionsTotal.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Inc()
 
-		parseResult, err := reader.fetchAndParseWorkflowJobLogs(ctx, e)
-		if err != nil {
-			log.Error(err, "reading workflow job log")
-			return
-		} else {
-			log.Info("reading workflow_job logs", keysAndValues...)
+		var (
+			exitCode       = "na"
+			runTimeSeconds *float64
+		)
+
+		// We need to do our best not to fail the whole event processing
+		// when the user provided no GitHub API credentials.
+		// See https://github.com/actions/actions-runner-controller/issues/2424
+		if reader.GitHubClient != nil {
+			parseResult, err := reader.fetchAndParseWorkflowJobLogs(ctx, e)
+			if err != nil {
+				log.Error(err, "reading workflow job log")
+				return
+			}
+
+			exitCode = parseResult.ExitCode
+
+			s := parseResult.RunTime.Seconds()
+			runTimeSeconds = &s
+
+			log.WithValues(keysAndValues...).Info("reading workflow_job logs", "exit_code", exitCode)
 		}
 
 		if *e.WorkflowJob.Conclusion == "failure" {
@@ -167,18 +188,20 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 				}
 				if *conclusion == "timed_out" {
 					failedStep = fmt.Sprint(i)
-					parseResult.ExitCode = "timed_out"
+					exitCode = "timed_out"
 					break
 				}
 			}
 			githubWorkflowJobFailuresTotal.With(
 				extraLabel("failed_step", failedStep,
-					extraLabel("exit_code", parseResult.ExitCode, labels),
+					extraLabel("exit_code", exitCode, labels),
 				),
 			).Inc()
 		}
 
-		githubWorkflowJobRunDurationSeconds.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Observe(parseResult.RunTime.Seconds())
+		if runTimeSeconds != nil {
+			githubWorkflowJobRunDurationSeconds.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Observe(*runTimeSeconds)
+		}
 	}
 }
 

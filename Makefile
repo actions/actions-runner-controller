@@ -5,7 +5,8 @@ else
 endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
-RUNNER_VERSION ?= 2.303.0
+COMMIT_SHA = $(shell git rev-parse HEAD)
+RUNNER_VERSION ?= 2.315.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -67,7 +68,7 @@ endif
 all: manager
 
 lint:
-	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.49.0 golangci-lint run
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.55.2 golangci-lint run
 
 GO_TEST_ARGS ?= -short
 
@@ -95,7 +96,8 @@ run: generate fmt vet manifests
 run-scaleset: generate fmt vet
 	CONTROLLER_MANAGER_POD_NAMESPACE=default \
 	CONTROLLER_MANAGER_CONTAINER_IMAGE="${DOCKER_IMAGE_NAME}:${VERSION}" \
-	go run ./main.go --auto-scaling-runner-set-only
+	go run -ldflags="-s -w -X 'github.com/actions/actions-runner-controller/build.Version=$(VERSION)'" \
+	./main.go --auto-scaling-runner-set-only
 
 # Install CRDs into a cluster
 install: manifests
@@ -202,7 +204,7 @@ generate: controller-gen
 
 # Run shellcheck on runner scripts
 shellcheck: shellcheck-install
-	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh
+	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh hack/*.sh
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
@@ -214,6 +216,7 @@ docker-buildx:
 		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		--build-arg VERSION=${VERSION} \
+		--build-arg COMMIT_SHA=${COMMIT_SHA} \
 		-t "${DOCKER_IMAGE_NAME}:${VERSION}" \
 		-f Dockerfile \
 		. ${PUSH_ARG}
@@ -317,7 +320,7 @@ ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 endif

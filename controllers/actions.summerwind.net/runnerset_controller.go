@@ -45,13 +45,10 @@ type RunnerSetReconciler struct {
 	Recorder record.EventRecorder
 	Scheme   *runtime.Scheme
 
-	CommonRunnerLabels        []string
-	GitHubClient              *MultiGitHubClient
-	RunnerImage               string
-	RunnerImagePullSecrets    []string
-	DockerImage               string
-	DockerRegistryMirror      string
-	UseRunnerStatusUpdateHook bool
+	CommonRunnerLabels []string
+	GitHubClient       *MultiGitHubClient
+
+	RunnerPodDefaults RunnerPodDefaults
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=runnersets,verbs=get;list;watch;create;update;patch;delete
@@ -231,7 +228,7 @@ func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1a
 
 	githubBaseURL := ghc.GithubBaseURL
 
-	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, r.RunnerImage, r.RunnerImagePullSecrets, r.DockerImage, r.DockerRegistryMirror, githubBaseURL, r.UseRunnerStatusUpdateHook)
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, githubBaseURL, r.RunnerPodDefaults)
 	if err != nil {
 		return nil, err
 	}

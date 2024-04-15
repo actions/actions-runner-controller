@@ -36,10 +36,11 @@ githubConfigSecret:
 #     - example.com
 #     - example.org
 
-## maxRunners is the max number of runners the auto scaling runner set will scale up to.
+## maxRunners is the max number of runners the autoscaling runner set will scale up to.
 # maxRunners: 5
 
-## minRunners is the min number of runners the auto scaling runner set will scale down to.
+## minRunners is the min number of idle runners. The target number of runners created will be
+## calculated as a sum of minRunners and the number of jobs assigned to the scale set.
 # minRunners: 0
 
 # runnerGroup: "default"
@@ -65,9 +66,15 @@ githubConfigSecret:
 #   certificateFrom:
 #     configMapKeyRef:
 #       name: config-map-name
-#       key: ca.pem
+#       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
+## Container mode is an object that provides out-of-box configuration
+## for dind and kubernetes mode. Template will be modified as documented under the
+## template object.
+##
+## If any customization is required for dind or kubernetes mode, containerMode should remain
+## empty, and configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to dind or kubernetes
 #   ## the following is required when containerMode.type=kubernetes
@@ -78,8 +85,28 @@ githubConfigSecret:
 #     resources:
 #       requests:
 #         storage: 1Gi
+#   kubernetesModeServiceAccount:
+#     annotations:
+
+## listenerTemplate is the PodSpec for each listener Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
+# listenerTemplate:
+#   spec:
+#     containers:
+#     # Use this section to append additional configuration to the listener container.
+#     # If you change the name of the container, the configuration will not be applied to the listener,
+#     # and it will be treated as a side-car container.
+#     - name: listener
+#       securityContext:
+#         runAsUser: 1000
+#     # Use this section to add the configuration of a side-car container.
+#     # Comment it out or remove it if you don't need it.
+#     # Spec for this container will be applied as is without any modifications.
+#     - name: side-car
+#       image: example-sidecar
 
 ## template is the PodSpec for each runner Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:
   ## template.spec will be modified if you change the container mode
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
@@ -95,34 +122,37 @@ template:
   ##     containers:
   ##     - name: runner
   ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: DOCKER_HOST
-  ##           value: tcp://localhost:2376
-  ##         - name: DOCKER_TLS_VERIFY
-  ##           value: "1"
-  ##         - name: DOCKER_CERT_PATH
-  ##           value: /certs/client
+  ##           value: unix:///var/run/docker.sock
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
-  ##         - name: dind-cert
-  ##           mountPath: /certs/client
-  ##           readOnly: true
+  ##         - name: dind-sock
+  ##           mountPath: /var/run
   ##     - name: dind
   ##       image: docker:dind
+  ##       args:
+  ##         - dockerd
+  ##         - --host=unix:///var/run/docker.sock
+  ##         - --group=$(DOCKER_GROUP_GID)
+  ##       env:
+  ##         - name: DOCKER_GROUP_GID
+  ##           value: "123"
   ##       securityContext:
   ##         privileged: true
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
-  ##         - name: dind-cert
-  ##           mountPath: /certs/client
+  ##         - name: dind-sock
+  ##           mountPath: /var/run
   ##         - name: dind-externals
   ##           mountPath: /home/runner/externals
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}
-  ##     - name: dind-cert
+  ##     - name: dind-sock
   ##       emptyDir: {}
   ##     - name: dind-externals
   ##       emptyDir: {}
@@ -133,6 +163,7 @@ template:
   ##     containers:
   ##     - name: runner
   ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: ACTIONS_RUNNER_CONTAINER_HOOKS
   ##           value: /home/runner/k8s/index.js
@@ -157,9 +188,9 @@ template:
   ##                   storage: 1Gi
   spec:
     containers:
-    - name: runner
-      image: ghcr.io/actions/actions-runner:latest
-      command: ["/home/runner/run.sh"]
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.

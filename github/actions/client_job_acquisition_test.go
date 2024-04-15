@@ -2,6 +2,7 @@ package actions_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -83,6 +84,39 @@ func TestAcquireJobs(t *testing.T) {
 		_, err = client.AcquireJobs(context.Background(), session.RunnerScaleSet.Id, session.MessageQueueAccessToken, requestIDs)
 		assert.NotNil(t, err)
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
+	})
+
+	t.Run("Should return MessageQueueTokenExpiredError when http error is not Unauthorized", func(t *testing.T) {
+		want := []int64{1}
+
+		session := &actions.RunnerScaleSetSession{
+			RunnerScaleSet:          &actions.RunnerScaleSet{Id: 1},
+			MessageQueueAccessToken: "abc",
+		}
+		requestIDs := want
+
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/acquirablejobs") {
+				w.Write([]byte(`{"count": 1}`))
+				return
+			}
+			if r.Method == http.MethodPost {
+				http.Error(w, "Session expired", http.StatusUnauthorized)
+				return
+			}
+		}))
+
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		_, err = client.GetAcquirableJobs(ctx, 1)
+		require.NoError(t, err)
+
+		got, err := client.AcquireJobs(ctx, session.RunnerScaleSet.Id, session.MessageQueueAccessToken, requestIDs)
+		require.Error(t, err)
+		assert.Nil(t, got)
+		var expectedErr *actions.MessageQueueTokenExpiredError
+		assert.True(t, errors.As(err, &expectedErr))
 	})
 }
 

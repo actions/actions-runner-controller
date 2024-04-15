@@ -2,7 +2,7 @@
 
 **Date**: 2023-02-10
 
-**Status**: Done
+**Status**: Superceded [^1]
 
 ## Context
 
@@ -136,3 +136,5 @@ The downside of this mode:
 
 - When you have multiple controllers deployed, they will still use the same version of the CRD. So you will need to make sure every controller you deployed has to be the same version as each other.
 - You can't mismatch install both `actions-runner-controller` in this mode (watchSingleNamespace) with the regular installation mode (watchAllClusterNamespaces) in your cluster.
+
+[^1]: Superseded by [ADR 2023-04-11](2023-04-11-limit-manager-role-permission.md)

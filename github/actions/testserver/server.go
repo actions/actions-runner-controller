@@ -35,6 +35,8 @@ func NewUnstarted(t ginkgo.GinkgoTInterface, handler http.Handler, options ...ac
 		server.Close()
 	})
 
+	server.setDefaults(t)
+
 	for _, option := range options {
 		option(server)
 	}
@@ -42,18 +44,13 @@ func NewUnstarted(t ginkgo.GinkgoTInterface, handler http.Handler, options ...ac
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// handle getRunnerRegistrationToken
 		if strings.HasSuffix(r.URL.Path, "/runners/registration-token") {
-			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte(`{"token":"token"}`))
+			server.runnerRegistrationTokenHandler(w, r)
 			return
 		}
 
 		// handle getActionsServiceAdminConnection
 		if strings.HasSuffix(r.URL.Path, "/actions/runner-registration") {
-			if server.token == "" {
-				server.token = DefaultActionsToken(t)
-			}
-
-			w.Write([]byte(`{"url":"` + s.URL + `/tenant/123/","token":"` + server.token + `"}`))
+			server.actionRegistrationTokenHandler(w, r)
 			return
 		}
 
@@ -73,10 +70,44 @@ func WithActionsToken(token string) actionsServerOption {
 	}
 }
 
+func WithRunnerRegistrationTokenHandler(h http.HandlerFunc) actionsServerOption {
+	return func(s *actionsServer) {
+		s.runnerRegistrationTokenHandler = h
+	}
+}
+
+func WithActionsRegistrationTokenHandler(h http.HandlerFunc) actionsServerOption {
+	return func(s *actionsServer) {
+		s.actionRegistrationTokenHandler = h
+	}
+}
+
 type actionsServer struct {
 	*httptest.Server
 
-	token string
+	token                          string
+	runnerRegistrationTokenHandler http.HandlerFunc
+	actionRegistrationTokenHandler http.HandlerFunc
+}
+
+func (s *actionsServer) setDefaults(t ginkgo.GinkgoTInterface) {
+	if s.runnerRegistrationTokenHandler == nil {
+		s.runnerRegistrationTokenHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"token":"token"}`))
+		}
+	}
+
+	if s.actionRegistrationTokenHandler == nil {
+		s.actionRegistrationTokenHandler = func(w http.ResponseWriter, r *http.Request) {
+			if s.token == "" {
+				s.token = DefaultActionsToken(t)
+			}
+
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"url":"` + s.URL + `/tenant/123/","token":"` + s.token + `"}`))
+		}
+	}
 }
 
 func (s *actionsServer) ConfigURLForOrg(org string) string {

@@ -10,7 +10,7 @@ When a new [runner](https://github.com/actions/runner) version is released, new
 images need to be built in
 [actions-runner-controller/releases](https://github.com/actions-runner-controller/releases).
 This is currently started by the
-[release-runners](https://github.com/actions/actions-runner-controller/blob/master/.github/workflows/release-runners.yaml)
+[release-runners](https://github.com/actions/actions-runner-controller/blob/master/.github/workflows/arc-release-runners.yaml)
 workflow, although this only starts when the set of file containing the runner
 version is updated (and this is currently done manually).
 
@@ -19,7 +19,7 @@ version is updated (and this is currently done manually).
 We can have another workflow running on a cadence (hourly seems sensible) and checking for new runner
 releases, creating a PR updating `RUNNER_VERSION` in:
 
-- `.github/workflows/release-runners.yaml`
+- `.github/workflows/arc-release-runners.yaml`
 - `Makefile`
 - `runner/Makefile`
 - `test/e2e/e2e_test.go`

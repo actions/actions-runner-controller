@@ -9,7 +9,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/go-logr/logr"
-	gogithub "github.com/google/go-github/v47/github"
+	gogithub "github.com/google/go-github/v52/github"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"

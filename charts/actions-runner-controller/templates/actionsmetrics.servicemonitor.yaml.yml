@@ -1,14 +1,15 @@
-{{- if and .Values.actionsMetricsServer.enabled .Values.actionsMetrics.serviceMonitor }}
+{{- if and .Values.actionsMetricsServer.enabled .Values.actionsMetrics.serviceMonitor.enable }}
+{{- $servicemonitornamespace := .Values.actionsMetrics.serviceMonitor.namespace | default .Release.Namespace }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
-  {{- with .Values.actionsMetricsServer.serviceMonitorLabels }}
+  {{- with .Values.actionsMetrics.serviceMonitorLabels }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
   name: {{ include "actions-runner-controller-actions-metrics-server.serviceMonitorName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $servicemonitornamespace }}
 spec:
   endpoints:
     - path: /metrics
@@ -19,6 +20,8 @@ spec:
       tlsConfig:
         insecureSkipVerify: true
       {{- end }}
+      interval: {{ .Values.actionsMetrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.actionsMetrics.serviceMonitor.timeout }}
   selector:
     matchLabels:
       {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 6 }}

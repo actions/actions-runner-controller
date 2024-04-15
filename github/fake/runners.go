@@ -8,7 +8,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/gorilla/mux"
 )
 

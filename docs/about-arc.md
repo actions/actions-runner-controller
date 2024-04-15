@@ -1,5 +1,8 @@
 # About ARC
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer autoscaling runner scale sets, it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller). To understand why these resources are considered legacy (and the benefits of using the newer autoscaling runner scale sets), read [this discussion (#2775)](https://github.com/actions/actions-runner-controller/discussions/2775).
+
 ## Introduction
 This document provides a high-level overview of Actions Runner Controller (ARC). ARC enables running Github Actions Runners on Kubernetes (K8s) clusters.
 
@@ -14,7 +17,7 @@ You can create workflows that build and test every pull request to your reposito
 Runners execute the job that is assigned to them by Github Actions workflow. There are two types of Runners:
 
 - [Github-hosted runners](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners) - GitHub provides Linux, Windows, and macOS virtual machines to run your workflows. These virtual machines are hosted in the cloud by Github.
-- [Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners) - you can host your own self-hosted runners in your own data center or cloud infrastructure. ARC deploys self-hosted runners.
+- [Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners) - you can host your own self-hosted runners in your own data center or cloud infrastructure. ARC deploys self-hosted runners.
 
 ## Self hosted runners
 Self-hosted runners offer more control of hardware, operating system, and software tools than GitHub-hosted runners. With self-hosted runners, you can create custom hardware configurations that meet your needs with processing power or memory to run larger jobs, install software available on your local network, and choose an operating system not offered by GitHub-hosted runners.
@@ -23,7 +26,7 @@ Self-hosted runners offer more control of hardware, operating system, and softwa
 Self-hosted runners can be physical, virtual, in a container, on-premises, or in a cloud.
 - Traditional Deployment is having a physical machine, with OS and apps on it. The runner runs on this machine and executes any jobs. It comes with the cost of owning and operating the hardware 24/7 even if it isn't in use that entire time. 
 - Virtualized deployments are simpler to manage. Each runner runs on a virtual machine (VM) that runs on a host. There could be multiple such VMs running on the same host. VMs are complete OS’s and might take time to bring up everytime a clean environment is needed to run workflows.
-- Containerized deployments are similar to VMs, but instead of bringing up entire VM’s, a container gets deployed.Kubernetes (K8s) provides a scalable and reproducible environment for containerized workloads. They are lightweight, loosely coupled, highly efficient and can be managed centrally. There are advantages to using Kubernetes (outlined "[here](https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/)."), but it is more complicated and less widely-understood than the other options. A managed provider makes this much simpler to run at scale.
+- Containerized deployments are similar to VMs, but instead of bringing up entire VM’s, a container gets deployed. Kubernetes (K8s) provides a scalable and reproducible environment for containerized workloads. They are lightweight, loosely coupled, highly efficient and can be managed centrally. There are advantages to using Kubernetes (outlined "[here](https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/)."), but it is more complicated and less widely-understood than the other options. A managed provider makes this much simpler to run at scale.
 
 *Actions Runner Controller(ARC) makes it simpler to run self hosted runners on K8s managed containers.*
 
@@ -83,7 +86,7 @@ The GitHub hosted runners include a large amount of pre-installed software packa
 ARC maintains a few runner images with `latest` aligning with GitHub's Ubuntu version. These images do not contain all of the software installed on the GitHub runners. They contain subset of packages from the GitHub runners: Basic CLI packages, git, docker and build-essentials. To install additional software, it is recommended to use the corresponding setup actions. For instance, `actions/setup-java` for Java or `actions/setup-node` for Node.
 
 ## Executing workflows
-Now, all the setup and configuration is done. A workflow can be created in the same repository that could target the self hosted runner created from ARC. The workflow needs to have `runs-on: self-hosted` so it can target the self host pool. For more information on targeting workflows to run on self hosted runners, see "[Using Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow)."
+Now, all the setup and configuration is done. A workflow can be created in the same repository that could target the self hosted runner created from ARC. The workflow needs to have `runs-on: self-hosted` so it can target the self host pool. For more information on targeting workflows to run on self hosted runners, see "[Using Self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/using-self-hosted-runners-in-a-workflow)."
 
 ## Scaling runners - statically with replicas count
 With a small tweak to the replicas count (for eg - `replicas: 2`) in the `runnerdeployment.yaml` file, more runners can be created. Depending on the count of replicas, those many sets of pods would be created. As before, Each pod contains the two containers.
@@ -172,7 +175,7 @@ If there is a need to include packages in the runner image for which there is no
 FROM summerwind/actions-runner:latest
 
 RUN sudo apt-get update -y \
-  && sudo apt-get install $YOUR_PACKAGES
+  && sudo apt-get install $YOUR_PACKAGES \
   && sudo rm -rf /var/lib/apt/lists/*
 ```
 

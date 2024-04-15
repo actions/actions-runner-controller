@@ -23,6 +23,10 @@ fi
 if [ -n "${DOCKER_REGISTRY_MIRROR}" ]; then
 jq ".\"registry-mirrors\"[0] = \"${DOCKER_REGISTRY_MIRROR}\"" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
 fi
+
+if [ -n "${DOCKER_INSECURE_REGISTRY}" ]; then
+jq ".\"insecure-registries\"[0] = \"${DOCKER_INSECURE_REGISTRY}\"" /etc/docker/daemon.json > /tmp/.daemon.json && mv /tmp/.daemon.json /etc/docker/daemon.json
+fi
 SCRIPT
 
 dumb-init bash <<'SCRIPT' &

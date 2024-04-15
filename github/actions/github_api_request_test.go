@@ -2,6 +2,7 @@ package actions_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var testUserAgent = actions.UserAgentInfo{
+	Version:    "test",
+	CommitSHA:  "test",
+	ScaleSetID: 1,
+}
 
 func TestNewGitHubAPIRequest(t *testing.T) {
 	ctx := context.Background()
@@ -62,13 +69,15 @@ func TestNewGitHubAPIRequest(t *testing.T) {
 	})
 
 	t.Run("sets user agent header if present", func(t *testing.T) {
-		client, err := actions.NewClient("http://localhost/my-org", nil, actions.WithUserAgent("my-agent"))
+		client, err := actions.NewClient("http://localhost/my-org", nil)
 		require.NoError(t, err)
+
+		client.SetUserAgent(testUserAgent)
 
 		req, err := client.NewGitHubAPIRequest(ctx, http.MethodGet, "/app/installations/123/access_tokens", nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, "my-agent", req.Header.Get("User-Agent"))
+		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
 	})
 
 	t.Run("sets the body we pass", func(t *testing.T) {
@@ -122,6 +131,65 @@ func TestNewActionsServiceRequest(t *testing.T) {
 			assert.Equal(t, "Bearer "+newToken, req.Header.Get("Authorization"))
 		})
 
+		t.Run("admin token refresh failure", func(t *testing.T) {
+			newToken := defaultActionsToken(t)
+			errMessage := `{"message":"test"}`
+			unauthorizedHandler := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(errMessage))
+			}
+			server := testserver.New(t, nil, testserver.WithActionsToken("random-token"), testserver.WithActionsToken(newToken), testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler))
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
+			require.NoError(t, err)
+			expiringToken := "expiring-token"
+			expiresAt := time.Now().Add(59 * time.Second)
+			client.ActionsServiceAdminToken = expiringToken
+			client.ActionsServiceAdminTokenExpiresAt = expiresAt
+			_, err = client.NewActionsServiceRequest(ctx, http.MethodGet, "my-path", nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), errMessage)
+			assert.Equal(t, client.ActionsServiceAdminToken, expiringToken)
+			assert.Equal(t, client.ActionsServiceAdminTokenExpiresAt, expiresAt)
+		})
+
+		t.Run("admin token refresh retry", func(t *testing.T) {
+			newToken := defaultActionsToken(t)
+			errMessage := `{"message":"test"}`
+
+			srv := "http://github.com/my-org"
+			resp := &actions.ActionsServiceAdminConnection{
+				AdminToken:        &newToken,
+				ActionsServiceUrl: &srv,
+			}
+			failures := 0
+			unauthorizedHandler := func(w http.ResponseWriter, r *http.Request) {
+				if failures < 2 {
+					failures++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(errMessage))
+					return
+				}
+
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(resp)
+			}
+			server := testserver.New(t, nil, testserver.WithActionsToken("random-token"), testserver.WithActionsToken(newToken), testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler))
+			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
+			require.NoError(t, err)
+			expiringToken := "expiring-token"
+			expiresAt := time.Now().Add(59 * time.Second)
+			client.ActionsServiceAdminToken = expiringToken
+			client.ActionsServiceAdminTokenExpiresAt = expiresAt
+
+			_, err = client.NewActionsServiceRequest(ctx, http.MethodGet, "my-path", nil)
+			require.NoError(t, err)
+			assert.Equal(t, client.ActionsServiceAdminToken, newToken)
+			assert.Equal(t, client.ActionsServiceURL, srv)
+			assert.NotEqual(t, client.ActionsServiceAdminTokenExpiresAt, expiresAt)
+		})
+
 		t.Run("token is currently valid", func(t *testing.T) {
 			tokenThatShouldNotBeFetched := defaultActionsToken(t)
 			server := testserver.New(t, nil, testserver.WithActionsToken(tokenThatShouldNotBeFetched))
@@ -160,13 +228,15 @@ func TestNewActionsServiceRequest(t *testing.T) {
 	t.Run("populates header", func(t *testing.T) {
 		server := testserver.New(t, nil)
 
-		client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds, actions.WithUserAgent("my-agent"))
+		client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 		require.NoError(t, err)
+
+		client.SetUserAgent(testUserAgent)
 
 		req, err := client.NewActionsServiceRequest(ctx, http.MethodGet, "/my/path", nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, "my-agent", req.Header.Get("User-Agent"))
+		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
 		assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 	})
 }

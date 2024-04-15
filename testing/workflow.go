@@ -55,4 +55,11 @@ type With struct {
 	// Needs to be "docker" in rootless mode
 	// https://stackoverflow.com/questions/66142872/how-to-solve-error-with-rootless-docker-in-github-actions-self-hosted-runner-wr
 	Driver string `json:"driver,omitempty"`
+
+	// Image is the image arg passed to docker-run-action
+	Image string `json:"image,omitempty"`
+	// Run is the run arg passed to docker-run-action
+	Run string `json:"run,omitempty"`
+	// Shell is the shell arg passed to docker-run-action
+	Shell string `json:"shell,omitempty"`
 }

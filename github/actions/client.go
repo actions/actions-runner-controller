@@ -6,17 +6,17 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/go-logr/logr"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
@@ -53,7 +53,31 @@ type ActionsService interface {
 	GetRunner(ctx context.Context, runnerId int64) (*RunnerReference, error)
 	GetRunnerByName(ctx context.Context, runnerName string) (*RunnerReference, error)
 	RemoveRunner(ctx context.Context, runnerId int64) error
+
+	SetUserAgent(info UserAgentInfo)
 }
+
+type clientLogger struct {
+	logr.Logger
+}
+
+func (l *clientLogger) Info(msg string, keysAndValues ...interface{}) {
+	l.Logger.Info(msg, keysAndValues...)
+}
+
+func (l *clientLogger) Debug(msg string, keysAndValues ...interface{}) {
+	// discard debug log
+}
+
+func (l *clientLogger) Error(msg string, keysAndValues ...interface{}) {
+	l.Logger.Error(errors.New(msg), "Retryable client error", keysAndValues...)
+}
+
+func (l *clientLogger) Warn(msg string, keysAndValues ...interface{}) {
+	l.Logger.Info(msg, keysAndValues...)
+}
+
+var _ retryablehttp.LeveledLogger = &clientLogger{}
 
 type Client struct {
 	*http.Client
@@ -72,7 +96,7 @@ type Client struct {
 	creds     *ActionsAuth
 	config    *GitHubConfig
 	logger    logr.Logger
-	userAgent string
+	userAgent UserAgentInfo
 
 	rootCAs               *x509.CertPool
 	tlsInsecureSkipVerify bool
@@ -84,10 +108,32 @@ type ProxyFunc func(req *http.Request) (*url.URL, error)
 
 type ClientOption func(*Client)
 
-func WithUserAgent(userAgent string) ClientOption {
-	return func(c *Client) {
-		c.userAgent = userAgent
+type UserAgentInfo struct {
+	// Version is the version of the controller
+	Version string
+	// CommitSHA is the git commit SHA of the controller
+	CommitSHA string
+	// ScaleSetID is the ID of the scale set
+	ScaleSetID int
+	// HasProxy is true if the controller is running behind a proxy
+	HasProxy bool
+	// Subsystem is the subsystem such as listener, controller, etc.
+	// Each system may pick its own subsystem name.
+	Subsystem string
+}
+
+func (u UserAgentInfo) String() string {
+	scaleSetID := "NA"
+	if u.ScaleSetID > 0 {
+		scaleSetID = strconv.Itoa(u.ScaleSetID)
 	}
+
+	proxy := "Proxy/disabled"
+	if u.HasProxy {
+		proxy = "Proxy/enabled"
+	}
+
+	return fmt.Sprintf("actions-runner-controller/%s (%s; %s) ScaleSetID/%s (%s)", u.Version, u.CommitSHA, u.Subsystem, scaleSetID, proxy)
 }
 
 func WithLogger(logger logr.Logger) ClientOption {
@@ -140,6 +186,11 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 		// retryablehttp defaults
 		retryMax:     4,
 		retryWaitMax: 30 * time.Second,
+		userAgent: UserAgentInfo{
+			Version:    build.Version,
+			CommitSHA:  build.CommitSHA,
+			ScaleSetID: 0,
+		},
 	}
 
 	for _, option := range options {
@@ -147,10 +198,12 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	}
 
 	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = log.New(io.Discard, "", log.LstdFlags)
+	retryClient.Logger = &clientLogger{Logger: ac.logger}
 
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax
+
+	retryClient.HTTPClient.Timeout = 5 * time.Minute // timeout must be > 1m to accomodate long polling
 
 	transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
 	if !ok {
@@ -178,6 +231,10 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	return ac, nil
 }
 
+func (c *Client) SetUserAgent(info UserAgentInfo) {
+	c.userAgent = info
+}
+
 // Identifier returns a string to help identify a client uniquely.
 // This is used for caching client instances and understanding when a config
 // change warrants creating a new client. Any changes to Client that would
@@ -186,7 +243,7 @@ func (c *Client) Identifier() string {
 	identifier := fmt.Sprintf("configURL:%q,", c.config.ConfigURL.String())
 
 	if c.creds.Token != "" {
-		identifier += fmt.Sprintf("token:%q", c.creds.Token)
+		identifier += fmt.Sprintf("token:%q,", c.creds.Token)
 	}
 
 	if c.creds.AppCreds != nil {
@@ -234,9 +291,7 @@ func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, b
 		return nil, err
 	}
 
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	return req, nil
 }
@@ -278,9 +333,7 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.ActionsServiceAdminToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	return req, nil
 }
@@ -473,9 +526,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 
 	req.Header.Set("Accept", "application/json; api-version=6.0-preview")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -524,9 +575,7 @@ func (c *Client) DeleteMessage(ctx context.Context, messageQueueUrl, messageQueu
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -591,8 +640,11 @@ func (c *Client) doSessionRequest(ctx context.Context, method, path string, requ
 		return err
 	}
 
-	if resp.StatusCode == expectedResponseStatusCode && responseUnmarshalTarget != nil {
-		return json.NewDecoder(resp.Body).Decode(responseUnmarshalTarget)
+	if resp.StatusCode == expectedResponseStatusCode {
+		if responseUnmarshalTarget != nil {
+			return json.NewDecoder(resp.Body).Decode(responseUnmarshalTarget)
+		}
+		return nil
 	}
 
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
@@ -624,9 +676,7 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	req.Header.Set("User-Agent", c.userAgent.String())
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -634,7 +684,18 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, ParseActionsErrorFromResponse(resp)
+		if resp.StatusCode != http.StatusUnauthorized {
+			return nil, ParseActionsErrorFromResponse(resp)
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		body = trimByteOrderMark(body)
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, &MessageQueueTokenExpiredError{msg: string(body)}
 	}
 
 	var acquiredJobs *Int64List
@@ -808,8 +869,7 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationT
 	bearerToken := ""
 
 	if c.creds.Token != "" {
-		encodedToken := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("github:%v", c.creds.Token)))
-		bearerToken = fmt.Sprintf("Basic %v", encodedToken)
+		bearerToken = fmt.Sprintf("Bearer %v", c.creds.Token)
 	} else {
 		accessToken, err := c.fetchAccessToken(ctx, c.config.ConfigURL.String(), c.creds.AppCreds)
 		if err != nil {
@@ -915,11 +975,39 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 
 	c.logger.Info("getting Actions tenant URL and JWT", "registrationURL", req.URL.String())
 
-	resp, err := c.Do(req)
-	if err != nil {
-		return nil, err
+	var resp *http.Response
+	retry := 0
+	for {
+		var err error
+		resp, err = c.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+			break
+		}
+
+		errStr := fmt.Sprintf("unexpected response from Actions service during registration call: %v", resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			err = fmt.Errorf("%s - %w", errStr, err)
+		} else {
+			err = fmt.Errorf("%s - %v", errStr, string(body))
+		}
+
+		if resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
+			return nil, err
+		}
+
+		retry++
+		if retry > 3 {
+			return nil, fmt.Errorf("unable to register runner after 3 retries: %v", err)
+		}
+		time.Sleep(time.Duration(500 * int(time.Millisecond) * (retry + 1)))
+
 	}
-	defer resp.Body.Close()
 
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
 	if err := json.NewDecoder(resp.Body).Decode(&actionsServiceAdminConnection); err != nil {

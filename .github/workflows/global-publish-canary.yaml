@@ -1,0 +1,133 @@
+name: Publish Canary Images
+
+# Revert to https://github.com/actions-runner-controller/releases#releases
+# for details on why we use this approach
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.github/actions/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/e2e-test-dispatch-workflow.yaml'
+      - '.github/workflows/gha-e2e-tests.yaml'
+      - '.github/workflows/arc-publish.yaml'
+      - '.github/workflows/arc-publish-chart.yaml'
+      - '.github/workflows/gha-publish-chart.yaml'
+      - '.github/workflows/arc-release-runners.yaml'
+      - '.github/workflows/global-run-codeql.yaml'
+      - '.github/workflows/global-run-first-interaction.yaml'
+      - '.github/workflows/global-run-stale.yaml'
+      - '.github/workflows/arc-update-runners-scheduled.yaml'
+      - '.github/workflows/validate-arc.yaml'
+      - '.github/workflows/arc-validate-chart.yaml'
+      - '.github/workflows/gha-validate-chart.yaml'
+      - '.github/workflows/arc-validate-runners.yaml'
+      - '.github/dependabot.yml'
+      - '.github/RELEASE_NOTE_TEMPLATE.md'
+      - 'runner/**'
+      - '.gitignore'
+      - 'PROJECT'
+      - 'LICENSE'
+      - 'Makefile'
+
+# https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  # Safeguard to prevent pushing images to registeries after build
+  PUSH_TO_REGISTRIES: true
+
+jobs:
+  legacy-canary-build:
+    name: Build and Publish Legacy Canary Image
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      TARGET_ORG: actions-runner-controller
+      TARGET_REPO: actions-runner-controller
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
+        with:
+          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Trigger Build And Push Images To Registries
+        run: |
+          # Authenticate
+          gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
+
+          # Trigger the workflow run
+          jq -n '{"event_type": "canary", "client_payload": {"sha": "${{ github.sha }}", "push_to_registries": ${{ env.PUSH_TO_REGISTRIES }}}}' \
+            | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
+
+      - name: Job summary
+        run: |
+          echo "The [publish-canary](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-canary.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- sha: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Push to registries: ${{ env.PUSH_TO_REGISTRIES }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml)" >> $GITHUB_STEP_SUMMARY
+
+  canary-build:
+    name: Build and Publish gha-runner-scale-set-controller Canary Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Normalization is needed because upper case characters are not allowed in the repository name
+      # and the short sha is needed for image tagging
+      - name: Resolve parameters
+        id: resolve_parameters
+        run: |
+          echo "INFO: Resolving short sha"
+          echo "short_sha=$(git rev-parse --short ${{ github.ref }})" >> $GITHUB_OUTPUT
+          echo "INFO: Normalizing repository name (lowercase)"
+          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: latest
+
+      # Unstable builds - run at your own risk
+      - name: Build and Push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=canary-${{ steps.resolve_parameters.outputs.short_sha }}
+          push: ${{ env.PUSH_TO_REGISTRIES }}
+          tags: |
+            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:canary
+            ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:canary-${{ steps.resolve_parameters.outputs.short_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

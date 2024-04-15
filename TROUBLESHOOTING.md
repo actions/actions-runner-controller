@@ -304,3 +304,27 @@ If you noticed that it takes several minutes for sidecar dind container to be cr
 **Solution**
 
 The solution is to switch to using faster storage, if you are experiencing this issue you are probably using HDD storage. Switching to SSD storage fixed the problem in my case. Most cloud providers have a list of storage options to use just pick something faster that your current disk, for on prem clusters you will need to invest in some SSDs.
+
+### Dockerd no space left on device
+
+**Problem**
+
+If you are running many containers on your runner you might encounter an issue where docker daemon is unable to start new containers and you see error `no space left on device`.  
+
+**Solution**
+
+Add a `dockerVarRunVolumeSizeLimit` key in your runner's spec with a higher size limit (the default is 1M) For instance:
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: github-runner
+  namespace: github-system
+spec:
+  replicas: 6
+  template:
+    spec:
+      dockerVarRunVolumeSizeLimit: 50M
+      env: []
+```

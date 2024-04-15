@@ -70,6 +70,9 @@ spec:
         {{- if .Values.logFormat  }}  
         - "--log-format={{ .Values.logFormat }}"
         {{- end }}
+        {{- if .Values.dockerGID  }}
+        - "--docker-gid={{ .Values.dockerGID }}"
+        {{- end }}
         command:
         - "/manager"
         env:
@@ -210,4 +213,7 @@ spec:
       {{- end }}
       {{- if .Values.hostNetwork }}
       hostNetwork: {{ .Values.hostNetwork }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
       {{- end }}

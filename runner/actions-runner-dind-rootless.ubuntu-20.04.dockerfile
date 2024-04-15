@@ -2,10 +2,10 @@ FROM ubuntu:20.04
 
 ARG TARGETPLATFORM
 ARG RUNNER_VERSION
-ARG RUNNER_CONTAINER_HOOKS_VERSION=0.2.0
+ARG RUNNER_CONTAINER_HOOKS_VERSION
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
-ARG DOCKER_COMPOSE_VERSION=v2.16.0
+ARG DOCKER_COMPOSE_VERSION=v2.23.0
 ARG DUMB_INIT_VERSION=1.2.5
 
 # Other arguments
@@ -27,7 +27,6 @@ RUN apt-get update -y \
     dnsutils \
     ftp \
     git \
-    git-lfs \
     iproute2 \
     iputils-ping \
     iptables \
@@ -55,6 +54,10 @@ RUN apt-get update -y \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Download latest git-lfs version
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
+    apt-get install -y --no-install-recommends git-lfs
 
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid $RUNNER_UID runner
@@ -139,8 +142,16 @@ RUN export SKIP_IPTABLES=1 \
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /home/runner/bin/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
-    && chmod +x /home/runner/bin/docker-compose
+    && mkdir -p /home/runner/.docker/cli-plugins \
+    && curl -fLo /home/runner/.docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
+    && chmod +x /home/runner/.docker/cli-plugins/docker-compose \
+    && ln -s /home/runner/.docker/cli-plugins/docker-compose /home/runner/bin/docker-compose \
+    && which docker-compose \
+    && docker compose version
+
+# Create folder structure here to avoid permission issues
+# when mounting the daemon.json file from a configmap.
+RUN mkdir -p /home/runner/.config/docker
 
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["entrypoint-dind-rootless.sh"]

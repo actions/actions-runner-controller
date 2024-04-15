@@ -47,6 +47,7 @@ authSecret:
   #github_basicauth_username: ""
   #github_basicauth_password: ""
 
+# http(s) should be specified for dockerRegistryMirror, e.g.: dockerRegistryMirror="https://<your-docker-registry-mirror>"
 dockerRegistryMirror: ""
 image:
   repository: "summerwind/actions-runner-controller"
@@ -69,7 +70,7 @@ rbac:
   {}
   # # This allows ARC to dynamically create a ServiceAccount and a Role for each Runner pod that uses "kubernetes" container mode,
   # # by extending ARC's manager role to have the same permissions required by the pod runs the runner agent in "kubernetes" container mode.
-  # # Without this, Kubernetes blocks ARC to create the role to prevent a priviledge escalation.
+  # # Without this, Kubernetes blocks ARC to create the role to prevent a privilege escalation.
   # # See https://github.com/actions/actions-runner-controller/pull/1268/files#r917327010
   # allowGrantingKubernetesContainerModePermissions: true
 
@@ -108,7 +109,11 @@ service:
 # Metrics service resource
 metrics:
   serviceAnnotations: {}
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    namespace: ""
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
   port: 8443
   proxy:
@@ -147,8 +152,7 @@ podDisruptionBudget:
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-env:
-  {}
+# env:
   # specify additional environment variables for the controller pod.
   # It's possible to specify either key vale pairs e.g.:
   # http_proxy: "proxy.com:8080"
@@ -188,8 +192,16 @@ admissionWebHooks:
 # https://github.com/actions/actions-runner-controller/issues/1005#issuecomment-993097155
 #hostNetwork: true
 
+# If you use `hostNetwork: true`, then you need dnsPolicy: ClusterFirstWithHostNet
+# https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-dns-policy
+#dnsPolicy: ClusterFirst
+
 ## specify log format for actions runner controller.  Valid options are "text" and "json"
 logFormat: text
+
+# enable setting the docker group id for the runner container
+# https://github.com/actions/actions-runner-controller/pull/2499
+#dockerGID: 121
 
 githubWebhookServer:
   enabled: false
@@ -291,7 +303,7 @@ githubWebhookServer:
   #       key: GITHUB_WEBHOOK_SECRET_TOKEN
   #       name: prod-gha-controller-webhook-token
   #       optional: true
-  env: {}
+  # env:
 
 actionsMetrics:
   serviceAnnotations: {}
@@ -299,7 +311,11 @@ actionsMetrics:
   # as a part of the helm release.
   # Do note that you also need actionsMetricsServer.enabled=true
   # to deploy the actions-metrics-server whose k8s service is referenced by the service monitor.
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    namespace: ""
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
   port: 8443
   proxy:
@@ -307,6 +323,19 @@ actionsMetrics:
     image:
       repository: quay.io/brancz/kube-rbac-proxy
       tag: v0.13.1
+  # specify additional environment variables for the webhook server pod.
+  # It's possible to specify either key vale pairs e.g.:
+  # my_env_var: "some value"
+  # my_other_env_var: "other value"
+
+  # or a list of complete environment variable definitions e.g.:
+  # - name: GITHUB_WEBHOOK_SECRET_TOKEN
+  #   valueFrom:
+  #     secretKeyRef:
+  #       key: GITHUB_WEBHOOK_SECRET_TOKEN
+  #       name: prod-gha-controller-webhook-token
+  #       optional: true
+  # env:
 
 actionsMetricsServer:
   enabled: false
@@ -359,6 +388,7 @@ actionsMetricsServer:
         protocol: TCP
         name: http
         #nodePort: someFixedPortForUseWithTerraformCdkCfnEtc
+    loadBalancerSourceRanges: []
   ingress:
     enabled: false
     ingressClassName: ""
@@ -388,4 +418,5 @@ actionsMetricsServer:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
-
+  terminationGracePeriodSeconds: 10
+  lifecycle: {}

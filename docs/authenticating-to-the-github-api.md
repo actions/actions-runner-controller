@@ -1,5 +1,8 @@
 # Authenticating to the GitHub API
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer autoscaling runner scale sets, it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller). To understand why these resources are considered legacy (and the benefits of using the newer autoscaling runner scale sets), read [this discussion (#2775)](https://github.com/actions/actions-runner-controller/discussions/2775).
+
 ## Setting Up Authentication with GitHub API
 
 There are two ways for actions-runner-controller to authenticate with the GitHub API (only 1 can be configured at a time however):
@@ -22,7 +25,7 @@ _Note: Links are provided further down to create an app for your logged in user 
 
 * Actions (read)
 * Administration (read / write)
-* Checks (read) (if you are going to use [Webhook Driven Scaling](#webhook-driven-scaling))
+* Checks (read) (if you are going to use [Webhook Driven Scaling](automatically-scaling-runners.md#webhook-driven-scaling))
 * Metadata (read)
 
 **Required Permissions for Organization Runners:**<br />
@@ -39,7 +42,7 @@ _Note: All API routes mapped to their permissions can be found [here](https://do
 
 **Subscribe to events**
 
-At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the `Workflow Job` event.
+At this point you have a choice of configuring a webhook, a webhook is needed if you are going to use [webhook driven scaling](automatically-scaling-runners.md#webhook-driven-scaling). The webhook can be configured centrally in the GitHub app itself or separately. In either case you need to subscribe to the `Workflow Job` event.
 
 ---
 

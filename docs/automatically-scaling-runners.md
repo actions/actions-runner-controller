@@ -1,5 +1,8 @@
 # Automatically scaling runners
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer autoscaling runner scale sets, it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller). To understand why these resources are considered legacy (and the benefits of using the newer autoscaling runner scale sets), read [this discussion (#2775)](https://github.com/actions/actions-runner-controller/discussions/2775).
+
 ## Overview
 
 > If you are using controller version < [v0.22.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.22.0) and you are not using GHES, and so you can't set your rate limit budget, it is recommended that you use 100 replicas or fewer to prevent being rate limited.
@@ -17,7 +20,7 @@ This anti-flap configuration also has the final say on if a runner can be scaled
 This delay is configurable via 2 methods:
 
 1. By setting a new default via the controller's `--default-scale-down-delay` flag
-2. By setting by setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
+2. By setting the attribute `scaleDownDelaySecondsAfterScaleOut:` in a `HorizontalRunnerAutoscaler` kind's `spec:`.
 
 Below is a complete basic example of one of the pull driven scaling metrics.
 
@@ -133,7 +136,7 @@ The `HorizontalRunnerAutoscaler` will poll GitHub for the number of runners in t
 **Benefits of this metric**
 1. Supports named repositories server-side the same as the `TotalNumberOfQueuedAndInProgressWorkflowRuns` metric [#313](https://github.com/actions/actions-runner-controller/pull/313)
 2. Supports GitHub organization wide scaling without maintaining an explicit list of repositories, this is especially useful for those that are working at a larger scale. [#223](https://github.com/actions/actions-runner-controller/pull/223)
-3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](#runner-labels)
+3. Like all scaling metrics, you can manage workflow allocation to the RunnerDeployment through the use of [GitHub labels](using-arc-runners-in-a-workflow.md#runner-labels)
 4. Supports scaling desired runner count on both a percentage increase / decrease basis as well as on a fixed increase / decrease count basis [#223](https://github.com/actions/actions-runner-controller/pull/223) [#315](https://github.com/actions/actions-runner-controller/pull/315)
 
 **Drawbacks of this metric**
@@ -186,6 +189,38 @@ spec:
     scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
 ```
 
+**Combining Pull Driven Scaling Metrics**
+
+If a HorizontalRunnerAutoscaler is configured with a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns`, then be aware that the controller will check the primary metric of `PercentageRunnersBusy` first and will only use the secondary metric to calculate the desired replica count if the primary metric returns 0 desired replicas.
+
+`PercentageRunnersBusy` metrics must appear before `TotalNumberOfQueuedAndInProgressWorkflowRuns`; otherwise, the controller will fail to process the `HorizontalRunnerAutoscaler`. A valid configuration follows.
+
+```yaml
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: example-runner-deployment-autoscaler
+spec:
+  scaleTargetRef:
+    kind: RunnerDeployment
+    # # In case the scale target is RunnerSet:
+    # kind: RunnerSet
+    name: example-runner-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'    # The percentage of busy runners at which the number of desired runners are re-evaluated to scale up
+    scaleDownThreshold: '0.3'   # The percentage of busy runners at which the number of desired runners are re-evaluated to scale down
+    scaleUpAdjustment: 2        # The scale up runner count added to desired count
+    scaleDownAdjustment: 1      # The scale down runner count subtracted from the desired count
+  - type: TotalNumberOfQueuedAndInProgressWorkflowRuns
+    repositoryNames:
+    # A repository name is the REPO part of `github.com/OWNER/REPO`
+    - myrepo
+```
+
 ## Webhook Driven Scaling
 
 > This feature requires controller version => [v0.20.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.20.0)
@@ -224,34 +259,54 @@ spec:
       duration: "30m"
 ```
 
-The lifecycle of a runner provisioned from a webhook is different to a runner provisioned from the pull based scaling method:
+With the `workflowJob` trigger, each event adds or subtracts a single runner. the `scaleUpTriggers.amount` field is ignored.
+
+The `duration` field is there because event delivery is not guaranteed. If a scale-up event is received, but the corresponding
+scale-down event is not, then the extra runner would be left running forever if there were not some clean-up mechanism.
+The `duration` field sets the maximum amount of time to wait for a scale-down event. Scale-down happens at the 
+earlier of receiving the scale-down event or the expiration of `duration` after the scale-up event is processed and
+the scale-up itself is initiated.
+
+The lifecycle of a runner provisioned from a webhook is different from that of a runner provisioned from the pull based scaling method:
 
 1. GitHub sends a `workflow_job` event to ARC with `status=queued`
-2. ARC finds a HRA with a `workflow_job` webhook scale trigger that backs a RunnerDeployment / RunnerSet with matching runner labels
-3. The matched HRA adds a unit to its `capacityReservations` list
-4. ARC adds a replica and sets the EffectiveTime of that replica to current + `HRA.spec.scaleUpTriggers[].duration`
+2. ARC finds the HRA with a `workflow_job` webhook scale trigger that backs a RunnerDeployment / RunnerSet with matching runner labels. (If it finds more than one match, the event is ignored.)
+3. The matched HRA adds a `capacityReservation` to its list and sets it to expire at current time + `HRA.spec.scaleUpTriggers[].duration`
+4. If there are fewer replicas running than `maxReplicas`, HRA adds a replica and sets the EffectiveTime of that replica to the current time
 
-At this point there are a few things that can happen, either the job gets allocated to the runner or the runner is left dangling due to it not being used, if the runner gets assigned the job that triggered the scale up the lifecycle looks like this:
+At this point there are a few things that can happen:
+1. Due to idle runners already being available, the job is assigned to one of them and the new runner is left dangling due to it not being used 
+2. The job gets allocated to the runner just launched
+3. If there are already `maxReplicas` replicas running, the job waits for its `capacityReservation` to be assigned to one of them
+ 
+If the runner gets assigned the job that triggered the scale up, the lifecycle looks like this:
 
 1. The new runner gets allocated the job and processes it
 2. Upon the job ending GitHub sends another `workflow_job` event to ARC but with `status=completed`
 3. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
+
+If the job has to wait for a runner because there are already `maxReplicas` replicas running, the lifecycle looks like this:
+1. A `capacityReservation` is added to the list, but no scale-up happens because that would exceed `maxReplicas`
+2. When one of the existing runners finishes a job, GitHub sends another `workflow_job` event to ARC but with `status=completed` (or `status=canceled` if the job was cancelled)
+3. The HRA removes the oldest capacity reservation from its `capacityReservations`, the oldest waiting `capacityReservation` becomes active, and its `duration` timer starts
+4. GitHub assigns a waiting job to the newly available runner
 
 If the job is cancelled before it is allocated to a runner then the lifecycle looks like this:
 
 1. Upon the job cancellation GitHub sends another `workflow_job` event to ARC but with `status=cancelled`
 2. The HRA removes the oldest capacity reservation from its `capacityReservations` and picks a runner to terminate ensuring it isn't busy via the GitHub API beforehand
 
-If runner is never used due to other runners matching needed runner group and required runner labels are allocated the job then the lifecycle looks like this:
+If the `status=completed` or `status=cancelled` is never delivered to ARC (which happens occasionally) then the lifecycle looks like this:
 
 1. The scale trigger duration specified via `HRA.spec.scaleUpTriggers[].duration` elapses
-2. The HRA thinks the capacity reservation is expired, removes it from HRA's `capacityReservations` and terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
+2. The HRA notices that the capacity reservation has expired, removes it from HRA's `capacityReservation` list and (unless there are `maxReplicas` running and jobs waiting) terminates the expired runner ensuring it isn't busy via the GitHub API beforehand
 
 Your `HRA.spec.scaleUpTriggers[].duration` value should be set long enough to account for the following things:
 
-1. the potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node avaliable 
-2. the amount of time it takes for GitHub to allocate a job to that runner
-3. the amount of time it takes for the runner to notice the allocated job and starts running it
+1. The potential amount of time it could take for a pod to become `Running` e.g. you need to scale horizontally because there isn't a node available +
+2. The amount of time it takes for GitHub to allocate a job to that runner +
+3. The amount of time it takes for the runner to notice the allocated job and starts running it +
+4. The length of time it takes for the runner to complete the job
 
 ### Install with Helm
 
@@ -411,8 +466,6 @@ The main use case for scaling from 0 is with the `HorizontalRunnerAutoscaler` ki
 
 `PercentageRunnersBusy` can't be used alone for scale-from-zero as, by its definition, it needs one or more GitHub runners to become `busy` to be able to scale. If there isn't a runner to pick up a job and enter a `busy` state then the controller will never know to provision a runner to begin with as this metric has no knowledge of the job queue and is relying on using the number of busy runners as a means for calculating the desired replica count.
 
-If a HorizontalRunnerAutoscaler is configured with a secondary metric of `TotalNumberOfQueuedAndInProgressWorkflowRuns` then be aware that the controller will check the primary metric of `PercentageRunnersBusy` first and will only use the secondary metric to calculate the desired replica count if the primary metric returns 0 desired replicas.
-
 Webhook-based autoscaling is the best option as it is relatively easy to configure and also it can scale quickly.
 
 ## Scheduled Overrides
@@ -504,7 +557,7 @@ This can be problematic in two scenarios:
 
 > RunnerDeployment is not affected by the Scenario 1 as RunnerDeployment-managed runners are already tolerable to unlimitedly long in-progress running job while being replaced, as it's graceful termination process is handled outside of the entrypoint and the Kubernetes' pod termination process.
 
-To make it more reliable, please set `spec.template.spec.terminationGracePeriodSeconds` field and the `RUNNER_GRACEFUL_STOP_TIMEOUT` environment variable appropriately.
+To make it more reliable, please set `spec.template.spec.terminationGracePeriodSeconds` field and the `RUNNER_GRACEFUL_STOP_TIMEOUT` environment variable appropriately. **NOTE:** if you are using the default configuration of running DinD as a sidecar, you'll need to set this environment variable in both `spec.template.spec.env` as well as `spec.template.spec.dockerEnv` for RunnerDeployment objects, otherwise the `docker` container will recieve the same termination signal and exit while the remainder of the build runs.
 
 If you want the pod to terminate in approximately 110 seconds at the latest since the termination request, try `terminationGracePeriodSeconds` of `110` and `RUNNER_GRACEFUL_STOP_TIMEOUT` of like `90`.
 

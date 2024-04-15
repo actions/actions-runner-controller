@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" . }}
+  name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceWatchRoleName" . }}
   namespace: {{ .Values.flags.watchSingleNamespace }}
 rules:
 - apiGroups:
@@ -50,6 +50,13 @@ rules:
   - ephemeralrunnersets/status
   verbs:
   - get
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunnersets/finalizers
+  verbs:
   - patch
   - update
 - apiGroups:
@@ -114,4 +121,5 @@ rules:
   verbs:
   - list
   - watch
+  - patch
 {{- end }}

@@ -11,7 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	prometheus_metrics "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net/metrics"
 	arcgithub "github.com/actions/actions-runner-controller/github"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -118,10 +118,10 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	}
 
 	var total, inProgress, queued, completed, unknown int
-	type callback func()
-	listWorkflowJobs := func(user string, repoName string, runID int64, fallback_cb callback) {
+	listWorkflowJobs := func(user string, repoName string, runID int64) {
 		if runID == 0 {
-			fallback_cb()
+			// should not happen in reality
+			r.Log.Info("Detected run with no runID of 0, ignoring the case and not scaling.", "repo_name", repoName, "run_id", runID)
 			return
 		}
 		opt := github.ListWorkflowJobsOptions{ListOptions: github.ListOptions{PerPage: 50}}
@@ -139,7 +139,8 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			opt.Page = resp.NextPage
 		}
 		if len(allJobs) == 0 {
-			fallback_cb()
+			// GitHub API can return run with empty job array - should be ignored
+			r.Log.Info("Detected run with no jobs, ignoring the case and not scaling.", "repo_name", repoName, "run_id", runID)
 		} else {
 		JOB:
 			for _, job := range allJobs {
@@ -201,9 +202,9 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			case "completed":
 				completed++
 			case "in_progress":
-				listWorkflowJobs(user, repoName, run.GetID(), func() { inProgress++ })
+				listWorkflowJobs(user, repoName, run.GetID())
 			case "queued":
-				listWorkflowJobs(user, repoName, run.GetID(), func() { queued++ })
+				listWorkflowJobs(user, repoName, run.GetID())
 			default:
 				unknown++
 			}

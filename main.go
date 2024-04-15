@@ -27,6 +27,7 @@ import (
 	summerwindv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
 	actionsgithubcom "github.com/actions/actions-runner-controller/controllers/actions.github.com"
+	actionsgithubcommetrics "github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -39,12 +40,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	// +kubebuilder:scaffold:imports
 )
 
 const (
 	defaultRunnerImage = "summerwind/actions-runner:latest"
 	defaultDockerImage = "docker:dind"
+	defaultDockerGID   = "1001"
 )
 
 var scheme = runtime.NewScheme()
@@ -72,22 +76,24 @@ func main() {
 		err      error
 		ghClient *github.Client
 
+		// metrics server configuration for AutoscalingListener
+		listenerMetricsAddr     string
+		listenerMetricsEndpoint string
+
 		metricsAddr              string
 		autoScalingRunnerSetOnly bool
 		enableLeaderElection     bool
 		disableAdmissionWebhook  bool
-		runnerStatusUpdateHook   bool
+		updateStrategy           string
 		leaderElectionId         string
 		port                     int
 		syncPeriod               time.Duration
 
 		defaultScaleDownDelay time.Duration
 
-		runnerImage            string
 		runnerImagePullSecrets stringSlice
+		runnerPodDefaults      actionssummerwindnet.RunnerPodDefaults
 
-		dockerImage          string
-		dockerRegistryMirror string
 		namespace            string
 		logLevel             string
 		logFormat            string
@@ -104,14 +110,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	flag.StringVar(&listenerMetricsAddr, "listener-metrics-addr", ":8080", "The address applied to AutoscalingListener metrics server")
+	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
-	flag.StringVar(&runnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
-	flag.StringVar(&dockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&runnerPodDefaults.RunnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&runnerPodDefaults.DockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
+	flag.StringVar(&runnerPodDefaults.DockerGID, "docker-gid", defaultDockerGID, "The default GID of docker group in the docker sidecar container. Use 1001 for dockerd sidecars of Ubuntu 20.04 runners 121 for Ubuntu 22.04.")
 	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
-	flag.StringVar(&dockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
+	flag.StringVar(&runnerPodDefaults.DockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
 	flag.StringVar(&c.EnterpriseURL, "github-enterprise-url", c.EnterpriseURL, "Enterprise URL to be used for your GitHub API calls")
 	flag.Int64Var(&c.AppID, "github-app-id", c.AppID, "The application ID of GitHub App.")
@@ -122,7 +131,7 @@ func main() {
 	flag.StringVar(&c.BasicauthUsername, "github-basicauth-username", c.BasicauthUsername, "Username for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.BasicauthPassword, "github-basicauth-password", c.BasicauthPassword, "Password for GitHub basic auth to use instead of PAT or GitHub APP in case it's running behind a proxy API")
 	flag.StringVar(&c.RunnerGitHubURL, "runner-github-url", c.RunnerGitHubURL, "GitHub URL to be used by runners during registration")
-	flag.BoolVar(&runnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
+	flag.BoolVar(&runnerPodDefaults.UseRunnerStatusUpdateHook, "runner-status-update-hook", false, "Use custom RBAC for runners (role, role binding and service account).")
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", actionssummerwindnet.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
@@ -132,8 +141,11 @@ func main() {
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
+	flag.StringVar(&updateStrategy, "update-strategy", "immediate", `Resources reconciliation strategy on upgrade with running/pending jobs. Valid values are: "immediate", "eventual". Defaults to "immediate".`)
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.Parse()
+
+	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
 
 	log, err := logging.NewLogger(logLevel, logFormat)
 	if err != nil {
@@ -153,12 +165,14 @@ func main() {
 	ctrl.SetLogger(log)
 
 	managerNamespace := ""
-	var newCache cache.NewCacheFunc
+	var defaultNamespaces map[string]cache.Config
+	if namespace != "" {
+		defaultNamespaces = map[string]cache.Config{
+			namespace: {},
+		}
+	}
 
 	if autoScalingRunnerSetOnly {
-		// We don't support metrics for AutoRunnerScaleSet for now
-		metricsAddr = "0"
-
 		managerNamespace = os.Getenv("CONTROLLER_MANAGER_POD_NAMESPACE")
 		if managerNamespace == "" {
 			log.Error(err, "unable to obtain manager pod namespace")
@@ -166,22 +180,57 @@ func main() {
 		}
 
 		if len(watchSingleNamespace) > 0 {
-			newCache = cache.MultiNamespacedCacheBuilder([]string{managerNamespace, watchSingleNamespace})
+			if defaultNamespaces == nil {
+				defaultNamespaces = make(map[string]cache.Config)
+			}
+
+			defaultNamespaces[watchSingleNamespace] = cache.Config{}
+			defaultNamespaces[managerNamespace] = cache.Config{}
+		}
+
+		switch updateStrategy {
+		case "eventual", "immediate":
+			log.Info(`Update strategy set to:`, "updateStrategy", updateStrategy)
+		default:
+			log.Info(`Update strategy not recognized. Defaulting to "immediately"`, "updateStrategy", updateStrategy)
+			updateStrategy = "immediate"
 		}
 	}
 
+	if actionsgithubcom.SetListenerLoggingParameters(logLevel, logFormat) {
+		log.Info("AutoscalingListener logging parameters changed", "LogLevel", logLevel, "LogFormat", logFormat)
+	} else {
+		log.Info("Using default AutoscalingListener logging parameters", "LogLevel", actionsgithubcom.DefaultScaleSetListenerLogLevel, "LogFormat", actionsgithubcom.DefaultScaleSetListenerLogFormat)
+	}
+
+	actionsgithubcom.SetListenerEntrypoint(os.Getenv("LISTENER_ENTRYPOINT"))
+
+	var webhookServer webhook.Server
+	if port != 0 {
+		webhookServer = webhook.NewServer(webhook.Options{
+			Port: port,
+		})
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		NewCache:           newCache,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   leaderElectionId,
-		Port:               port,
-		SyncPeriod:         &syncPeriod,
-		Namespace:          namespace,
-		ClientDisableCacheFor: []client.Object{
-			&corev1.Secret{},
-			&corev1.ConfigMap{},
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		Cache: cache.Options{
+			SyncPeriod:        &syncPeriod,
+			DefaultNamespaces: defaultNamespaces,
+		},
+		WebhookServer:    webhookServer,
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: leaderElectionId,
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{
+					&corev1.Secret{},
+					&corev1.ConfigMap{},
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -196,8 +245,12 @@ func main() {
 			os.Exit(1)
 		}
 
+		if metricsAddr != "" {
+			log.Info("Registering scale set metrics")
+			actionsgithubcommetrics.RegisterMetrics()
+		}
+
 		actionsMultiClient := actions.NewMultiClient(
-			"actions-runner-controller/"+build.Version,
 			log.WithName("actions-clients"),
 		)
 
@@ -208,6 +261,7 @@ func main() {
 			ControllerNamespace:                managerNamespace,
 			DefaultRunnerScaleSetListenerImage: managerImage,
 			ActionsClient:                      actionsMultiClient,
+			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
@@ -225,18 +279,22 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunnerSet"),
-			Scheme:        mgr.GetScheme(),
-			ActionsClient: actionsMultiClient,
+			Client:         mgr.GetClient(),
+			Log:            log.WithName("EphemeralRunnerSet"),
+			Scheme:         mgr.GetScheme(),
+			ActionsClient:  actionsMultiClient,
+			PublishMetrics: metricsAddr != "0",
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
 		}
+
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Log:    log.WithName("AutoscalingListener"),
-			Scheme: mgr.GetScheme(),
+			Client:                  mgr.GetClient(),
+			Log:                     log.WithName("AutoscalingListener"),
+			Scheme:                  mgr.GetScheme(),
+			ListenerMetricsAddr:     listenerMetricsAddr,
+			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
@@ -248,16 +306,11 @@ func main() {
 		)
 
 		runnerReconciler := &actionssummerwindnet.RunnerReconciler{
-			Client:                    mgr.GetClient(),
-			Log:                       log.WithName("runner"),
-			Scheme:                    mgr.GetScheme(),
-			GitHubClient:              multiClient,
-			DockerImage:               dockerImage,
-			DockerRegistryMirror:      dockerRegistryMirror,
-			UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
-			// Defaults for self-hosted runner containers
-			RunnerImage:            runnerImage,
-			RunnerImagePullSecrets: runnerImagePullSecrets,
+			Client:            mgr.GetClient(),
+			Log:               log.WithName("runner"),
+			Scheme:            mgr.GetScheme(),
+			GitHubClient:      multiClient,
+			RunnerPodDefaults: runnerPodDefaults,
 		}
 
 		if err = runnerReconciler.SetupWithManager(mgr); err != nil {
@@ -289,17 +342,12 @@ func main() {
 		}
 
 		runnerSetReconciler := &actionssummerwindnet.RunnerSetReconciler{
-			Client:               mgr.GetClient(),
-			Log:                  log.WithName("runnerset"),
-			Scheme:               mgr.GetScheme(),
-			CommonRunnerLabels:   commonRunnerLabels,
-			DockerImage:          dockerImage,
-			DockerRegistryMirror: dockerRegistryMirror,
-			GitHubClient:         multiClient,
-			// Defaults for self-hosted runner containers
-			RunnerImage:               runnerImage,
-			RunnerImagePullSecrets:    runnerImagePullSecrets,
-			UseRunnerStatusUpdateHook: runnerStatusUpdateHook,
+			Client:             mgr.GetClient(),
+			Log:                log.WithName("runnerset"),
+			Scheme:             mgr.GetScheme(),
+			CommonRunnerLabels: commonRunnerLabels,
+			GitHubClient:       multiClient,
+			RunnerPodDefaults:  runnerPodDefaults,
 		}
 
 		if err = runnerSetReconciler.SetupWithManager(mgr); err != nil {
@@ -312,8 +360,9 @@ func main() {
 			"version", build.Version,
 			"default-scale-down-delay", defaultScaleDownDelay,
 			"sync-period", syncPeriod,
-			"default-runner-image", runnerImage,
-			"default-docker-image", dockerImage,
+			"default-runner-image", runnerPodDefaults.RunnerImage,
+			"default-docker-image", runnerPodDefaults.DockerImage,
+			"default-docker-gid", runnerPodDefaults.DockerGID,
 			"common-runnner-labels", commonRunnerLabels,
 			"leader-election-enabled", enableLeaderElection,
 			"leader-election-id", leaderElectionId,

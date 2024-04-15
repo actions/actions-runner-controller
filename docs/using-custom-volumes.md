@@ -1,5 +1,8 @@
 # Using custom volumes
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer autoscaling runner scale sets, it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller). To understand why these resources are considered legacy (and the benefits of using the newer autoscaling runner scale sets), read [this discussion (#2775)](https://github.com/actions/actions-runner-controller/discussions/2775).
+
 ## Custom Volume mounts
 
 You can configure your own custom volume mounts. For example to have the work/docker data in memory or on NVME SSD, for
@@ -78,7 +81,7 @@ spec:
       - hostPath:
           path: /mnt/disks/ssd0
         name: tmp
-    ephemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
+      ephemeral: true # VERY important. otherwise data inside the workdir and /tmp is not cleared between builds
 ```
 
 ### Docker image layers caching
@@ -160,7 +163,7 @@ spec:
 
 ### PV-backed runner work directory
 
-ARC works by automatically creating runner pods for running [`actions/runner`](https://github.com/actions/runner) and [running `config.sh`](https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-a-repository) which you had to ran manually without ARC.
+ARC works by automatically creating runner pods for running [`actions/runner`](https://github.com/actions/runner) and [running `config.sh`](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-a-repository) which you had to ran manually without ARC.
 
 `config.sh` is the script provided by `actions/runner` to pre-configure the runner process before being started. One of the options provided by `config.sh` is `--work`,
 which specifies the working directory where the runner runs your workflow jobs in.

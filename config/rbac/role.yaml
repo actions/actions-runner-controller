@@ -1,9 +1,7 @@
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -102,6 +100,13 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunnersets/finalizers
+  verbs:
+  - patch
+  - update
 - apiGroups:
   - actions.github.com
   resources:

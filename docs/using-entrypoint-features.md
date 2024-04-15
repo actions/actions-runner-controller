@@ -1,5 +1,8 @@
 # Using entrypoint features
 
+> [!WARNING]
+> This documentation covers the legacy mode of ARC (resources in the `actions.summerwind.net` namespace). If you're looking for documentation on the newer autoscaling runner scale sets, it is available in [GitHub Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller). To understand why these resources are considered legacy (and the benefits of using the newer autoscaling runner scale sets), read [this discussion (#2775)](https://github.com/actions/actions-runner-controller/discussions/2775).
+
 ## Runner Entrypoint Features
 
 > Environment variable values must all be strings
@@ -66,4 +69,47 @@ spec:
           value: "172.17.0.0/12"
         - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
           value: "24"
+```
+
+More options can be configured by mounting a configmap to the daemon.json location:
+
+- rootless: /home/runner/.config/docker/daemon.json
+- rootful: /etc/docker/daemon.json
+
+```yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeployment
+spec:
+  template:
+    spec:
+      dockerdWithinRunnerContainer: true
+      image: summerwind/actions-runner-dind(-rootless)
+      volumeMounts:
+        - mountPath: /home/runner/.config/docker/daemon.json
+          name: daemon-config-volume
+          subPath: daemon.json
+      volumes:
+        - name: daemon-config-volume
+          configMap:
+            name: daemon-cm
+            items:
+              - key: daemon.json
+                path: daemon.json
+      securityContext:
+        fsGroup: 1001 # runner user id
+```
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: daemon-cm
+data:
+  daemon.json: |
+    {
+      "log-level": "warn",
+      "dns": ["x.x.x.x"]
+    }
 ```

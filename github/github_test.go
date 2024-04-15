@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/github/fake"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 )
 
 var server *httptest.Server
