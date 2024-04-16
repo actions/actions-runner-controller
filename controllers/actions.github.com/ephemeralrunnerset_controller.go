@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
@@ -483,10 +482,14 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient actions.ActionsService, log logr.Logger) (bool, error) {
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
 		actionsError := &actions.ActionsError{}
-		if errors.As(err, &actionsError) &&
-			actionsError.StatusCode == http.StatusBadRequest &&
-			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
-			// Runner is still running a job, proceed with the next one
+		if !errors.As(err, &actionsError) {
+			log.Error(err, "failed to remove runner from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
+			return false, err
+		}
+
+		if actionsError.StatusCode == http.StatusBadRequest &&
+			actionsError.IsException("JobStillRunningException") {
+			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
 			return false, nil
 		}
 

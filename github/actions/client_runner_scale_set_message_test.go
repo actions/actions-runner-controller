@@ -98,7 +98,7 @@ func TestGetMessage(t *testing.T) {
 
 	t.Run("Status code not found", func(t *testing.T) {
 		want := actions.ActionsError{
-			Message:    "Request returned status: 404 Not Found",
+			Err:        errors.New("unknown exception"),
 			StatusCode: 404,
 		}
 		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
