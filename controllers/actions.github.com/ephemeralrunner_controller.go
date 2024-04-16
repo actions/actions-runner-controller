@@ -323,7 +323,6 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 
 	log.Error(err, "Failed clean up runner from the service")
 	return ctrl.Result{}, err
-
 }
 
 func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (deleted bool, err error) {
