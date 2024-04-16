@@ -3,6 +3,8 @@ kind: RoleBinding
 metadata:
   name: {{ include "gha-runner-scale-set.managerRoleBindingName" . }}
   namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
   labels:
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
     app.kubernetes.io/component: manager-role-binding

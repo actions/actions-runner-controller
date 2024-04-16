@@ -5,6 +5,8 @@ kind: RoleBinding
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleBindingName" . }}
   namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
   finalizers:
     - actions.github.com/cleanup-protection
 roleRef:
