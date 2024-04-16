@@ -47,7 +47,6 @@ func (e *ActionsError) IsException(target string) bool {
 	if ex, ok := e.Err.(*ActionsExceptionError); ok {
 		return strings.Contains(ex.ExceptionName, target)
 	}
-
 	return false
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(s.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		got, err := client.GetMessage(ctx, s.URL, token, 0)
+		got, err := client.GetMessage(ctx, s.URL, token, 0, 10)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -52,7 +53,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(s.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		got, err := client.GetMessage(ctx, s.URL, token, 1)
+		got, err := client.GetMessage(ctx, s.URL, token, 1, 10)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	})
@@ -76,7 +77,7 @@ func TestGetMessage(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		assert.NotNil(t, err)
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
 	})
@@ -89,7 +90,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		require.NotNil(t, err)
 
 		var expectedErr *actions.MessageQueueTokenExpiredError
@@ -108,7 +109,7 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		require.NotNil(t, err)
 		assert.Equal(t, want.Error(), err.Error())
 	})
@@ -122,8 +123,34 @@ func TestGetMessage(t *testing.T) {
 		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
 		require.NoError(t, err)
 
-		_, err = client.GetMessage(ctx, server.URL, token, 0)
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 10)
 		assert.NotNil(t, err)
+	})
+
+	t.Run("Capacity error handling", func(t *testing.T) {
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hc := r.Header.Get(actions.HeaderScaleSetMaxCapacity)
+			c, err := strconv.Atoi(hc)
+			require.NoError(t, err)
+			assert.GreaterOrEqual(t, c, 0)
+
+			w.WriteHeader(http.StatusBadRequest)
+			w.Header().Set("Content-Type", "text/plain")
+		}))
+
+		client, err := actions.NewClient(server.configURLForOrg("my-org"), auth)
+		require.NoError(t, err)
+
+		_, err = client.GetMessage(ctx, server.URL, token, 0, -1)
+		require.Error(t, err)
+		// Ensure we don't send requests with negative capacity
+		assert.False(t, errors.Is(err, &actions.ActionsError{}))
+
+		_, err = client.GetMessage(ctx, server.URL, token, 0, 0)
+		assert.Error(t, err)
+		var expectedErr *actions.ActionsError
+		assert.ErrorAs(t, err, &expectedErr)
+		assert.Equal(t, http.StatusBadRequest, expectedErr.StatusCode)
 	})
 }
 
