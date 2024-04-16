@@ -174,8 +174,8 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 			continue
 		}
 
-		// New context is created to avoid cancelation during message handling.
-		if err := l.handleMessage(context.Background(), handler, msg); err != nil {
+		// Remove cancellation from the context to avoid cancelling the message handling.
+		if err := l.handleMessage(context.WithoutCancel(ctx), handler, msg); err != nil {
 			return fmt.Errorf("failed to handle message: %w", err)
 		}
 	}

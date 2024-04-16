@@ -484,8 +484,8 @@ func TestListener_Listen(t *testing.T) {
 			).
 			Once()
 
-			// Ensure delete message is called with background context
-		client.On("DeleteMessage", context.Background(), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		// Ensure delete message is called without cancel
+		client.On("DeleteMessage", context.WithoutCancel(ctx), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 		config.Client = client
 
