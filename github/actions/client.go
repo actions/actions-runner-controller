@@ -29,6 +29,9 @@ const (
 	apiVersionQueryParam = "api-version=6.0-preview"
 )
 
+// Header used to propagate capacity information to the back-end
+const HeaderScaleSetMaxCapacity = "X-ScaleSetMaxCapacity"
+
 //go:generate mockery --inpackage --name=ActionsService
 type ActionsService interface {
 	GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*RunnerScaleSet, error)
@@ -45,7 +48,7 @@ type ActionsService interface {
 	AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error)
 	GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*AcquirableJobList, error)
 
-	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*RunnerScaleSetMessage, error)
+	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*RunnerScaleSetMessage, error)
 	DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error
 
 	GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *RunnerScaleSetJitRunnerSetting, scaleSetId int) (*RunnerScaleSetJitRunnerConfig, error)
@@ -103,6 +106,8 @@ type Client struct {
 
 	proxyFunc ProxyFunc
 }
+
+var _ ActionsService = &Client{}
 
 type ProxyFunc func(req *http.Request) (*url.URL, error)
 
@@ -543,7 +548,7 @@ func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int)
 	return nil
 }
 
-func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*RunnerScaleSetMessage, error) {
+func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*RunnerScaleSetMessage, error) {
 	u, err := url.Parse(messageQueueUrl)
 	if err != nil {
 		return nil, err
@@ -555,6 +560,10 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 		u.RawQuery = q.Encode()
 	}
 
+	if maxCapacity < 0 {
+		return nil, fmt.Errorf("maxCapacity must be greater than or equal to 0")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
@@ -563,6 +572,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 	req.Header.Set("Accept", "application/json; api-version=6.0-preview")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", messageQueueAccessToken))
 	req.Header.Set("User-Agent", c.userAgent.String())
+	req.Header.Set(HeaderScaleSetMaxCapacity, strconv.Itoa(maxCapacity))
 
 	resp, err := c.Do(req)
 	if err != nil {

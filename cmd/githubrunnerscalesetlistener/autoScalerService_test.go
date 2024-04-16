@@ -64,7 +64,7 @@ func TestStart(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
+	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything, mock.Anything).Run(func(mock.Arguments) { cancel() }).Return(nil).Once()
 
 	err = service.Start()
 
@@ -98,7 +98,7 @@ func TestStart_ScaleToMinRunners(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mockRsClient.On("GetRunnerScaleSetMessage", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mockRsClient.On("GetRunnerScaleSetMessage", ctx, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		_ = service.scaleForAssignedJobCount(5)
 	}).Return(nil)
 
@@ -137,7 +137,7 @@ func TestStart_ScaleToMinRunnersFailed(t *testing.T) {
 	require.NoError(t, err)
 
 	c := mockKubeManager.On("ScaleEphemeralRunnerSet", ctx, service.settings.Namespace, service.settings.ResourceName, 5).Return(fmt.Errorf("error")).Once()
-	mockRsClient.On("GetRunnerScaleSetMessage", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mockRsClient.On("GetRunnerScaleSetMessage", ctx, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		_ = service.scaleForAssignedJobCount(5)
 	}).Return(c.ReturnArguments.Get(0))
 
@@ -172,8 +172,8 @@ func TestStart_GetMultipleMessages(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Return(nil).Times(5)
-	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
+	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything, mock.Anything).Return(nil).Times(5)
+	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { cancel() }).Return(nil).Once()
 
 	err = service.Start()
 
@@ -207,8 +207,8 @@ func TestStart_ErrorOnMessage(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Return(nil).Times(2)
-	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything).Return(fmt.Errorf("error")).Once()
+	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything, mock.Anything).Return(nil).Times(2)
+	mockRsClient.On("GetRunnerScaleSetMessage", service.ctx, mock.Anything, mock.Anything).Return(fmt.Errorf("error")).Once()
 
 	err = service.Start()
 
