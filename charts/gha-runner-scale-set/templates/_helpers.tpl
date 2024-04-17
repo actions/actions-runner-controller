@@ -104,6 +104,8 @@ args:
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
+  - name: DOCKER_IPTABLES_LEGACY
+    value: "1"
 securityContext:
   privileged: true
 volumeMounts:
@@ -227,7 +229,7 @@ env:
     {{- end }}
     {{- if $setRunnerWaitDocker }}
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
-    value: "120"
+    value: "240"
     {{- end }}
     {{- if $setNodeExtraCaCerts }}
   - name: NODE_EXTRA_CA_CERTS
