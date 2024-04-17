@@ -1,10 +1,10 @@
 ## githubConfigUrl is the GitHub url for where you want to configure runners
 ## ex: https://github.com/myorg/myrepo or https://github.com/myorg
-githubConfigUrl: ""
+githubConfigUrl: "https://github.com/prosperllc"
 
 ## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
 ## You can choose to use GitHub App or a PAT token
-githubConfigSecret:
+githubConfigSecret: pre-defined-secret
   ### GitHub Apps Configuration
   ## NOTE: IDs MUST be strings, use quotes
   #github_app_id: ""
@@ -12,7 +12,7 @@ githubConfigSecret:
   #github_app_private_key: |
 
   ### GitHub PAT Configuration
-  github_token: ""
+##github_token: ""
 ## If you have a pre-define Kubernetes secret in the same namespace the gha-runner-scale-set is going to deploy,
 ## you can also reference it via `githubConfigSecret: pre-defined-secret`.
 ## You need to make sure your predefined secret has all the required secret data set properly.
@@ -37,16 +37,16 @@ githubConfigSecret:
 #     - example.org
 
 ## maxRunners is the max number of runners the autoscaling runner set will scale up to.
-# maxRunners: 5
+maxRunners: 20
 
 ## minRunners is the min number of idle runners. The target number of runners created will be
 ## calculated as a sum of minRunners and the number of jobs assigned to the scale set.
-# minRunners: 0
+minRunners: 5
 
-# runnerGroup: "default"
+#runner-scale-set1"
 
 ## name of the runner scale set to create.  Defaults to the helm release name
-# runnerScaleSetName: ""
+#runnerScaleSetName: "runner-scale-set1"
 
 ## A self-signed CA certificate for communication with the GitHub server can be
 ## provided using a config map key selector. If `runnerMountPath` is set, for
@@ -75,8 +75,8 @@ githubConfigSecret:
 ##
 ## If any customization is required for dind or kubernetes mode, containerMode should remain
 ## empty, and configuration should be applied to the template.
-# containerMode:
-#   type: "dind"  ## type can be set to dind or kubernetes
+containerMode:
+  type: "dind"  ## type can be set to dind or kubernetes
 #   ## the following is required when containerMode.type=kubernetes
 #   kubernetesModeWorkVolumeClaim:
 #     accessModes: ["ReadWriteOnce"]
@@ -88,7 +88,7 @@ githubConfigSecret:
 #   kubernetesModeServiceAccount:
 #     annotations:
 
-## listenerTemplate is the PodSpec for each listener Pod
+## template is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 # listenerTemplate:
 #   spec:
@@ -107,55 +107,55 @@ githubConfigSecret:
 
 ## template is the PodSpec for each runner Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
+
 template:
-  ## template.spec will be modified if you change the container mode
-  ## with containerMode.type=dind, we will populate the template.spec with following pod spec
-  ## template:
-  ##   spec:
-  ##     initContainers:
-  ##     - name: init-dind-externals
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
-  ##       volumeMounts:
-  ##         - name: dind-externals
-  ##           mountPath: /home/runner/tmpDir
-  ##     containers:
-  ##     - name: runner
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["/home/runner/run.sh"]
-  ##       env:
-  ##         - name: DOCKER_HOST
-  ##           value: unix:///var/run/docker.sock
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##         - name: dind-sock
-  ##           mountPath: /var/run
-  ##     - name: dind
-  ##       image: docker:dind
-  ##       args:
-  ##         - dockerd
-  ##         - --host=unix:///var/run/docker.sock
-  ##         - --group=$(DOCKER_GROUP_GID)
-  ##       env:
-  ##         - name: DOCKER_GROUP_GID
-  ##           value: "123"
-  ##       securityContext:
-  ##         privileged: true
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##         - name: dind-sock
-  ##           mountPath: /var/run
-  ##         - name: dind-externals
-  ##           mountPath: /home/runner/externals
-  ##     volumes:
-  ##     - name: work
-  ##       emptyDir: {}
-  ##     - name: dind-sock
-  ##       emptyDir: {}
-  ##     - name: dind-externals
-  ##       emptyDir: {}
+  spec:
+    initContainers:
+    - name: init-dind-externals
+      image: us-docker.pkg.dev/prosper-prod-registry/images/actions-runner:latest
+      command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+      volumeMounts:
+        - name: dind-externals
+          mountPath: /home/runner/tmpDir
+    containers:
+    - name: runner
+      image: ghcr.io/actions/actions-runner:latest
+      command: ["/home/runner/run.sh"]
+      env:
+        - name: DOCKER_HOST
+          value: unix:///var/run/docker.sock
+      volumeMounts:
+        - name: work
+          mountPath: /home/runner/_work
+        - name: dind-sock
+          mountPath: /var/run
+    - name: dind
+      image: docker:dind
+      args:
+        - dockerd
+        - --host=unix:///var/run/docker.sock
+        - --group=$(DOCKER_GROUP_GID)
+      env:
+        - name: DOCKER_GROUP_GID
+          value: "123"
+        - name: DOCKER_IPTABLES_LEGACY
+          value: '1'
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: work
+          mountPath: /home/runner/_work
+        - name: dind-sock
+          mountPath: /var/run
+        - name: dind-externals
+          mountPath: /home/runner/externals
+    volumes:
+    - name: work
+      emptyDir: {}
+    - name: dind-sock
+      emptyDir: {}
+    - name: dind-externals
+      emptyDir: {}
   ######################################################################################################
   ## with containerMode.type=kubernetes, we will populate the template.spec with following pod spec
   ## template:
@@ -189,8 +189,15 @@ template:
   spec:
     containers:
       - name: runner
-        image: ghcr.io/actions/actions-runner:latest
+        image: us-docker.pkg.dev/prosper-prod-registry/images/actions-runner:latest
         command: ["/home/runner/run.sh"]
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          request: 
+            cpu: "2"  
+            memory: 4Gi
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
@@ -198,6 +205,6 @@ template:
 ## In case the helm chart can't find the right service account, you can explicitly pass in the following value
 ## to help it finish RoleBinding with the right service account.
 ## Note: if your controller is installed to only watch a single namespace, you have to pass these values explicitly.
-# controllerServiceAccount:
-#   namespace: arc-system
-#   name: test-arc-gha-runner-scale-set-controller
+controllerServiceAccount:
+  namespace: prosper-runners
+  name: prosper-runner-controller-gha-rs-controller
