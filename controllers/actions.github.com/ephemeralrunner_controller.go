@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -295,14 +294,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
-	actionsError := &actions.ActionsError{}
-	err := r.deleteRunnerFromService(ctx, ephemeralRunner, log)
-	if err != nil {
-		if errors.As(err, &actionsError) &&
-			actionsError.StatusCode == http.StatusBadRequest &&
-			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
+	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+		actionsError := &actions.ActionsError{}
+		if !errors.As(err, &actionsError) {
+			log.Error(err, "Failed to clean up runner from the service (not an ActionsError)")
+			return ctrl.Result{}, err
+		}
+
+		if actionsError.StatusCode == http.StatusBadRequest && actionsError.IsException("JobStillRunningException") {
 			log.Info("Runner is still running the job. Re-queue in 30 seconds")
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+
 		}
 
 		log.Error(err, "Failed clean up runner from the service")
@@ -310,10 +312,9 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 	}
 
 	log.Info("Successfully removed runner registration from service")
-	err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
-	})
-	if err != nil {
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -528,7 +529,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		}
 
 		if actionsError.StatusCode != http.StatusConflict ||
-			!strings.Contains(actionsError.ExceptionName, "AgentExistsException") {
+			!actionsError.IsException("AgentExistsException") {
 			return ctrl.Result{}, fmt.Errorf("failed to generate JIT config with Actions service error: %v", err)
 		}
 
@@ -784,7 +785,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 		}
 
 		if actionsError.StatusCode != http.StatusNotFound ||
-			!strings.Contains(actionsError.ExceptionName, "AgentNotFoundException") {
+			!actionsError.IsException("AgentNotFoundException") {
 			return false, fmt.Errorf("failed to check if runner exists in GitHub service: %v", err)
 		}
 

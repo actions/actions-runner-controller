@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -124,9 +125,15 @@ func TestGetRunnerScaleSet(t *testing.T) {
 	})
 
 	t.Run("Multiple runner scale sets found", func(t *testing.T) {
-		wantErr := fmt.Errorf("multiple runner scale sets found with name %s", scaleSetName)
+		reqID := uuid.NewString()
+		wantErr := &actions.ActionsError{
+			StatusCode: http.StatusOK,
+			ActivityID: reqID,
+			Err:        fmt.Errorf("multiple runner scale sets found with name %q", scaleSetName),
+		}
 		runnerScaleSetsResp := []byte(`{"count":2,"value":[{"id":1,"name":"ScaleSet"}]}`)
 		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set(actions.HeaderActionsActivityID, reqID)
 			w.Write(runnerScaleSetsResp)
 		}))
 

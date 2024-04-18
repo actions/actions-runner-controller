@@ -139,7 +139,13 @@ func TestNewActionsServiceRequest(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				w.Write([]byte(errMessage))
 			}
-			server := testserver.New(t, nil, testserver.WithActionsToken("random-token"), testserver.WithActionsToken(newToken), testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler))
+			server := testserver.New(
+				t,
+				nil,
+				testserver.WithActionsToken("random-token"),
+				testserver.WithActionsToken(newToken),
+				testserver.WithActionsRegistrationTokenHandler(unauthorizedHandler),
+			)
 			client, err := actions.NewClient(server.ConfigURLForOrg("my-org"), defaultCreds)
 			require.NoError(t, err)
 			expiringToken := "expiring-token"

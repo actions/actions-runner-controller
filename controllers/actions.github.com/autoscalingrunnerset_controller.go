@@ -276,6 +276,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			// need to scale down to 0
 			err := patch(ctx, r.Client, latestRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
 				obj.Spec.Replicas = 0
+				obj.Spec.PatchID = 0
 			})
 			if err != nil {
 				log.Error(err, "Failed to patch runner set to set desired count to 0")

@@ -31,7 +31,7 @@ const (
 type Client interface {
 	GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error)
 	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error)
-	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*actions.RunnerScaleSetMessage, error)
+	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error)
 	DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error
 	AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error)
 	RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*actions.RunnerScaleSetSession, error)
@@ -80,6 +80,7 @@ type Listener struct {
 
 	// updated fields
 	lastMessageID int64                          // The ID of the last processed message.
+	maxCapacity   int                            // The maximum number of runners that can be created.
 	session       *actions.RunnerScaleSetSession // The session for managing the runner scale set.
 }
 
@@ -89,10 +90,11 @@ func New(config Config) (*Listener, error) {
 	}
 
 	listener := &Listener{
-		scaleSetID: config.ScaleSetID,
-		client:     config.Client,
-		logger:     config.Logger,
-		metrics:    metrics.Discard,
+		scaleSetID:  config.ScaleSetID,
+		client:      config.Client,
+		logger:      config.Logger,
+		metrics:     metrics.Discard,
+		maxCapacity: config.MaxRunners,
 	}
 
 	if config.Metrics != nil {
@@ -164,11 +166,16 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 		}
 
 		if msg == nil {
+			_, err := handler.HandleDesiredRunnerCount(ctx, 0, 0)
+			if err != nil {
+				return fmt.Errorf("handling nil message failed: %w", err)
+			}
+
 			continue
 		}
 
-		// New context is created to avoid cancelation during message handling.
-		if err := l.handleMessage(context.Background(), handler, msg); err != nil {
+		// Remove cancellation from the context to avoid cancelling the message handling.
+		if err := l.handleMessage(context.WithoutCancel(ctx), handler, msg); err != nil {
 			return fmt.Errorf("failed to handle message: %w", err)
 		}
 	}
@@ -262,7 +269,7 @@ func (l *Listener) createSession(ctx context.Context) error {
 
 func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessage, error) {
 	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
-	msg, err := l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	msg, err := l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID, l.maxCapacity)
 	if err == nil { // if NO error
 		return msg, nil
 	}
@@ -278,7 +285,7 @@ func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessa
 
 	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
 
-	msg, err = l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	msg, err = l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID, l.maxCapacity)
 	if err != nil { // if NO error
 		return nil, fmt.Errorf("failed to get next message after message session refresh: %w", err)
 	}

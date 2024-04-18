@@ -43,6 +43,16 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.9.1
+
+#### Major changes
+
+1. Shutdown metrics server when listener exits [#3445](https://github.com/actions/actions-runner-controller/pull/3445)
+1. Propagate max capacity information to the actions back-end [#3431](https://github.com/actions/actions-runner-controller/pull/3431)
+1. Refactor actions client error to include request id [#3430](https://github.com/actions/actions-runner-controller/pull/3430)
+1. Include self correction on empty batch and avoid removing pending runners when cluster is busy [#3426](https://github.com/actions/actions-runner-controller/pull/3426)
+1. Add topologySpreadConstraint to gha-runner-scale-set-controller chart [#3405](https://github.com/actions/actions-runner-controller/pull/3405)
+
 ### v0.9.0
 
 #### ⚠️ Warning
