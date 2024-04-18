@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
@@ -197,7 +196,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				log.Error(err, "failed to cleanup finished ephemeral runners")
 			}
 		}()
-
 		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
 		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
@@ -208,8 +206,16 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, err
 			}
 
-		case total > ephemeralRunnerSet.Spec.Replicas: // Handle scale down scenario.
+		case ephemeralRunnerSet.Spec.PatchID > 0 && total >= ephemeralRunnerSet.Spec.Replicas: // Handle scale down scenario.
+			// If ephemeral runner did not yet update the phase to succeeded, but the scale down
+			// request is issued, we should ignore the scale down request.
+			// Eventually, the ephemeral runner will be cleaned up on the next patch request, which happens
+			// on the next batch
+		case ephemeralRunnerSet.Spec.PatchID == 0 && total > ephemeralRunnerSet.Spec.Replicas:
 			count := total - ephemeralRunnerSet.Spec.Replicas
+			if count <= 0 {
+				break
+			}
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
 			if err := r.deleteIdleEphemeralRunners(
 				ctx,
@@ -428,6 +434,9 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 // When this happens, the next reconcile loop will try to delete the remaining ephemeral runners
 // after we get notified by any of the `v1alpha1.EphemeralRunner.Status` updates.
 func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, pendingEphemeralRunners, runningEphemeralRunners []*v1alpha1.EphemeralRunner, count int, log logr.Logger) error {
+	if count <= 0 {
+		return nil
+	}
 	runners := newEphemeralRunnerStepper(pendingEphemeralRunners, runningEphemeralRunners)
 	if runners.len() == 0 {
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
@@ -473,10 +482,14 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient actions.ActionsService, log logr.Logger) (bool, error) {
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
 		actionsError := &actions.ActionsError{}
-		if errors.As(err, &actionsError) &&
-			actionsError.StatusCode == http.StatusBadRequest &&
-			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
-			// Runner is still running a job, proceed with the next one
+		if !errors.As(err, &actionsError) {
+			log.Error(err, "failed to remove runner from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
+			return false, err
+		}
+
+		if actionsError.StatusCode == http.StatusBadRequest &&
+			actionsError.IsException("JobStillRunningException") {
+			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
 			return false, nil
 		}
 

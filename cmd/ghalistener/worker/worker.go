@@ -177,12 +177,12 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int, jobsCo
 		"jobsCompleted", jobsCompleted,
 	}
 
-	if w.lastPatch == targetRunnerCount && jobsCompleted == 0 {
-		w.logger.Info("Skipping patch", logValues...)
-		return targetRunnerCount, nil
+	if count == 0 && jobsCompleted == 0 {
+		w.lastPatchID = 0
+	} else {
+		w.lastPatchID++
 	}
 
-	w.lastPatchID++
 	w.lastPatch = targetRunnerCount
 
 	original, err := json.Marshal(

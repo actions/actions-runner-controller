@@ -123,13 +123,14 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
 		want := &actions.RunnerScaleSetMessage{
 			MessageId: 1,
 		}
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(want, nil).Once()
 		config.Client = client
 
 		l, err := New(config)
@@ -148,10 +149,11 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.HttpClientSideError{Code: http.StatusNotFound}).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(nil, &actions.HttpClientSideError{Code: http.StatusNotFound}).Once()
 		config.Client = client
 
 		l, err := New(config)
@@ -170,6 +172,7 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
@@ -185,12 +188,12 @@ func TestListener_getMessage(t *testing.T) {
 		}
 		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
 
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
 
 		want := &actions.RunnerScaleSetMessage{
 			MessageId: 1,
 		}
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(want, nil).Once()
 
 		config.Client = client
 
@@ -214,6 +217,7 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
@@ -229,7 +233,7 @@ func TestListener_getMessage(t *testing.T) {
 		}
 		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
 
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Twice()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(nil, &actions.MessageQueueTokenExpiredError{}).Twice()
 
 		config.Client = client
 
@@ -450,6 +454,7 @@ func TestListener_Listen(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
@@ -470,7 +475,7 @@ func TestListener_Listen(t *testing.T) {
 			MessageType: "RunnerScaleSetJobMessages",
 			Statistics:  &actions.RunnerScaleSetStatistic{},
 		}
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).
 			Return(msg, nil).
 			Run(
 				func(mock.Arguments) {
@@ -479,8 +484,8 @@ func TestListener_Listen(t *testing.T) {
 			).
 			Once()
 
-			// Ensure delete message is called with background context
-		client.On("DeleteMessage", context.Background(), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		// Ensure delete message is called without cancel
+		client.On("DeleteMessage", context.WithoutCancel(ctx), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 		config.Client = client
 

@@ -186,25 +186,25 @@ func (_m *MockActionsService) GetAcquirableJobs(ctx context.Context, runnerScale
 	return r0, r1
 }
 
-// GetMessage provides a mock function with given fields: ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId
-func (_m *MockActionsService) GetMessage(ctx context.Context, messageQueueUrl string, messageQueueAccessToken string, lastMessageId int64) (*RunnerScaleSetMessage, error) {
-	ret := _m.Called(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId)
+// GetMessage provides a mock function with given fields: ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity
+func (_m *MockActionsService) GetMessage(ctx context.Context, messageQueueUrl string, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*RunnerScaleSetMessage, error) {
+	ret := _m.Called(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity)
 
 	var r0 *RunnerScaleSetMessage
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64) (*RunnerScaleSetMessage, error)); ok {
-		return rf(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64, int) (*RunnerScaleSetMessage, error)); ok {
+		return rf(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64) *RunnerScaleSetMessage); ok {
-		r0 = rf(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64, int) *RunnerScaleSetMessage); ok {
+		r0 = rf(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*RunnerScaleSetMessage)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, int64) error); ok {
-		r1 = rf(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int64, int) error); ok {
+		r1 = rf(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity)
 	} else {
 		r1 = ret.Error(1)
 	}
