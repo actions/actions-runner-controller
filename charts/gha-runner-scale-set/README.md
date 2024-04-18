@@ -1,9 +1,11 @@
 # Prosper Runner Scale set installation steps
 
 
+```bash
 GCP Porject : prosper-nonprod-platform
 cluster : gke_prosper-nonprod-platform_us-west1_nonprod-us-west1-util02
 namespace : prosper-runners
+```
 
 
 ## Helm Release names
