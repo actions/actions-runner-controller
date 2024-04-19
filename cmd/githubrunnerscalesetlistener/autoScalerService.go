@@ -89,7 +89,7 @@ func (s *Service) Start() error {
 			s.logger.Info("service is stopped.")
 			return nil
 		default:
-			err := s.rsClient.GetRunnerScaleSetMessage(s.ctx, s.processMessage)
+			err := s.rsClient.GetRunnerScaleSetMessage(s.ctx, s.processMessage, s.settings.MaxRunners)
 			if err != nil {
 				return fmt.Errorf("could not get and process message. %w", err)
 			}

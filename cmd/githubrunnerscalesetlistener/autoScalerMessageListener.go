@@ -129,7 +129,7 @@ func (m *AutoScalerClient) Close() error {
 	return m.client.Close()
 }
 
-func (m *AutoScalerClient) GetRunnerScaleSetMessage(ctx context.Context, handler func(msg *actions.RunnerScaleSetMessage) error) error {
+func (m *AutoScalerClient) GetRunnerScaleSetMessage(ctx context.Context, handler func(msg *actions.RunnerScaleSetMessage) error, maxCapacity int) error {
 	if m.initialMessage != nil {
 		err := handler(m.initialMessage)
 		if err != nil {
@@ -141,7 +141,7 @@ func (m *AutoScalerClient) GetRunnerScaleSetMessage(ctx context.Context, handler
 	}
 
 	for {
-		message, err := m.client.GetMessage(ctx, m.lastMessageId)
+		message, err := m.client.GetMessage(ctx, m.lastMessageId, maxCapacity)
 		if err != nil {
 			return fmt.Errorf("get message failed from refreshing client. %w", err)
 		}

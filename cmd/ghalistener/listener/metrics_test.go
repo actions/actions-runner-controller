@@ -86,7 +86,7 @@ func TestInitialMetrics(t *testing.T) {
 		config.Client = client
 
 		handler := listenermocks.NewHandler(t)
-		handler.On("HandleDesiredRunnerCount", mock.Anything, sessionStatistics.TotalAssignedJobs).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, sessionStatistics.TotalAssignedJobs, 0).
 			Return(sessionStatistics.TotalAssignedJobs, nil).
 			Once()
 
@@ -178,7 +178,7 @@ func TestHandleMessageMetrics(t *testing.T) {
 
 	handler := listenermocks.NewHandler(t)
 	handler.On("HandleJobStarted", mock.Anything, jobsStarted[0]).Return(nil).Once()
-	handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).Return(desiredResult, nil).Once()
+	handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 2).Return(desiredResult, nil).Once()
 
 	client := listenermocks.NewClient(t)
 	client.On("DeleteMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()

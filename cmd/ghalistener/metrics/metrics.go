@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
@@ -223,8 +224,8 @@ type baseLabels struct {
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
 		labelKeyEnterprise:     b.enterprise,
-		labelKeyOrganization:   b.organization,
-		labelKeyRepository:     b.repository,
+		labelKeyOrganization:   jobBase.OwnerName,
+		labelKeyRepository:     jobBase.RepositoryName,
 		labelKeyJobName:        jobBase.JobDisplayName,
 		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
 		labelKeyEventName:      jobBase.EventName,
@@ -271,8 +272,10 @@ type ServerPublisher interface {
 	ListenAndServe(ctx context.Context) error
 }
 
-var _ Publisher = &discard{}
-var _ ServerPublisher = &exporter{}
+var (
+	_ Publisher       = &discard{}
+	_ ServerPublisher = &exporter{}
+)
 
 var Discard Publisher = &discard{}
 
@@ -336,7 +339,9 @@ func (e *exporter) ListenAndServe(ctx context.Context) error {
 	e.logger.Info("starting metrics server", "addr", e.srv.Addr)
 	go func() {
 		<-ctx.Done()
-		e.logger.Info("stopping metrics server")
+		e.logger.Info("stopping metrics server", "err", ctx.Err())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		e.srv.Shutdown(ctx)
 	}()
 	return e.srv.ListenAndServe()
