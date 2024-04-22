@@ -12,6 +12,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -99,6 +100,13 @@ func (w *Worker) applyDefaults() error {
 func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
 	ctx, span := otel.Tracer("arc").Start(ctx, "Worker.HandleJobStarted")
 	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("runner.name", jobInfo.RunnerName),
+		attribute.String("runner.repo.name", jobInfo.RepositoryName),
+		attribute.String("workflow.ref", jobInfo.JobWorkflowRef),
+		attribute.Int64("workflow.run.id", jobInfo.WorkflowRunId),
+	)
 
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
