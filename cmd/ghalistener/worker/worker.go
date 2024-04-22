@@ -38,20 +38,20 @@ type Config struct {
 // The Worker's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
 type Worker struct {
-	clientset   *kubernetes.Clientset
-	config      Config
-	lastPatch   int
-	lastPatchID int
-	logger      *logr.Logger
+	clientset *kubernetes.Clientset
+	config    Config
+	lastPatch int
+	patchSeq  int
+	logger    *logr.Logger
 }
 
 var _ listener.Handler = (*Worker)(nil)
 
 func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
-		config:      config,
-		lastPatch:   -1,
-		lastPatchID: -1,
+		config:    config,
+		lastPatch: -1,
+		patchSeq:  -1,
 	}
 
 	conf, err := rest.InClusterConfig()
@@ -164,7 +164,7 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsCompleted int) (int, error) {
-	w.setDesiredWorkerState(count, jobsCompleted)
+	patchID := w.setDesiredWorkerState(count, jobsCompleted)
 
 	original, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
@@ -182,7 +182,7 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: w.lastPatch,
-				PatchID:  w.lastPatchID,
+				PatchID:  patchID,
 			},
 		},
 	)
@@ -222,17 +222,23 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 }
 
 // calculateDesiredState calculates the desired state of the worker based on the desired count and the the number of jobs completed.
-func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) {
+func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
 	// Max runners should always be set by the resource builder either to the configured value,
 	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
 	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
+	w.patchSeq++
+	desiredPatchID := w.patchSeq
 
-	if count == 0 && jobsCompleted == 0 {
-		w.lastPatchID = 0
-		// On the first run, lastPatch is -1, so take the max of the lastPatch and targetRunnerCount
+	if count == 0 && jobsCompleted == 0 { // empty batch
 		targetRunnerCount = max(w.lastPatch, targetRunnerCount)
-	} else {
-		w.lastPatchID++
+		if targetRunnerCount == w.config.MinRunners {
+			// We have an empty batch, and the last patch was the min runners.
+			// Since this is an empty batch, and we are at the min runners, they should all be idle.
+			// If controller created few more pods on accident (during scale down events),
+			// this situation allows the controller to scale down to the min runners.
+			// However, it is important to keep the patch sequence increasing so we don't ignore one batch.
+			desiredPatchID = 0
+		}
 	}
 
 	w.lastPatch = targetRunnerCount
@@ -246,4 +252,6 @@ func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) {
 		"currentRunnerCount", w.lastPatch,
 		"jobsCompleted", jobsCompleted,
 	)
+
+	return desiredPatchID
 }
