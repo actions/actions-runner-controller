@@ -213,9 +213,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// on the next batch
 		case ephemeralRunnerSet.Spec.PatchID == 0 && total > ephemeralRunnerSet.Spec.Replicas:
 			count := total - ephemeralRunnerSet.Spec.Replicas
-			if count <= 0 {
-				break
-			}
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
 			if err := r.deleteIdleEphemeralRunners(
 				ctx,
