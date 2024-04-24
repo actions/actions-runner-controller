@@ -92,6 +92,9 @@ githubConfigSecret:
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 # listenerTemplate:
 #   spec:
+#     # Service account name will be used if controller is installed with 'flags.skipListenerSaCreation' set to true
+#     # In such case, provided SA must be present in the same namespace as the controller
+#     serviceAccountName: ""
 #     containers:
 #     # Use this section to append additional configuration to the listener container.
 #     # If you change the name of the container, the configuration will not be applied to the listener,
@@ -201,3 +204,7 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+flags:
+  # Assume all RBAC for the controller SA is already in place
+  skipRbacSetup: false

@@ -18,8 +18,8 @@ package actionsgithubcom
 
 import (
 	"context"
+	"errors"
 	"fmt"
-
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -160,52 +160,72 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Make sure the runner scale set listener service account is created for the listener pod in the controller namespace
 	serviceAccount := new(corev1.ServiceAccount)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerServiceAccountName(autoscalingListener)}, serviceAccount); err != nil {
-		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to get listener service accounts", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerServiceAccountName(autoscalingListener))
+	if !ShouldSkipListenerSaCreation() {
+		log.Info("Creating a service account for the listener pod")
+		if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerServiceAccountName(autoscalingListener)}, serviceAccount); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Error(err, "Unable to get listener service accounts", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerServiceAccountName(autoscalingListener))
+				return ctrl.Result{}, err
+			}
+
+			// Create a service account for the listener pod in the controller namespace
+			log.Info("Creating a service account for the listener pod")
+			return r.createServiceAccountForListener(ctx, autoscalingListener, log)
+		}
+	} else {
+		log.Info("Skipping listener service account creation, checking if provided one exists")
+		serviceAccountName := autoscalingListener.Spec.Template.Spec.ServiceAccountName
+		if serviceAccountName == "" {
+			err := errors.New("Service Account name required for listener, but was not provided in the runnerset")
+			log.Error(err, "Service Account name required for listener, but was not provided in the runnerset", "namespace", autoscalingListener.Namespace)
 			return ctrl.Result{}, err
 		}
-
-		// Create a service account for the listener pod in the controller namespace
-		log.Info("Creating a service account for the listener pod")
-		return r.createServiceAccountForListener(ctx, autoscalingListener, log)
+		if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: serviceAccountName}, serviceAccount); err != nil {
+			log.Error(err, "Service Account not found in the namespace", "namespace", autoscalingListener.Namespace, "name", serviceAccountName)
+			return ctrl.Result{}, errors.New("Listener's service account not found")
+		}
 	}
 
 	// TODO: make sure the service account is up to date
 
-	// Make sure the runner scale set listener role is created in the AutoscalingRunnerSet namespace
-	listenerRole := new(rbacv1.Role)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRole); err != nil {
-		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to get listener role", "namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, "name", scaleSetListenerRoleName(autoscalingListener))
-			return ctrl.Result{}, err
+	if !ShouldSkipListenerRbacSetup() {
+		// Make sure the runner scale set listener role is created in the AutoscalingRunnerSet namespace
+		log.Info("Creating role and role bindings for the listener pod")
+		listenerRole := new(rbacv1.Role)
+		if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRole); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Error(err, "Unable to get listener role", "namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, "name", scaleSetListenerRoleName(autoscalingListener))
+				return ctrl.Result{}, err
+			}
+
+			// Create a role for the listener pod in the AutoScalingRunnerSet namespace
+			log.Info("Creating a role for the listener pod")
+			return r.createRoleForListener(ctx, autoscalingListener, log)
 		}
 
-		// Create a role for the listener pod in the AutoScalingRunnerSet namespace
-		log.Info("Creating a role for the listener pod")
-		return r.createRoleForListener(ctx, autoscalingListener, log)
-	}
-
-	// Make sure the listener role has the up-to-date rules
-	existingRuleHash := listenerRole.Labels["role-policy-rules-hash"]
-	desiredRules := rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName})
-	desiredRulesHash := hash.ComputeTemplateHash(&desiredRules)
-	if existingRuleHash != desiredRulesHash {
-		log.Info("Updating the listener role with the up-to-date rules")
-		return r.updateRoleForListener(ctx, listenerRole, desiredRules, desiredRulesHash, log)
-	}
-
-	// Make sure the runner scale set listener role binding is created
-	listenerRoleBinding := new(rbacv1.RoleBinding)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRoleBinding); err != nil {
-		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to get listener role binding", "namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, "name", scaleSetListenerRoleName(autoscalingListener))
-			return ctrl.Result{}, err
+		// Make sure the listener role has the up-to-date rules
+		existingRuleHash := listenerRole.Labels["role-policy-rules-hash"]
+		desiredRules := rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName})
+		desiredRulesHash := hash.ComputeTemplateHash(&desiredRules)
+		if existingRuleHash != desiredRulesHash {
+			log.Info("Updating the listener role with the up-to-date rules")
+			return r.updateRoleForListener(ctx, listenerRole, desiredRules, desiredRulesHash, log)
 		}
 
-		// Create a role binding for the listener pod in the AutoScalingRunnerSet namespace
-		log.Info("Creating a role binding for the service account and role")
-		return r.createRoleBindingForListener(ctx, autoscalingListener, listenerRole, serviceAccount, log)
+		// Make sure the runner scale set listener role binding is created
+		listenerRoleBinding := new(rbacv1.RoleBinding)
+		if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRoleBinding); err != nil {
+			if !kerrors.IsNotFound(err) {
+				log.Error(err, "Unable to get listener role binding", "namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, "name", scaleSetListenerRoleName(autoscalingListener))
+				return ctrl.Result{}, err
+			}
+
+			// Create a role binding for the listener pod in the AutoScalingRunnerSet namespace
+			log.Info("Creating a role binding for the service account and role")
+			return r.createRoleBindingForListener(ctx, autoscalingListener, listenerRole, serviceAccount, log)
+		}
+	} else {
+		log.Info("Skipping listener role and role binding creation")
 	}
 
 	// Create a secret containing proxy config if specified
@@ -320,54 +340,63 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		logger.Info("Listener proxy secret is deleted")
 	}
 
-	listenerRoleBinding := new(rbacv1.RoleBinding)
-	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRoleBinding)
-	switch {
-	case err == nil:
-		if listenerRoleBinding.ObjectMeta.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener role binding")
-			if err := r.Delete(ctx, listenerRoleBinding); err != nil {
-				return false, fmt.Errorf("failed to delete listener role binding: %v", err)
+	if !ShouldSkipListenerRbacSetup() {
+		logger.Info("Cleaning up the listener role and role binding")
+		listenerRoleBinding := new(rbacv1.RoleBinding)
+		err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRoleBinding)
+		switch {
+		case err == nil:
+			if listenerRoleBinding.ObjectMeta.DeletionTimestamp.IsZero() {
+				logger.Info("Deleting the listener role binding")
+				if err := r.Delete(ctx, listenerRoleBinding); err != nil {
+					return false, fmt.Errorf("failed to delete listener role binding: %v", err)
+				}
 			}
+			return false, nil
+		case err != nil && !kerrors.IsNotFound(err):
+			return false, fmt.Errorf("failed to get listener role binding: %v", err)
 		}
-		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener role binding: %v", err)
-	}
-	logger.Info("Listener role binding is deleted")
+		logger.Info("Listener role binding is deleted")
 
-	listenerRole := new(rbacv1.Role)
-	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRole)
-	switch {
-	case err == nil:
-		if listenerRole.ObjectMeta.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener role")
-			if err := r.Delete(ctx, listenerRole); err != nil {
-				return false, fmt.Errorf("failed to delete listener role: %v", err)
+		listenerRole := new(rbacv1.Role)
+		err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: scaleSetListenerRoleName(autoscalingListener)}, listenerRole)
+		switch {
+		case err == nil:
+			if listenerRole.ObjectMeta.DeletionTimestamp.IsZero() {
+				logger.Info("Deleting the listener role")
+				if err := r.Delete(ctx, listenerRole); err != nil {
+					return false, fmt.Errorf("failed to delete listener role: %v", err)
+				}
 			}
+			return false, nil
+		case err != nil && !kerrors.IsNotFound(err):
+			return false, fmt.Errorf("failed to get listener role: %v", err)
 		}
-		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener role: %v", err)
+		logger.Info("Listener role is deleted")
+	} else {
+		logger.Info("Skipping listener role and role binding deletion")
 	}
-	logger.Info("Listener role is deleted")
 
-	logger.Info("Cleaning up the listener service account")
-	listenerSa := new(corev1.ServiceAccount)
-	err = r.Get(ctx, types.NamespacedName{Name: scaleSetListenerServiceAccountName(autoscalingListener), Namespace: autoscalingListener.Namespace}, listenerSa)
-	switch {
-	case err == nil:
-		if listenerSa.ObjectMeta.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener service account")
-			if err := r.Delete(ctx, listenerSa); err != nil {
-				return false, fmt.Errorf("failed to delete listener service account: %v", err)
+	if !ShouldSkipListenerSaCreation() {
+		logger.Info("Cleaning up the listener service account")
+		listenerSa := new(corev1.ServiceAccount)
+		err = r.Get(ctx, types.NamespacedName{Name: scaleSetListenerServiceAccountName(autoscalingListener), Namespace: autoscalingListener.Namespace}, listenerSa)
+		switch {
+		case err == nil:
+			if listenerSa.ObjectMeta.DeletionTimestamp.IsZero() {
+				logger.Info("Deleting the listener service account")
+				if err := r.Delete(ctx, listenerSa); err != nil {
+					return false, fmt.Errorf("failed to delete listener service account: %v", err)
+				}
 			}
+			return false, nil
+		case err != nil && !kerrors.IsNotFound(err):
+			return false, fmt.Errorf("failed to get listener service account: %v", err)
 		}
-		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener service account: %v", err)
+		logger.Info("Listener service account is deleted")
+	} else {
+		logger.Info("Skipping listener service account deletion")
 	}
-	logger.Info("Listener service account is deleted")
 
 	return true, nil
 }
@@ -690,6 +719,8 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	log := r.Log.WithValues("autoscalinglistener")
+
 	groupVersionIndexer := func(rawObj client.Object) []string {
 		groupVersion := v1alpha1.GroupVersion.String()
 		owner := metav1.GetControllerOf(rawObj)
@@ -737,12 +768,28 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error
 		return requests
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	controller := ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AutoscalingListener{}).
-		Owns(&corev1.Pod{}).
-		Owns(&corev1.ServiceAccount{}).
-		Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+		Owns(&corev1.Pod{})
+
+	if !ShouldSkipListenerSaCreation() {
+		log.Info("Controller will own ServiceAccount for listeners")
+		controller = controller.
+			Owns(&corev1.ServiceAccount{})
+	} else {
+		log.Info("Skipping Listener's ServiceAccount ownership")
+	}
+
+	if !ShouldSkipListenerRbacSetup() {
+		log.Info("Controller will watch RBAC resources for listeners")
+		controller = controller.
+			Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc))
+	} else {
+		log.Info("Skipping Listener's RBAC watches")
+	}
+
+	return controller.
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		Complete(r)
 }

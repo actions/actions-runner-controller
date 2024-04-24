@@ -397,13 +397,25 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 		logger:               logger,
 	}
 
-	c.removeKubernetesModeRoleBindingFinalizer(ctx)
-	c.removeKubernetesModeRoleFinalizer(ctx)
-	c.removeKubernetesModeServiceAccountFinalizer(ctx)
-	c.removeNoPermissionServiceAccountFinalizer(ctx)
+	if !ShouldSkipListenerRbacSetup() {
+		c.removeKubernetesModeRoleBindingFinalizer(ctx)
+		c.removeKubernetesModeRoleFinalizer(ctx)
+	} else {
+		logger.Info("Skipping Kubernetes mode RBAC finalizers cleanup")
+	}
+	if !ShouldSkipListenerSaCreation() {
+		c.removeKubernetesModeServiceAccountFinalizer(ctx)
+	} else {
+		logger.Info("Skipping Kubernetes mode service account finalizer cleanup")
+	}
 	c.removeGitHubSecretFinalizer(ctx)
-	c.removeManagerRoleBindingFinalizer(ctx)
-	c.removeManagerRoleFinalizer(ctx)
+	if !ShouldSkipRbac() {
+		c.removeNoPermissionServiceAccountFinalizer(ctx)
+		c.removeManagerRoleBindingFinalizer(ctx)
+		c.removeManagerRoleFinalizer(ctx)
+	} else {
+		logger.Info("Skipping RBAC finalizers cleanup")
+	}
 
 	requeue, err = c.result()
 	if err != nil {
