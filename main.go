@@ -256,7 +256,7 @@ func main() {
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
-			Log:                                log.WithName("AutoscalingRunnerSet"),
+			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
 			Scheme:                             mgr.GetScheme(),
 			ControllerNamespace:                managerNamespace,
 			DefaultRunnerScaleSetListenerImage: managerImage,
@@ -270,7 +270,7 @@ func main() {
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
 			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunner"),
+			Log:           log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:        mgr.GetScheme(),
 			ActionsClient: actionsMultiClient,
 		}).SetupWithManager(mgr); err != nil {
@@ -280,7 +280,7 @@ func main() {
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
 			Client:         mgr.GetClient(),
-			Log:            log.WithName("EphemeralRunnerSet"),
+			Log:            log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:         mgr.GetScheme(),
 			ActionsClient:  actionsMultiClient,
 			PublishMetrics: metricsAddr != "0",
@@ -291,7 +291,7 @@ func main() {
 
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
 			Client:                  mgr.GetClient(),
-			Log:                     log.WithName("AutoscalingListener"),
+			Log:                     log.WithName("AutoscalingListener").WithValues("version", build.Version),
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
