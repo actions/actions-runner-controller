@@ -12,10 +12,16 @@ If needed, the proxy can be disabled in the `values.yml` file:
 ```diff
 metrics:
   serviceAnnotations: {}
-  serviceMonitor: false
+  serviceMonitor:
+    enable: false
+    namespace: ""
+    timeout: 30s
+    interval: 1m
   serviceMonitorLabels: {}
+- port: 8443
 + port: 8080
   proxy:
+-   enabled: true
 +   enabled: false
 ```
 
@@ -27,6 +33,12 @@ podAnnotations:
 + prometheus.io/path: /metrics
 + prometheus.io/port: "8080"
 ```
+
+## Dashboard
+
+If needed, import and use Grafana dashboard [ID 19382](https://grafana.com/grafana/dashboards/19382-horizontalrunnerautoscalers/) for horizontal runner autoscalers.
+
+This dashboard adds observability to the Horizontal Runner Autoscalers (HRA). It automatically scans some ARC metrics to display the behaviour of all your HRAs.
 
 ## Troubleshooting
 
