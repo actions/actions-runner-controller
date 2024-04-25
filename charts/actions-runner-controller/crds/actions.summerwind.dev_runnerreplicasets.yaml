@@ -5,7 +5,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
     {{- if .Values.crds.annotations }}
-    {{.Values.crds.annotations }}
+    {{ .Values.crds.annotations | toYaml | trim | nindent 4 }}
     {{- end }} 
   name: runnerreplicasets.actions.summerwind.dev
 spec:
