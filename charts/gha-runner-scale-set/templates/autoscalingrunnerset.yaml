@@ -1,13 +1,13 @@
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
 metadata:
-  {{- if or (not (include "gha-runner-scale-set.scale-set-name" .)) (gt (len (include "gha-runner-scale-set.scale-set-name" .)) 45) }}
+  {{- if or (not (include "gha-runner-scale-set.fullname" .)) (gt (len (include "gha-runner-scale-set.fullname" .)) 45) }}
   {{ fail "Name must have up to 45 characters" }}
   {{- end }}
   {{- if gt (len .Release.Namespace) 63 }}
   {{ fail "Namespace must have up to 63 characters" }}
   {{- end }}
-  name: {{ include "gha-runner-scale-set.scale-set-name" . }}
+  name: {{ include "gha-runner-scale-set.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/component: "autoscaling-runner-set"
