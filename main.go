@@ -441,7 +441,7 @@ func main() {
 		}
 	}
 
-	log.Info("starting manager")
+	log.Info("starting manager", "version", build.Version)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "problem running manager")
 		os.Exit(1)
