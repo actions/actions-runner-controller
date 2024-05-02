@@ -66,6 +66,10 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
   {{- end }}
 {{- end }}
 
+{{- define "gha-runner-scale-set.hookTemplate" -}}
+{{- include "gha-runner-scale-set.fullname" . }}-hook-template
+{{- end }}
+
 {{- define "gha-runner-scale-set.noPermissionServiceAccountName" -}}
 {{- include "gha-runner-scale-set.fullname" . }}-no-permission
 {{- end }}
@@ -168,6 +172,12 @@ volumeMounts:
 - {{ $volume | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
+{{- end }}
+
+{{- define "gha-runner-scale-set.hook-template-volume" -}}
+- name: hook-template
+  configMap:
+    name: {{ include "gha-runner-scale-set.hookTemplate" . }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.non-runner-containers" -}}
@@ -277,6 +287,7 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.kubernetes-mode-runner-container" -}}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
+{{- $hookTemplate := .Values.hookTemplate }}
 {{- range $i, $container := .Values.template.spec.containers }}
   {{- if eq $container.name "runner" }}
     {{- range $key, $val := $container }}
@@ -341,6 +352,10 @@ env:
     {{- if $tlsConfig.runnerMountPath }}
       {{- $mountGitHubServerTLS = 1 }}
     {{- end }}
+    {{- if $hookTemplate }}
+  - name: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE
+    value: /home/runner/hookTemplate.yaml
+    {{- end }}
 volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
@@ -361,6 +376,12 @@ volumeMounts:
   - name: github-server-tls-cert
     mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
     subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
+    {{- if $hookTemplate }}
+  - name: hook-template
+    mountPath: /home/runner/hookTemplate.yaml
+    subPath: hookTemplate.yaml
+    readOnly: true
     {{- end }}
   {{- end }}
 {{- end }}

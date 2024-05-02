@@ -87,6 +87,17 @@ githubConfigSecret:
 #         storage: 1Gi
 #   kubernetesModeServiceAccount:
 #     annotations:
+#
+#   ## PodTemplate
+#   podTemplate:
+#     metadata:
+#       labels:
+#         app: runner-pod-template
+#     template:
+#       spec:
+#         securityContext:
+#           runAsUser: 1001
+#           runAsGroup: 123
 
 ## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
@@ -191,6 +202,19 @@ template:
       - name: runner
         image: ghcr.io/actions/actions-runner:latest
         command: ["/home/runner/run.sh"]
+
+## hookTemplate is the podTemplate definition of the worker in containerMode.type=kubernetes
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-template-v1/#PodTemplate
+# hookTemplate:
+#   apiVersion: v1
+#   kind: PodTemplate
+#   spec:
+#     containers:
+#     - name: $job
+#       resources:
+#         requests:
+#           cpu: 32
+#           memory: 32Gi
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
