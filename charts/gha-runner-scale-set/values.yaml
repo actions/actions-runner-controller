@@ -87,17 +87,6 @@ githubConfigSecret:
 #         storage: 1Gi
 #   kubernetesModeServiceAccount:
 #     annotations:
-#
-#   ## PodTemplate
-#   podTemplate:
-#     metadata:
-#       labels:
-#         app: runner-pod-template
-#     template:
-#       spec:
-#         securityContext:
-#           runAsUser: 1001
-#           runAsGroup: 123
 
 ## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
