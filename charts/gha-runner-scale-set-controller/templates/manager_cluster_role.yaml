@@ -127,6 +127,13 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - update
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
