@@ -239,6 +239,10 @@ func main() {
 	}
 
 	if autoScalingRunnerSetOnly {
+		if err := actionsgithubcom.SetupIndexers(mgr); err != nil {
+			log.Error(err, "unable to setup indexers")
+			os.Exit(1)
+		}
 		managerImage := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE")
 		if managerImage == "" {
 			log.Error(err, "unable to obtain listener image")
