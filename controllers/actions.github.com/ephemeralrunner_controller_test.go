@@ -135,7 +135,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 				timeout,
 				interval,
-			).Should(BeEquivalentTo([]string{ephemeralRunnerActionsFinalizerName, ephemeralRunnerFinalizerName}))
+			).Should(BeEquivalentTo([]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}))
 
 			Eventually(
 				func() (bool, error) {
