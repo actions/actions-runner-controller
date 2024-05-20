@@ -43,6 +43,14 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.9.2
+
+1. Refresh session if token expires during delete message [#3529](https://github.com/actions/actions-runner-controller/pull/3529)
+1. Re-use the last desired patch on empty batch [#3453](https://github.com/actions/actions-runner-controller/pull/3453)
+1. Extract single place to set up indexers [#3454](https://github.com/actions/actions-runner-controller/pull/3454)
+1. Include controller version in logs [#3473](https://github.com/actions/actions-runner-controller/pull/3473)
+1. Propogate arbitrary labels from runnersets to all created resources [#3157](https://github.com/actions/actions-runner-controller/pull/3157)
+
 ### v0.9.1
 
 #### Major changes
