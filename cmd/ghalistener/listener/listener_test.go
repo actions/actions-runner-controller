@@ -377,6 +377,93 @@ func TestListener_deleteLastMessage(t *testing.T) {
 		err = l.deleteLastMessage(ctx)
 		assert.NotNil(t, err)
 	})
+
+	t.Run("RefreshAndSucceeds", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		newUUID := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &newUUID,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(&actions.MessageQueueTokenExpiredError{}).Once()
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.MatchedBy(func(lastMessageID any) bool {
+			return lastMessageID.(int64) == int64(5)
+		})).Return(nil).Once()
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		oldUUID := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &oldUUID,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+		l.lastMessageID = 5
+
+		config.Client = client
+
+		err = l.deleteLastMessage(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("RefreshAndFails", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		newUUID := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &newUUID,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(&actions.MessageQueueTokenExpiredError{}).Twice()
+
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		oldUUID := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &oldUUID,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+		l.lastMessageID = 5
+
+		config.Client = client
+
+		err = l.deleteLastMessage(ctx)
+		assert.Error(t, err)
+	})
 }
 
 func TestListener_Listen(t *testing.T) {

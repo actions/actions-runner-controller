@@ -815,7 +815,6 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// TODO(nikola-jokic): Add indexing and filtering fields on corev1.Pod{}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).

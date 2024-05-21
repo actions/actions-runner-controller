@@ -295,8 +295,23 @@ func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessa
 
 func (l *Listener) deleteLastMessage(ctx context.Context) error {
 	l.logger.Info("Deleting last message", "lastMessageID", l.lastMessageID)
-	if err := l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID); err != nil {
-		return fmt.Errorf("failed to delete message: %w", err)
+	err := l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	if err == nil { // if NO error
+		return nil
+	}
+
+	expiredError := &actions.MessageQueueTokenExpiredError{}
+	if !errors.As(err, &expiredError) {
+		return fmt.Errorf("failed to delete last message: %w", err)
+	}
+
+	if err := l.refreshSession(ctx); err != nil {
+		return err
+	}
+
+	err = l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	if err != nil {
+		return fmt.Errorf("failed to delete last message after message session refresh: %w", err)
 	}
 
 	return nil
