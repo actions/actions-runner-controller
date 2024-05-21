@@ -671,8 +671,10 @@ var _ = Describe("EphemeralRunner", func() {
 							fake.WithGetRunner(
 								nil,
 								&actions.ActionsError{
-									StatusCode:    http.StatusNotFound,
-									ExceptionName: "AgentNotFoundException",
+									StatusCode: http.StatusNotFound,
+									Err: &actions.ActionsExceptionError{
+										ExceptionName: "AgentNotFoundException",
+									},
 								},
 							),
 						),

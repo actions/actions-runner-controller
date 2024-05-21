@@ -239,6 +239,10 @@ func main() {
 	}
 
 	if autoScalingRunnerSetOnly {
+		if err := actionsgithubcom.SetupIndexers(mgr); err != nil {
+			log.Error(err, "unable to setup indexers")
+			os.Exit(1)
+		}
 		managerImage := os.Getenv("CONTROLLER_MANAGER_CONTAINER_IMAGE")
 		if managerImage == "" {
 			log.Error(err, "unable to obtain listener image")
@@ -256,7 +260,7 @@ func main() {
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
-			Log:                                log.WithName("AutoscalingRunnerSet"),
+			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
 			Scheme:                             mgr.GetScheme(),
 			ControllerNamespace:                managerNamespace,
 			DefaultRunnerScaleSetListenerImage: managerImage,
@@ -270,7 +274,7 @@ func main() {
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
 			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunner"),
+			Log:           log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:        mgr.GetScheme(),
 			ActionsClient: actionsMultiClient,
 		}).SetupWithManager(mgr); err != nil {
@@ -280,7 +284,7 @@ func main() {
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
 			Client:         mgr.GetClient(),
-			Log:            log.WithName("EphemeralRunnerSet"),
+			Log:            log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:         mgr.GetScheme(),
 			ActionsClient:  actionsMultiClient,
 			PublishMetrics: metricsAddr != "0",
@@ -291,7 +295,7 @@ func main() {
 
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
 			Client:                  mgr.GetClient(),
-			Log:                     log.WithName("AutoscalingListener"),
+			Log:                     log.WithName("AutoscalingListener").WithValues("version", build.Version),
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
@@ -441,7 +445,7 @@ func main() {
 		}
 	}
 
-	log.Info("starting manager")
+	log.Info("starting manager", "version", build.Version)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "problem running manager")
 		os.Exit(1)

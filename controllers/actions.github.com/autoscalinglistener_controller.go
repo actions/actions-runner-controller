@@ -690,30 +690,6 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	groupVersionIndexer := func(rawObj client.Object) []string {
-		groupVersion := v1alpha1.GroupVersion.String()
-		owner := metav1.GetControllerOf(rawObj)
-		if owner == nil {
-			return nil
-		}
-
-		// ...make sure it is owned by this controller
-		if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingListener" {
-			return nil
-		}
-
-		// ...and if so, return it
-		return []string{owner.Name}
-	}
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, resourceOwnerKey, groupVersionIndexer); err != nil {
-		return err
-	}
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ServiceAccount{}, resourceOwnerKey, groupVersionIndexer); err != nil {
-		return err
-	}
-
 	labelBasedWatchFunc := func(_ context.Context, obj client.Object) []reconcile.Request {
 		var requests []reconcile.Request
 		labels := obj.GetLabels()
