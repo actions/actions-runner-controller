@@ -213,9 +213,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// on the next batch
 		case ephemeralRunnerSet.Spec.PatchID == 0 && total > ephemeralRunnerSet.Spec.Replicas:
 			count := total - ephemeralRunnerSet.Spec.Replicas
-			if count <= 0 {
-				break
-			}
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
 			if err := r.deleteIdleEphemeralRunners(
 				ctx,
@@ -574,28 +571,6 @@ func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Conte
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Index EphemeralRunner owned by EphemeralRunnerSet so we can perform faster look ups.
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.EphemeralRunner{}, resourceOwnerKey, func(rawObj client.Object) []string {
-		groupVersion := v1alpha1.GroupVersion.String()
-
-		// grab the job object, extract the owner...
-		ephemeralRunner := rawObj.(*v1alpha1.EphemeralRunner)
-		owner := metav1.GetControllerOf(ephemeralRunner)
-		if owner == nil {
-			return nil
-		}
-
-		// ...make sure it is owned by this controller
-		if owner.APIVersion != groupVersion || owner.Kind != "EphemeralRunnerSet" {
-			return nil
-		}
-
-		// ...and if so, return it
-		return []string{owner.Name}
-	}); err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.EphemeralRunnerSet{}).
 		Owns(&v1alpha1.EphemeralRunner{}).
