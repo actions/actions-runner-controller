@@ -79,7 +79,7 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
