@@ -7,7 +7,7 @@ metadata:
   {{- if gt (len .Release.Namespace) 63 }}
   {{ fail "Namespace must have up to 63 characters" }}
   {{- end }}
-  name: {{ include "gha-runner-scale-set.scale-set-name" . }}
+  name: {{ include "gha-runner-scale-set.scale-set-name" . | replace "_" "-" }}
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/component: "autoscaling-runner-set"
