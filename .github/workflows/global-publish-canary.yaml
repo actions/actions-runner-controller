@@ -46,45 +46,6 @@ env:
   PUSH_TO_REGISTRIES: true
 
 jobs:
-  legacy-canary-build:
-    name: Build and Publish Legacy Canary Image
-    runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      TARGET_ORG: actions-runner-controller
-      TARGET_REPO: actions-runner-controller
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Get Token
-        id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
-        with:
-          application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
-          application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
-          organization: ${{ env.TARGET_ORG }}
-
-      - name: Trigger Build And Push Images To Registries
-        run: |
-          # Authenticate
-          gh auth login --with-token <<< ${{ steps.get_workflow_token.outputs.token }}
-
-          # Trigger the workflow run
-          jq -n '{"event_type": "canary", "client_payload": {"sha": "${{ github.sha }}", "push_to_registries": ${{ env.PUSH_TO_REGISTRIES }}}}' \
-            | gh api -X POST /repos/actions-runner-controller/releases/dispatches --input -
-
-      - name: Job summary
-        run: |
-          echo "The [publish-canary](https://github.com/actions-runner-controller/releases/blob/main/.github/workflows/publish-canary.yaml) workflow has been triggered!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- sha: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Push to registries: ${{ env.PUSH_TO_REGISTRIES }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:**" >> $GITHUB_STEP_SUMMARY
-          echo "[https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml](https://github.com/actions-runner-controller/releases/actions/workflows/publish-canary.yaml)" >> $GITHUB_STEP_SUMMARY
-
   canary-build:
     name: Build and Publish gha-runner-scale-set-controller Canary Image
     runs-on: ubuntu-latest
