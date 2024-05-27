@@ -242,17 +242,27 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, mirrorSecret, log)
 	}
 
-	// The listener pod failed might mean the mirror secret is out of date
-	// Delete the listener pod and re-create it to make sure the mirror secret is up to date
-	if listenerPod.Status.Phase == corev1.PodFailed && listenerPod.DeletionTimestamp.IsZero() {
-		log.Info("Listener pod failed, deleting it and re-creating it", "namespace", listenerPod.Namespace, "name", listenerPod.Name, "reason", listenerPod.Status.Reason, "message", listenerPod.Status.Message)
-		if err := r.Delete(ctx, listenerPod); err != nil && !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
-			return ctrl.Result{}, err
-		}
-	}
+	cs := listenerContainerStatus(listenerPod)
+	switch {
+	case cs == nil:
+		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+		return ctrl.Result{}, nil
+	case cs.State.Terminated != nil:
+		log.Info("Listener pod is terminated", "namespace", listenerPod.Namespace, "name", listenerPod.Name, "reason", cs.State.Terminated.Reason, "message", cs.State.Terminated.Message)
 
-	if listenerPod.Status.Phase == corev1.PodRunning {
+		if err := r.publishRunningListener(autoscalingListener, false); err != nil {
+			log.Error(err, "Unable to publish runner listener down metric", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+		}
+
+		if listenerPod.DeletionTimestamp.IsZero() {
+			log.Info("Deleting the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+			if err := r.Delete(ctx, listenerPod); err != nil && !kerrors.IsNotFound(err) {
+				log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	case cs.State.Running != nil:
 		if err := r.publishRunningListener(autoscalingListener, true); err != nil {
 			log.Error(err, "Unable to publish running listener", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 			// stop reconciling. We should never get to this point but if we do,
@@ -260,8 +270,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			// notify the reconciler again.
 			return ctrl.Result{}, nil
 		}
+		return ctrl.Result{}, nil
 	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -721,4 +731,14 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		Complete(r)
+}
+
+func listenerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
+		if cs.Name == autoscalingListenerContainerName {
+			return cs
+		}
+	}
+	return nil
 }
