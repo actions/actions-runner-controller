@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -336,6 +337,9 @@ func NewExporter(config ExporterConfig) ServerPublisher {
 }
 
 func (e *exporter) ListenAndServe(ctx context.Context) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "exporter.ListenAndServe")
+	defer span.End()
+
 	e.logger.Info("starting metrics server", "addr", e.srv.Addr)
 	go func() {
 		<-ctx.Done()

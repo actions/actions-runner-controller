@@ -27,6 +27,8 @@ import (
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
+	otelCodes "go.opentelemetry.io/otel/codes"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -93,6 +95,9 @@ type AutoscalingRunnerSetReconciler struct {
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
 func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.Reconcile")
+	defer span.End()
+
 	log := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
 
 	autoscalingRunnerSet := new(v1alpha1.AutoscalingRunnerSet)
@@ -334,6 +339,15 @@ func (r *AutoscalingRunnerSetReconciler) drainingJobs(latestRunnerSetStatus *v1a
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.cleanupListener")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	logger.Info("Cleaning up the listener")
 	var listener v1alpha1.AutoscalingListener
 	err = r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, &listener)
@@ -355,6 +369,15 @@ func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, au
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.cleanupEphemeralRunnerSets")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	logger.Info("Cleaning up ephemeral runner sets")
 	runnerSets, err := r.listEphemeralRunnerSets(ctx, autoscalingRunnerSet)
 	if err != nil {
@@ -373,6 +396,9 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 }
 
 func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.Context, oldRunnerSets []v1alpha1.EphemeralRunnerSet, logger logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.deleteEphemeralRunnerSets")
+	defer span.End()
+
 	for i := range oldRunnerSets {
 		rs := &oldRunnerSets[i]
 		// already deleted but contains finalizer so it still exists
@@ -390,6 +416,15 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 }
 
 func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.removeFinalizersFromDependentResources")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	c := autoscalingRunnerSetFinalizerDependencyCleaner{
 		client:               r.Client,
 		autoscalingRunnerSet: autoscalingRunnerSet,
@@ -413,6 +448,9 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 }
 
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.createRunnerScaleSet")
+	defer span.End()
+
 	logger.Info("Creating a new runner scale set")
 	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
 	if len(autoscalingRunnerSet.Spec.RunnerScaleSetName) == 0 {
@@ -504,6 +542,9 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 }
 
 func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.updateRunnerScaleSetRunnerGroup")
+	defer span.End()
+
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
 		logger.Error(err, "Failed to parse runner scale set ID")
@@ -547,6 +588,9 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx con
 }
 
 func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.updateRunnerScaleSetName")
+	defer span.End()
+
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
 		logger.Error(err, "Failed to parse runner scale set ID")
@@ -583,6 +627,9 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 }
 
 func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.deleteRunnerScaleSet")
+	defer span.End()
+
 	scaleSetId, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey]
 	if !ok {
 		// Annotation not being present can occur in 3 scenarios
@@ -634,6 +681,9 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 }
 
 func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.createEphemeralRunnerSet")
+	defer span.End()
+
 	desiredRunnerSet, err := r.resourceBuilder.newEphemeralRunnerSet(autoscalingRunnerSet)
 	if err != nil {
 		log.Error(err, "Could not create EphemeralRunnerSet")
@@ -656,6 +706,9 @@ func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Co
 }
 
 func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.createAutoScalingListenerForRunnerSet")
+	defer span.End()
+
 	var imagePullSecrets []corev1.LocalObjectReference
 	for _, imagePullSecret := range r.DefaultRunnerScaleSetListenerImagePullSecrets {
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
@@ -680,6 +733,9 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 }
 
 func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*EphemeralRunnerSets, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.listEphemeralRunnerSets")
+	defer span.End()
+
 	list := new(v1alpha1.EphemeralRunnerSetList)
 	if err := r.List(ctx, list, client.InNamespace(autoscalingRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: autoscalingRunnerSet.Name}); err != nil {
 		return nil, fmt.Errorf("failed to list ephemeral runner sets: %v", err)
@@ -689,6 +745,9 @@ func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Con
 }
 
 func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (actions.ActionsService, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.actionsClientFor")
+	defer span.End()
+
 	var configSecret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, &configSecret); err != nil {
 		return nil, fmt.Errorf("failed to find GitHub config secret: %w", err)
@@ -709,6 +768,9 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 }
 
 func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoscalingRunnerSetReconciler.actionsClientOptionsFor")
+	defer span.End()
+
 	var options []actions.ClientOption
 
 	if autoscalingRunnerSet.Spec.Proxy != nil {
@@ -794,6 +856,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) result() (requeue bool,
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRoleBindingFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeKubernetesModeRoleBindingFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}
@@ -838,6 +903,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRoleFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeKubernetesModeRoleFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}
@@ -881,6 +949,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeServiceAccountFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeKubernetesModeServiceAccountFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}
@@ -925,6 +996,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServiceAccountFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeNoPermissionServiceAccountFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}
@@ -969,6 +1043,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeGitHubSecretFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}
@@ -1013,6 +1090,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindingFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeManagerRoleBindingFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}
@@ -1057,6 +1137,9 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinalizer(ctx context.Context) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "autoscalingRunnerSetFinalizerDependencyCleaner.removeManagerRoleFinalizer")
+	defer span.End()
+
 	if c.requeue || c.err != nil {
 		return
 	}

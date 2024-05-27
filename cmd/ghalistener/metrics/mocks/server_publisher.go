@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	actions "github.com/actions/actions-runner-controller/github/actions"
+	"go.opentelemetry.io/otel"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -17,6 +18,9 @@ type ServerPublisher struct {
 
 // ListenAndServe provides a mock function with given fields: ctx
 func (_m *ServerPublisher) ListenAndServe(ctx context.Context) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "ServerPublisher.ListenAndServe")
+	defer span.End()
+
 	ret := _m.Called(ctx)
 
 	var r0 error

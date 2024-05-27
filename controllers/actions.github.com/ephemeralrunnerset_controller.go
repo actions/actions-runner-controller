@@ -28,6 +28,7 @@ import (
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -75,6 +76,9 @@ type EphemeralRunnerSetReconciler struct {
 // be to bring the count of EphemeralRunners to the desired one, not to patch this resource
 // until it is safe to do so
 func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.Reconcile")
+	defer span.End()
+
 	log := r.Log.WithValues("ephemeralrunnerset", req.NamespacedName)
 
 	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
@@ -250,6 +254,9 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx context.Context, finishedEphemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.cleanupFinishedEphemeralRunners")
+	defer span.End()
+
 	// cleanup finished runners and proceed
 	var errs []error
 	for i := range finishedEphemeralRunners {
@@ -265,6 +272,9 @@ func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx conte
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.cleanUpProxySecret")
+	defer span.End()
+
 	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy == nil {
 		return nil
 	}
@@ -284,6 +294,9 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.cleanUpEphemeralRunners")
+	defer span.End()
+
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
 	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
 	if err != nil {
@@ -357,6 +370,9 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.createEphemeralRunners")
+	defer span.End()
+
 	// Track multiple errors at once and return the bundle.
 	errs := make([]error, 0)
 	for i := 0; i < count; i++ {
@@ -386,6 +402,9 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 }
 
 func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.createProxySecret")
+	defer span.End()
+
 	proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
 		secret := new(corev1.Secret)
 		err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
@@ -431,6 +450,9 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 // When this happens, the next reconcile loop will try to delete the remaining ephemeral runners
 // after we get notified by any of the `v1alpha1.EphemeralRunner.Status` updates.
 func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, pendingEphemeralRunners, runningEphemeralRunners []*v1alpha1.EphemeralRunner, count int, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.deleteIdleEphemeralRunners")
+	defer span.End()
+
 	if count <= 0 {
 		return nil
 	}
@@ -477,6 +499,9 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient actions.ActionsService, log logr.Logger) (bool, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.deleteEphemeralRunnerWithActionsClient")
+	defer span.End()
+
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
 		actionsError := &actions.ActionsError{}
 		if !errors.As(err, &actionsError) {
@@ -503,6 +528,9 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 }
 
 func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) (actions.ActionsService, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.actionsClientFor")
+	defer span.End()
+
 	secret := new(corev1.Secret)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
@@ -523,6 +551,9 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 }
 
 func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) ([]actions.ClientOption, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerSetReconciler.actionsClientOptionsFor")
+	defer span.End()
+
 	var opts []actions.ClientOption
 	if rs.Spec.EphemeralRunnerSpec.Proxy != nil {
 		proxyFunc, err := rs.Spec.EphemeralRunnerSpec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {

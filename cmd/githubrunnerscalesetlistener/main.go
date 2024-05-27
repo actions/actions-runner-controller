@@ -34,6 +34,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/sync/errgroup"
 )
@@ -155,6 +156,9 @@ type runOptions struct {
 }
 
 func run(ctx context.Context, rc config.Config, logger logr.Logger, opts runOptions) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "run")
+	defer span.End()
+
 	// Create root context and hook with sigint and sigterm
 	creds := &actions.ActionsAuth{}
 	if rc.Token != "" {

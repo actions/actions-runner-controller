@@ -13,6 +13,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -125,6 +126,9 @@ type Handler interface {
 // The handler is responsible for handling the initial message and subsequent messages.
 // If an error occurs during any step, Listen returns an error.
 func (l *Listener) Listen(ctx context.Context, handler Handler) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.Listen")
+	defer span.End()
+
 	if err := l.createSession(ctx); err != nil {
 		return fmt.Errorf("createSession failed: %w", err)
 	}
@@ -182,6 +186,9 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 }
 
 func (l *Listener) handleMessage(ctx context.Context, handler Handler, msg *actions.RunnerScaleSetMessage) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.handleMessage")
+	defer span.End()
+
 	parsedMsg, err := l.parseMessage(ctx, msg)
 	if err != nil {
 		return fmt.Errorf("failed to parse message: %w", err)
@@ -223,6 +230,9 @@ func (l *Listener) handleMessage(ctx context.Context, handler Handler, msg *acti
 }
 
 func (l *Listener) createSession(ctx context.Context) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.createSession")
+	defer span.End()
+
 	var session *actions.RunnerScaleSetSession
 	var retries int
 
@@ -268,6 +278,9 @@ func (l *Listener) createSession(ctx context.Context) error {
 }
 
 func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessage, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.getMessage")
+	defer span.End()
+
 	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
 	msg, err := l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID, l.maxCapacity)
 	if err == nil { // if NO error
@@ -294,6 +307,9 @@ func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessa
 }
 
 func (l *Listener) deleteLastMessage(ctx context.Context) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.deleteLastMessage")
+	defer span.End()
+
 	l.logger.Info("Deleting last message", "lastMessageID", l.lastMessageID)
 	err := l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
 	if err == nil { // if NO error
@@ -325,6 +341,9 @@ type parsedMessage struct {
 }
 
 func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSetMessage) (*parsedMessage, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.parseMessage")
+	defer span.End()
+
 	if msg.MessageType != "RunnerScaleSetJobMessages" {
 		l.logger.Info("Skipping message", "messageType", msg.MessageType)
 		return nil, fmt.Errorf("invalid message type: %s", msg.MessageType)
@@ -398,6 +417,9 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 }
 
 func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*actions.JobAvailable) ([]int64, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.acquireAvailableJobs")
+	defer span.End()
+
 	ids := make([]int64, 0, len(jobsAvailable))
 	for _, job := range jobsAvailable {
 		ids = append(ids, job.RunnerRequestId)
@@ -428,6 +450,9 @@ func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*ac
 }
 
 func (l *Listener) refreshSession(ctx context.Context) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Listener.refreshSession")
+	defer span.End()
+
 	l.logger.Info("Message queue token is expired during GetNextMessage, refreshing...")
 	session, err := l.client.RefreshMessageSession(ctx, l.session.RunnerScaleSet.Id, l.session.SessionId)
 	if err != nil {

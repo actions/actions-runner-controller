@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	actions "github.com/actions/actions-runner-controller/github/actions"
+	"go.opentelemetry.io/otel"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -19,6 +20,9 @@ type Client struct {
 
 // AcquireJobs provides a mock function with given fields: ctx, runnerScaleSetId, messageQueueAccessToken, requestIds
 func (_m *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.AcquireJobs")
+	defer span.End()
+
 	ret := _m.Called(ctx, runnerScaleSetId, messageQueueAccessToken, requestIds)
 
 	var r0 []int64
@@ -45,6 +49,9 @@ func (_m *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, message
 
 // CreateMessageSession provides a mock function with given fields: ctx, runnerScaleSetId, owner
 func (_m *Client) CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.CreateMessageSession")
+	defer span.End()
+
 	ret := _m.Called(ctx, runnerScaleSetId, owner)
 
 	var r0 *actions.RunnerScaleSetSession
@@ -71,6 +78,9 @@ func (_m *Client) CreateMessageSession(ctx context.Context, runnerScaleSetId int
 
 // DeleteMessage provides a mock function with given fields: ctx, messageQueueUrl, messageQueueAccessToken, messageId
 func (_m *Client) DeleteMessage(ctx context.Context, messageQueueUrl string, messageQueueAccessToken string, messageId int64) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.DeleteMessage")
+	defer span.End()
+
 	ret := _m.Called(ctx, messageQueueUrl, messageQueueAccessToken, messageId)
 
 	var r0 error
@@ -85,6 +95,9 @@ func (_m *Client) DeleteMessage(ctx context.Context, messageQueueUrl string, mes
 
 // DeleteMessageSession provides a mock function with given fields: ctx, runnerScaleSetId, sessionId
 func (_m *Client) DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.DeleteMessageSession")
+	defer span.End()
+
 	ret := _m.Called(ctx, runnerScaleSetId, sessionId)
 
 	var r0 error
@@ -99,6 +112,9 @@ func (_m *Client) DeleteMessageSession(ctx context.Context, runnerScaleSetId int
 
 // GetAcquirableJobs provides a mock function with given fields: ctx, runnerScaleSetId
 func (_m *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.GetAcquirableJobs")
+	defer span.End()
+
 	ret := _m.Called(ctx, runnerScaleSetId)
 
 	var r0 *actions.AcquirableJobList
@@ -125,6 +141,9 @@ func (_m *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (
 
 // GetMessage provides a mock function with given fields: ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity
 func (_m *Client) GetMessage(ctx context.Context, messageQueueUrl string, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.GetMessage")
+	defer span.End()
+
 	ret := _m.Called(ctx, messageQueueUrl, messageQueueAccessToken, lastMessageId, maxCapacity)
 
 	var r0 *actions.RunnerScaleSetMessage
@@ -151,6 +170,9 @@ func (_m *Client) GetMessage(ctx context.Context, messageQueueUrl string, messag
 
 // RefreshMessageSession provides a mock function with given fields: ctx, runnerScaleSetId, sessionId
 func (_m *Client) RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*actions.RunnerScaleSetSession, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Client.RefreshMessageSession")
+	defer span.End()
+
 	ret := _m.Called(ctx, runnerScaleSetId, sessionId)
 
 	var r0 *actions.RunnerScaleSetSession

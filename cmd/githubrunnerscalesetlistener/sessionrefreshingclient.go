@@ -8,6 +8,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
 )
 
 type SessionRefreshingClient struct {
@@ -25,6 +26,9 @@ func newSessionClient(client actions.ActionsService, logger *logr.Logger, sessio
 }
 
 func (m *SessionRefreshingClient) GetMessage(ctx context.Context, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "SessionRefreshingClient.GetMessage")
+	defer span.End()
+
 	if maxCapacity < 0 {
 		return nil, fmt.Errorf("maxCapacity must be greater than or equal to 0")
 	}
@@ -55,6 +59,9 @@ func (m *SessionRefreshingClient) GetMessage(ctx context.Context, lastMessageId 
 }
 
 func (m *SessionRefreshingClient) DeleteMessage(ctx context.Context, messageId int64) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "SessionRefreshingClient.DeleteMessage")
+	defer span.End()
+
 	err := m.client.DeleteMessage(ctx, m.session.MessageQueueUrl, m.session.MessageQueueAccessToken, messageId)
 	if err == nil {
 		return nil
@@ -82,6 +89,9 @@ func (m *SessionRefreshingClient) DeleteMessage(ctx context.Context, messageId i
 }
 
 func (m *SessionRefreshingClient) AcquireJobs(ctx context.Context, requestIds []int64) ([]int64, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "SessionRefreshingClient.AcquireJobs")
+	defer span.End()
+
 	ids, err := m.client.AcquireJobs(ctx, m.session.RunnerScaleSet.Id, m.session.MessageQueueAccessToken, requestIds)
 	if err == nil {
 		return ids, nil

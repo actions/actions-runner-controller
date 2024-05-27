@@ -8,6 +8,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -38,6 +39,9 @@ func NewKubernetesManager(logger *logr.Logger) (*AutoScalerKubernetesManager, er
 }
 
 func (k *AutoScalerKubernetesManager) ScaleEphemeralRunnerSet(ctx context.Context, namespace, resourceName string, runnerCount int) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoScalerKubernetesManager.ScaleEphemeralRunnerSet")
+	defer span.End()
+
 	original := &v1alpha1.EphemeralRunnerSet{
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: -1,
@@ -83,6 +87,9 @@ func (k *AutoScalerKubernetesManager) ScaleEphemeralRunnerSet(ctx context.Contex
 }
 
 func (k *AutoScalerKubernetesManager) UpdateEphemeralRunnerWithJobInfo(ctx context.Context, namespace, resourceName, ownerName, repositoryName, jobWorkflowRef, jobDisplayName string, workflowRunId, jobRequestId int64) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoScalerKubernetesManager.UpdateEphemeralRunnerWithJobInfo")
+	defer span.End()
+
 	original := &v1alpha1.EphemeralRunner{}
 	originalJson, err := json.Marshal(original)
 	if err != nil {

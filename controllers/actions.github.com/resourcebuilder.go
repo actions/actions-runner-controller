@@ -15,6 +15,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
+	"go.opentelemetry.io/otel"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -573,6 +574,9 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 }
 
 func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
+	ctx, span := otel.Tracer("arc").Start(ctx, "resourceBuilder.newEphemeralRunnerPod")
+	defer span.End()
+
 	var newPod corev1.Pod
 
 	labels := map[string]string{}

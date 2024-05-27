@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	actions "github.com/actions/actions-runner-controller/github/actions"
+	"go.opentelemetry.io/otel"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -17,6 +18,9 @@ type Handler struct {
 
 // HandleDesiredRunnerCount provides a mock function with given fields: ctx, count, jobsCompleted
 func (_m *Handler) HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Handler.HandleDesiredRunnerCount")
+	defer span.End()
+
 	ret := _m.Called(ctx, count, jobsCompleted)
 
 	var r0 int
@@ -41,6 +45,9 @@ func (_m *Handler) HandleDesiredRunnerCount(ctx context.Context, count int, jobs
 
 // HandleJobStarted provides a mock function with given fields: ctx, jobInfo
 func (_m *Handler) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Handler.HandleJobStarted")
+	defer span.End()
+
 	ret := _m.Called(ctx, jobInfo)
 
 	var r0 error

@@ -13,6 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -38,6 +39,9 @@ func NewAutoScalerClient(
 	runnerScaleSetId int,
 	options ...func(*AutoScalerClient),
 ) (*AutoScalerClient, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "NewAutoScalerClient")
+	defer span.End()
+
 	listener := AutoScalerClient{
 		logger: logger.WithName("auto_scaler"),
 	}
@@ -59,6 +63,9 @@ func NewAutoScalerClient(
 }
 
 func createSession(ctx context.Context, logger *logr.Logger, client actions.ActionsService, runnerScaleSetId int) (*actions.RunnerScaleSetSession, *actions.RunnerScaleSetMessage, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "createSession")
+	defer span.End()
+
 	hostName, err := os.Hostname()
 	if err != nil {
 		hostName = uuid.New().String()
@@ -130,6 +137,9 @@ func (m *AutoScalerClient) Close() error {
 }
 
 func (m *AutoScalerClient) GetRunnerScaleSetMessage(ctx context.Context, handler func(msg *actions.RunnerScaleSetMessage) error, maxCapacity int) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoScalerClient.GetRunnerScaleSetMessage")
+	defer span.End()
+
 	if m.initialMessage != nil {
 		err := handler(m.initialMessage)
 		if err != nil {
@@ -162,6 +172,9 @@ func (m *AutoScalerClient) GetRunnerScaleSetMessage(ctx context.Context, handler
 }
 
 func (m *AutoScalerClient) deleteMessage(ctx context.Context, messageId int64) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoScalerClient.deleteMessage")
+	defer span.End()
+
 	err := m.client.DeleteMessage(ctx, messageId)
 	if err != nil {
 		return fmt.Errorf("delete message failed from refreshing client. %w", err)
@@ -172,6 +185,9 @@ func (m *AutoScalerClient) deleteMessage(ctx context.Context, messageId int64) e
 }
 
 func (m *AutoScalerClient) AcquireJobsForRunnerScaleSet(ctx context.Context, requestIds []int64) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "AutoScalerClient.AcquireJobsForRunnerScaleSet")
+	defer span.End()
+
 	m.logger.Info("acquiring jobs.", "request count", len(requestIds), "requestIds", fmt.Sprint(requestIds))
 	if len(requestIds) == 0 {
 		return nil

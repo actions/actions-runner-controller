@@ -10,6 +10,7 @@ import (
 	"github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 )
 
 type ScaleSettings struct {
@@ -60,6 +61,9 @@ func NewService(
 	settings *ScaleSettings,
 	options ...func(*Service),
 ) (*Service, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "NewService")
+	defer span.End()
+
 	s := &Service{
 		ctx:                ctx,
 		rsClient:           rsClient,

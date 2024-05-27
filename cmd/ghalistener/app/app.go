@@ -11,6 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/worker"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -105,6 +106,9 @@ func New(config config.Config) (*App, error) {
 }
 
 func (app *App) Run(ctx context.Context) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "App.Run")
+	defer span.End()
+
 	var errs []error
 	if app.worker == nil {
 		errs = append(errs, fmt.Errorf("worker not initialized"))

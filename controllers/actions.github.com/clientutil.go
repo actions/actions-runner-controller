@@ -3,6 +3,7 @@ package actionsgithubcom
 import (
 	"context"
 
+	"go.opentelemetry.io/otel"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -16,6 +17,9 @@ type patcher interface {
 }
 
 func patch[T object[T]](ctx context.Context, client patcher, obj T, update func(obj T)) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "patch")
+	defer span.End()
+
 	original := obj.DeepCopy()
 	update(obj)
 	return client.Patch(ctx, obj, kclient.MergeFrom(original))
@@ -26,6 +30,9 @@ type subResourcePatcher interface {
 }
 
 func patchSubResource[T object[T]](ctx context.Context, client subResourcePatcher, obj T, update func(obj T)) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "patchSubResource")
+	defer span.End()
+
 	original := obj.DeepCopy()
 	update(obj)
 	return client.Patch(ctx, obj, kclient.MergeFrom(original))

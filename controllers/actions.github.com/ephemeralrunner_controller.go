@@ -26,6 +26,8 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
+	otelCodes "go.opentelemetry.io/otel/codes"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -68,6 +70,9 @@ type EphemeralRunnerReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
 func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.Reconcile")
+	defer span.End()
+
 	log := r.Log.WithValues("ephemeralrunner", req.NamespacedName)
 
 	ephemeralRunner := new(v1alpha1.EphemeralRunner)
@@ -294,6 +299,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.cleanupRunnerFromService")
+	defer span.End()
+
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
 		actionsError := &actions.ActionsError{}
 		if !errors.As(err, &actionsError) {
@@ -323,6 +331,15 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 }
 
 func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (deleted bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.cleanupResources")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	log.Info("Cleaning up the runner pod")
 	pod := new(corev1.Pod)
 	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
@@ -361,6 +378,15 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 }
 
 func (r *EphemeralRunnerReconciler) cleanupContainerHooksResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (done bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.cleanupContainerHooksResources")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	log.Info("Cleaning up runner linked pods")
 	done, err = r.cleanupRunnerLinkedPods(ctx, ephemeralRunner, log)
 	if err != nil {
@@ -381,6 +407,15 @@ func (r *EphemeralRunnerReconciler) cleanupContainerHooksResources(ctx context.C
 }
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (done bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.cleanupRunnerLinkedPods")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	runnerLinedLabels := client.MatchingLabels(
 		map[string]string{
 			"runner-pod": ephemeralRunner.Name,
@@ -416,6 +451,15 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 }
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (done bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.cleanupRunnerLinkedSecrets")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	runnerLinkedLabels := client.MatchingLabels(
 		map[string]string{
 			"runner-pod": ephemeralRunner.ObjectMeta.Name,
@@ -451,6 +495,9 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 }
 
 func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.markAsFailed")
+	defer span.End()
+
 	log.Info("Updating ephemeral runner status to Failed")
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodFailed
@@ -470,6 +517,9 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 }
 
 func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.markAsFinished")
+	defer span.End()
+
 	log.Info("Updating ephemeral runner status to Finished")
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodSucceeded
@@ -484,6 +534,9 @@ func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemera
 // deletePodAsFailed is responsible for deleting the pod and updating the .Status.Failures for tracking failure count.
 // It should not be responsible for setting the status to Failed.
 func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.deletePodAsFailed")
+	defer span.End()
+
 	if pod.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Deleting the ephemeral runner pod", "podId", pod.UID)
 		if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
@@ -511,6 +564,9 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 // updateStatusWithRunnerConfig fetches runtime configuration needed by the runner
 // This method should always set .status.runnerId and .status.runnerJITConfig
 func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.updateStatusWithRunnerConfig")
+	defer span.End()
+
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
 	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner)
@@ -584,6 +640,9 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 }
 
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.createPod")
+	defer span.End()
+
 	var envs []corev1.EnvVar
 	if runner.Spec.ProxySecretRef != "" {
 		http := corev1.EnvVar{
@@ -657,6 +716,9 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 }
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.createSecret")
+	defer span.End()
+
 	log.Info("Creating new secret for ephemeral runner")
 	jitSecret := r.resourceBuilder.newEphemeralRunnerJitSecret(runner)
 
@@ -679,6 +741,9 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 // The event should not be re-queued since the termination status should be set
 // before proceeding with reconciliation logic
 func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.updateRunStatusFromPod")
+	defer span.End()
+
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return nil
 	}
@@ -702,6 +767,9 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 }
 
 func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) (actions.ActionsService, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.actionsClientFor")
+	defer span.End()
+
 	secret := new(corev1.Secret)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: runner.Spec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
@@ -722,6 +790,9 @@ func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner
 }
 
 func (r *EphemeralRunnerReconciler) actionsClientOptionsFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) ([]actions.ClientOption, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.actionsClientOptionsFor")
+	defer span.End()
+
 	var opts []actions.ClientOption
 	if runner.Spec.Proxy != nil {
 		proxyFunc, err := runner.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
@@ -771,6 +842,15 @@ func (r *EphemeralRunnerReconciler) actionsClientOptionsFor(ctx context.Context,
 // runnerRegisteredWithService checks if the runner is still registered with the service
 // Returns found=false and err=nil if ephemeral runner does not exist in GitHub service and should be deleted
 func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (found bool, err error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.runnerRegisteredWithService")
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(otelCodes.Error, "error")
+			span.RecordError(err)
+		}
+	}()
+
 	actionsClient, err := r.actionsClientFor(ctx, runner)
 	if err != nil {
 		return false, fmt.Errorf("failed to get Actions client for ScaleSet: %w", err)
@@ -798,6 +878,9 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 }
 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "EphemeralRunnerReconciler.deleteRunnerFromService")
+	defer span.End()
+
 	client, err := r.actionsClientFor(ctx, ephemeralRunner)
 	if err != nil {
 		return fmt.Errorf("failed to get actions client for runner: %v", err)

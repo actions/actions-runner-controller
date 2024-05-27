@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	actions "github.com/actions/actions-runner-controller/github/actions"
+	"go.opentelemetry.io/otel"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -17,6 +18,9 @@ type MockRunnerScaleSetClient struct {
 
 // AcquireJobsForRunnerScaleSet provides a mock function with given fields: ctx, requestIds
 func (_m *MockRunnerScaleSetClient) AcquireJobsForRunnerScaleSet(ctx context.Context, requestIds []int64) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "MockRunnerScaleSetClient.AcquireJobsForRunnerScaleSet")
+	defer span.End()
+
 	ret := _m.Called(ctx, requestIds)
 
 	var r0 error
@@ -31,6 +35,9 @@ func (_m *MockRunnerScaleSetClient) AcquireJobsForRunnerScaleSet(ctx context.Con
 
 // GetRunnerScaleSetMessage provides a mock function with given fields: ctx, handler, maxCapacity
 func (_m *MockRunnerScaleSetClient) GetRunnerScaleSetMessage(ctx context.Context, handler func(*actions.RunnerScaleSetMessage) error, maxCapacity int) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "MockRunnerScaleSetClient.GetRunnerScaleSetMessage")
+	defer span.End()
+
 	ret := _m.Called(ctx, handler, maxCapacity)
 
 	var r0 error

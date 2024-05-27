@@ -11,6 +11,7 @@ import (
 	"github.com/actions/actions-runner-controller/logging"
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -96,6 +97,9 @@ func (w *Worker) applyDefaults() error {
 // about the ephemeral runner that should not be deleted when scaling down.
 // It returns an error if there is any issue with updating the job information.
 func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Worker.HandleJobStarted")
+	defer span.End()
+
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
@@ -164,6 +168,9 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsCompleted int) (int, error) {
+	ctx, span := otel.Tracer("arc").Start(ctx, "Worker.HandleDesiredRunnerCount")
+	defer span.End()
+
 	patchID := w.setDesiredWorkerState(count, jobsCompleted)
 
 	original, err := json.Marshal(
