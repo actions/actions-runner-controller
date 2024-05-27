@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const exampleRequestID = "5ddf2050-dae0-013c-9159-04421ad31b68"
+
 func TestCreateMessageSession(t *testing.T) {
 	ctx := context.Background()
 	auth := &actions.ActionsAuth{
@@ -69,13 +71,17 @@ func TestCreateMessageSession(t *testing.T) {
 		}
 
 		want := &actions.ActionsError{
-			ExceptionName: "CSharpExceptionNameHere",
-			Message:       "could not do something",
-			StatusCode:    http.StatusBadRequest,
+			ActivityID: exampleRequestID,
+			StatusCode: http.StatusBadRequest,
+			Err: &actions.ActionsExceptionError{
+				ExceptionName: "CSharpExceptionNameHere",
+				Message:       "could not do something",
+			},
 		}
 
 		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set(actions.HeaderActionsActivityID, exampleRequestID)
 			w.WriteHeader(http.StatusBadRequest)
 			resp := []byte(`{"typeName": "CSharpExceptionNameHere","message": "could not do something"}`)
 			w.Write(resp)

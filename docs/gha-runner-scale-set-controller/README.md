@@ -43,6 +43,50 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.9.2
+
+1. Refresh session if token expires during delete message [#3529](https://github.com/actions/actions-runner-controller/pull/3529)
+1. Re-use the last desired patch on empty batch [#3453](https://github.com/actions/actions-runner-controller/pull/3453)
+1. Extract single place to set up indexers [#3454](https://github.com/actions/actions-runner-controller/pull/3454)
+1. Include controller version in logs [#3473](https://github.com/actions/actions-runner-controller/pull/3473)
+1. Propogate arbitrary labels from runnersets to all created resources [#3157](https://github.com/actions/actions-runner-controller/pull/3157)
+
+### v0.9.1
+
+#### Major changes
+
+1. Shutdown metrics server when listener exits [#3445](https://github.com/actions/actions-runner-controller/pull/3445)
+1. Propagate max capacity information to the actions back-end [#3431](https://github.com/actions/actions-runner-controller/pull/3431)
+1. Refactor actions client error to include request id [#3430](https://github.com/actions/actions-runner-controller/pull/3430)
+1. Include self correction on empty batch and avoid removing pending runners when cluster is busy [#3426](https://github.com/actions/actions-runner-controller/pull/3426)
+1. Add topologySpreadConstraint to gha-runner-scale-set-controller chart [#3405](https://github.com/actions/actions-runner-controller/pull/3405)
+
+### v0.9.0
+
+#### ⚠️ Warning
+
+- This release contains CRD changes. During the upgrade, please remove the old CRDs before re-installing the new version. For more information, please read the [Upgrading ARC](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/deploying-runner-scale-sets-with-actions-runner-controller#upgrading-arc).
+- This release contains changes in the [default docker socket path](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/deploying-runner-scale-sets-with-actions-runner-controller#upgrading-arc) expanded for container mode `dind`.
+- Older version of the listener (`githubrunnerscalesetlistener`) is deprecated and will be removed in the future `0.10.0` release.
+
+Please evaluate these changes carefully before upgrading.
+
+#### Major changes
+
+1. Change docker socket path to /var/run/docker.sock [#3337](https://github.com/actions/actions-runner-controller/pull/3337)
+1. Update metrics to include repository on job-based label [#3310](https://github.com/actions/actions-runner-controller/pull/3310)
+1. Bump Go version to 1.22.1 [#3290](https://github.com/actions/actions-runner-controller/pull/3290)
+1. Propagate runner scale set name annotation to EphemeralRunner [#3098](https://github.com/actions/actions-runner-controller/pull/3098)
+1. Add annotation with values hash to re-create listener [#3195](https://github.com/actions/actions-runner-controller/pull/3195)
+1. Fix overscaling when the controller is much faster then the listener [#3371](https://github.com/actions/actions-runner-controller/pull/3371)
+1. Add retry on 401 and 403 for runner-registration [#3377](https://github.com/actions/actions-runner-controller/pull/3377)
+
+
+### v0.8.3
+1. Expose volumeMounts and volumes in gha-runner-scale-set-controller [#3260](https://github.com/actions/actions-runner-controller/pull/3260)
+1. Refer to the correct variable in discovery error message [#3296](https://github.com/actions/actions-runner-controller/pull/3296)
+1. Fix acquire jobs after session refresh ghalistener [#3307](https://github.com/actions/actions-runner-controller/pull/3307)
+
 ### v0.8.2
 1. Add listener graceful termination period and background context after the message is received [#3187](https://github.com/actions/actions-runner-controller/pull/3187)
 1. Publish metrics in the new ghalistener [#3193](https://github.com/actions/actions-runner-controller/pull/3193)

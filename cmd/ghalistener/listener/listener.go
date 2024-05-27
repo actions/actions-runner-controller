@@ -31,7 +31,7 @@ const (
 type Client interface {
 	GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error)
 	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error)
-	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*actions.RunnerScaleSetMessage, error)
+	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error)
 	DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error
 	AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error)
 	RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*actions.RunnerScaleSetSession, error)
@@ -80,6 +80,7 @@ type Listener struct {
 
 	// updated fields
 	lastMessageID int64                          // The ID of the last processed message.
+	maxCapacity   int                            // The maximum number of runners that can be created.
 	session       *actions.RunnerScaleSetSession // The session for managing the runner scale set.
 }
 
@@ -89,10 +90,11 @@ func New(config Config) (*Listener, error) {
 	}
 
 	listener := &Listener{
-		scaleSetID: config.ScaleSetID,
-		client:     config.Client,
-		logger:     config.Logger,
-		metrics:    metrics.Discard,
+		scaleSetID:  config.ScaleSetID,
+		client:      config.Client,
+		logger:      config.Logger,
+		metrics:     metrics.Discard,
+		maxCapacity: config.MaxRunners,
 	}
 
 	if config.Metrics != nil {
@@ -114,7 +116,7 @@ func New(config Config) (*Listener, error) {
 //go:generate mockery --name Handler --output ./mocks --outpkg mocks --case underscore
 type Handler interface {
 	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
-	HandleDesiredRunnerCount(ctx context.Context, count int) (int, error)
+	HandleDesiredRunnerCount(ctx context.Context, count, jobsCompleted int) (int, error)
 }
 
 // Listen listens for incoming messages and handles them using the provided handler.
@@ -145,7 +147,7 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 	}
 	l.metrics.PublishStatistics(initialMessage.Statistics)
 
-	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, initialMessage.Statistics.TotalAssignedJobs)
+	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, initialMessage.Statistics.TotalAssignedJobs, 0)
 	if err != nil {
 		return fmt.Errorf("handling initial message failed: %w", err)
 	}
@@ -164,11 +166,16 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 		}
 
 		if msg == nil {
+			_, err := handler.HandleDesiredRunnerCount(ctx, 0, 0)
+			if err != nil {
+				return fmt.Errorf("handling nil message failed: %w", err)
+			}
+
 			continue
 		}
 
-		// New context is created to avoid cancelation during message handling.
-		if err := l.handleMessage(context.Background(), handler, msg); err != nil {
+		// Remove cancellation from the context to avoid cancelling the message handling.
+		if err := l.handleMessage(context.WithoutCancel(ctx), handler, msg); err != nil {
 			return fmt.Errorf("failed to handle message: %w", err)
 		}
 	}
@@ -207,7 +214,7 @@ func (l *Listener) handleMessage(ctx context.Context, handler Handler, msg *acti
 		l.metrics.PublishJobStarted(jobStarted)
 	}
 
-	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, parsedMsg.statistics.TotalAssignedJobs)
+	desiredRunners, err := handler.HandleDesiredRunnerCount(ctx, parsedMsg.statistics.TotalAssignedJobs, len(parsedMsg.jobsCompleted))
 	if err != nil {
 		return fmt.Errorf("failed to handle desired runner count: %w", err)
 	}
@@ -262,7 +269,7 @@ func (l *Listener) createSession(ctx context.Context) error {
 
 func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessage, error) {
 	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
-	msg, err := l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	msg, err := l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID, l.maxCapacity)
 	if err == nil { // if NO error
 		return msg, nil
 	}
@@ -278,19 +285,33 @@ func (l *Listener) getMessage(ctx context.Context) (*actions.RunnerScaleSetMessa
 
 	l.logger.Info("Getting next message", "lastMessageID", l.lastMessageID)
 
-	msg, err = l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	msg, err = l.client.GetMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID, l.maxCapacity)
 	if err != nil { // if NO error
 		return nil, fmt.Errorf("failed to get next message after message session refresh: %w", err)
 	}
 
 	return msg, nil
-
 }
 
 func (l *Listener) deleteLastMessage(ctx context.Context) error {
 	l.logger.Info("Deleting last message", "lastMessageID", l.lastMessageID)
-	if err := l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID); err != nil {
-		return fmt.Errorf("failed to delete message: %w", err)
+	err := l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	if err == nil { // if NO error
+		return nil
+	}
+
+	expiredError := &actions.MessageQueueTokenExpiredError{}
+	if !errors.As(err, &expiredError) {
+		return fmt.Errorf("failed to delete last message: %w", err)
+	}
+
+	if err := l.refreshSession(ctx); err != nil {
+		return err
+	}
+
+	err = l.client.DeleteMessage(ctx, l.session.MessageQueueUrl, l.session.MessageQueueAccessToken, l.lastMessageID)
+	if err != nil {
+		return fmt.Errorf("failed to delete last message after message session refresh: %w", err)
 	}
 
 	return nil
@@ -384,9 +405,9 @@ func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*ac
 
 	l.logger.Info("Acquiring jobs", "count", len(ids), "requestIds", fmt.Sprint(ids))
 
-	ids, err := l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
+	idsAcquired, err := l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
 	if err == nil { // if NO errors
-		return ids, nil
+		return idsAcquired, nil
 	}
 
 	expiredError := &actions.MessageQueueTokenExpiredError{}
@@ -398,12 +419,12 @@ func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*ac
 		return nil, err
 	}
 
-	ids, err = l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
+	idsAcquired, err = l.client.AcquireJobs(ctx, l.scaleSetID, l.session.MessageQueueAccessToken, ids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire jobs after session refresh: %w", err)
 	}
 
-	return ids, nil
+	return idsAcquired, nil
 }
 
 func (l *Listener) refreshSession(ctx context.Context) error {

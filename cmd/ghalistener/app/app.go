@@ -34,7 +34,7 @@ type Listener interface {
 //go:generate mockery --name Worker --output ./mocks --outpkg mocks --case underscore
 type Worker interface {
 	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
-	HandleDesiredRunnerCount(ctx context.Context, count int) (int, error)
+	HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error)
 }
 
 func New(config config.Config) (*App, error) {
@@ -117,15 +117,19 @@ func (app *App) Run(ctx context.Context) error {
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
+	metricsCtx, cancelMetrics := context.WithCancelCause(ctx)
+
 	g.Go(func() error {
 		app.logger.Info("Starting listener")
-		return app.listener.Listen(ctx, app.worker)
+		listnerErr := app.listener.Listen(ctx, app.worker)
+		cancelMetrics(fmt.Errorf("Listener exited: %w", listnerErr))
+		return listnerErr
 	})
 
 	if app.metrics != nil {
 		g.Go(func() error {
 			app.logger.Info("Starting metrics server")
-			return app.metrics.ListenAndServe(ctx)
+			return app.metrics.ListenAndServe(metricsCtx)
 		})
 	}
 

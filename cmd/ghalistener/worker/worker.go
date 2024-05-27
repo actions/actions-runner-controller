@@ -41,6 +41,7 @@ type Worker struct {
 	clientset *kubernetes.Clientset
 	config    Config
 	lastPatch int
+	patchSeq  int
 	logger    *logr.Logger
 }
 
@@ -50,6 +51,7 @@ func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
 		config:    config,
 		lastPatch: -1,
+		patchSeq:  -1,
 	}
 
 	conf, err := rest.InClusterConfig()
@@ -161,28 +163,14 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // The function then scales the ephemeral runner set by applying the merge patch.
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
-func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
-	// Max runners should always be set by the resource builder either to the configured value,
-	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
-	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
-
-	logValues := []any{
-		"assigned job", count,
-		"decision", targetRunnerCount,
-		"min", w.config.MinRunners,
-		"max", w.config.MaxRunners,
-		"currentRunnerCount", w.lastPatch,
-	}
-
-	if targetRunnerCount == w.lastPatch {
-		w.logger.Info("Skipping patching of EphemeralRunnerSet as the desired count has not changed", logValues...)
-		return targetRunnerCount, nil
-	}
+func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsCompleted int) (int, error) {
+	patchID := w.setDesiredWorkerState(count, jobsCompleted)
 
 	original, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: -1,
+				PatchID:  -1,
 			},
 		},
 	)
@@ -193,7 +181,8 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 	patch, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
-				Replicas: targetRunnerCount,
+				Replicas: w.lastPatch,
+				PatchID:  patchID,
 			},
 		},
 	)
@@ -202,14 +191,13 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		return 0, err
 	}
 
+	w.logger.Info("Compare", "original", string(original), "patch", string(patch))
 	mergePatch, err := jsonpatch.CreateMergePatch(original, patch)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create merge patch json for ephemeral runner set: %w", err)
 	}
 
-	w.logger.Info("Created merge patch json for EphemeralRunnerSet update", "json", string(mergePatch))
-
-	w.logger.Info("Scaling ephemeral runner set", logValues...)
+	w.logger.Info("Preparing EphemeralRunnerSet update", "json", string(mergePatch))
 
 	patchedEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{}
 	err = w.clientset.RESTClient().
@@ -230,5 +218,40 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		"name", w.config.EphemeralRunnerSetName,
 		"replicas", patchedEphemeralRunnerSet.Spec.Replicas,
 	)
-	return targetRunnerCount, nil
+	return w.lastPatch, nil
+}
+
+// calculateDesiredState calculates the desired state of the worker based on the desired count and the the number of jobs completed.
+func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
+	// Max runners should always be set by the resource builder either to the configured value,
+	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
+	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
+	w.patchSeq++
+	desiredPatchID := w.patchSeq
+
+	if count == 0 && jobsCompleted == 0 { // empty batch
+		targetRunnerCount = max(w.lastPatch, targetRunnerCount)
+		if targetRunnerCount == w.config.MinRunners {
+			// We have an empty batch, and the last patch was the min runners.
+			// Since this is an empty batch, and we are at the min runners, they should all be idle.
+			// If controller created few more pods on accident (during scale down events),
+			// this situation allows the controller to scale down to the min runners.
+			// However, it is important to keep the patch sequence increasing so we don't ignore one batch.
+			desiredPatchID = 0
+		}
+	}
+
+	w.lastPatch = targetRunnerCount
+
+	w.logger.Info(
+		"Calculated target runner count",
+		"assigned job", count,
+		"decision", targetRunnerCount,
+		"min", w.config.MinRunners,
+		"max", w.config.MaxRunners,
+		"currentRunnerCount", w.lastPatch,
+		"jobsCompleted", jobsCompleted,
+	)
+
+	return desiredPatchID
 }

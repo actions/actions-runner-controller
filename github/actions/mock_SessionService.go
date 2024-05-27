@@ -67,25 +67,25 @@ func (_m *MockSessionService) DeleteMessage(ctx context.Context, messageId int64
 	return r0
 }
 
-// GetMessage provides a mock function with given fields: ctx, lastMessageId
-func (_m *MockSessionService) GetMessage(ctx context.Context, lastMessageId int64) (*RunnerScaleSetMessage, error) {
-	ret := _m.Called(ctx, lastMessageId)
+// GetMessage provides a mock function with given fields: ctx, lastMessageId, maxCapacity
+func (_m *MockSessionService) GetMessage(ctx context.Context, lastMessageId int64, maxCapacity int) (*RunnerScaleSetMessage, error) {
+	ret := _m.Called(ctx, lastMessageId, maxCapacity)
 
 	var r0 *RunnerScaleSetMessage
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64) (*RunnerScaleSetMessage, error)); ok {
-		return rf(ctx, lastMessageId)
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int) (*RunnerScaleSetMessage, error)); ok {
+		return rf(ctx, lastMessageId, maxCapacity)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int64) *RunnerScaleSetMessage); ok {
-		r0 = rf(ctx, lastMessageId)
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int) *RunnerScaleSetMessage); ok {
+		r0 = rf(ctx, lastMessageId, maxCapacity)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*RunnerScaleSetMessage)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int64) error); ok {
-		r1 = rf(ctx, lastMessageId)
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int) error); ok {
+		r1 = rf(ctx, lastMessageId, maxCapacity)
 	} else {
 		r1 = ret.Error(1)
 	}

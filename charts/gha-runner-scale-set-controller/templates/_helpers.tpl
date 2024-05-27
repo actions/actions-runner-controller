@@ -126,7 +126,3 @@ Create the name of the service account to use
 {{- end }}
 {{- $names | join ","}}
 {{- end }}
-
-{{- define "gha-runner-scale-set-controller.serviceMonitorName" -}}
-{{- include "gha-runner-scale-set-controller.fullname" . }}-service-monitor
-{{- end }}

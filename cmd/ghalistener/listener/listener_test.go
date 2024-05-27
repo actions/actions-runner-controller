@@ -37,7 +37,6 @@ func TestNew(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotNil(t, l)
 	})
-
 }
 
 func TestListener_createSession(t *testing.T) {
@@ -124,13 +123,14 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
 		want := &actions.RunnerScaleSetMessage{
 			MessageId: 1,
 		}
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(want, nil).Once()
 		config.Client = client
 
 		l, err := New(config)
@@ -149,10 +149,11 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.HttpClientSideError{Code: http.StatusNotFound}).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(nil, &actions.HttpClientSideError{Code: http.StatusNotFound}).Once()
 		config.Client = client
 
 		l, err := New(config)
@@ -171,6 +172,7 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
@@ -186,12 +188,12 @@ func TestListener_getMessage(t *testing.T) {
 		}
 		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
 
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
 
 		want := &actions.RunnerScaleSetMessage{
 			MessageId: 1,
 		}
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(want, nil).Once()
 
 		config.Client = client
 
@@ -215,6 +217,7 @@ func TestListener_getMessage(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
@@ -230,7 +233,7 @@ func TestListener_getMessage(t *testing.T) {
 		}
 		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
 
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Twice()
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).Return(nil, &actions.MessageQueueTokenExpiredError{}).Twice()
 
 		config.Client = client
 
@@ -374,6 +377,93 @@ func TestListener_deleteLastMessage(t *testing.T) {
 		err = l.deleteLastMessage(ctx)
 		assert.NotNil(t, err)
 	})
+
+	t.Run("RefreshAndSucceeds", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		newUUID := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &newUUID,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(&actions.MessageQueueTokenExpiredError{}).Once()
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.MatchedBy(func(lastMessageID any) bool {
+			return lastMessageID.(int64) == int64(5)
+		})).Return(nil).Once()
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		oldUUID := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &oldUUID,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+		l.lastMessageID = 5
+
+		config.Client = client
+
+		err = l.deleteLastMessage(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("RefreshAndFails", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		config := Config{
+			ScaleSetID: 1,
+			Metrics:    metrics.Discard,
+		}
+
+		client := listenermocks.NewClient(t)
+
+		newUUID := uuid.New()
+		session := &actions.RunnerScaleSetSession{
+			SessionId:               &newUUID,
+			OwnerName:               "example",
+			RunnerScaleSet:          &actions.RunnerScaleSet{},
+			MessageQueueUrl:         "https://example.com",
+			MessageQueueAccessToken: "1234567890",
+			Statistics:              nil,
+		}
+		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
+
+		client.On("DeleteMessage", ctx, mock.Anything, mock.Anything, mock.Anything).Return(&actions.MessageQueueTokenExpiredError{}).Twice()
+
+		config.Client = client
+
+		l, err := New(config)
+		require.Nil(t, err)
+
+		oldUUID := uuid.New()
+		l.session = &actions.RunnerScaleSetSession{
+			SessionId:      &oldUUID,
+			RunnerScaleSet: &actions.RunnerScaleSet{},
+		}
+		l.lastMessageID = 5
+
+		config.Client = client
+
+		err = l.deleteLastMessage(ctx)
+		assert.Error(t, err)
+	})
 }
 
 func TestListener_Listen(t *testing.T) {
@@ -428,7 +518,7 @@ func TestListener_Listen(t *testing.T) {
 
 		var called bool
 		handler := listenermocks.NewHandler(t)
-		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 0).
 			Return(0, nil).
 			Run(
 				func(mock.Arguments) {
@@ -451,6 +541,7 @@ func TestListener_Listen(t *testing.T) {
 		config := Config{
 			ScaleSetID: 1,
 			Metrics:    metrics.Discard,
+			MaxRunners: 10,
 		}
 
 		client := listenermocks.NewClient(t)
@@ -471,7 +562,7 @@ func TestListener_Listen(t *testing.T) {
 			MessageType: "RunnerScaleSetJobMessages",
 			Statistics:  &actions.RunnerScaleSetStatistic{},
 		}
-		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything).
+		client.On("GetMessage", ctx, mock.Anything, mock.Anything, mock.Anything, 10).
 			Return(msg, nil).
 			Run(
 				func(mock.Arguments) {
@@ -480,17 +571,17 @@ func TestListener_Listen(t *testing.T) {
 			).
 			Once()
 
-			// Ensure delete message is called with background context
-		client.On("DeleteMessage", context.Background(), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		// Ensure delete message is called without cancel
+		client.On("DeleteMessage", context.WithoutCancel(ctx), mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 		config.Client = client
 
 		handler := listenermocks.NewHandler(t)
-		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 0).
 			Return(0, nil).
 			Once()
 
-		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything).
+		handler.On("HandleDesiredRunnerCount", mock.Anything, mock.Anything, 0).
 			Return(0, nil).
 			Once()
 
@@ -628,9 +719,6 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		}
 		client.On("RefreshMessageSession", ctx, mock.Anything, mock.Anything).Return(session, nil).Once()
 
-		// First call to AcquireJobs will fail with a token expired error
-		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(nil, &actions.MessageQueueTokenExpiredError{}).Once()
-
 		// Second call to AcquireJobs will succeed
 		want := []int64{1, 2, 3}
 		availableJobs := []*actions.JobAvailable{
@@ -650,7 +738,24 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 				},
 			},
 		}
-		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).Return(want, nil).Once()
+
+		// First call to AcquireJobs will fail with a token expired error
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				ids := args.Get(3).([]int64)
+				assert.Equal(t, want, ids)
+			}).
+			Return(nil, &actions.MessageQueueTokenExpiredError{}).
+			Once()
+
+		// Second call should succeed
+		client.On("AcquireJobs", ctx, mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				ids := args.Get(3).([]int64)
+				assert.Equal(t, want, ids)
+			}).
+			Return(want, nil).
+			Once()
 
 		config.Client = client
 
