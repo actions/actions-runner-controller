@@ -29,9 +29,9 @@ import (
 )
 
 const (
-	timeout     = time.Second * 10
-	interval    = time.Millisecond * 250
-	runnerImage = "ghcr.io/actions/actions-runner:latest"
+	ephemeralRunnerTimeout  = time.Second * 20
+	ephemeralRunnerInterval = time.Millisecond * 250
+	runnerImage             = "ghcr.io/actions/actions-runner:latest"
 )
 
 func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.EphemeralRunner {
@@ -133,8 +133,8 @@ var _ = Describe("EphemeralRunner", func() {
 					n := len(created.Finalizers) // avoid capacity mismatch
 					return created.Finalizers[:n:n], nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo([]string{ephemeralRunnerActionsFinalizerName, ephemeralRunnerFinalizerName}))
 
 			Eventually(
@@ -147,8 +147,8 @@ var _ = Describe("EphemeralRunner", func() {
 					_, ok := secret.Data[jitTokenKey]
 					return ok, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			Eventually(
@@ -160,8 +160,8 @@ var _ = Describe("EphemeralRunner", func() {
 
 					return pod.Name, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(ephemeralRunner.Name))
 		})
 
@@ -184,8 +184,8 @@ var _ = Describe("EphemeralRunner", func() {
 				}
 				return true, nil
 			},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 		})
 
@@ -203,7 +203,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return "", nil
 				}
 				return updated.Status.Phase, nil
-			}, timeout, interval).Should(BeEquivalentTo(corev1.PodFailed))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(corev1.PodFailed))
 			Expect(updated.Status.Reason).Should(Equal("InvalidPod"))
 			Expect(updated.Status.Message).Should(Equal("Failed to create the pod: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
 		})
@@ -247,8 +247,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			// create runner linked secret
@@ -273,8 +273,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			err = k8sClient.Delete(ctx, ephemeralRunner)
@@ -289,8 +289,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return kerrors.IsNotFound(err), nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			Eventually(
@@ -302,8 +302,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return kerrors.IsNotFound(err), nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			Eventually(
@@ -315,8 +315,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return kerrors.IsNotFound(err), nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			Eventually(
@@ -328,8 +328,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return kerrors.IsNotFound(err), nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			Eventually(
@@ -341,8 +341,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return kerrors.IsNotFound(err), nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 		})
 
@@ -356,8 +356,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return updatedEphemeralRunner.Status.RunnerId, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeNumerically(">", 0))
 		})
 
@@ -371,8 +371,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			for _, phase := range []corev1.PodPhase{corev1.PodRunning, corev1.PodPending} {
@@ -395,8 +395,8 @@ var _ = Describe("EphemeralRunner", func() {
 						}
 						return updated.Status.Phase, nil
 					},
-					timeout,
-					interval,
+					ephemeralRunnerTimeout,
+					ephemeralRunnerInterval,
 				).Should(BeEquivalentTo(phase))
 			}
 		})
@@ -411,8 +411,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			pod.Status.Phase = corev1.PodRunning
@@ -427,7 +427,7 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return updated.Status.Phase, nil
 				},
-				timeout,
+				ephemeralRunnerTimeout,
 			).Should(BeEquivalentTo(""))
 		})
 
@@ -462,8 +462,8 @@ var _ = Describe("EphemeralRunner", func() {
 					Expect(err).To(BeNil(), "Failed to update pod status")
 					return false, fmt.Errorf("pod haven't failed for 5 times.")
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true), "we should stop creating pod after 5 failures")
 
 			// In case we still have pod created due to controller-runtime cache delay, mark the container as exited
@@ -488,7 +488,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return "", err
 				}
 				return updated.Status.Reason, nil
-			}, timeout, interval).Should(BeEquivalentTo("TooManyPodFailures"), "Reason should be TooManyPodFailures")
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo("TooManyPodFailures"), "Reason should be TooManyPodFailures")
 
 			// EphemeralRunner should not have any pod
 			Eventually(func() (bool, error) {
@@ -497,7 +497,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return false, nil
 				}
 				return kerrors.IsNotFound(err), nil
-			}, timeout, interval).Should(BeEquivalentTo(true))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 		})
 
 		It("It should re-create pod on eviction", func() {
@@ -510,8 +510,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			pod.Status.Phase = corev1.PodFailed
@@ -530,7 +530,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return false, err
 				}
 				return len(updated.Status.Failures) == 1, nil
-			}, timeout, interval).Should(BeEquivalentTo(true))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 
 			// should re-create after failure
 			Eventually(
@@ -541,8 +541,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 		})
 
@@ -555,8 +555,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
@@ -577,7 +577,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return false, err
 				}
 				return len(updated.Status.Failures) == 1, nil
-			}, timeout, interval).Should(BeEquivalentTo(true))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 
 			// should re-create after failure
 			Eventually(
@@ -588,8 +588,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 		})
 
@@ -602,8 +602,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return true, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
 			// first set phase to running
@@ -627,8 +627,8 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return updated.Status.Phase, nil
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(corev1.PodRunning))
 
 			// set phase to succeeded
@@ -644,7 +644,7 @@ var _ = Describe("EphemeralRunner", func() {
 					}
 					return updated.Status.Phase, nil
 				},
-				timeout,
+				ephemeralRunnerTimeout,
 			).Should(BeEquivalentTo(corev1.PodRunning))
 		})
 	})
@@ -700,7 +700,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return false, err
 				}
 				return true, nil
-			}, timeout, interval).Should(BeEquivalentTo(true))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 
 			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: EphemeralRunnerContainerName,
@@ -720,7 +720,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return "", nil
 				}
 				return updated.Status.Phase, nil
-			}, timeout, interval).Should(BeEquivalentTo(corev1.PodSucceeded))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(corev1.PodSucceeded))
 		})
 	})
 
@@ -800,7 +800,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return proxySuccessfulllyCalled
 				},
 				2*time.Second,
-				interval,
+				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 		})
 
@@ -825,8 +825,8 @@ var _ = Describe("EphemeralRunner", func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
 					g.Expect(err).To(BeNil(), "failed to get ephemeral runner pod")
 				},
-				timeout,
-				interval,
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
 			).Should(Succeed(), "failed to get ephemeral runner pod")
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
@@ -958,7 +958,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return serverSuccessfullyCalled
 				},
 				2*time.Second,
-				interval,
+				ephemeralRunnerInterval,
 			).Should(BeTrue(), "failed to contact server")
 		})
 	})

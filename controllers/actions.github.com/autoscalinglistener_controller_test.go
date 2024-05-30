@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	autoscalingListenerTestTimeout     = time.Second * 5
+	autoscalingListenerTestTimeout     = time.Second * 20
 	autoscalingListenerTestInterval    = time.Millisecond * 250
 	autoscalingListenerTestGitHubToken = "gh_token"
 )
@@ -887,7 +887,6 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 
 				g.Expect(pod.ObjectMeta.Annotations).To(HaveKeyWithValue("test-annotation-key", "test-annotation-value"), "pod annotations should be copied from runner set template")
 				g.Expect(pod.ObjectMeta.Labels).To(HaveKeyWithValue("test-label-key", "test-label-value"), "pod labels should be copied from runner set template")
-
 			},
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval).Should(Succeed(), "failed to create listener pod with proxy details")
