@@ -1084,17 +1084,19 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
-		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			corev1.Volume{
-				Name: varRunVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{
-						Medium:    corev1.StorageMediumMemory,
-						SizeLimit: runnerSpec.DockerVarRunVolumeSizeLimit,
+		if ok, _ := varRunVolumePresent(pod.Spec.Volumes); !ok {
+			pod.Spec.Volumes = append(pod.Spec.Volumes,
+				corev1.Volume{
+					Name: varRunVolumeName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							Medium:    corev1.StorageMediumMemory,
+							SizeLimit: runnerSpec.DockerVarRunVolumeSizeLimit,
+						},
 					},
 				},
-			},
-		)
+			)
+		}
 
 		if ok, _ := workVolumeMountPresent(runnerContainer.VolumeMounts); !ok {
 			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
@@ -1105,7 +1107,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			)
 		}
 
-		if ok, _ := volumeMountPresent(varRunVolumeName, runnerContainer.VolumeMounts); !ok {
+		if ok, _ := varRunVolumeMountPresent(runnerContainer.VolumeMounts); !ok {
 			runnerContainer.VolumeMounts = append(runnerContainer.VolumeMounts,
 				corev1.VolumeMount{
 					Name:      varRunVolumeName,
@@ -1123,7 +1125,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 			},
 		}
 
-		if p, _ := volumeMountPresent(varRunVolumeName, dockerdContainer.VolumeMounts); !p {
+		if p, _ := varRunVolumeMountPresent(dockerdContainer.VolumeMounts); !p {
 			dockerVolumeMounts = append(dockerVolumeMounts, corev1.VolumeMount{
 				Name:      varRunVolumeName,
 				MountPath: varRunVolumeMountPath,
@@ -1347,6 +1349,19 @@ func workVolumePresent(items []corev1.Volume) (bool, int) {
 
 func workVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
 	return volumeMountPresent("work", items)
+}
+
+func varRunVolumePresent(items []corev1.Volume) (bool, int) {
+	for index, item := range items {
+		if item.Name == "var-run" {
+			return true, index
+		}
+	}
+	return false, 0
+}
+
+func varRunVolumeMountPresent(items []corev1.VolumeMount) (bool, int) {
+	return volumeMountPresent("var-run", items)
 }
 
 func volumeMountPresent(name string, items []corev1.VolumeMount) (bool, int) {
