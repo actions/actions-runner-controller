@@ -610,6 +610,9 @@ func (r *AutoscalingListenerReconciler) updateSecretsForListener(ctx context.Con
 
 func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
 	newRole := r.resourceBuilder.newScaleSetListenerRole(autoscalingListener)
+	if err := ctrl.SetControllerReference(autoscalingListener, newRole, r.Scheme); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	logger.Info("Creating listener role", "namespace", newRole.Namespace, "name", newRole.Name, "rules", newRole.Rules)
 	if err := r.Create(ctx, newRole); err != nil {
@@ -638,6 +641,10 @@ func (r *AutoscalingListenerReconciler) updateRoleForListener(ctx context.Contex
 
 func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
 	newRoleBinding := r.resourceBuilder.newScaleSetListenerRoleBinding(autoscalingListener, listenerRole, serviceAccount)
+
+	if err := ctrl.SetControllerReference(autoscalingListener, newRoleBinding, r.Scheme); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	logger.Info("Creating listener role binding",
 		"namespace", newRoleBinding.Namespace,
