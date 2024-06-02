@@ -1,6 +1,8 @@
 package actionsgithubcom
 
 import (
+	"time"
+
 	"github.com/actions/actions-runner-controller/logging"
 )
 
@@ -67,6 +69,9 @@ const DefaultScaleSetListenerLogLevel = string(logging.LogLevelDebug)
 
 // DefaultScaleSetListenerLogFormat is the default log format applied
 const DefaultScaleSetListenerLogFormat = string(logging.LogFormatText)
+
+// DefaultScaleSetHealthyRequeueAfter is the default requeue time for healthy scale sets
+const DefaultScaleSetHealthyRequeueAfter = time.Duration(1 * time.Minute)
 
 // ownerKey is field selector matching the owner name of a particular resource
 const resourceOwnerKey = ".metadata.controller"

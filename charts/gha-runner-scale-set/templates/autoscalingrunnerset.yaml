@@ -89,6 +89,11 @@ spec:
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
 
+  {{- if and .Values.scheduledOverrides (kindIs "slice" .Values.scheduledOverrides) }}
+  scheduledOverrides:
+    {{- .Values.scheduledOverrides | toYaml | nindent 4 }}
+  {{- end }}
+
   {{- with .Values.listenerTemplate}}
   listenerTemplate:
     {{- toYaml . | nindent 4}}

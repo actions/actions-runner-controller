@@ -76,13 +76,10 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		return nil, err
 	}
 
-	effectiveMinRunners := 0
+	effectiveMinRunners := autoscalingRunnerSet.Status.DesiredMinRunners
 	effectiveMaxRunners := math.MaxInt32
 	if autoscalingRunnerSet.Spec.MaxRunners != nil {
 		effectiveMaxRunners = *autoscalingRunnerSet.Spec.MaxRunners
-	}
-	if autoscalingRunnerSet.Spec.MinRunners != nil {
-		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
 	}
 
 	labels := mergeLabels(autoscalingRunnerSet.Labels, map[string]string{
