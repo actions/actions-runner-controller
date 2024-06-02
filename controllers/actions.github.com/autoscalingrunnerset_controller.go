@@ -30,7 +30,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -135,15 +134,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		requeue, err := r.removeFinalizersFromDependentResources(ctx, autoscalingRunnerSet, log)
-		if err != nil {
+		if err := r.removeFinalizersFromDependentResources(ctx, autoscalingRunnerSet, log); err != nil {
 			log.Error(err, "Failed to remove finalizers on dependent resources")
 			return ctrl.Result{}, err
-		}
-
-		if requeue {
-			log.Info("Waiting for dependent resources to be deleted")
-			return ctrl.Result{Requeue: true}, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -277,6 +270,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			// need to scale down to 0
 			err := patch(ctx, r.Client, latestRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
 				obj.Spec.Replicas = 0
+				obj.Spec.PatchID = 0
 			})
 			if err != nil {
 				log.Error(err, "Failed to patch runner set to set desired count to 0")
@@ -389,7 +383,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 	return nil
 }
 
-func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (requeue bool, err error) {
+func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
 	c := autoscalingRunnerSetFinalizerDependencyCleaner{
 		client:               r.Client,
 		autoscalingRunnerSet: autoscalingRunnerSet,
@@ -404,12 +398,7 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 	c.removeManagerRoleBindingFinalizer(ctx)
 	c.removeManagerRoleFinalizer(ctx)
 
-	requeue, err = c.result()
-	if err != nil {
-		logger.Error(err, "Failed to cleanup finalizer from dependent resource")
-		return true, err
-	}
-	return requeue, nil
+	return c.Err()
 }
 
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
@@ -758,26 +747,6 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Con
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	groupVersionIndexer := func(rawObj client.Object) []string {
-		groupVersion := v1alpha1.GroupVersion.String()
-		owner := metav1.GetControllerOf(rawObj)
-		if owner == nil {
-			return nil
-		}
-
-		// ...make sure it is owned by this controller
-		if owner.APIVersion != groupVersion || owner.Kind != "AutoscalingRunnerSet" {
-			return nil
-		}
-
-		// ...and if so, return it
-		return []string{owner.Name}
-	}
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.EphemeralRunnerSet{}, resourceOwnerKey, groupVersionIndexer); err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AutoscalingRunnerSet{}).
 		Owns(&v1alpha1.EphemeralRunnerSet{}).
@@ -804,17 +773,16 @@ type autoscalingRunnerSetFinalizerDependencyCleaner struct {
 	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	logger               logr.Logger
 
-	// fields to operate on
-	requeue bool
-	err     error
+	err error
 }
 
-func (c *autoscalingRunnerSetFinalizerDependencyCleaner) result() (requeue bool, err error) {
-	return c.requeue, c.err
+func (c *autoscalingRunnerSetFinalizerDependencyCleaner) Err() error {
+	return c.err
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRoleBindingFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
+		c.logger.Info("Skipping cleaning up kubernetes mode service account")
 		return
 	}
 
@@ -845,7 +813,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 			c.err = fmt.Errorf("failed to patch kubernetes mode role binding without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from container mode kubernetes role binding", "name", roleBindingName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
@@ -858,7 +825,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRoleFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
 		return
 	}
 
@@ -888,7 +855,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 			c.err = fmt.Errorf("failed to patch kubernetes mode role without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from container mode kubernetes role")
 		return
 	case err != nil && !kerrors.IsNotFound(err):
@@ -901,7 +867,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeServiceAccountFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
 		return
 	}
 
@@ -932,7 +898,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 			c.err = fmt.Errorf("failed to patch kubernetes mode service account without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from container mode kubernetes service account")
 		return
 	case err != nil && !kerrors.IsNotFound(err):
@@ -945,7 +910,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServiceAccountFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
 		return
 	}
 
@@ -976,7 +941,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 			c.err = fmt.Errorf("failed to patch service account without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from no permission service account", "name", serviceAccountName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
@@ -989,7 +953,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
 		return
 	}
 
@@ -1020,7 +984,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 			c.err = fmt.Errorf("failed to patch GitHub secret without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from GitHub secret", "name", githubSecretName)
 		return
 	case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
@@ -1033,7 +996,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindingFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
 		return
 	}
 
@@ -1064,7 +1027,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 			c.err = fmt.Errorf("failed to patch manager role binding without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from manager role binding", "name", managerRoleBindingName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):
@@ -1077,7 +1039,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 }
 
 func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinalizer(ctx context.Context) {
-	if c.requeue || c.err != nil {
+	if c.err != nil {
 		return
 	}
 
@@ -1108,7 +1070,6 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 			c.err = fmt.Errorf("failed to patch manager role without finalizer: %w", err)
 			return
 		}
-		c.requeue = true
 		c.logger.Info("Removed finalizer from manager role", "name", managerRoleName)
 		return
 	case err != nil && !kerrors.IsNotFound(err):

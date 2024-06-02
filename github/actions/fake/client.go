@@ -259,7 +259,7 @@ func (f *FakeClient) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int
 	return f.getAcquirableJobsResult.AcquirableJobList, f.getAcquirableJobsResult.err
 }
 
-func (f *FakeClient) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64) (*actions.RunnerScaleSetMessage, error) {
+func (f *FakeClient) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error) {
 	return f.getMessageResult.RunnerScaleSetMessage, f.getMessageResult.err
 }
 
