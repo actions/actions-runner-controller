@@ -140,8 +140,8 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
-        uses: azure/setup-helm@df50d879fa2c7ad2245510549f2c2eb28d0da618
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -188,8 +188,8 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
-        uses: azure/setup-helm@df50d879fa2c7ad2245510549f2c2eb28d0da618
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
 
