@@ -522,6 +522,14 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	jitSettings := &actions.RunnerScaleSetJitRunnerSetting{
 		Name: ephemeralRunner.Name,
 	}
+
+	for i := range ephemeralRunner.Spec.Spec.Containers {
+		if ephemeralRunner.Spec.Spec.Containers[i].Name == EphemeralRunnerContainerName &&
+			ephemeralRunner.Spec.Spec.Containers[i].WorkingDir != "" {
+			jitSettings.WorkFolder = ephemeralRunner.Spec.Spec.Containers[i].WorkingDir
+		}
+	}
+
 	jitConfig, err := actionsClient.GenerateJitRunnerConfig(ctx, jitSettings, ephemeralRunner.Spec.RunnerScaleSetId)
 	if err != nil {
 		actionsError := &actions.ActionsError{}
