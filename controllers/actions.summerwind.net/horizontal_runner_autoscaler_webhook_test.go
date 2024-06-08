@@ -361,6 +361,127 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 	})
 }
 
+func TestWebhookWorkflowJobWithCompletedCheckRun(t *testing.T) {
+	setupTestSucceeded := func() github.WorkflowJobEvent {
+		f, err := os.Open("testdata/webhook_workflow_job_with_completed_success_check_run.json")
+		if err != nil {
+			t.Fatalf("could not open the fixture: %s", err)
+		}
+		defer f.Close()
+		var e github.WorkflowJobEvent
+		if err := json.NewDecoder(f).Decode(&e); err != nil {
+			t.Fatalf("invalid json: %s", err)
+		}
+
+		return e
+	}
+	setupTestFailure := func() github.WorkflowJobEvent {
+		f, err := os.Open("testdata/webhook_workflow_job_with_completed_failure_check_run.json")
+		if err != nil {
+			t.Fatalf("could not open the fixture: %s", err)
+		}
+		defer f.Close()
+		var e github.WorkflowJobEvent
+		if err := json.NewDecoder(f).Decode(&e); err != nil {
+			t.Fatalf("invalid json: %s", err)
+		}
+
+		return e
+	}
+	t.Run("Success", func(t *testing.T) {
+		e := setupTestSucceeded()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"label1"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"",
+			initObjs,
+		)
+	})
+	t.Run("Failure", func(t *testing.T) {
+		e := setupTestFailure()
+		hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+				ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+					Name: "test-name",
+				},
+				ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+					{
+						GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+							WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+						},
+					},
+				},
+			},
+		}
+
+		rd := &actionsv1alpha1.RunnerDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-name",
+			},
+			Spec: actionsv1alpha1.RunnerDeploymentSpec{
+				Template: actionsv1alpha1.RunnerTemplate{
+					Spec: actionsv1alpha1.RunnerSpec{
+						RunnerConfig: actionsv1alpha1.RunnerConfig{
+							Organization: "MYORG",
+							Labels:       []string{"label1"},
+						},
+					},
+				},
+			},
+		}
+
+		initObjs := []runtime.Object{hra, rd}
+
+		testServerWithInitObjs(t,
+			"workflow_job",
+			&e,
+			200,
+			"",
+			initObjs,
+		)
+	})
+}
+
 func TestGetRequest(t *testing.T) {
 	hra := HorizontalRunnerAutoscalerGitHubWebhook{}
 	request, _ := http.NewRequest(http.MethodGet, "/", nil)
