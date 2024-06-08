@@ -294,7 +294,7 @@ type AutoscalingRunnerSetStatus struct {
 
 	// +optional
 	// +kubebuilder:validation:Minimum:=0
-	DesiredMinRunners int `json:"desiredMinRunners,omitempty"`
+	DesiredMinRunners int `json:"desiredMinRunners"`
 	// +optional
 	ScheduledOverridesSummary *string `json:"scheduledOverridesSummary,omitempty"`
 }

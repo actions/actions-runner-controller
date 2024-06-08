@@ -318,50 +318,49 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	var overridesSummary string
 
-	// Update the status of the desired min runners and scheduled overrides summary
-	if autoscalingRunnerSet.Status.DesiredMinRunners != minRunners {
+	currentReplicasOutOfDate := latestRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners
+	minReplicasOutOfDate := autoscalingRunnerSet.Status.DesiredMinRunners != minRunners
+
+	// Update the status of autoscaling runner set.
+	if minReplicasOutOfDate || currentReplicasOutOfDate {
 		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-			obj.Status.DesiredMinRunners = minRunners
-
-			if (active != nil && upcoming == nil) || (active != nil && upcoming != nil && active.Period.EndTime.Before(upcoming.Period.StartTime)) {
-				var after int
-				if obj.Status.DesiredMinRunners >= 0 {
-					after = obj.Status.DesiredMinRunners
-				}
-
-				overridesSummary = fmt.Sprintf("min=%d status=active endTime=%s", after, active.Period.EndTime)
+			if currentReplicasOutOfDate {
+				obj.Status.CurrentRunners = latestRunnerSet.Status.CurrentReplicas
+				obj.Status.PendingEphemeralRunners = latestRunnerSet.Status.PendingEphemeralRunners
+				obj.Status.RunningEphemeralRunners = latestRunnerSet.Status.RunningEphemeralRunners
+				obj.Status.FailedEphemeralRunners = latestRunnerSet.Status.FailedEphemeralRunners
 			}
 
-			if active == nil && upcoming != nil || (active != nil && upcoming != nil && active.Period.EndTime.After(upcoming.Period.StartTime)) {
-				if upcoming.ScheduledOverride.MinRunners != nil {
-					overridesSummary = fmt.Sprintf("min=%d status=upcoming startTime=%s", *upcoming.ScheduledOverride.MinRunners, upcoming.Period.StartTime)
-				}
-			}
+			if minReplicasOutOfDate {
+				obj.Status.DesiredMinRunners = minRunners
 
-			if overridesSummary != "" {
-				obj.Status.ScheduledOverridesSummary = &overridesSummary
-			} else {
-				obj.Status.ScheduledOverridesSummary = nil
+				if (active != nil && upcoming == nil) || (active != nil && upcoming != nil && active.Period.EndTime.Before(upcoming.Period.StartTime)) {
+					var after int
+					if obj.Status.DesiredMinRunners >= 0 {
+						after = obj.Status.DesiredMinRunners
+					}
+
+					overridesSummary = fmt.Sprintf("min=%d status=active endTime=%s", after, active.Period.EndTime)
+				}
+
+				if active == nil && upcoming != nil || (active != nil && upcoming != nil && active.Period.EndTime.After(upcoming.Period.StartTime)) {
+					if upcoming.ScheduledOverride.MinRunners != nil {
+						overridesSummary = fmt.Sprintf("min=%d status=upcoming startTime=%s", *upcoming.ScheduledOverride.MinRunners, upcoming.Period.StartTime)
+					}
+				}
+
+				if overridesSummary != "" {
+					obj.Status.ScheduledOverridesSummary = &overridesSummary
+				} else {
+					obj.Status.ScheduledOverridesSummary = nil
+				}
 			}
 		}); err != nil {
-			log.Error(err, "Failed to update autoscaling runner set status with desired min runners")
+			log.Error(err, "Failed to update autoscaling runner set status")
 			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, nil
-	}
-
-	// Update the status of autoscaling runner set.
-	if latestRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners {
-		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-			obj.Status.CurrentRunners = latestRunnerSet.Status.CurrentReplicas
-			obj.Status.PendingEphemeralRunners = latestRunnerSet.Status.PendingEphemeralRunners
-			obj.Status.RunningEphemeralRunners = latestRunnerSet.Status.RunningEphemeralRunners
-			obj.Status.FailedEphemeralRunners = latestRunnerSet.Status.FailedEphemeralRunners
-		}); err != nil {
-			log.Error(err, "Failed to update autoscaling runner set status with current runner count")
-			return ctrl.Result{}, err
-		}
 	}
 
 	return ctrl.Result{RequeueAfter: DefaultScaleSetHealthyRequeueAfter}, nil
