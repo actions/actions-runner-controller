@@ -135,7 +135,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 				timeout,
 				interval,
-			).Should(BeEquivalentTo([]string{ephemeralRunnerActionsFinalizerName, ephemeralRunnerFinalizerName}))
+			).Should(BeEquivalentTo([]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}))
 
 			Eventually(
 				func() (bool, error) {
@@ -671,8 +671,10 @@ var _ = Describe("EphemeralRunner", func() {
 							fake.WithGetRunner(
 								nil,
 								&actions.ActionsError{
-									StatusCode:    http.StatusNotFound,
-									ExceptionName: "AgentNotFoundException",
+									StatusCode: http.StatusNotFound,
+									Err: &actions.ActionsExceptionError{
+										ExceptionName: "AgentNotFoundException",
+									},
 								},
 							),
 						),

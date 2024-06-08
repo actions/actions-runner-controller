@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -150,6 +149,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
+		log.Info("Adding finalizer")
+		if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+			controllerutil.AddFinalizer(obj, ephemeralRunnerFinalizerName)
+		}); err != nil {
+			log.Error(err, "Failed to update with finalizer set")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully added finalizer")
+		return ctrl.Result{}, nil
+	}
+
 	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
 		log.Info("Adding runner registration finalizer")
 		err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
@@ -161,18 +173,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		log.Info("Successfully added runner registration finalizer")
-	}
-
-	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
-		log.Info("Adding finalizer")
-		if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-			controllerutil.AddFinalizer(obj, ephemeralRunnerFinalizerName)
-		}); err != nil {
-			log.Error(err, "Failed to update with finalizer set")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Successfully added finalizer")
 		return ctrl.Result{}, nil
 	}
 
@@ -295,14 +295,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
-	actionsError := &actions.ActionsError{}
-	err := r.deleteRunnerFromService(ctx, ephemeralRunner, log)
-	if err != nil {
-		if errors.As(err, &actionsError) &&
-			actionsError.StatusCode == http.StatusBadRequest &&
-			strings.Contains(actionsError.ExceptionName, "JobStillRunningException") {
+	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+		actionsError := &actions.ActionsError{}
+		if !errors.As(err, &actionsError) {
+			log.Error(err, "Failed to clean up runner from the service (not an ActionsError)")
+			return ctrl.Result{}, err
+		}
+
+		if actionsError.StatusCode == http.StatusBadRequest && actionsError.IsException("JobStillRunningException") {
 			log.Info("Runner is still running the job. Re-queue in 30 seconds")
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+
 		}
 
 		log.Error(err, "Failed clean up runner from the service")
@@ -310,10 +313,9 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 	}
 
 	log.Info("Successfully removed runner registration from service")
-	err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+	if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
-	})
-	if err != nil {
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -520,6 +522,14 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	jitSettings := &actions.RunnerScaleSetJitRunnerSetting{
 		Name: ephemeralRunner.Name,
 	}
+
+	for i := range ephemeralRunner.Spec.Spec.Containers {
+		if ephemeralRunner.Spec.Spec.Containers[i].Name == EphemeralRunnerContainerName &&
+			ephemeralRunner.Spec.Spec.Containers[i].WorkingDir != "" {
+			jitSettings.WorkFolder = ephemeralRunner.Spec.Spec.Containers[i].WorkingDir
+		}
+	}
+
 	jitConfig, err := actionsClient.GenerateJitRunnerConfig(ctx, jitSettings, ephemeralRunner.Spec.RunnerScaleSetId)
 	if err != nil {
 		actionsError := &actions.ActionsError{}
@@ -528,7 +538,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		}
 
 		if actionsError.StatusCode != http.StatusConflict ||
-			!strings.Contains(actionsError.ExceptionName, "AgentExistsException") {
+			!actionsError.IsException("AgentExistsException") {
 			return ctrl.Result{}, fmt.Errorf("failed to generate JIT config with Actions service error: %v", err)
 		}
 
@@ -784,7 +794,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 		}
 
 		if actionsError.StatusCode != http.StatusNotFound ||
-			!strings.Contains(actionsError.ExceptionName, "AgentNotFoundException") {
+			!actionsError.IsException("AgentNotFoundException") {
 			return false, fmt.Errorf("failed to check if runner exists in GitHub service: %v", err)
 		}
 
@@ -814,7 +824,6 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// TODO(nikola-jokic): Add indexing and filtering fields on corev1.Pod{}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).
