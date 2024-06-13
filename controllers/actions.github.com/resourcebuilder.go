@@ -73,6 +73,11 @@ type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
 }
 
+// boolPtr returns a pointer to a bool value
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
@@ -284,6 +289,16 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
 			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GetObjectKind().GroupVersionKind().Kind,
+					UID:                autoscalingListener.GetUID(),
+					Name:               autoscalingListener.GetName(),
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: podSpec,
 	}
@@ -530,6 +545,16 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			Namespace:    autoscalingRunnerSet.ObjectMeta.Namespace,
 			Labels:       labels,
 			Annotations:  newAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+					UID:                autoscalingRunnerSet.GetUID(),
+					Name:               autoscalingRunnerSet.GetName(),
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
@@ -569,6 +594,16 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         ephemeralRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:               ephemeralRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+					UID:                ephemeralRunnerSet.GetUID(),
+					Name:               ephemeralRunnerSet.GetName(),
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}
@@ -607,6 +642,16 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 		Namespace:   runner.ObjectMeta.Namespace,
 		Labels:      labels,
 		Annotations: annotations,
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         runner.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+				Kind:               runner.GetObjectKind().GroupVersionKind().Kind,
+				UID:                runner.GetUID(),
+				Name:               runner.GetName(),
+				Controller:         boolPtr(true),
+				BlockOwnerDeletion: boolPtr(true),
+			},
+		},
 	}
 
 	newPod.ObjectMeta = objectMeta
