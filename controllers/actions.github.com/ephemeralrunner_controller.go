@@ -828,7 +828,6 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Named("ephemeral-runner-controller").
 		Complete(r)
 }
 
