@@ -113,6 +113,17 @@ volumeMounts:
     mountPath: /var/run
   - name: dind-externals
     mountPath: /home/runner/externals
+lifecycle:
+  preStop:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - >
+        while pgrep "Runner.Worker" > /dev/null; do
+          echo "Runner's Worker is still running, delaying termination...";
+          sleep 2;
+        done
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}

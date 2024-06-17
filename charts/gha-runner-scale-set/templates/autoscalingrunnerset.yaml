@@ -116,6 +116,9 @@ spec:
       restartPolicy: Never
       {{- end }}
       {{- $containerMode := .Values.containerMode }}
+      {{- if eq $containerMode.type "dind" }}
+      shareProcessNamespace: true
+      {{- end }}
       {{- if eq $containerMode.type "kubernetes" }}
       serviceAccountName: {{ default (include "gha-runner-scale-set.kubeModeServiceAccountName" .) .Values.template.spec.serviceAccountName }}
       {{- else }}
