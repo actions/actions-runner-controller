@@ -1106,7 +1106,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.22.1",
+						GoVersion: "1.22.4",
 					},
 				},
 			)
@@ -1236,7 +1236,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			testing.Step{
 				Uses: "azure/setup-kubectl@v1",
 				With: &testing.With{
-					Version: "v1.22.1",
+					Version: "v1.22.4",
 				},
 			},
 			testing.Step{
