@@ -133,9 +133,9 @@ var _ = Describe("EphemeralRunner", func() {
 					n := len(created.Finalizers) // avoid capacity mismatch
 					return created.Finalizers[:n:n], nil
 				},
-				ephemeralRunnerTimeout,
-				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo([]string{ephemeralRunnerActionsFinalizerName, ephemeralRunnerFinalizerName}))
+				timeout,
+				interval,
+			).Should(BeEquivalentTo([]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}))
 
 			Eventually(
 				func() (bool, error) {
