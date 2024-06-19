@@ -79,6 +79,9 @@ spec:
         - "--listener-metrics-endpoint="
         - "--metrics-addr=0"
         {{- end }}
+        {{- range .Values.flags.excludeLabelPropagationPrefixes }}
+        - "--exclude-label-propagation-prefix={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         {{- with .Values.metrics }}

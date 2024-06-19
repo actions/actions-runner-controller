@@ -94,10 +94,11 @@ func main() {
 		runnerImagePullSecrets stringSlice
 		runnerPodDefaults      actionssummerwindnet.RunnerPodDefaults
 
-		namespace            string
-		logLevel             string
-		logFormat            string
-		watchSingleNamespace string
+		namespace                       string
+		logLevel                        string
+		logFormat                       string
+		watchSingleNamespace            string
+		excludeLabelPropagationPrefixes stringSlice
 
 		autoScalerImagePullSecrets stringSlice
 
@@ -138,6 +139,7 @@ func main() {
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&watchSingleNamespace, "watch-single-namespace", "", "Restrict to watch for custom resources in a single namespace.")
+	flag.Var(&excludeLabelPropagationPrefixes, "exclude-label-propagation-prefix", "The list of prefixes that should be excluded from label propagation")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
@@ -258,6 +260,10 @@ func main() {
 			log.WithName("actions-clients"),
 		)
 
+		rb := actionsgithubcom.ResourceBuilder{
+			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
+		}
+
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
 			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
@@ -267,27 +273,30 @@ func main() {
 			ActionsClient:                      actionsMultiClient,
 			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
+			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:        mgr.GetClient(),
-			Log:           log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:        mgr.GetScheme(),
-			ActionsClient: actionsMultiClient,
+			Client:          mgr.GetClient(),
+			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:          mgr.GetScheme(),
+			ActionsClient:   actionsMultiClient,
+			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-			Client:         mgr.GetClient(),
-			Log:            log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
-			Scheme:         mgr.GetScheme(),
-			ActionsClient:  actionsMultiClient,
-			PublishMetrics: metricsAddr != "0",
+			Client:          mgr.GetClient(),
+			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
+			Scheme:          mgr.GetScheme(),
+			ActionsClient:   actionsMultiClient,
+			PublishMetrics:  metricsAddr != "0",
+			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
@@ -299,6 +308,7 @@ func main() {
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
+			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
