@@ -19,9 +19,13 @@ func TestLabelPropagation(t *testing.T) {
 			Name:      "test-scale-set",
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
-				LabelKeyKubernetesVersion: "0.2.0",
-				"arbitrary-label":         "random-value",
+				LabelKeyKubernetesPartOf:          labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion:         "0.2.0",
+				"arbitrary-label":                 "random-value",
+				"example.com/label":               "example-value",
+				"example.com/example":             "example-value",
+				"directly.excluded.org/label":     "excluded-value",
+				"directly.excluded.org/arbitrary": "not-excluded-value",
 			},
 			Annotations: map[string]string{
 				runnerScaleSetIdAnnotationKey:         "1",
@@ -34,7 +38,12 @@ func TestLabelPropagation(t *testing.T) {
 		},
 	}
 
-	var b resourceBuilder
+	b := ResourceBuilder{
+		ExcludeLabelPropagationPrefixes: []string{
+			"example.com/",
+			"directly.excluded.org/label",
+		},
+	}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
@@ -62,6 +71,11 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "org", listener.Labels[LabelKeyGitHubOrganization])
 	assert.Equal(t, "repo", listener.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], listener.Labels["arbitrary-label"])
+
+	assert.NotContains(t, listener.Labels, "example.com/label")
+	assert.NotContains(t, listener.Labels, "example.com/example")
+	assert.NotContains(t, listener.Labels, "directly.excluded.org/label")
+	assert.Equal(t, "not-excluded-value", listener.Labels["directly.excluded.org/arbitrary"])
 
 	listenerServiceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -128,7 +142,7 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
 		}
 
-		var b resourceBuilder
+		var b ResourceBuilder
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
@@ -152,7 +166,7 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
 		}
 
-		var b resourceBuilder
+		var b ResourceBuilder
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)

@@ -49,10 +49,10 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	ActionsClient   actions.MultiClient
-	resourceBuilder resourceBuilder
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
+	ActionsClient actions.MultiClient
+	ResourceBuilder
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
@@ -642,7 +642,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
+	newPod := r.ResourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
@@ -667,7 +667,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Creating new secret for ephemeral runner")
-	jitSecret := r.resourceBuilder.newEphemeralRunnerJitSecret(runner)
+	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)

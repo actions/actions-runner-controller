@@ -53,7 +53,7 @@ type EphemeralRunnerSetReconciler struct {
 
 	PublishMetrics bool
 
-	resourceBuilder resourceBuilder
+	ResourceBuilder
 }
 
 //+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
@@ -360,7 +360,7 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	// Track multiple errors at once and return the bundle.
 	errs := make([]error, 0)
 	for i := 0; i < count; i++ {
-		ephemeralRunner := r.resourceBuilder.newEphemeralRunner(runnerSet)
+		ephemeralRunner := r.ResourceBuilder.newEphemeralRunner(runnerSet)
 		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
 			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
 		}
