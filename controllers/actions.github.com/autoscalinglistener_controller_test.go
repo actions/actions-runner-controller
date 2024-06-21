@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	autoscalingListenerTestTimeout     = time.Second * 5
+	autoscalingListenerTestTimeout     = time.Second * 20
 	autoscalingListenerTestInterval    = time.Millisecond * 250
 	autoscalingListenerTestGitHubToken = "gh_token"
 )

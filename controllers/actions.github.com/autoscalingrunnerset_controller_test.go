@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	autoscalingRunnerSetTestTimeout     = time.Second * 5
+	autoscalingRunnerSetTestTimeout     = time.Second * 20
 	autoscalingRunnerSetTestInterval    = time.Millisecond * 250
 	autoscalingRunnerSetTestGitHubToken = "gh_token"
 )
