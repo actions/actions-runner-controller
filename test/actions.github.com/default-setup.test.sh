@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 DIR="$(dirname "${BASH_SOURCE[0]}")"
 
