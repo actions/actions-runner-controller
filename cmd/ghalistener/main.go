@@ -10,9 +10,17 @@ import (
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/app"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+
+	"go.opentelemetry.io/otel"
+	ddotel "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentelemetry"
 )
 
 func main() {
+	provider := ddotel.NewTracerProvider()
+	defer provider.Shutdown()
+
+	otel.SetTracerProvider(provider)
+
 	configPath, ok := os.LookupEnv("LISTENER_CONFIG_PATH")
 	if !ok {
 		fmt.Fprintf(os.Stderr, "Error: LISTENER_CONFIG_PATH environment variable is not set\n")
