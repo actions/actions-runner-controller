@@ -24,6 +24,9 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/teambition/rrule-go v1.8.2
 	go.opentelemetry.io/otel v1.27.0
+	go.opentelemetry.io/otel/exporters/stdout/stdoutlog v0.3.0
+	go.opentelemetry.io/otel/log v0.3.0
+	go.opentelemetry.io/otel/sdk/log v0.3.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.24.0
@@ -107,6 +110,7 @@ require (
 	github.com/tinylib/msgp v1.1.8 // indirect
 	github.com/urfave/cli v1.22.2 // indirect
 	go.opentelemetry.io/otel/metric v1.27.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.27.0 // indirect
 	go.opentelemetry.io/otel/trace v1.27.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.22.0 // indirect

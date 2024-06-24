@@ -13,6 +13,10 @@ import (
 
 	"go.opentelemetry.io/otel"
 	ddotel "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentelemetry"
+
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
+	"go.opentelemetry.io/otel/log/global"
+	otellog "go.opentelemetry.io/otel/sdk/log"
 )
 
 func main() {
@@ -20,6 +24,15 @@ func main() {
 	defer provider.Shutdown()
 
 	otel.SetTracerProvider(provider)
+
+	loggerProvider, err := newLoggerProvider()
+	if err != nil {
+		return
+	}
+
+	global.SetLoggerProvider(loggerProvider)
+
+	log.Printf("Enabled OpenTelemetry Tracing")
 
 	configPath, ok := os.LookupEnv("LISTENER_CONFIG_PATH")
 	if !ok {
@@ -45,4 +58,16 @@ func main() {
 		log.Printf("Application returned an error: %v", err)
 		os.Exit(1)
 	}
+}
+
+func newLoggerProvider() (*otellog.LoggerProvider, error) {
+	logExporter, err := stdoutlog.New()
+	if err != nil {
+		return nil, err
+	}
+
+	loggerProvider := otellog.NewLoggerProvider(
+		otellog.WithProcessor(otellog.NewBatchProcessor(logExporter)),
+	)
+	return loggerProvider, nil
 }

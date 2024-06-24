@@ -14,6 +14,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -164,17 +165,22 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 		default:
 		}
 
+		ctx, span := otel.Tracer("arc").Start(ctx, "Listener.Listen.loop", trace.WithNewRoot())
+
 		msg, err := l.getMessage(ctx)
 		if err != nil {
+			span.End()
 			return fmt.Errorf("failed to get message: %w", err)
 		}
 
 		if msg == nil {
 			_, err := handler.HandleDesiredRunnerCount(ctx, 0, 0)
 			if err != nil {
+				span.End()
 				return fmt.Errorf("handling nil message failed: %w", err)
 			}
 
+			span.End()
 			continue
 		}
 
@@ -182,6 +188,8 @@ func (l *Listener) Listen(ctx context.Context, handler Handler) error {
 		if err := l.handleMessage(context.WithoutCancel(ctx), handler, msg); err != nil {
 			return fmt.Errorf("failed to handle message: %w", err)
 		}
+
+		span.End()
 	}
 }
 
