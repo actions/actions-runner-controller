@@ -1,0 +1,15 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+hookTemplate:
+  apiVersion: v1
+  kind: PodTemplate
+  spec:
+    containers:
+    - name: $job
+      resources:
+        requests:
+          cpu: 1
+          memory: 1Gi
+containerMode:
+  type: kubernetes
