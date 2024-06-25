@@ -402,7 +402,17 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 			return ctrl.Result{}, nil
 		}
 
-		log.Error(err, "Failed to create pod resource")
+		errMsg := fmt.Sprintf("Failed to create pod resource: %v", err)
+		r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedCreatePod", errMsg)
+
+		newRunner := runner.DeepCopy()
+		newRunner.Status.Phase = "Failed"
+		newRunner.Status.Message = errMsg
+
+		if err := r.Status().Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
+			r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRunner", fmt.Sprintf("Failed to update runner resource: %v", err))
+			return ctrl.Result{}, err
+		}
 
 		return ctrl.Result{}, err
 	}
