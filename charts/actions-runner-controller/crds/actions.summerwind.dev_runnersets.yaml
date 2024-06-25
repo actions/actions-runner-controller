@@ -7563,6 +7563,9 @@ spec:
                 replicas:
                   description: Replicas is the total number of replicas
                   type: integer
+                selector:
+                  description: Selector is the string form of the pod selector
+                  type: string
                 updatedReplicas:
                   description: |-
                     ReadyReplicas is the total number of available runners which have been successfully registered to GitHub and still running.
@@ -7573,5 +7576,9 @@ spec:
       served: true
       storage: true
       subresources:
+        scale:
+          labelSelectorPath: .status.selector
+          specReplicasPath: .spec.replicas
+          statusReplicasPath: .status.replicas
         status: {}
   preserveUnknownFields: false
