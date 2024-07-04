@@ -189,7 +189,7 @@ template:
   ##                   storage: 1Gi
   spec:
     dind:
-      ## Log level of the ephemeral runners. Use one of the following values: "debug", "info", "warn", "error", "fatal".
+      ## Log level of the Docker daemon. Use one of the following values: "debug", "info", "warn", "error", "fatal".
       ## Defaults to "info".
       logLevel: info
       ## Set a dind image for sidecar container. Eg: use a specific registry in cloud environment to speed up the image pulling process and cut down external network traffic cost.
