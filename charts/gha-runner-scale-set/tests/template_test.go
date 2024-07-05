@@ -283,7 +283,7 @@ func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
-			"template.spec.serviceAccountName":   "test-service-account",
+			"runner.serviceAccountName":          "test-service-account",
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
 		},
@@ -420,14 +420,14 @@ func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
 	options := &helm.Options{
 		Logger: logger.Discard,
 		SetValues: map[string]string{
-			"githubConfigUrl":                     "https://github.com/actions",
-			"githubConfigSecret.github_token":     "gh_token12345",
-			"template.metadata.labels.test1":      "test1",
-			"template.metadata.labels.test2":      "test2",
-			"template.metadata.annotations.test3": "test3",
-			"template.metadata.annotations.test4": "test4",
-			"controllerServiceAccount.name":       "arc",
-			"controllerServiceAccount.namespace":  "arc-system",
+			"githubConfigUrl":                        "https://github.com/actions",
+			"githubConfigSecret.github_token":        "gh_token12345",
+			"runner.extraMetadata.labels.test1":      "test1",
+			"runner.extraMetadata.labels.test2":      "test2",
+			"runner.extraMetadata.annotations.test3": "test3",
+			"runner.extraMetadata.annotations.test4": "test4",
+			"controllerServiceAccount.name":          "arc",
+			"controllerServiceAccount.namespace":     "arc-system",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -1781,7 +1781,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RestartPolicy(t *testing.T) {
 			"githubConfigSecret.github_token":    "gh_token12345",
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
-			"template.spec.restartPolicy":        "Always",
+			"runner.restartPolicy":               "Always",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}

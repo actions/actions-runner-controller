@@ -1,9 +1,8 @@
 githubConfigUrl: https://github.com/actions/actions-runner-controller
 githubConfigSecret:
   github_token: test
-template:
-  spec:
-    initContainers:
+runner:
+  extraInitContainers:
     - name: kube-init
       image: runner-image:latest
       command: ["sudo", "chown", "-R", "1001:123", "/home/runner/_work"]

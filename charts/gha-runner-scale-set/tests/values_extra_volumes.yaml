@@ -1,12 +1,11 @@
 githubConfigUrl: https://github.com/actions/actions-runner-controller
 githubConfigSecret:
   github_token: test
-template:
-  spec:
-    containers:
+runner:
+  extraContainers:
     - name: other
       image: other-image:latest
-    volumes:
+  extraVolumes:
     - name: foo
       emptyDir: {}
     - name: bar
