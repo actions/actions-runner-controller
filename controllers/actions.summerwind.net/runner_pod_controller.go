@@ -159,7 +159,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 
-			// Otherwise the subsequent patch request can revive the removed finalizer and it will trigger a unnecessary reconcilation
+			// Otherwise the subsequent patch request can revive the removed finalizer and it will trigger a unnecessary reconciliation
 			runnerPod = *patchedPod
 		}
 
@@ -177,7 +177,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			patchedPod := updatedPod.DeepCopy()
 			patchedPod.ObjectMeta.Finalizers = finalizers
 
-			// We commit the removal of the finalizer so that Kuberenetes notices it and delete the pod resource from the cluster.
+			// We commit the removal of the finalizer so that Kubernetes notices it and delete the pod resource from the cluster.
 			if err := r.Patch(ctx, patchedPod, client.MergeFrom(&runnerPod)); err != nil {
 				log.Error(err, "Failed to update runner for finalizer removal")
 				return ctrl.Result{}, err
