@@ -3,7 +3,6 @@ package metrics
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/actions/actions-runner-controller/github/actions"
