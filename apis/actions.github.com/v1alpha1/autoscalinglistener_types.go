@@ -49,6 +49,9 @@ type AutoscalingListenerSpec struct {
 	// +kubebuilder:validation:Minimum:=0
 	MinRunners int `json:"minRunners,omitempty"`
 
+	// +optional
+	ScaleUpFactor string `json:"scaleUpFactor,omitempty"`
+
 	// Required
 	Image string `json:"image,omitempty"`
 

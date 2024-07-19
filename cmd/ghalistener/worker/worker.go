@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
@@ -33,6 +35,7 @@ type Config struct {
 	EphemeralRunnerSetName      string
 	MaxRunners                  int
 	MinRunners                  int
+	ScaleUpFactor               string
 }
 
 // The Worker's role is to process the messages it receives from the listener.
@@ -225,7 +228,13 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
 	// Max runners should always be set by the resource builder either to the configured value,
 	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
-	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
+	scaleUpFactor, err := strconv.ParseFloat(w.config.ScaleUpFactor, 64)
+	if err != nil {
+		w.logger.Error(err, "validating autoscaling spec.scaleUpFactor cannot be parsed into a float64")
+		return 0
+	}
+	desiredRunners := int(math.Ceil(float64(w.config.MinRunners+count) * scaleUpFactor))
+	targetRunnerCount := min(desiredRunners, w.config.MaxRunners)
 	w.patchSeq++
 	desiredPatchID := w.patchSeq
 

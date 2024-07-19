@@ -88,6 +88,9 @@ spec:
     {{- end }}
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
+  {{- if .Values.scaleUpFactor }}
+  scaleUpFactor: {{ .Values.scaleUpFactor }}
+  {{- end }}
 
   {{- with .Values.listenerTemplate}}
   listenerTemplate:

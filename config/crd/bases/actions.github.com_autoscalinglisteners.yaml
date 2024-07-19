@@ -117,6 +117,10 @@ spec:
                   description: Required
                   minimum: 0
                   type: integer
+                scaleUpFactor:
+                  description: "TODO:"
+                  default: "1"
+                  type: string
                 proxy:
                   properties:
                     http:

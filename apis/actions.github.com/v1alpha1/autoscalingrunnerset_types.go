@@ -84,6 +84,9 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum:=0
 	MinRunners *int `json:"minRunners,omitempty"`
+
+	// +optional
+	ScaleUpFactor string `json:"scaleUpFactor,omitempty"`
 }
 
 type GitHubServerTLSConfig struct {
