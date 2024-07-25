@@ -324,3 +324,84 @@ func TestSetDesiredWorkerState_MinMaxSet(t *testing.T) {
 		assert.Equal(t, 2, w.patchSeq)
 	})
 }
+
+func TestSetDesiredWorkerState_ScaleUpFactorSet(t *testing.T) {
+	logger := logr.Discard()
+	newEmptyWorker := func() *Worker {
+		return &Worker{
+			config: Config{
+				MinRunners:    1,
+				MaxRunners:    10,
+				ScaleUpFactor: "1.5",
+			},
+			lastPatch: -1,
+			patchSeq:  -1,
+			logger:    &logger,
+		}
+	}
+
+	t.Run("initial scale when acquired == 0 and completed == 0", func(t *testing.T) {
+		w := newEmptyWorker()
+		patchID := w.setDesiredWorkerState(0, 0)
+		assert.Equal(t, 0, patchID)
+		assert.Equal(t, 1, w.lastPatch)
+		assert.Equal(t, 0, w.patchSeq)
+	})
+
+	t.Run("re-use the old state on count == 0 and completed == 1", func(t *testing.T) {
+		// Scales up 1.5 times 1+ceil(2*1.5) = 4
+		w := newEmptyWorker()
+		patchID := w.setDesiredWorkerState(2, 0)
+		assert.Equal(t, 0, patchID)
+		patchID = w.setDesiredWorkerState(0, 0)
+		assert.Equal(t, 1, patchID)
+		assert.Equal(t, 4, w.lastPatch)
+		assert.Equal(t, 1, w.patchSeq)
+	})
+
+	t.Run("scale to min when count == 0", func(t *testing.T) {
+		w := newEmptyWorker()
+		patchID := w.setDesiredWorkerState(2, 0)
+		assert.Equal(t, 0, patchID)
+		patchID = w.setDesiredWorkerState(0, 1)
+		assert.Equal(t, 1, patchID)
+		assert.Equal(t, 1, w.lastPatch)
+		assert.Equal(t, 1, w.patchSeq)
+	})
+
+	t.Run("scale up to max when count > max", func(t *testing.T) {
+		w := newEmptyWorker()
+		patchID := w.setDesiredWorkerState(6, 0)
+		assert.Equal(t, 0, patchID)
+		assert.Equal(t, 10, w.lastPatch)
+		assert.Equal(t, 0, w.patchSeq)
+	})
+
+	t.Run("scale to max when count == max", func(t *testing.T) {
+		w := newEmptyWorker()
+		patchID := w.setDesiredWorkerState(3, 0)
+		assert.Equal(t, 0, patchID)
+		assert.Equal(t, 6, w.lastPatch)
+		assert.Equal(t, 0, w.patchSeq)
+	})
+
+	t.Run("force 0 on empty batch and last patch == min runners", func(t *testing.T) {
+		w := newEmptyWorker()
+		patchID := w.setDesiredWorkerState(3, 0)
+		assert.Equal(t, 0, patchID)
+		assert.Equal(t, 6, w.lastPatch)
+		assert.Equal(t, 0, w.patchSeq)
+
+		patchID = w.setDesiredWorkerState(0, 3)
+		assert.Equal(t, 1, patchID)
+		assert.Equal(t, 1, w.lastPatch)
+		assert.Equal(t, 1, w.patchSeq)
+
+		// Empty batch on min runners
+		patchID = w.setDesiredWorkerState(0, 0)
+		assert.Equal(t, 0, patchID) // forcing the state
+		assert.Equal(t, 1, w.lastPatch)
+		assert.Equal(t, 2, w.patchSeq)
+	})
+
+}

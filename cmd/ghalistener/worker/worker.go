@@ -51,6 +51,9 @@ type Worker struct {
 var _ listener.Handler = (*Worker)(nil)
 
 func New(config Config, options ...Option) (*Worker, error) {
+	if config.ScaleUpFactor == "" {
+		config.ScaleUpFactor = "1"
+	}
 	w := &Worker{
 		config:    config,
 		lastPatch: -1,
@@ -228,12 +231,15 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
 	// Max runners should always be set by the resource builder either to the configured value,
 	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
+	if w.config.ScaleUpFactor == "" {
+		w.config.ScaleUpFactor = "1"
+	}
 	scaleUpFactor, err := strconv.ParseFloat(w.config.ScaleUpFactor, 64)
 	if err != nil {
 		w.logger.Error(err, "validating autoscaling spec.scaleUpFactor cannot be parsed into a float64")
 		return 0
 	}
-	desiredRunners := int(math.Ceil(float64(w.config.MinRunners+count) * scaleUpFactor))
+	desiredRunners := w.config.MinRunners + int(math.Ceil(float64(count)*scaleUpFactor))
 	targetRunnerCount := min(desiredRunners, w.config.MaxRunners)
 	w.patchSeq++
 	desiredPatchID := w.patchSeq

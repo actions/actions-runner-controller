@@ -3,6 +3,7 @@ githubConfigSecret:
   github_token: test
 maxRunners: 10
 minRunners: 5
+scaleUpFactor: "1.2"
 controllerServiceAccount:
   name: "arc"
   namespace: "arc-system"

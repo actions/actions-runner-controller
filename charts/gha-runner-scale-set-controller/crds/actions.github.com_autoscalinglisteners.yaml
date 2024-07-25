@@ -143,6 +143,8 @@ spec:
                 runnerScaleSetId:
                   description: Required
                   type: integer
+                scaleUpFactor:
+                  type: string
                 template:
                   description: PodTemplateSpec describes the data a pod should have when created from a template
                   properties:

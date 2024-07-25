@@ -90,7 +90,14 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
 	}
 	if autoscalingRunnerSet.Spec.ScaleUpFactor != "" {
-		scaleUpFactor = autoscalingRunnerSet.Spec.ScaleUpFactor
+		sup, err := strconv.ParseFloat(autoscalingRunnerSet.Spec.ScaleUpFactor, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Validation autoscaling spec.scaleUpFactor cannot be parsed into a float64: %v", err)
+		}
+		// TODO: 0 or 1
+		if sup > 0 {
+			scaleUpFactor = autoscalingRunnerSet.Spec.ScaleUpFactor
+		}
 	}
 
 	labels := b.mergeLabels(autoscalingRunnerSet.Labels, map[string]string{

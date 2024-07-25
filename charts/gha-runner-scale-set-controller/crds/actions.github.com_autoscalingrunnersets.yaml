@@ -6983,6 +6983,8 @@ spec:
                   type: string
                 runnerScaleSetName:
                   type: string
+                scaleUpFactor:
+                  type: string
                 template:
                   description: Required
                   properties:
