@@ -105,12 +105,25 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
+	boolPtr := func(v bool) *bool {
+		return &v
+	}
+
 	autoscalingListener := &v1alpha1.AutoscalingListener{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        scaleSetListenerName(autoscalingRunnerSet),
 			Namespace:   namespace,
 			Labels:      labels,
 			Annotations: annotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "actions.github.com/v1alpha1",
+					Kind:               "AutoscalingRunnerSet",
+					Name:               autoscalingRunnerSet.Name,
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
