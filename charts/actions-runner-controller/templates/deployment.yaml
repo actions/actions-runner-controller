@@ -3,6 +3,10 @@ kind: Deployment
 metadata:
   name: {{ include "actions-runner-controller.fullname" . }}
   namespace: {{ .Release.Namespace }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
 spec:
