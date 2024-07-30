@@ -24,4 +24,7 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "delete"]
+- apiGroups: ["apps"]
+  resources: [ "deployments"]
+  verbs: ["get", "list", "create", "delete"]
 {{- end }}
