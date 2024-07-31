@@ -266,6 +266,7 @@ func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
 		"max", w.config.MaxRunners,
 		"currentRunnerCount", w.lastPatch,
 		"jobsCompleted", jobsCompleted,
+		"scaleUpFactor", scaleUpFactor,
 	)
 
 	return desiredPatchID
