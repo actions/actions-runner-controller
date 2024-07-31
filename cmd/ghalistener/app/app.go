@@ -78,6 +78,7 @@ func New(config config.Config) (*App, error) {
 			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
 			MaxRunners:                  config.MaxRunners,
 			MinRunners:                  config.MinRunners,
+			ScaleUpFactor:               config.ScaleUpFactor,
 		},
 		worker.WithLogger(app.logger.WithName("worker")),
 	)

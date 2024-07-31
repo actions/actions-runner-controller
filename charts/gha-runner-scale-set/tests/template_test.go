@@ -661,6 +661,41 @@ func TestTemplateRenderedAutoScalingRunnerSet_MinMaxRunners_FromValuesFile(t *te
 
 	assert.Equal(t, 5, *ars.Spec.MinRunners, "MinRunners should be 5")
 	assert.Equal(t, 10, *ars.Spec.MaxRunners, "MaxRunners should be 10")
+	assert.Equal(t, "1.2", ars.Spec.ScaleUpFactor)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_WithScaleUpFactor(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"minRunners":                         "5",
+			"scaleUpFactor":                      "1.2",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	require.NotNil(t, ars.Spec.ScaleUpFactor)
+	assert.Equal(t, 5, *ars.Spec.MinRunners, "MinRunners should be 5")
+	assert.Nil(t, ars.Spec.MaxRunners, "MaxRunners should be nil")
+	assert.Equal(t, "1.2", ars.Spec.ScaleUpFactor)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_ExtraVolumes(t *testing.T) {
