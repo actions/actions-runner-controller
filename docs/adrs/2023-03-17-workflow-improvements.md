@@ -42,7 +42,7 @@ eliminate some duplication:
   `-coverprofile` flags: while `-short` is used to skip [old ARC E2E
   tests](https://github.com/actions/actions-runner-controller/blob/master/test/e2e/e2e_test.go#L85-L87),
   `-coverprofile` is adding to the test time without really giving us any value
-  in return. We should also start using `actions/setup-go@v4` to take advantage
+  in return. We should also start using `actions/setup-go@v5` to take advantage
   of caching (it would speed up our tests by a lot) or enable it on `v3` if we
   have a strong reason not to upgrade. We should keep ignoring our E2E tests too
   as those will be run elsewhere (either use `Short` there too or ignoring the

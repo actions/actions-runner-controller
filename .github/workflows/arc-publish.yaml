@@ -39,9 +39,9 @@ jobs:
     if: ${{ !startsWith(github.event.inputs.release_tag_name, 'gha-runner-scale-set-') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
@@ -73,7 +73,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}

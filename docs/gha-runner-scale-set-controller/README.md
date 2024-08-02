@@ -43,6 +43,16 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### v0.9.3
+
+1. AutoscalingListener controller: Inspect listener container state instead of pod phase [#3548](https://github.com/actions/actions-runner-controller/pull/3548)
+1. Exclude label prefix propagation [#3607](https://github.com/actions/actions-runner-controller/pull/3607)
+1. Check status code of fetch access token for github app [#3568](https://github.com/actions/actions-runner-controller/pull/3568)
+1. Remove .Named() from the ephemeral runner controller [#3596](https://github.com/actions/actions-runner-controller/pull/3596)
+1. Customize work directory [#3477](https://github.com/actions/actions-runner-controller/pull/3477)
+1. Fix problem with ephemeralRunner Succeeded state before build executed [#3528](https://github.com/actions/actions-runner-controller/pull/3528)
+1. Remove finalizers in one pass to speed up cleanups AutoscalingRunnerSet [#3536](https://github.com/actions/actions-runner-controller/pull/3536)
+
 ### v0.9.2
 
 1. Refresh session if token expires during delete message [#3529](https://github.com/actions/actions-runner-controller/pull/3529)
