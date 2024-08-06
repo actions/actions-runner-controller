@@ -111,6 +111,10 @@ Create the name of the service account to use
 {{- include "gha-runner-scale-set-controller.fullname" . }}-listener
 {{- end }}
 
+{{- define "gha-runner-scale-set-controller.managerPodMonitor" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}
+{{- end }}
+
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleName" -}}
 {{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
