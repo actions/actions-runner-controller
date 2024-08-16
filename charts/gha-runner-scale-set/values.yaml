@@ -105,6 +105,9 @@ githubConfigSecret:
 #     - name: side-car
 #       image: example-sidecar
 
+# Sets namespace for namespaced resources, defaults to .Release.Namespace
+namespaceOverride: ""
+
 ## template is the PodSpec for each runner Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:

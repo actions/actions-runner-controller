@@ -553,3 +553,11 @@ volumeMounts:
 {{- $managerServiceAccountNamespace }}
 {{- end }}
 {{- end }}
+
+{{- define "helpers.namespace" -}}
+{{ $namespace := default .Release.Namespace .Values.namespaceOverride }}
+  {{- if gt (len $namespace) 63 }}
+  {{ fail "Namespace must have up to 63 characters" }}
+  {{- end }}
+namespace: $namespace
+{{- end }}
