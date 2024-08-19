@@ -48,8 +48,9 @@ const (
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
 type AutoscalingListenerReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log                                           logr.Logger
+	Scheme                                        *runtime.Scheme
+	ReadGitHubConfigSecretFromControllerNamespace bool
 	// ListenerMetricsAddr is address that the metrics endpoint binds to.
 	// If it is set to "0", the metrics server is not started.
 	ListenerMetricsAddr     string
@@ -130,7 +131,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Check if the GitHub config secret exists
 	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: autoscalingListener.Spec.GitHubConfigSecret}, secret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: r.deriveConfigSecretNamespace(autoscalingListener), Name: autoscalingListener.Spec.GitHubConfigSecret}, secret); err != nil {
 		log.Error(err, "Failed to find GitHub config secret.",
 			"namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			"name", autoscalingListener.Spec.GitHubConfigSecret)
@@ -273,6 +274,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingListenerReconciler) deriveConfigSecretNamespace(autoscalingListener *v1alpha1.AutoscalingListener) string {
+	secretNamespace := autoscalingListener.Spec.AutoscalingRunnerSetNamespace
+	if r.ReadGitHubConfigSecretFromControllerNamespace {
+		secretNamespace = autoscalingListener.Namespace
+	}
+	return secretNamespace
 }
 
 func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (done bool, err error) {
