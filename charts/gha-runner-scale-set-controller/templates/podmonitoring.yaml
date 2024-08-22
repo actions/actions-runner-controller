@@ -1,7 +1,7 @@
 apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
-  name: prosper-runner-controller
+  name: gha-runner-scale-set-controller
   namespace: prosper-runners
 spec:
   selector:
