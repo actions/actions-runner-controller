@@ -1,7 +1,7 @@
 apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
-  name: prosper-linux-np-podmonitor
+  name: runner-scaleset-monitoring
   namespace: prosper-runners
 spec:
   selector:
