@@ -1,12 +1,13 @@
 apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
-  name: prosper-linux-np-podmonitor
-  namespace: prosper-runners
+  annotations:
+    meta.helm.sh/release-name: prosper-runner-controller
+    meta.helm.sh/release-namespace: prosper-runners
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/component: runner-scale-set-listener
+      app.kubernetes.io/name: gha-rs-controller
   endpoints:
   - interval: 30s
     path: /metrics
