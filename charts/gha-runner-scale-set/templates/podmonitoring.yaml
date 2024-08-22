@@ -2,7 +2,6 @@ apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
   name: gha-runner-scale-set
-  namespace: prosper-runners
 spec:
   selector:
     matchLabels:
