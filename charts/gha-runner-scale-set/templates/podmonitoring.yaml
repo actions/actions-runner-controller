@@ -1,0 +1,12 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: gha-runner-scale-set
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: runner-scale-set-listener
+  endpoints:
+  - interval: 30s
+    path: /metrics
+    port: 8080
