@@ -1,4 +1,4 @@
-# create helm packages
+# Create helm packages
 ```bash
 git clone https://github.com/prosperllc/actions-runner-controller.git
 cd charts/gha-runner-scale-set-controller
