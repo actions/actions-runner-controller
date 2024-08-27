@@ -9,6 +9,7 @@ helm package
 push to helm repo
 helm push gha-runner-scale-set-0.9.1.tgz oci://us-docker.pkg.dev/prosper-nonprod-registry/helm/action-runner-controller/gha-runner-scale-set
 helm push gha-runner-scale-set-controller-0.9.1.tgz oci://us-docker.pkg.dev/prosper-nonprod-registry/helm/action-runner-controller/gha-runner-scale-set-controller
+```
 
 
 
