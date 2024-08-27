@@ -21,8 +21,18 @@ helm push gha-runner-scale-set-controller-0.9.1.tgz oci://us-docker.pkg.dev/pros
 GCP Porject : prosper-nonprod-platform
 cluster : gke_prosper-nonprod-platform_us-west1_nonprod-us-west1-util02
 namespace : prosper-runners
-```
 
+module "gke_runner" {
+  source                 = "github.com/prosperllc/iac-modules.git//module_gcp_actions_runners/?ref=main--2024-08-24--21-59"
+  #source                 = "../../../../../../iac-modules/module_gcp_actions_runners"
+  project_id             = var.project_id
+  cluster_name           = var.cluster_name
+  host                   = module.gke_cluster.cluster_endpoint
+  full_cluster_name      = module.gke_cluster.cluster_name
+  cluster_ca_certificate = base64decode(module.gke_cluster.cluster_cert)
+  runners_name           = var.runners_name
+}
+```
 
 ## Helm Release names
 
