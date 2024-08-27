@@ -1,3 +1,18 @@
+# create helm packages
+```bash
+git clone https://github.com/prosperllc/actions-runner-controller.git
+cd charts/gha-runner-scale-set-controller
+helm package .
+cd charts/gha-runner-scale-set
+helm package
+
+push to helm repo
+helm push gha-runner-scale-set-0.9.1.tgz oci://us-docker.pkg.dev/prosper-nonprod-registry/helm/action-runner-controller/gha-runner-scale-set
+helm push gha-runner-scale-set-controller-0.9.1.tgz oci://us-docker.pkg.dev/prosper-nonprod-registry/helm/action-runner-controller/gha-runner-scale-set-controller
+
+
+
+
 # Prosper Runner Scale set installation steps
 
 
