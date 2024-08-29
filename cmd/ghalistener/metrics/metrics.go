@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -46,13 +47,24 @@ var (
 		labelKeyJobName,
 		labelKeyJobWorkflowRef,
 		labelKeyEventName,
+		labelKeyRunnerID,
+		labelKeyRunnerName,
 	}
 
-	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
-	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	completedJobLabels []string
+
+	includeRunnerScaleSetNameInJobLabels = false
 )
+
+func init() {
+	if os.Getenv("INCLUDE_RUNNER_SCALE_SET_NAME_IN_JOB_LABELS") == "true" {
+		includeRunnerScaleSetNameInJobLabels = true
+
+		jobLabels = append(jobLabels, labelKeyRunnerScaleSetName)
+	}
+
+	completedJobLabels = append([]string{}, append(jobLabels, labelKeyJobResult)...)
+}
 
 var (
 	assignedJobs = prometheus.NewGaugeVec(
@@ -133,7 +145,7 @@ var (
 			Name:      "started_jobs_total",
 			Help:      "Total number of jobs started.",
 		},
-		startedJobsTotalLabels,
+		jobLabels,
 	)
 
 	completedJobsTotal = prometheus.NewCounterVec(
@@ -142,7 +154,7 @@ var (
 			Help:      "Total number of jobs completed.",
 			Subsystem: githubScaleSetSubsystem,
 		},
-		completedJobsTotalLabels,
+		completedJobLabels,
 	)
 
 	jobStartupDurationSeconds = prometheus.NewHistogramVec(
@@ -152,7 +164,7 @@ var (
 			Help:      "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
 			Buckets:   runtimeBuckets,
 		},
-		jobStartupDurationLabels,
+		jobLabels,
 	)
 
 	jobExecutionDurationSeconds = prometheus.NewHistogramVec(
@@ -162,7 +174,7 @@ var (
 			Help:      "Time spent executing workflow jobs by the scale set (in seconds).",
 			Buckets:   runtimeBuckets,
 		},
-		jobExecutionDurationLabels,
+		completedJobLabels,
 	)
 )
 
@@ -223,13 +235,17 @@ type baseLabels struct {
 }
 
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
-	return prometheus.Labels{
+	l := prometheus.Labels{
 		labelKeyEnterprise:     b.enterprise,
 		labelKeyOrganization:   jobBase.OwnerName,
 		labelKeyRepository:     jobBase.RepositoryName,
 		labelKeyJobName:        jobBase.JobDisplayName,
 		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
 		labelKeyEventName:      jobBase.EventName,
+	}
+
+	if includeRunnerScaleSetNameInJobLabels {
+		l[labelKeyRunnerScaleSetName] = b.scaleSetName
 	}
 }
 
