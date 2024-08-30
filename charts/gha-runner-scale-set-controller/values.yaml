@@ -102,7 +102,7 @@ flags:
 
   ## Restricts the controller to only watch resources in the desired namespace.
   ## Defaults to watch all namespaces when unset.
-  watchSingleNamespace: "prosper-runners"
+  watchSingleNamespace: "prosper-gha-runners"
 
   ## Defines how the controller should handle upgrades while having running jobs.
   ##
