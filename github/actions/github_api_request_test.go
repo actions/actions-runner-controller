@@ -170,7 +170,7 @@ func TestNewActionsServiceRequest(t *testing.T) {
 			}
 			failures := 0
 			unauthorizedHandler := func(w http.ResponseWriter, r *http.Request) {
-				if failures < 2 {
+				if failures < 5 {
 					failures++
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
