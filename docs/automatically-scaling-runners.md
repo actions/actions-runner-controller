@@ -430,6 +430,7 @@ resources:
 - github.com/actions/actions-runner-controller/config//default?ref=v0.22.2
 # Add the below!
 - github.com/actions/actions-runner-controller/config//github-webhook-server?ref=v0.22.2
+```
 
 Finally, you will have to configure an ingress so that you may configure the webhook in github. An example of such ingress can be find below:
 
