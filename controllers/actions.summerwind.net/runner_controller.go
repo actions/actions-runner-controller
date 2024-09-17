@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
@@ -397,7 +398,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 			// Without this we got a few errors like the below on new runner pod:
 			// 2021-03-16T00:23:10.116Z        ERROR   controller-runtime.controller   Reconciler error      {"controller": "runner-controller", "request": "default/example-runnerdeploy-b2g2g-j4mcp", "error": "pods \"example-runnerdeploy-b2g2g-j4mcp\" already exists"}
 			log.Info(
-				"Failed to create pod due to AlreadyExists error. Probably this pod has been already created in previous reconcilation but is still not in the informer cache. Will retry on pod created. If it doesn't repeat, there's no problem",
+				"Failed to create pod due to AlreadyExists error. Probably this pod has been already created in previous reconciliation but is still not in the informer cache. Will retry on pod created. If it doesn't repeat, there's no problem",
 			)
 			return ctrl.Result{}, nil
 		}
@@ -601,7 +602,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	runnerSpec := runner.Spec
 
 	if len(runnerSpec.VolumeMounts) != 0 {
-		// if operater provides a work volume mount, use that
+		// if the operator provides a work volume mount, use that
 		isPresent, _ := workVolumeMountPresent(runnerSpec.VolumeMounts)
 		if isPresent {
 			if runnerSpec.ContainerMode == "kubernetes" {
@@ -1248,7 +1249,7 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 						// the TLS key and  the cert to be used by dockerd.
 						//
 						// The author of this prestop script encountered issues where the prestophung for ten or more minutes on his cluster.
-						// He realized that the hang happened when a prestop hook is executed while the docker init is provioning the key and cert.
+						// He realized that the hang happened when a prestop hook is executed while the docker init is provisioning the key and cert.
 						// Assuming it's due to that the SIGTERM sent by K8s after the prestop hook was ignored by the docker init at that time,
 						// and it needed to wait until terminationGracePeriodSeconds to elapse before finally killing the container,
 						// he wrote this script so that it tries to delay SIGTERM until dockerd starts and becomes ready for processing the signal.
