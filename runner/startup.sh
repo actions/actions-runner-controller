@@ -176,5 +176,7 @@ fi
 log.notice "WARNING LATEST TAG HAS BEEN DEPRECATED. SEE GITHUB ISSUE FOR DETAILS:"
 log.notice "https://github.com/actions/actions-runner-controller/issues/2056"
 
+docker buildx create --name action-runner --use --driver=docker-container --config /etc/arc/config/buildx-config.toml
+
 update-status "Idle"
 exec env -- "${env[@]}" ./run.sh

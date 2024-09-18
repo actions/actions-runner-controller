@@ -32,6 +32,20 @@ RUN apt-get update -y \
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
     apt-get install -y --no-install-recommends git-lfs
 
+# custome apt package
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+    make \
+    build-essential \
+    ssh \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+# kubectl
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && curl -fLo /usr/bin/kubectl https://dl.k8s.io/release/v1.26.0/bin/linux/${ARCH}/kubectl \
+    && chmod +x /usr/bin/kubectl
+
 # Runner user
 RUN adduser --disabled-password --gecos "" --uid $RUNNER_USER_UID runner \
     && groupadd docker --gid $DOCKER_GROUP_GID \
@@ -104,6 +118,8 @@ COPY docker-shim.sh /usr/local/bin/docker
 # Configure hooks folder structure.
 COPY hooks /etc/arc/hooks/
 
+COPY buildx-config.toml /etc/arc/config/
+
 VOLUME /var/lib/docker
 
 # Add the Python "User Script Directory" to the PATH
@@ -115,6 +131,10 @@ RUN echo "PATH=${PATH}" > /etc/environment \
 
 # No group definition, as that makes it harder to run docker.
 USER runner
+
+RUN mkdir -p $HOME/.docker/cli-plugins/
+ADD https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64  /home/runner/.docker/cli-plugins/docker-buildx
+RUN sudo chmod +x $HOME/.docker/cli-plugins/docker-buildx
 
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["entrypoint-dind.sh"]

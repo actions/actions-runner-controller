@@ -1,0 +1,8 @@
+[registry."docker.io"]
+  mirrors = ["docker-registry.docker-registry.svc:5000"]
+
+[registry."docker-registry.docker-registry.svc:5000"]
+  http = true
+
+[registry."docker-registry-cache.docker-registry.svc:5000"]
+  http = true
