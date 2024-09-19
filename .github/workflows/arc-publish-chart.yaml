@@ -40,12 +40,12 @@ jobs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
     - name: Set up Helm
-      uses: azure/setup-helm@v3.4
+      uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
       with:
         version: ${{ env.HELM_VERSION }}
 
@@ -58,7 +58,7 @@ jobs:
       run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score - --ignore-test pod-networkpolicy --ignore-test deployment-has-poddisruptionbudget --ignore-test deployment-has-host-podantiaffinity --ignore-test container-security-context --ignore-test pod-probes --ignore-test container-image-tag --enable-optional-test container-security-context-privileged --enable-optional-test container-security-context-readonlyrootfilesystem
 
     # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
@@ -134,7 +134,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
@@ -145,7 +145,7 @@ jobs:
 
     - name: Get Token
       id: get_workflow_token
-      uses: peter-murray/workflow-application-token-action@8e1ba3bf1619726336414f1014e37f17fbadf1db
+      uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
       with:
         application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
         application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
@@ -184,7 +184,7 @@ jobs:
     # this workaround is intended to move the index.yaml to the target repo
     # where the github pages are hosted
     - name: Checkout target repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}
         path: ${{ env.CHART_TARGET_REPO }}

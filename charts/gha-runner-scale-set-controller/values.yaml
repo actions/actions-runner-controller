@@ -119,3 +119,12 @@ flags:
   ##   This can lead to a longer time to apply the change but it will ensure
   ##   that you don't have any overprovisioning of runners.
   updateStrategy: "immediate"
+
+  ## Defines a list of prefixes that should not be propagated to internal resources.
+  ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
+  ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.
+  ##
+  ## By default, all labels are propagated to internal resources
+  ## Labels that match prefix specified in the list are excluded from propagation.
+  # excludeLabelPropagationPrefixes:
+  #   - "argocd.argoproj.io/instance"

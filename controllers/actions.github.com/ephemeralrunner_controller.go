@@ -49,10 +49,10 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	ActionsClient   actions.MultiClient
-	resourceBuilder resourceBuilder
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
+	ActionsClient actions.MultiClient
+	ResourceBuilder
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
@@ -149,6 +149,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
+		log.Info("Adding finalizer")
+		if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+			controllerutil.AddFinalizer(obj, ephemeralRunnerFinalizerName)
+		}); err != nil {
+			log.Error(err, "Failed to update with finalizer set")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Successfully added finalizer")
+		return ctrl.Result{}, nil
+	}
+
 	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
 		log.Info("Adding runner registration finalizer")
 		err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
@@ -160,18 +173,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		log.Info("Successfully added runner registration finalizer")
-	}
-
-	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
-		log.Info("Adding finalizer")
-		if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-			controllerutil.AddFinalizer(obj, ephemeralRunnerFinalizerName)
-		}); err != nil {
-			log.Error(err, "Failed to update with finalizer set")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Successfully added finalizer")
 		return ctrl.Result{}, nil
 	}
 
@@ -521,6 +522,14 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	jitSettings := &actions.RunnerScaleSetJitRunnerSetting{
 		Name: ephemeralRunner.Name,
 	}
+
+	for i := range ephemeralRunner.Spec.Spec.Containers {
+		if ephemeralRunner.Spec.Spec.Containers[i].Name == EphemeralRunnerContainerName &&
+			ephemeralRunner.Spec.Spec.Containers[i].WorkingDir != "" {
+			jitSettings.WorkFolder = ephemeralRunner.Spec.Spec.Containers[i].WorkingDir
+		}
+	}
+
 	jitConfig, err := actionsClient.GenerateJitRunnerConfig(ctx, jitSettings, ephemeralRunner.Spec.RunnerScaleSetId)
 	if err != nil {
 		actionsError := &actions.ActionsError{}
@@ -633,7 +642,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.resourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
+	newPod := r.ResourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
@@ -658,7 +667,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Creating new secret for ephemeral runner")
-	jitSecret := r.resourceBuilder.newEphemeralRunnerJitSecret(runner)
+	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)
@@ -815,12 +824,10 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// TODO(nikola-jokic): Add indexing and filtering fields on corev1.Pod{}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Named("ephemeral-runner-controller").
 		Complete(r)
 }
 
