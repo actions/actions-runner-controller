@@ -178,7 +178,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if ephemeralRunner.Status.RunnerId == 0 {
 		log.Info("Creating new ephemeral runner registration and updating status with runner config")
-		return r.updateStatusWithRunnerConfig(ctx, ephemeralRunner, log)
+		if r, err := r.updateStatusWithRunnerConfig(ctx, ephemeralRunner, log); r != nil {
+			return *r, err
+		}
 	}
 
 	secret := new(corev1.Secret)
@@ -189,7 +191,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		// create secret if not created
 		log.Info("Creating new ephemeral runner secret for jitconfig.")
-		return r.createSecret(ctx, ephemeralRunner, log)
+		if r, err := r.createSecret(ctx, ephemeralRunner, log); r != nil {
+			return *r, err
+		}
+
+		// Retry to get the secret that was just created.
+		// Otherwise, even though we want to continue to create the pod,
+		// it fails due to the missing secret resulting in an invalid pod spec.
+		if err := r.Get(ctx, req.NamespacedName, secret); err != nil {
+			log.Error(err, "Failed to fetch secret")
+			return ctrl.Result{}, err
+		}
 	}
 
 	pod := new(corev1.Pod)
@@ -511,12 +523,12 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 
 // updateStatusWithRunnerConfig fetches runtime configuration needed by the runner
 // This method should always set .status.runnerId and .status.runnerJITConfig
-func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
 	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %v", err)
 	}
 
 	jitSettings := &actions.RunnerScaleSetJitRunnerSetting{
@@ -534,12 +546,12 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	if err != nil {
 		actionsError := &actions.ActionsError{}
 		if !errors.As(err, &actionsError) {
-			return ctrl.Result{}, fmt.Errorf("failed to generate JIT config with generic error: %v", err)
+			return &ctrl.Result{}, fmt.Errorf("failed to generate JIT config with generic error: %v", err)
 		}
 
 		if actionsError.StatusCode != http.StatusConflict ||
 			!actionsError.IsException("AgentExistsException") {
-			return ctrl.Result{}, fmt.Errorf("failed to generate JIT config with Actions service error: %v", err)
+			return &ctrl.Result{}, fmt.Errorf("failed to generate JIT config with Actions service error: %v", err)
 		}
 
 		// If the runner with the name we want already exists it means:
@@ -552,12 +564,12 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		log.Info("Getting runner jit config failed with conflict error, trying to get the runner by name", "runnerName", ephemeralRunner.Name)
 		existingRunner, err := actionsClient.GetRunnerByName(ctx, ephemeralRunner.Name)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get runner by name: %v", err)
+			return &ctrl.Result{}, fmt.Errorf("failed to get runner by name: %v", err)
 		}
 
 		if existingRunner == nil {
 			log.Info("Runner with the same name does not exist, re-queuing the reconciliation")
-			return ctrl.Result{Requeue: true}, nil
+			return &ctrl.Result{Requeue: true}, nil
 		}
 
 		log.Info("Found the runner with the same name", "runnerId", existingRunner.Id, "runnerScaleSetId", existingRunner.RunnerScaleSetId)
@@ -565,16 +577,16 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 			log.Info("Removing the runner with the same name")
 			err := actionsClient.RemoveRunner(ctx, int64(existingRunner.Id))
 			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to remove runner from the service: %v", err)
+				return &ctrl.Result{}, fmt.Errorf("failed to remove runner from the service: %v", err)
 			}
 
 			log.Info("Removed the runner with the same name, re-queuing the reconciliation")
-			return ctrl.Result{Requeue: true}, nil
+			return &ctrl.Result{Requeue: true}, nil
 		}
 
 		// TODO: Do we want to mark the ephemeral runner as failed, and let EphemeralRunnerSet to clean it up, so we can recover from this situation?
 		// The situation is that the EphemeralRunner's name is already used by something else to register a runner, and we can't take the control back.
-		return ctrl.Result{}, fmt.Errorf("runner with the same name but doesn't belong to this RunnerScaleSet: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("runner with the same name but doesn't belong to this RunnerScaleSet: %v", err)
 	}
 	log.Info("Created ephemeral runner JIT config", "runnerId", jitConfig.Runner.Id)
 
@@ -585,11 +597,20 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		obj.Status.RunnerJITConfig = jitConfig.EncodedJITConfig
 	})
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %v", err)
 	}
 
+	// We want to continue without a requeue for faster pod creation.
+	//
+	// To do so, we update the status in-place, so that both continuing the loop and
+	// and requeuing and skipping updateStatusWithRunnerConfig in the next loop, will
+	// have the same effect.
+	ephemeralRunner.Status.RunnerId = jitConfig.Runner.Id
+	ephemeralRunner.Status.RunnerName = jitConfig.Runner.Name
+	ephemeralRunner.Status.RunnerJITConfig = jitConfig.EncodedJITConfig
+
 	log.Info("Updated ephemeral runner status with runnerId and runnerJITConfig")
-	return ctrl.Result{}, nil
+	return nil, nil
 }
 
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
@@ -665,21 +686,21 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	log.Info("Creating new secret for ephemeral runner")
 	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)
 	}
 
 	log.Info("Created new secret spec for ephemeral runner")
 	if err := r.Create(ctx, jitSecret); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create jit secret: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to create jit secret: %v", err)
 	}
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
-	return ctrl.Result{Requeue: true}, nil
+	return nil, nil
 }
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
