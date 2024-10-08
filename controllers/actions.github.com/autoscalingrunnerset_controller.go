@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
@@ -244,10 +245,17 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("AutoscalingListener does not exist.")
 	}
 
+	desiredMinRunnersChanged := false
+	// If the listener's minRunners value is different from the autoscalingRunnerSet desired minRunners, we recreate the listener
+	if listenerFound && listener.Spec.MinRunners != autoscalingRunnerSet.Status.DesiredMinRunners {
+		log.Info("RunnerScaleSetListener minRunners is different from the autoscalingRunnerSet desired minRunners", "current", listener.Spec.MinRunners, "desired", autoscalingRunnerSet.Status.DesiredMinRunners)
+		desiredMinRunnersChanged = true
+	}
+
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
 	listenerValuesHashChanged := listener.Annotations[annotationKeyValuesHash] != autoscalingRunnerSet.Annotations[annotationKeyValuesHash]
 	listenerSpecHashChanged := listener.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()
-	if listenerFound && (listenerValuesHashChanged || listenerSpecHashChanged) {
+	if listenerFound && (listenerValuesHashChanged || listenerSpecHashChanged || desiredMinRunnersChanged) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
 			if kerrors.IsNotFound(err) {
@@ -300,20 +308,61 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
 	}
 
-	// Update the status of autoscaling runner set.
-	if latestRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners {
-		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-			obj.Status.CurrentRunners = latestRunnerSet.Status.CurrentReplicas
-			obj.Status.PendingEphemeralRunners = latestRunnerSet.Status.PendingEphemeralRunners
-			obj.Status.RunningEphemeralRunners = latestRunnerSet.Status.RunningEphemeralRunners
-			obj.Status.FailedEphemeralRunners = latestRunnerSet.Status.FailedEphemeralRunners
-		}); err != nil {
-			log.Error(err, "Failed to update autoscaling runner set status with current runner count")
-			return ctrl.Result{}, err
-		}
+	minRunners, active, upcoming, err := r.getMinRunners(log, time.Now(), *autoscalingRunnerSet)
+	if err != nil {
+		log.Error(err, "Could not compute desired min runners")
+
+		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	var overridesSummary string
+
+	currentReplicasOutOfDate := latestRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners
+	minReplicasOutOfDate := autoscalingRunnerSet.Status.DesiredMinRunners != minRunners
+
+	// Update the status of autoscaling runner set.
+	if minReplicasOutOfDate || currentReplicasOutOfDate {
+		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+			if currentReplicasOutOfDate {
+				obj.Status.CurrentRunners = latestRunnerSet.Status.CurrentReplicas
+				obj.Status.PendingEphemeralRunners = latestRunnerSet.Status.PendingEphemeralRunners
+				obj.Status.RunningEphemeralRunners = latestRunnerSet.Status.RunningEphemeralRunners
+				obj.Status.FailedEphemeralRunners = latestRunnerSet.Status.FailedEphemeralRunners
+			}
+
+			if minReplicasOutOfDate {
+				obj.Status.DesiredMinRunners = minRunners
+
+				if (active != nil && upcoming == nil) || (active != nil && upcoming != nil && active.Period.EndTime.Before(upcoming.Period.StartTime)) {
+					var after int
+					if obj.Status.DesiredMinRunners >= 0 {
+						after = obj.Status.DesiredMinRunners
+					}
+
+					overridesSummary = fmt.Sprintf("min=%d status=active endTime=%s", after, active.Period.EndTime)
+				}
+
+				if active == nil && upcoming != nil || (active != nil && upcoming != nil && active.Period.EndTime.After(upcoming.Period.StartTime)) {
+					if upcoming.ScheduledOverride.MinRunners != nil {
+						overridesSummary = fmt.Sprintf("min=%d status=upcoming startTime=%s", *upcoming.ScheduledOverride.MinRunners, upcoming.Period.StartTime)
+					}
+				}
+
+				if overridesSummary != "" {
+					obj.Status.ScheduledOverridesSummary = &overridesSummary
+				} else {
+					obj.Status.ScheduledOverridesSummary = nil
+				}
+			}
+		}); err != nil {
+			log.Error(err, "Failed to update autoscaling runner set status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	return ctrl.Result{RequeueAfter: DefaultScaleSetHealthyRequeueAfter}, nil
 }
 
 // Prevents overprovisioning of runners.
@@ -764,6 +813,84 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		)).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		Complete(r)
+}
+
+type Override struct {
+	ScheduledOverride v1alpha1.ScheduledOverride
+	Period            Period
+}
+
+func (r *AutoscalingRunnerSetReconciler) matchScheduledOverrides(log logr.Logger, now time.Time, autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet) (*int, *Override, *Override, error) {
+	var minRunners *int
+	var active, upcoming *Override
+
+	for _, o := range autoscalingRunnerSet.Spec.ScheduledOverrides {
+		log.V(1).Info(
+			"Checking scheduled override",
+			"now", now,
+			"startTime", o.StartTime,
+			"endTime", o.EndTime,
+			"frequency", o.RecurrenceRule.Frequency,
+			"untilTime", o.RecurrenceRule.UntilTime,
+		)
+
+		a, u, err := MatchSchedule(
+			now, o.StartTime.Time, o.EndTime.Time,
+			RecurrenceRule{
+				Frequency: o.RecurrenceRule.Frequency,
+				UntilTime: o.RecurrenceRule.UntilTime.Time,
+			},
+		)
+		if err != nil {
+			return minRunners, nil, nil, err
+		}
+
+		// Use the first when there are two or more active scheduled overrides,
+		// as the spec defines that the earlier scheduled override is prioritized higher than later ones.
+		if a != nil && active == nil {
+			active = &Override{Period: *a, ScheduledOverride: o}
+
+			if o.MinRunners != nil {
+				minRunners = o.MinRunners
+
+				log.V(1).Info(
+					"Found active scheduled override",
+					"activeStartTime", a.StartTime,
+					"activeEndTime", a.EndTime,
+					"activeMinRunners", minRunners,
+				)
+			}
+		}
+
+		if u != nil && (upcoming == nil || u.StartTime.Before(upcoming.Period.StartTime)) {
+			upcoming = &Override{Period: *u, ScheduledOverride: o}
+
+			log.V(1).Info(
+				"Found upcoming scheduled override",
+				"upcomingStartTime", u.StartTime,
+				"upcomingEndTime", u.EndTime,
+				"upcomingMinRunners", o.MinRunners,
+			)
+		}
+	}
+
+	return minRunners, active, upcoming, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) getMinRunners(log logr.Logger, now time.Time, autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet) (int, *Override, *Override, error) {
+	var minRunners int
+	if autoscalingRunnerSet.Spec.MinRunners != nil && *autoscalingRunnerSet.Spec.MinRunners >= 0 {
+		minRunners = *autoscalingRunnerSet.Spec.MinRunners
+	}
+
+	m, active, upcoming, err := r.matchScheduledOverrides(log, now, autoscalingRunnerSet)
+	if err != nil {
+		return 0, nil, nil, err
+	} else if m != nil {
+		minRunners = *m
+	}
+
+	return minRunners, active, upcoming, nil
 }
 
 type autoscalingRunnerSetFinalizerDependencyCleaner struct {
