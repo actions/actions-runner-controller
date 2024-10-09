@@ -30,7 +30,7 @@ runs:
       uses: docker/setup-buildx-action@v3
       with:
           # Pinning v0.9.1 for Buildx and BuildKit v0.10.6
-          # BuildKit v0.11 which has a bug causing intermittent 
+          # BuildKit v0.11 which has a bug causing intermittent
           # failures pushing images to GHCR
           version: v0.9.1
           driver-opts: image=moby/buildkit:v0.10.6
@@ -43,7 +43,7 @@ runs:
         load: true
         build-args: |
           DOCKER_IMAGE_NAME=${{inputs.image-name}}
-          VERSION=${{inputs.image-tag}} 
+          VERSION=${{inputs.image-tag}}
         tags: |
           ${{inputs.image-name}}:${{inputs.image-tag}}
         no-cache: true
