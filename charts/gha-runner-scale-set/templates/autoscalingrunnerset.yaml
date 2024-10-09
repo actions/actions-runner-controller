@@ -28,6 +28,7 @@ metadata:
     {{- if and (ne $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
     actions.github.com/cleanup-no-permission-service-account-name: {{ include "gha-runner-scale-set.noPermissionServiceAccountName" . }}
     {{- end }}
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
   githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}
