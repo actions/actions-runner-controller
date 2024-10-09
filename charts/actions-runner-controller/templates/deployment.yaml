@@ -175,7 +175,7 @@ spec:
         - containerPort: {{ .Values.metrics.port }}
           name: metrics-port
         resources:
-          {{- toYaml .Values.resources | nindent 12 }}
+          {{- toYaml .Values.metrics.proxy.resources | nindent 12 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
       {{- end }}
