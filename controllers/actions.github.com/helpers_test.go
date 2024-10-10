@@ -35,29 +35,37 @@ func startManagers(t ginkgo.GinkgoTInterface, first manager.Manager, others ...m
 	}
 }
 
-func createNamespace(t ginkgo.GinkgoTInterface, client client.Client) (*corev1.Namespace, manager.Manager) {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
+func createNamespaces(t ginkgo.GinkgoTInterface, numNamespaces int) ([]*corev1.Namespace, manager.Manager) {
+	namespaces := make([]*corev1.Namespace, 0)
+	defaultNamespaces := make(map[string]cache.Config)
+	for range numNamespaces {
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
+		}
+		namespaces = append(namespaces, ns)
+
+		err := k8sClient.Create(context.Background(), ns)
+		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			err := k8sClient.Delete(context.Background(), ns)
+			require.NoError(t, err)
+		})
+
+		defaultNamespaces[ns.Name] = cache.Config{}
 	}
 
-	err := k8sClient.Create(context.Background(), ns)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		err := k8sClient.Delete(context.Background(), ns)
-		require.NoError(t, err)
-	})
-
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Cache: cache.Options{
-			DefaultNamespaces: map[string]cache.Config{
-				ns.Name: {},
-			},
-		},
+		Cache: cache.Options{DefaultNamespaces: defaultNamespaces},
 	})
 	require.NoError(t, err)
 
-	return ns, mgr
+	return namespaces, mgr
+}
+
+func createNamespace(t ginkgo.GinkgoTInterface, client client.Client) (*corev1.Namespace, manager.Manager) {
+	namespaces, mgr := createNamespaces(t, 1)
+	return namespaces[0], mgr
 }
 
 func createDefaultSecret(t ginkgo.GinkgoTInterface, client client.Client, namespace string) *corev1.Secret {
