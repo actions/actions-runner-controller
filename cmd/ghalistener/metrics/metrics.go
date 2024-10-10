@@ -3,7 +3,6 @@ package metrics
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/actions/actions-runner-controller/github/actions"
@@ -22,8 +21,6 @@ const (
 	labelKeyJobWorkflowRef          = "job_workflow_ref"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
-	labelKeyRunnerID                = "runner_id"
-	labelKeyRunnerName              = "runner_name"
 )
 
 const githubScaleSetSubsystem = "gha"
@@ -47,10 +44,10 @@ var (
 		labelKeyEventName,
 	}
 
-	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
-	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult)
+	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult)
+	startedJobsTotalLabels     = append(jobLabels)
+	jobStartupDurationLabels   = append(jobLabels)
 )
 
 var (
@@ -244,16 +241,12 @@ func (b *baseLabels) scaleSetLabels() prometheus.Labels {
 
 func (b *baseLabels) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
-	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
 	l[labelKeyJobResult] = msg.Result
-	l[labelKeyRunnerName] = msg.RunnerName
 	return l
 }
 
 func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
-	l[labelKeyRunnerID] = strconv.Itoa(msg.RunnerId)
-	l[labelKeyRunnerName] = msg.RunnerName
 	return l
 }
 
