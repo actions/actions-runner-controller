@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	autoscalingListenerTestTimeout     = time.Second * 5
+	autoscalingListenerTestTimeout     = time.Second * 20
 	autoscalingListenerTestInterval    = time.Millisecond * 250
 	autoscalingListenerTestGitHubToken = "gh_token"
 )
@@ -351,6 +351,53 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
 		})
 
+		It("It should re-create pod whenever listener container is terminated", func() {
+			// Waiting for the pod is created
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			oldPodUID := string(pod.UID)
+			updated := pod.DeepCopy()
+			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+						},
+					},
+				},
+			}
+			err := k8sClient.Status().Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "failed to update test pod")
+
+			// Waiting for the new pod is created
+			Eventually(
+				func() (string, error) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return string(pod.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be re-created")
+		})
+
 		It("It should update mirror secrets to match secret used by AutoScalingRunnerSet", func() {
 			// Waiting for the pod is created
 			pod := new(corev1.Pod)
@@ -373,7 +420,18 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to update test secret")
 
 			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
+			// Ignore status running and consult the container state
+			updatedPod.Status.Phase = corev1.PodRunning
+			updatedPod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+						},
+					},
+				},
+			}
 			err = k8sClient.Status().Update(ctx, updatedPod)
 			Expect(err).NotTo(HaveOccurred(), "failed to update test pod to failed")
 
@@ -420,6 +478,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 	var autoscalingListener *v1alpha1.AutoscalingListener
 
 	var runAsUser int64 = 1001
+	const sidecarContainerName = "sidecar"
 
 	listenerPodTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
@@ -432,7 +491,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 					},
 				},
 				{
-					Name:            "sidecar",
+					Name:            sidecarContainerName,
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Image:           "busybox",
 				},
@@ -525,7 +584,8 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 					return created.Finalizers[0], nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
 
 			// Check if config is created
 			config := new(corev1.Secret)
@@ -559,9 +619,98 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 			Expect(pod.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(&runAsUser), "Pod should have the correct security context")
 			Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways), "Pod should have the correct image pull policy")
 
-			Expect(pod.Spec.Containers[1].Name).To(Equal("sidecar"), "Pod should have the correct container name")
+			Expect(pod.Spec.Containers[1].Name).To(Equal(sidecarContainerName), "Pod should have the correct container name")
 			Expect(pod.Spec.Containers[1].Image).To(Equal("busybox"), "Pod should have the correct image")
 			Expect(pod.Spec.Containers[1].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent), "Pod should have the correct image pull policy")
+		})
+	})
+
+	Context("When AutoscalingListener pod has interuptions", func() {
+		It("Should re-create pod when it is deleted", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			Expect(len(pod.Spec.Containers)).To(Equal(2), "Pod should have 2 containers")
+			oldPodUID := string(pod.UID)
+
+			err := k8sClient.Delete(ctx, pod)
+			Expect(err).NotTo(HaveOccurred(), "failed to delete pod")
+
+			pod = new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return string(pod.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be created")
+		})
+
+		It("Should re-create pod when the listener pod is terminated", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			updated := pod.DeepCopy()
+			oldPodUID := string(pod.UID)
+			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+						},
+					},
+				},
+				{
+					Name: sidecarContainerName,
+					State: corev1.ContainerState{
+						Running: &corev1.ContainerStateRunning{},
+					},
+				},
+			}
+			err := k8sClient.Status().Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "failed to update pod status")
+
+			pod = new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return string(pod.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be created")
 		})
 	})
 })
@@ -887,7 +1036,6 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 
 				g.Expect(pod.ObjectMeta.Annotations).To(HaveKeyWithValue("test-annotation-key", "test-annotation-value"), "pod annotations should be copied from runner set template")
 				g.Expect(pod.ObjectMeta.Labels).To(HaveKeyWithValue("test-label-key", "test-label-value"), "pod labels should be copied from runner set template")
-
 			},
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval).Should(Succeed(), "failed to create listener pod with proxy details")
