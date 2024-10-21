@@ -209,7 +209,7 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax
 
-	retryClient.HTTPClient.Timeout = 5 * time.Minute // timeout must be > 1m to accomodate long polling
+	retryClient.HTTPClient.Timeout = 90 * time.Second // timeout must be > 1m to accommodate long polling
 
 	transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
 	if !ok {
