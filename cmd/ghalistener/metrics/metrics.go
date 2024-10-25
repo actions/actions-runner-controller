@@ -18,7 +18,6 @@ const (
 	labelKeyOrganization            = "organization"
 	labelKeyRepository              = "repository"
 	labelKeyJobName                 = "job_name"
-	labelKeyJobWorkflowRef          = "job_workflow_ref"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
 )
@@ -40,7 +39,6 @@ var (
 		labelKeyOrganization,
 		labelKeyEnterprise,
 		labelKeyJobName,
-		labelKeyJobWorkflowRef,
 		labelKeyEventName,
 	}
 
@@ -224,7 +222,6 @@ func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Label
 		labelKeyOrganization:   jobBase.OwnerName,
 		labelKeyRepository:     jobBase.RepositoryName,
 		labelKeyJobName:        jobBase.JobDisplayName,
-		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
 		labelKeyEventName:      jobBase.EventName,
 	}
 }
