@@ -844,12 +844,14 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.EphemeralRunner{}).
-		Owns(&corev1.Pod{}).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(r)
+func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	return builderWithOptions(
+		ctrl.NewControllerManagedBy(mgr).
+			For(&v1alpha1.EphemeralRunner{}).
+			Owns(&corev1.Pod{}).
+			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+		opts,
+	).Complete(r)
 }
 
 func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
