@@ -43,7 +43,7 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: gha-rs
 actions.github.com/scale-set-name: {{ include "gha-runner-scale-set.scale-set-name" . }}
-actions.github.com/scale-set-namespace: {{ .Release.Namespace }}
+actions.github.com/scale-set-namespace: {{ include "gha-runner-scale-set.namespace" . }}
 {{- end }}
 
 {{/*
@@ -481,8 +481,8 @@ volumeMounts:
       {{- $managerServiceAccountName = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-name") }}
     {{- end }}
   {{- else if gt $singleNamespaceCounter 0 }}
-    {{- if hasKey $singleNamespaceControllerDeployments .Release.Namespace }}
-      {{- $controllerDeployment = get $singleNamespaceControllerDeployments .Release.Namespace }}
+    {{- if hasKey $singleNamespaceControllerDeployments (include "gha-runner-scale-set.namespace" .) }}
+      {{- $controllerDeployment = get $singleNamespaceControllerDeployments (include "gha-runner-scale-set.namespace" .) }}
       {{- with $controllerDeployment.metadata }}
         {{- $managerServiceAccountName = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-name") }}
       {{- end }}
@@ -538,8 +538,8 @@ volumeMounts:
       {{- $managerServiceAccountNamespace = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-namespace") }}
     {{- end }}
   {{- else if gt $singleNamespaceCounter 0 }}
-    {{- if hasKey $singleNamespaceControllerDeployments .Release.Namespace }}
-      {{- $controllerDeployment = get $singleNamespaceControllerDeployments .Release.Namespace }}
+    {{- if hasKey $singleNamespaceControllerDeployments (include "gha-runner-scale-set.namespace" .) }}
+      {{- $controllerDeployment = get $singleNamespaceControllerDeployments (include "gha-runner-scale-set.namespace" .) }}
       {{- with $controllerDeployment.metadata }}
         {{- $managerServiceAccountNamespace = (get $controllerDeployment.metadata.labels "actions.github.com/controller-service-account-namespace") }}
       {{- end }}
@@ -551,5 +551,13 @@ volumeMounts:
     {{- fail "No service account namespace found for gha-rs-controller deployment using label (actions.github.com/controller-service-account-namespace), consider setting controllerServiceAccount.namespace in values.yaml to be explicit if you think the discovery is wrong." }}
   {{- end }}
 {{- $managerServiceAccountNamespace }}
+{{- end }}
+{{- end }}
+
+{{- define "gha-runner-scale-set.namespace" -}}
+{{- if .Values.namespaceOverride }}
+  {{- .Values.namespaceOverride }}
+{{- else }}
+  {{- .Release.Namespace }}
 {{- end }}
 {{- end }}
