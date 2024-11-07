@@ -101,9 +101,6 @@ args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
-env:
-  - name: DOCKER_GROUP_GID
-    value: "123"
 {{- range $i, $container := .Values.template.spec.containers }}
   {{- if eq $container.name "dind" }}
     {{- if hasKey $container "resources"  }}
