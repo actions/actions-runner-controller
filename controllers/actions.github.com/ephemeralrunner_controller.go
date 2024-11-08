@@ -251,6 +251,20 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, nil
 		}
 
+		if pod.Status.Phase == corev1.PodPending && cs.State.Waiting.Reason == "ContainersNotReady" {
+			log.Info("Runner Container Not Ready, deleting the pod",
+				"PodPhase", pod.Status.Phase,
+				"PodReason", pod.Status.Reason,
+				"PodMessage", pod.Status.Message,
+			)
+
+			if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
+				log.Error(err, "failed to delete pod as failed on pod.Status.Phase: Failed")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
 		log.Info("Ephemeral runner container is still running")
 		if err := r.updateRunStatusFromPod(ctx, ephemeralRunner, pod, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
