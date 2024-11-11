@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -133,7 +134,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if ephemeralRunner.IsDone() {
-		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
+		log.Info("Cleaning up resources after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
 		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up ephemeral runner owned resources")
@@ -189,7 +190,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		// create secret if not created
 		log.Info("Creating new ephemeral runner secret for jitconfig.")
-		return r.createSecret(ctx, ephemeralRunner, log)
+		err = r.createSecret(ctx, ephemeralRunner, log)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	pod := new(corev1.Pod)
@@ -199,6 +203,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to fetch the pod")
 			return ctrl.Result{}, err
 
+		// TODO: Make this Failures status check configuration
 		case len(ephemeralRunner.Status.Failures) > 5:
 			log.Info("EphemeralRunner has failed more than 5 times. Marking it as failed")
 			errMessage := fmt.Sprintf("Pod has failed to start more than 5 times: %s", pod.Status.Message)
@@ -211,6 +216,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		default:
 			// Pod was not found. Create if the pod has never been created
 			log.Info("Creating new EphemeralRunner pod.")
+
 			result, err := r.createPod(ctx, ephemeralRunner, secret, log)
 			switch {
 			case err == nil:
@@ -588,6 +594,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %v", err)
 	}
 
+	// TODO: Immediately trigger secret creation and pod creation
 	log.Info("Updated ephemeral runner status with runnerId and runnerJITConfig")
 	return ctrl.Result{}, nil
 }
@@ -662,24 +669,26 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 		"configUrl", runner.Spec.GitHubConfigUrl,
 		"podName", newPod.Name)
 
+	// TODO: Should continue and runnerContainerStatus() statement deal with queue handling
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Creating new secret for ephemeral runner")
 	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)
+		return fmt.Errorf("failed to set controller reference: %v", err)
 	}
 
 	log.Info("Created new secret spec for ephemeral runner")
 	if err := r.Create(ctx, jitSecret); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create jit secret: %v", err)
+		return fmt.Errorf("failed to create jit secret: %v", err)
 	}
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
-	return ctrl.Result{Requeue: true}, nil
+
+	return nil
 }
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
@@ -828,6 +837,9 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 10,
+		}).
 		Complete(r)
 }
 

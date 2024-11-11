@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -201,5 +202,7 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.RunnerReplicaSet{}).
 		Owns(&v1alpha1.Runner{}).
 		Named(name).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 10}).
 		Complete(r)
 }
