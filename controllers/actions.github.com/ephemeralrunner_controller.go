@@ -190,10 +190,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		// create secret if not created
 		log.Info("Creating new ephemeral runner secret for jitconfig.")
-		err = r.createSecret(ctx, ephemeralRunner, log)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+		// TODO: This fails to immedietly continue becuase the secret name is not determined ahead of time by the controller
+		return r.createSecret(ctx, ephemeralRunner, log)
 	}
 
 	pod := new(corev1.Pod)
@@ -658,7 +656,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 	log.Info("Created new pod spec for ephemeral runner")
 	if err := r.Create(ctx, newPod); err != nil {
-		log.Error(err, "Failed to create pod resource for ephemeral runner.")
+		log.Error(err, fmt.Sprintf("Failed to create pod resource for ephemeral runner. Ephemeral runner pod spec: %v", newPod))
 		return err
 	}
 
@@ -672,22 +670,22 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	return nil
 }
 
-func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) error {
+func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Creating new secret for ephemeral runner")
 	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)
 	}
 
 	log.Info("Created new secret spec for ephemeral runner")
 	if err := r.Create(ctx, jitSecret); err != nil {
-		return fmt.Errorf("failed to create jit secret: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create jit secret: %v", err)
 	}
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
