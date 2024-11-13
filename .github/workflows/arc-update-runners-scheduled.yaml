@@ -132,6 +132,7 @@ jobs:
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/Makefile
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" Makefile
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" test/e2e/e2e_test.go
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" docker-bake.hcl
 
           CURRENT_VERSION="${CONTAINER_HOOKS_CURRENT_VERSION//./\\.}"
           LATEST_VERSION="${CONTAINER_HOOKS_LATEST_VERSION//./\\.}"
@@ -139,6 +140,7 @@ jobs:
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" runner/Makefile
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" Makefile
           sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" test/e2e/e2e_test.go
+          sed -i "s/$CURRENT_VERSION/$LATEST_VERSION/g" docker-bake.hcl
 
       - name: Commit changes
         run: |
