@@ -1,0 +1,25 @@
+name: publish
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  cache-registry: 'docker-registry-cache.docker-registry.svc:5000'
+
+jobs:
+  build:
+    runs-on: [self-hosted, pod]
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Login registry.smtx.io
+        uses: docker/login-action@v2
+        with:
+          registry: registry.smtx.io
+          username: ${{ secrets.HARBOR_PUSH_USERNAME }}
+          password: ${{ secrets.HARBOR_PUSH_TOKEN }}
+
+      - name: Build and push latest image
+        run: TAG_SUFFIX=latest docker buildx bake "https://github.com/everoute/actions-runner-controller.git#main"
