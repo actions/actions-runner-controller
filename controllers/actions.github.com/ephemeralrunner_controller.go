@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -133,7 +134,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if ephemeralRunner.IsDone() {
-		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
+		log.Info("Cleaning up resources after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
 		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up ephemeral runner owned resources")
@@ -211,10 +212,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		default:
 			// Pod was not found. Create if the pod has never been created
 			log.Info("Creating new EphemeralRunner pod.")
-			result, err := r.createPod(ctx, ephemeralRunner, secret, log)
+			err := r.createPod(ctx, ephemeralRunner, secret, log)
 			switch {
 			case err == nil:
-				return result, nil
+				return ctrl.Result{}, err
 			case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
 				log.Error(err, "Failed to create a pod due to unrecoverable failure")
 				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
@@ -305,7 +306,6 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 		if actionsError.StatusCode == http.StatusBadRequest && actionsError.IsException("JobStillRunningException") {
 			log.Info("Runner is still running the job. Re-queue in 30 seconds")
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-
 		}
 
 		log.Error(err, "Failed clean up runner from the service")
@@ -592,7 +592,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
+func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) error {
 	var envs []corev1.EnvVar
 	if runner.Spec.ProxySecretRef != "" {
 		http := corev1.EnvVar{
@@ -646,13 +646,13 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	log.Info("Created new pod spec for ephemeral runner")
 	if err := r.Create(ctx, newPod); err != nil {
 		log.Error(err, "Failed to create pod resource for ephemeral runner.")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	log.Info("Created ephemeral runner pod",
@@ -662,7 +662,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 		"configUrl", runner.Spec.GitHubConfigUrl,
 		"podName", newPod.Name)
 
-	return ctrl.Result{}, nil
+	return nil
 }
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
@@ -828,6 +828,9 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.EphemeralRunner{}).
 		Owns(&corev1.Pod{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 10,
+		}).
 		Complete(r)
 }
 
