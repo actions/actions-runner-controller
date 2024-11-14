@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -209,7 +210,17 @@ func NewClient(githubConfigURL string, creds *ActionsAuth, options ...ClientOpti
 	retryClient.RetryMax = ac.retryMax
 	retryClient.RetryWaitMax = ac.retryWaitMax
 
-	retryClient.HTTPClient.Timeout = 5 * time.Minute // timeout must be > 1m to accomodate long polling
+	ts, found := os.LookupEnv("ACTIONS_HTTP_CLIENT_TIMEOUT_SECONDS")
+	if !found {
+		// Default to 5 minutes
+		// timeout must be > 1m to accommodate long polling
+		ts = "300"
+	}
+	timeout, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert ACTIONS_HTTP_CLIENT_TIMEOUT_SECONDS to int64: %v", err)
+	}
+	retryClient.HTTPClient.Timeout = time.Duration(timeout) * time.Second
 
 	transport, ok := retryClient.HTTPClient.Transport.(*http.Transport)
 	if !ok {
