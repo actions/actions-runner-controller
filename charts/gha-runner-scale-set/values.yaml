@@ -2,25 +2,40 @@
 ## ex: https://github.com/myorg/myrepo or https://github.com/myorg
 githubConfigUrl: ""
 
-## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
-## You can choose to use GitHub App or a PAT token
+## githubConfigSecret is the k8s secrets to use when authenticating via the GitHub API.
+## You can choose to supply:
+##   A) a PAT token, 
+##   B) a GitHub App, or 
+##   C) a pre-defined Kubernetes secret.
+## The syntax for each of these variations is documented below.
+## (Variation A) When using a PAT token, the syntax is as follows:
 githubConfigSecret:
-  ### GitHub Apps Configuration
-  ## NOTE: IDs MUST be strings, use quotes
-  #github_app_id: ""
-  #github_app_installation_id: ""
-  #github_app_private_key: |
-
-  ### GitHub PAT Configuration
-  github_token: ""
-## If you have a pre-define Kubernetes secret in the same namespace the gha-runner-scale-set is going to deploy,
-## you can also reference it via `githubConfigSecret: pre-defined-secret`.
-## You need to make sure your predefined secret has all the required secret data set properly.
+  # Example:  
+  # github_token: "ghp_sampleSampleSampleSampleSampleSample"
+  github_token: ""  
+#
+## (Variation B) When using a GitHub App, the syntax is as follows:
+# githubConfigSecret:
+#   # NOTE: IDs MUST be strings, use quotes
+#   github_app_id: ""
+#   github_app_installation_id: ""
+#   github_app_private_key: |
+#      private key line 1
+#      private key line 2
+#      .
+#      .
+#      .
+#      private key line N
+#
+## (Variation C) When using a pre-defined Kubernetes secret in the same namespace that the gha-runner-scale-set is going to deploy,
+## the syntax is as follows:
+# githubConfigSecret: pre-defined-secret
+## Notes on using pre-defined Kubernetes secrets:
+##   You need to make sure your predefined secret has all the required secret data set properly.
 ##   For a pre-defined secret using GitHub PAT, the secret needs to be created like this:
 ##   > kubectl create secret generic pre-defined-secret --namespace=my_namespace --from-literal=github_token='ghp_your_pat'
 ##   For a pre-defined secret using GitHub App, the secret needs to be created like this:
 ##   > kubectl create secret generic pre-defined-secret --namespace=my_namespace --from-literal=github_app_id=123456 --from-literal=github_app_installation_id=654321 --from-literal=github_app_private_key='-----BEGIN CERTIFICATE-----*******'
-# githubConfigSecret: pre-defined-secret
 
 ## proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.
