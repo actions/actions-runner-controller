@@ -2,7 +2,7 @@
 ## ex: https://github.com/myorg/myrepo or https://github.com/myorg
 githubConfigUrl: ""
 
-## githubConfigSecret is the k8s secrets to use when authenticating via the GitHub API.
+## githubConfigSecret is the k8s secret information to use when authenticating via the GitHub API.
 ## You can choose to supply:
 ##   A) a PAT token, 
 ##   B) a GitHub App, or 
