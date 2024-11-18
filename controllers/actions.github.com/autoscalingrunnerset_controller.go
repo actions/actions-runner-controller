@@ -75,6 +75,7 @@ type AutoscalingRunnerSetReconciler struct {
 	Log                                           logr.Logger
 	Scheme                                        *runtime.Scheme
 	ControllerNamespace                           string
+	ReadGitHubConfigSecretFromControllerNamespace bool
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
 	UpdateStrategy                                UpdateStrategy
@@ -208,7 +209,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, secret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: r.deriveConfigSecretNamespace(autoscalingRunnerSet), Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, secret); err != nil {
 		log.Error(err, "Failed to find GitHub config secret.",
 			"namespace", autoscalingRunnerSet.Namespace,
 			"name", autoscalingRunnerSet.Spec.GitHubConfigSecret)
@@ -678,7 +679,7 @@ func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Con
 
 func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (actions.ActionsService, error) {
 	var configSecret corev1.Secret
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, &configSecret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: r.deriveConfigSecretNamespace(autoscalingRunnerSet), Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, &configSecret); err != nil {
 		return nil, fmt.Errorf("failed to find GitHub config secret: %w", err)
 	}
 
@@ -694,6 +695,14 @@ func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, a
 		configSecret.Data,
 		opts...,
 	)
+}
+
+func (r *AutoscalingRunnerSetReconciler) deriveConfigSecretNamespace(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	secretNamespace := autoscalingRunnerSet.Namespace
+	if r.ReadGitHubConfigSecretFromControllerNamespace {
+		secretNamespace = r.ControllerNamespace
+	}
+	return secretNamespace
 }
 
 func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
