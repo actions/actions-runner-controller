@@ -4,12 +4,16 @@ on:
   pull_request:
     branches:
       - master
+      - mercari-master
     paths:
       - 'charts/**'
       - '.github/workflows/gha-validate-chart.yaml'
       - '!charts/actions-runner-controller/**'
       - '!**.md'
   push:
+    branches:
+      - master
+      - mercari-master
     paths:
       - 'charts/**'
       - '.github/workflows/gha-validate-chart.yaml'

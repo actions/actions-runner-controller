@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - mercari-master
     paths:
       - '.github/workflows/go.yaml'
       - '**.go'
