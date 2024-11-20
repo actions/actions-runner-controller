@@ -93,6 +93,8 @@ priorityClassName: ""
 #   controllerManagerAddr: ":8080"
 #   listenerAddr: ":8080"
 #   listenerEndpoint: "/metrics"
+#   podMonitor:
+#     enabled: true
 
 flags:
   ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
