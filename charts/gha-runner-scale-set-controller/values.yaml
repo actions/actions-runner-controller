@@ -94,6 +94,10 @@ priorityClassName: ""
 #   listenerAddr: ":8080"
 #   listenerEndpoint: "/metrics"
 
+## To enable pprof, uncomment the following lines.
+# pprof:
+#   controllerManagerAddr: ":8081"
+
 flags:
   ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
   ## Defaults to "debug".
