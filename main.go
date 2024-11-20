@@ -103,6 +103,11 @@ func main() {
 		autoScalerImagePullSecrets stringSlice
 
 		commonRunnerLabels commaSeparatedStringSlice
+
+		maxConcurrentReconcilesForAutoscalingRunnerSet int
+		maxConcurrentReconcilesForEphemeralRunnerSet   int
+		maxConcurrentReconcilesForEphemeralRunner      int
+		maxConcurrentReconcilesForAutoscalingListener  int
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -145,6 +150,10 @@ func main() {
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
 	flag.StringVar(&updateStrategy, "update-strategy", "immediate", `Resources reconciliation strategy on upgrade with running/pending jobs. Valid values are: "immediate", "eventual". Defaults to "immediate".`)
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
+	flag.IntVar(&maxConcurrentReconcilesForAutoscalingRunnerSet, "max-concurrent-reconciles-for-autoscaling-runner-set", 1, "The maximum number of concurrent reconciles for AutoscalingRunnerSet.")
+	flag.IntVar(&maxConcurrentReconcilesForEphemeralRunnerSet, "max-concurrent-reconciles-for-ephemeral-runner-set", 1, "The maximum number of concurrent reconciles for EphemeralRunnerSet.")
+	flag.IntVar(&maxConcurrentReconcilesForEphemeralRunner, "max-concurrent-reconciles-for-ephemeral-runner", 1, "The maximum number of concurrent reconciles for EphemeralRunner.")
+	flag.IntVar(&maxConcurrentReconcilesForAutoscalingListener, "max-concurrent-reconciles-for-autoscaling-listener", 1, "The maximum number of concurrent reconciles for AutoscalingListener.")
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -273,30 +282,33 @@ func main() {
 			ActionsClient:                      actionsMultiClient,
 			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
-			ResourceBuilder: rb,
+			MaxConcurrentReconciles:                       maxConcurrentReconcilesForAutoscalingRunnerSet,
+			ResourceBuilder:                               rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:          mgr.GetClient(),
-			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
-			ResourceBuilder: rb,
+			Client:                  mgr.GetClient(),
+			Log:                     log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:                  mgr.GetScheme(),
+			ActionsClient:           actionsMultiClient,
+			MaxConcurrentReconciles: maxConcurrentReconcilesForEphemeralRunner,
+			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-			Client:          mgr.GetClient(),
-			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
-			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
-			PublishMetrics:  metricsAddr != "0",
-			ResourceBuilder: rb,
+			Client:                  mgr.GetClient(),
+			Log:                     log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
+			Scheme:                  mgr.GetScheme(),
+			ActionsClient:           actionsMultiClient,
+			PublishMetrics:          metricsAddr != "0",
+			MaxConcurrentReconciles: maxConcurrentReconcilesForEphemeralRunnerSet,
+			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
@@ -308,6 +320,7 @@ func main() {
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
+			MaxConcurrentReconciles: maxConcurrentReconcilesForAutoscalingListener,
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")

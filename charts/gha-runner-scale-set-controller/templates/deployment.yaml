@@ -82,6 +82,18 @@ spec:
         {{- range .Values.flags.excludeLabelPropagationPrefixes }}
         - "--exclude-label-propagation-prefix={{ . }}"
         {{- end }}
+        {{- with .Values.flags.maxConcurrentReconcilesForAutoscalingRunnerSet }}
+        - "--max-concurrent-reconciles-for-autoscaling-runner-set={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.maxConcurrentReconcilesForEphemeralRunnerSet }}
+        - "--max-concurrent-reconciles-for-ephemeral-runner-set={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.maxConcurrentReconcilesForEphemeralRunner }}
+        - "--max-concurrent-reconciles-for-ephemeral-runner={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.maxConcurrentReconcilesForAutoscalingListener }}
+        - "--max-concurrent-reconciles-for-autoscaling-listener={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         {{- with .Values.metrics }}

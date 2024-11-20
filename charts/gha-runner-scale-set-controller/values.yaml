@@ -130,3 +130,9 @@ flags:
   ## Labels that match prefix specified in the list are excluded from propagation.
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
+
+  ## Defines the maximum number of concurrent reconciles for each reconciler.
+  # maxConcurrentReconcilesForAutoscalingRunnerSet: 1
+  # maxConcurrentReconcilesForEphemeralRunnerSet: 1
+  # maxConcurrentReconcilesForEphemeralRunner: 1
+  # maxConcurrentReconcilesForAutoscalingListener: 1
