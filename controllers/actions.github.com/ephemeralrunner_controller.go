@@ -71,6 +71,7 @@ type EphemeralRunnerReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
 func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("ephemeralrunner", req.NamespacedName)
+	log.Info("Start Reconcile")
 
 	ephemeralRunner := new(v1alpha1.EphemeralRunner)
 	if err := r.Get(ctx, req.NamespacedName, ephemeralRunner); err != nil {
@@ -183,6 +184,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return r.updateStatusWithRunnerConfig(ctx, ephemeralRunner, log)
 	}
 
+	now := time.Now()
 	secret := new(corev1.Secret)
 	if err := r.Get(ctx, req.NamespacedName, secret); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -193,6 +195,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Creating new ephemeral runner secret for jitconfig.")
 		return r.createSecret(ctx, ephemeralRunner, log)
 	}
+	log.Info("Get Secret", "duration_ms", time.Since(now).Milliseconds())
 
 	pod := new(corev1.Pod)
 	if err := r.Get(ctx, req.NamespacedName, pod); err != nil {
@@ -344,8 +347,10 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	log.Info("Pod is deleted")
 
 	log.Info("Cleaning up the runner jitconfig secret")
+	now := time.Now()
 	secret := new(corev1.Secret)
 	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret)
+	log.Info("Get Secret for cleanup", "duration_ms", time.Since(now).Milliseconds())
 	switch {
 	case err == nil:
 		if secret.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -516,7 +521,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner)
+	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner, log)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %v", err)
 	}
@@ -712,11 +717,13 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	return nil
 }
 
-func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) (actions.ActionsService, error) {
+func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (actions.ActionsService, error) {
+	now := time.Now()
 	secret := new(corev1.Secret)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: runner.Spec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
+	log.Info("Get Secret for GitHub client", "duration_ms", time.Since(now).Milliseconds())
 
 	opts, err := r.actionsClientOptionsFor(ctx, runner)
 	if err != nil {
@@ -782,7 +789,7 @@ func (r *EphemeralRunnerReconciler) actionsClientOptionsFor(ctx context.Context,
 // runnerRegisteredWithService checks if the runner is still registered with the service
 // Returns found=false and err=nil if ephemeral runner does not exist in GitHub service and should be deleted
 func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (found bool, err error) {
-	actionsClient, err := r.actionsClientFor(ctx, runner)
+	actionsClient, err := r.actionsClientFor(ctx, runner, log)
 	if err != nil {
 		return false, fmt.Errorf("failed to get Actions client for ScaleSet: %w", err)
 	}
@@ -809,7 +816,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 }
 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	client, err := r.actionsClientFor(ctx, ephemeralRunner)
+	client, err := r.actionsClientFor(ctx, ephemeralRunner, log)
 	if err != nil {
 		return fmt.Errorf("failed to get actions client for runner: %v", err)
 	}

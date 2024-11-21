@@ -109,6 +109,9 @@ func main() {
 		maxConcurrentReconcilesForEphemeralRunnerSet   int
 		maxConcurrentReconcilesForEphemeralRunner      int
 		maxConcurrentReconcilesForAutoscalingListener  int
+
+		rateLimiterQPS   int
+		rateLimiterBurst int
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -156,6 +159,8 @@ func main() {
 	flag.IntVar(&maxConcurrentReconcilesForEphemeralRunnerSet, "max-concurrent-reconciles-for-ephemeral-runner-set", 1, "The maximum number of concurrent reconciles for EphemeralRunnerSet.")
 	flag.IntVar(&maxConcurrentReconcilesForEphemeralRunner, "max-concurrent-reconciles-for-ephemeral-runner", 1, "The maximum number of concurrent reconciles for EphemeralRunner.")
 	flag.IntVar(&maxConcurrentReconcilesForAutoscalingListener, "max-concurrent-reconciles-for-autoscaling-listener", 1, "The maximum number of concurrent reconciles for AutoscalingListener.")
+	flag.IntVar(&rateLimiterQPS, "client-go-rate-limiter-qps", 20, "The QPS value of client-go rate limiter.")
+	flag.IntVar(&rateLimiterBurst, "client-go-rate-limiter-burst", 30, "The burst value of client-go rate limiter.")
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -225,7 +230,11 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+	cfg.QPS = float32(rateLimiterQPS)
+	cfg.Burst = rateLimiterBurst
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
