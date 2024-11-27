@@ -214,6 +214,16 @@ func main() {
 		})
 	}
 
+	clientOptions := client.Options{}
+	if watchSingleNamespace == "" {
+		clientOptions.Cache = &client.CacheOptions{
+			DisableFor: []client.Object{
+				&corev1.Secret{},
+				&corev1.ConfigMap{},
+			},
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -226,14 +236,7 @@ func main() {
 		WebhookServer:    webhookServer,
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: leaderElectionId,
-		Client: client.Options{
-			Cache: &client.CacheOptions{
-				DisableFor: []client.Object{
-					&corev1.Secret{},
-					&corev1.ConfigMap{},
-				},
-			},
-		},
+		Client:           clientOptions,
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
