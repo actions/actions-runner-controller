@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -55,6 +56,7 @@ type EphemeralRunnerSetReconciler struct {
 	PublishMetrics bool
 
 	MaxConcurrentReconciles int
+	WorkqueueRateLimiter    workqueue.RateLimiter
 
 	ResourceBuilder
 }
@@ -578,7 +580,10 @@ func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		For(&v1alpha1.EphemeralRunnerSet{}).
 		Owns(&v1alpha1.EphemeralRunner{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: r.MaxConcurrentReconciles,
+			RateLimiter:             r.WorkqueueRateLimiter,
+		}).
 		Complete(r)
 }
 

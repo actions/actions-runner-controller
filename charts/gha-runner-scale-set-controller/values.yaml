@@ -144,3 +144,4 @@ flags:
   ## Defines the client-go rate limiter parameters.
   # clientGoRateLimiterQPS: 20
   # clientGoRateLimiterBurst: 30
+  # disableWorkqueueBucketRateLimiter: false

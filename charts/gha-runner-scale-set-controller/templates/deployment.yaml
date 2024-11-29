@@ -103,6 +103,9 @@ spec:
         {{- with .Values.flags.clientGoRateLimiterBurst }}
         - "--client-go-rate-limiter-burst={{ . }}"
         {{- end }}
+        {{- with .Values.flags.disableWorkqueueBucketRateLimiter }}
+        - "--disable-workqueue-bucket-rate-limiter={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         {{- if or .Values.metrics .Values.pprof }}

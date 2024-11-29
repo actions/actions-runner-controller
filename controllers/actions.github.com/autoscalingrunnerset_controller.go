@@ -32,6 +32,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -81,6 +82,7 @@ type AutoscalingRunnerSetReconciler struct {
 	UpdateStrategy                                UpdateStrategy
 	ActionsClient                                 actions.MultiClient
 	MaxConcurrentReconciles                       int
+	WorkqueueRateLimiter                          workqueue.RateLimiter
 	ResourceBuilder
 }
 
@@ -765,7 +767,10 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) erro
 			},
 		)).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: r.MaxConcurrentReconciles,
+			RateLimiter:             r.WorkqueueRateLimiter,
+		}).
 		Complete(r)
 }
 

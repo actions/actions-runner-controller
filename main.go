@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -112,6 +113,8 @@ func main() {
 
 		rateLimiterQPS   int
 		rateLimiterBurst int
+
+		disableWorkqueueBucketRateLimiter bool
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -161,6 +164,7 @@ func main() {
 	flag.IntVar(&maxConcurrentReconcilesForAutoscalingListener, "max-concurrent-reconciles-for-autoscaling-listener", 1, "The maximum number of concurrent reconciles for AutoscalingListener.")
 	flag.IntVar(&rateLimiterQPS, "client-go-rate-limiter-qps", 20, "The QPS value of client-go rate limiter.")
 	flag.IntVar(&rateLimiterBurst, "client-go-rate-limiter-burst", 30, "The burst value of client-go rate limiter.")
+	flag.BoolVar(&disableWorkqueueBucketRateLimiter, "disable-workqueue-bucket-rate-limiter", false, "Disable workqueue BucketRateLimiter.")
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -265,6 +269,13 @@ func main() {
 	}
 
 	if autoScalingRunnerSetOnly {
+		var newWorkqueueRateLimiter func() workqueue.RateLimiter
+		if disableWorkqueueBucketRateLimiter {
+			newWorkqueueRateLimiter = workqueue.DefaultItemBasedRateLimiter
+		} else {
+			newWorkqueueRateLimiter = workqueue.DefaultControllerRateLimiter
+		}
+
 		if err := actionsgithubcom.SetupIndexers(mgr); err != nil {
 			log.Error(err, "unable to setup indexers")
 			os.Exit(1)
@@ -298,6 +309,7 @@ func main() {
 			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 			MaxConcurrentReconciles:                       maxConcurrentReconcilesForAutoscalingRunnerSet,
+			WorkqueueRateLimiter:                          newWorkqueueRateLimiter(),
 			ResourceBuilder:                               rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
@@ -310,6 +322,7 @@ func main() {
 			Scheme:                  mgr.GetScheme(),
 			ActionsClient:           actionsMultiClient,
 			MaxConcurrentReconciles: maxConcurrentReconcilesForEphemeralRunner,
+			WorkqueueRateLimiter:    newWorkqueueRateLimiter(),
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
@@ -323,6 +336,7 @@ func main() {
 			ActionsClient:           actionsMultiClient,
 			PublishMetrics:          metricsAddr != "0",
 			MaxConcurrentReconciles: maxConcurrentReconcilesForEphemeralRunnerSet,
+			WorkqueueRateLimiter:    newWorkqueueRateLimiter(),
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
@@ -336,6 +350,7 @@ func main() {
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 			MaxConcurrentReconciles: maxConcurrentReconcilesForAutoscalingListener,
+			WorkqueueRateLimiter:    newWorkqueueRateLimiter(),
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
