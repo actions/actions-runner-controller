@@ -22,7 +22,7 @@ type Options struct {
 // rather than having to correlate those in multiple places.
 func OptionsWithDefault() Options {
 	return Options{
-		RunnerMaxConcuncurrentReconciles: 1,
+		RunnerMaxConcuncurrentReconciles: 2,
 	}
 }
 
