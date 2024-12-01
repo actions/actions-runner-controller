@@ -130,3 +130,6 @@ flags:
   ## Labels that match prefix specified in the list are excluded from propagation.
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
+
+# Add the option to deploy in another namespace rather than .Release.Namespace.
+namespaceOverride: ""

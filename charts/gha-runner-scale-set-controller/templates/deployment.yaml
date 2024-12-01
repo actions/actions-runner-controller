@@ -2,10 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "gha-runner-scale-set-controller.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
   labels:
     {{- include "gha-runner-scale-set-controller.labels" . | nindent 4 }}
-    actions.github.com/controller-service-account-namespace: {{ .Release.Namespace }}
+    actions.github.com/controller-service-account-namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
     actions.github.com/controller-service-account-name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
     {{- if .Values.flags.watchSingleNamespace }}
     actions.github.com/controller-watch-single-namespace: {{ .Values.flags.watchSingleNamespace }}

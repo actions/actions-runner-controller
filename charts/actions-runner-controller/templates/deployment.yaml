@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "actions-runner-controller.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "actions-runner-controller.namespace" . }}
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
 spec:
@@ -56,7 +56,7 @@ spec:
         - "--docker-registry-mirror={{ .Values.dockerRegistryMirror }}"
         {{- end }}
         {{- if .Values.scope.singleNamespace }}
-        - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
+        - "--watch-namespace={{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}"
         {{- end }}
         {{- if .Values.logLevel }}
         - "--log-level={{ .Values.logLevel }}"

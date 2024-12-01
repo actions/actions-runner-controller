@@ -1,5 +1,5 @@
 {{- if and .Values.githubWebhookServer.enabled .Values.metrics.serviceMonitor.enable }}
-{{- $servicemonitornamespace := .Values.actionsMetrics.serviceMonitor.namespace | default .Release.Namespace }}
+{{- $servicemonitornamespace := .Values.actionsMetrics.serviceMonitor.namespace | default (include "actions-runner-controller.namespace" .) }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
