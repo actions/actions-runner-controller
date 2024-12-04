@@ -2151,7 +2151,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ImagePullSecrets(t *testing.T) {
 	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
-	testValuesPath, err := filepath.Abs("../tests/values_image_pull_secrets.yaml")
+	testValuesPath, err := filepath.Abs("../tests/values_image.yaml")
 	require.NoError(t, err)
 
 	releaseName := "test-runners"
@@ -2177,9 +2177,12 @@ func TestTemplateRenderedAutoScalingRunnerSet_ImagePullSecrets(t *testing.T) {
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "There should be 2 containers")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
 	assert.Equal(t, "myregistry/runner-image:latest", ars.Spec.Template.Spec.Containers[0].Image, "Container image should be myregistry/runner-image:latest")
+	assert.Equal(t, corev1.PullIfNotPresent, ars.Spec.Template.Spec.Containers[0].ImagePullPolicy, "Container imagePullPolicy should be Always")
 	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name, "Container name should be dind")
 	assert.Equal(t, "myregistry/dind-image:latest", ars.Spec.Template.Spec.Containers[1].Image, "Container image should be myregistry/dind-image:latest")
+	assert.Equal(t, corev1.PullIfNotPresent, ars.Spec.Template.Spec.Containers[1].ImagePullPolicy, "Container imagePullPolicy should be Always")
 	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 1, "There should be 1 init-container")
 	assert.Equal(t, "init-dind-externals", ars.Spec.Template.Spec.InitContainers[0].Name, "Container name should be init-dind-externals")
 	assert.Equal(t, "myregistry/dind-init-image:latest", ars.Spec.Template.Spec.InitContainers[0].Image, "Container image should be myregistry/dind-init-image:latest")
+	assert.Equal(t, corev1.PullIfNotPresent, ars.Spec.Template.Spec.InitContainers[0].ImagePullPolicy, "Container imagePullPolicy should be Always")
 }

@@ -84,6 +84,7 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
 image: {{ (.Values.runner.dindInitContainer).image | default "ghcr.io/actions/actions-runner:latest" }}
+imagePullPolicy: {{ .Values.runner.dindInitContainer.imagePullPolicy }}
 command: ["cp"]
 args:
   - -r
@@ -104,6 +105,7 @@ resources:
 
 {{- define "gha-runner-scale-set.dind-container" -}}
 image: {{ (.Values.runner.dindContainer).image | default "docker:dind" }}
+imagePullPolicy: {{ .Values.runner.dindInitContainer.imagePullPolicy }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
@@ -208,6 +210,7 @@ resources:
 
 {{- define "gha-runner-scale-set.dind-runner-container" -}}
 image: {{ .Values.runner.runnerContainer.image }}
+imagePullPolicy: {{ .Values.runner.runnerContainer.imagePullPolicy }}
 command: ["/home/runner/run.sh"]
 {{ if not (empty .Values.runner.runnerContainer.extraArgs) }}
 args:
@@ -300,6 +303,7 @@ resources:
 
 {{- define "gha-runner-scale-set.kubernetes-mode-runner-container" -}}
 image: {{ .Values.runner.runnerContainer.image }}
+imagePullPolicy: {{ .Values.runner.runnerContainer.imagePullPolicy }}
 command: ["/home/runner/run.sh"]
 {{ if not (empty .Values.runner.runnerContainer.extraArgs) -}}
 args:
@@ -394,6 +398,7 @@ resources:
 
 {{- define "gha-runner-scale-set.default-mode-runner-containers" -}}
 image: {{ .Values.runner.runnerContainer.image }}
+imagePullPolicy: {{ .Values.runner.runnerContainer.imagePullPolicy }}
 command: ["/home/runner/run.sh"]
 {{ if not (empty .Values.runner.runnerContainer.extraArgs) }}
 args:

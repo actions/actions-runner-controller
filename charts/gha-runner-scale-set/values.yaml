@@ -121,6 +121,7 @@ runner:
     # -- Optionally specify spec for the runner container.
     runnerContainer:
       image: "ghcr.io/actions/actions-runner:latest"
+      imagePullPolicy: "Always"
       extraArgs: []
       extraEnv: []
       extraVolumeMounts: []
@@ -130,6 +131,7 @@ runner:
     # ignored if containerMode.type is not dind.
     dindInitContainer:
       image: "ghcr.io/actions/actions-runner:latest"
+      imagePullPolicy: "Always"
       extraArgs: []
       extraEnv: []
       extraVolumeMounts: []
@@ -139,6 +141,7 @@ runner:
     # ignored if containerMode.type is not dind.
     dindContainer:
       image: "docker:dind"
+      imagePullPolicy: "Always"
       extraArgs: []
       extraEnv: []
       extraVolumeMounts: []
