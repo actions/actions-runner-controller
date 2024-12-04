@@ -114,6 +114,10 @@ spec:
       {{- else }}
       serviceAccountName: {{ default (include "gha-runner-scale-set.noPermissionServiceAccountName" .) .Values.runner.serviceAccountName }}
       {{- end }}
+      {{ if not (empty .Values.runner.imagePullSecrets) }}
+      imagePullSecrets:
+        {{- toYaml .Values.runner.imagePullSecrets | nindent 8 }}
+      {{- end }}
       {{- if or (not (empty .Values.runner.extraInitContainers)) (eq $containerMode.type "dind") }}
       initContainers:
         {{- if eq $containerMode.type "dind" }}

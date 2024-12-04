@@ -111,6 +111,7 @@ githubConfigSecret:
 runner:
     restartPolicy: Never
     serviceAccountName: "" # optional, if not set, serviceAccountName will be auto-generated
+    imagePullSecrets: []
     extraMetadata: {}
     extraVolumes: []
     extraContainers: []
