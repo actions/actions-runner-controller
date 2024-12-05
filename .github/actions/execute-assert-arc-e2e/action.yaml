@@ -199,4 +199,11 @@ runs:
       shell: bash
       if: always()
       run: |
+        echo "::group::Controller logs"
         kubectl logs deployment/arc-gha-rs-controller -n ${{inputs.arc-controller-namespace}}
+        echo "::endgroup::"
+
+        echo "::group::Listener logs"
+        LISTENER_POD="$(kubectl get autoscalinglisteners.actions.github.com -n arc-systems -o jsonpath='{.items[*].metadata.name}'))"
+        kubectl logs $LISTENER_POD -n ${{inputs.arc-controller-namespace}}
+        echo "::endgroup::"
