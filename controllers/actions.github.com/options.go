@@ -1,10 +1,6 @@
 package actionsgithubcom
 
 import (
-	"fmt"
-	"os"
-	"strconv"
-
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -12,9 +8,9 @@ import (
 // Options is the optional configuration for the controllers, which can be
 // set via command-line flags or environment variables.
 type Options struct {
-	// RunnerMaxConcuncurrentReconciles is the maximum number of concurrent Reconciles which can be run
+	// RunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run
 	// by the EphemeralRunnerController.
-	RunnerMaxConcuncurrentReconciles int
+	RunnerMaxConcurrentReconciles int
 }
 
 // OptionsWithDefault returns the default options.
@@ -22,38 +18,8 @@ type Options struct {
 // rather than having to correlate those in multiple places.
 func OptionsWithDefault() Options {
 	return Options{
-		RunnerMaxConcuncurrentReconciles: 2,
+		RunnerMaxConcurrentReconciles: 2,
 	}
-}
-
-// LoadEnv loads the options from the environment variables.
-// This updates the option value only if the environment variable is set.
-// If the option is already set (via a command-line flag), the value from the environment variable takes precedence.
-func (o *Options) LoadEnv() error {
-	v, err := o.getEnvInt("RUNNER_MAX_CONCURRENT_RECONCILES")
-	if err != nil {
-		return err
-	}
-
-	if v != nil {
-		o.RunnerMaxConcuncurrentReconciles = *v
-	}
-
-	return nil
-}
-
-func (o *Options) getEnvInt(name string) (*int, error) {
-	s := os.Getenv(name)
-	if s == "" {
-		return nil, nil
-	}
-
-	v, err := strconv.Atoi(s)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert %s=%s to int: %w", name, s, err)
-	}
-
-	return &v, nil
 }
 
 type Option func(*controller.Options)
