@@ -102,6 +102,8 @@ func main() {
 
 		autoScalerImagePullSecrets stringSlice
 
+		opts = actionsgithubcom.OptionsWithDefault()
+
 		commonRunnerLabels commaSeparatedStringSlice
 	)
 	var c github.Config
@@ -136,6 +138,7 @@ func main() {
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", actionssummerwindnet.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
+	flag.IntVar(&opts.RunnerMaxConcurrentReconciles, "runner-max-concurrent-reconciles", opts.RunnerMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller. Increase this value to improve the throughput of the controller, but it may also increase the load on the API server and the external service (e.g. GitHub API).")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&watchSingleNamespace, "watch-single-namespace", "", "Restrict to watch for custom resources in a single namespace.")
@@ -155,6 +158,8 @@ func main() {
 		os.Exit(1)
 	}
 	c.Log = &log
+
+	log.Info("Using options", "runner-max-concurrent-reconciles", opts.RunnerMaxConcurrentReconciles)
 
 	if !autoScalingRunnerSetOnly {
 		ghClient, err = c.NewClient()
@@ -285,7 +290,7 @@ func main() {
 			Scheme:          mgr.GetScheme(),
 			ActionsClient:   actionsMultiClient,
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}
