@@ -138,7 +138,7 @@ spec:
       containers:
       {{- if eq $containerMode.type "dind" }}
       - name: runner
-        {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}                {{- if include "gha-runner-scale-set.isK8sVersionGte129" . }}
+        {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
         {{- if not (include "gha-runner-scale-set.isK8sVersionGte129" .) }}
       - name: dind
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
