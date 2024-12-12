@@ -54,14 +54,6 @@ app.kubernetes.io/name: {{ include "gha-runner-scale-set.scale-set-name" . }}
 app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }}
 {{- end }}
 
-{{/*
-Check if the Kubernetes version supports native sidecar containers (>=1.29).
-*/}}
-{{- define "gha-runner-scale-set.isK8sVersionGte129" -}}
-{{- $version := .Capabilities.KubeVersion.Version -}}
-{{- semverCompare ">=1.29.0" $version -}}
-{{- end }}
-
 {{- define "gha-runner-scale-set.githubsecret" -}}
   {{- if kindIs "string" .Values.githubConfigSecret }}
     {{- if not (empty .Values.githubConfigSecret) }}
@@ -114,7 +106,7 @@ env:
     value: "123"
 securityContext:
   privileged: true
-{{- if include "gha-runner-scale-set.isK8sVersionGte129" . }}
+{{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
 restartPolicy: Always
 {{- end }}
 volumeMounts:

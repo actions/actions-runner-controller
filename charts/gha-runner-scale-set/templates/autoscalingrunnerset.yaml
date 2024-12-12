@@ -127,7 +127,7 @@ spec:
       - name: init-dind-externals
         {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
         {{- end }}
-        {{- if include "gha-runner-scale-set.isK8sVersionGte129" . }}
+        {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
       - name: dind
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
         {{- end }}
@@ -139,7 +139,7 @@ spec:
       {{- if eq $containerMode.type "dind" }}
       - name: runner
         {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
-        {{- if not (include "gha-runner-scale-set.isK8sVersionGte129" .) }}
+        {{- if not (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
       - name: dind
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
         {{- end }}
