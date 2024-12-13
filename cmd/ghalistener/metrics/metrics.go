@@ -46,6 +46,7 @@ var (
 	lastJobExecutionDurationLabels = append(jobLabels, labelKeyJobResult)
 	startedJobsTotalLabels         = jobLabels
 	lastJobStartupDurationLabels   = jobLabels
+	jobQueueDurationLabels         = jobLabels
 )
 
 var (
@@ -141,6 +142,15 @@ var (
 
 	// Becasue jobs might not run with uniform frequency calculating rates from histogram might not be suitable for all jobs.
 	// With last durations we can use prometheus <aggr>_over_time functions to display the last duration of the job.
+	jobLastQueueDurationSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "job_last_queue_duration_seconds",
+			Help:      "Last duration spent in the queue by the job (in seconds).",
+		},
+		jobQueueDurationLabels,
+	)
+
 	jobLastStartupDurationSeconds = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
@@ -255,6 +265,7 @@ func NewExporter(config ExporterConfig) ServerPublisher {
 		idleRunners,
 		startedJobsTotal,
 		completedJobsTotal,
+		jobLastQueueDurationSeconds,
 		jobLastStartupDurationSeconds,
 		jobLastExecutionDurationSeconds,
 	)
@@ -317,6 +328,11 @@ func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 	if !msg.JobMessageBase.RunnerAssignTime.IsZero() && !msg.JobMessageBase.ScaleSetAssignTime.IsZero() {
 		startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
 		jobLastStartupDurationSeconds.With(l).Set(float64(startupDuration))
+	}
+
+	if !msg.JobMessageBase.QueueTime.IsZero() && !msg.JobMessageBase.RunnerAssignTime.IsZero() {
+		queueDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
+		jobLastQueueDurationSeconds.With(l).Set(float64(queueDuration))
 	}
 }
 
