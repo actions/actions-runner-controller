@@ -367,16 +367,20 @@ func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 	l := e.startedJobLabels(msg)
 	startedJobsTotal.With(l).Inc()
 
-	startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
-	jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
+	if !msg.JobMessageBase.RunnerAssignTime.IsZero() && !msg.JobMessageBase.ScaleSetAssignTime.IsZero() {
+		startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
+		jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
+	}
 }
 
 func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
 	l := e.completedJobLabels(msg)
 	completedJobsTotal.With(l).Inc()
 
-	executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
-	jobExecutionDurationSeconds.With(l).Observe(float64(executionDuration))
+	if !msg.JobMessageBase.FinishTime.IsZero() && !msg.JobMessageBase.RunnerAssignTime.IsZero() {
+		executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
+		jobExecutionDurationSeconds.With(l).Observe(float64(executionDuration))
+	}
 }
 
 func (m *exporter) PublishDesiredRunners(count int) {
