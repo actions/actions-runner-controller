@@ -49,12 +49,18 @@ This release includes major improvements to the runner provisioning duration. In
 
 Make sure to check [#3832](https://github.com/actions/actions-runner-controller/pull/3832) and [#3848](https://github.com/actions/actions-runner-controller/pull/3848) for details on how to fine-tune that behavior.
 
+### Major changes
+
 1. Add exponential backoff when generating runner reg tokens [#3724](https://github.com/actions/actions-runner-controller/pull/3724)
-2. Make EphemeralRunnerController MaxConcurrentReconciles configurable [#3832](https://github.com/actions/actions-runner-controller/pull/3832)
-3. Make EphemeralRunnerReconciler create runner pods earlier [#3831](https://github.com/actions/actions-runner-controller/pull/3831)
-4. Make k8s client rate limiter parameters configurable [#3848](https://github.com/actions/actions-runner-controller/pull/3848)
-5. Update docs with details for the dashboard visualizations [#3696](https://github.com/actions/actions-runner-controller/pull/3696)
-6. Bump github.com/bradleyfalzon/ghinstallation/v2 from `2.8.0` to `2.12.0` [#3837](https://github.com/actions/actions-runner-controller/pull/3837)
+1. Make EphemeralRunnerController MaxConcurrentReconciles configurable [#3832](https://github.com/actions/actions-runner-controller/pull/3832)
+1. Make EphemeralRunnerReconciler create runner pods earlier [#3831](https://github.com/actions/actions-runner-controller/pull/3831)
+1. Make k8s client rate limiter parameters configurable [#3848](https://github.com/actions/actions-runner-controller/pull/3848)
+
+### Minor changes
+
+1. Bump github.com/bradleyfalzon/ghinstallation/v2 from `2.8.0` to `2.12.0` [#3837](https://github.com/actions/actions-runner-controller/pull/3837)
+2. Bump golang.org/x/crypto from `0.22.0` to `0.31.0` [#3844](https://github.com/actions/actions-runner-controller/pull/3844)
+1. Update docs with details for the dashboard visualizations [#3696](https://github.com/actions/actions-runner-controller/pull/3696)
 
 ### v0.9.3
 
