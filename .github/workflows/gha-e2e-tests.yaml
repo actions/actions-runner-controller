@@ -103,8 +103,6 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-          sleep 60
-
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -196,8 +194,6 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-          sleep 60
-
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -287,8 +283,6 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
-
-          sleep 60
 
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
@@ -388,8 +382,6 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
-
-          sleep 60
 
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
@@ -492,8 +484,6 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-          sleep 60
-
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -588,8 +578,6 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
-
-          sleep 60
 
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
@@ -711,8 +699,6 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
-          sleep 60
-
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -802,8 +788,6 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
-
-          sleep 60
 
       - name: Trigger long running jobs and wait for runners to pick them up
         uses: ./.github/actions/execute-assert-arc-e2e
