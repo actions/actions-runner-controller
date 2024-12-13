@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -1139,15 +1140,30 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		}
 
 		retry++
-		if retry > 3 {
+		if retry > 5 {
 			return nil, fmt.Errorf("unable to register runner after 3 retries: %w", &GitHubAPIError{
 				StatusCode: resp.StatusCode,
 				RequestID:  resp.Header.Get(HeaderGitHubRequestID),
 				Err:        innerErr,
 			})
 		}
-		time.Sleep(time.Duration(500 * int(time.Millisecond) * (retry + 1)))
+		// Add exponential backoff + jitter to avoid thundering herd
+		// This will generate a backoff schedule:
+		// 1: 1s
+		// 2: 3s
+		// 3: 4s
+		// 4: 8s
+		// 5: 17s
+		baseDelay := 500 * time.Millisecond
+		jitter := time.Duration(rand.Intn(1000))
+		maxDelay := 20 * time.Second
+		delay := baseDelay*(1<<retry) + jitter
 
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+
+		time.Sleep(delay)
 	}
 
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
