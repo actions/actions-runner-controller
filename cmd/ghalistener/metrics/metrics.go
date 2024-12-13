@@ -47,10 +47,10 @@ var (
 		labelKeyEventName,
 	}
 
-	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
-	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	completedJobsTotalLabels       = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
+	lastJobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
+	startedJobsTotalLabels         = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	lastJobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
 )
 
 var (
@@ -144,74 +144,26 @@ var (
 		completedJobsTotalLabels,
 	)
 
-	jobStartupDurationSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	// Becasue jobs might not run with uniform frequency calculating rates from histogram might not be suitable for all jobs.
+	// With last durations we can use prometheus <aggr>_over_time functions to display the last duration of the job.
+	jobLastStartupDurationSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
-			Name:      "job_startup_duration_seconds",
-			Help:      "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
-			Buckets:   runtimeBuckets,
+			Name:      "job_last_startup_duration_seconds",
+			Help:      "The last duration spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
 		},
-		jobStartupDurationLabels,
+		lastJobStartupDurationLabels,
 	)
 
-	jobExecutionDurationSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	jobLastExecutionDurationSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetSubsystem,
-			Name:      "job_execution_duration_seconds",
-			Help:      "Time spent executing workflow jobs by the scale set (in seconds).",
-			Buckets:   runtimeBuckets,
+			Name:      "job_last_execution_duration_seconds",
+			Help:      "The last duration spent executing workflow jobs by the scale set (in seconds).",
 		},
-		jobExecutionDurationLabels,
+		lastJobExecutionDurationLabels,
 	)
 )
-
-var runtimeBuckets []float64 = []float64{
-	0.01,
-	0.05,
-	0.1,
-	0.5,
-	1,
-	2,
-	3,
-	4,
-	5,
-	6,
-	7,
-	8,
-	9,
-	10,
-	12,
-	15,
-	18,
-	20,
-	25,
-	30,
-	40,
-	50,
-	60,
-	70,
-	80,
-	90,
-	100,
-	110,
-	120,
-	150,
-	180,
-	210,
-	240,
-	300,
-	360,
-	420,
-	480,
-	540,
-	600,
-	900,
-	1200,
-	1800,
-	2400,
-	3000,
-	3600,
-}
 
 type baseLabels struct {
 	scaleSetName      string
@@ -309,8 +261,8 @@ func NewExporter(config ExporterConfig) ServerPublisher {
 		idleRunners,
 		startedJobsTotal,
 		completedJobsTotal,
-		jobStartupDurationSeconds,
-		jobExecutionDurationSeconds,
+		jobLastStartupDurationSeconds,
+		jobLastExecutionDurationSeconds,
 	)
 
 	mux := http.NewServeMux()
@@ -369,7 +321,7 @@ func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 
 	if !msg.JobMessageBase.RunnerAssignTime.IsZero() && !msg.JobMessageBase.ScaleSetAssignTime.IsZero() {
 		startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
-		jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
+		jobLastStartupDurationSeconds.With(l).Set(float64(startupDuration))
 	}
 }
 
@@ -379,7 +331,7 @@ func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
 
 	if !msg.JobMessageBase.FinishTime.IsZero() && !msg.JobMessageBase.RunnerAssignTime.IsZero() {
 		executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
-		jobExecutionDurationSeconds.With(l).Observe(float64(executionDuration))
+		jobLastExecutionDurationSeconds.With(l).Set(float64(executionDuration))
 	}
 }
 
