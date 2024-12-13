@@ -20,6 +20,7 @@ const (
 	labelKeyJobName                 = "job_name"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
+	labelKeyRunnerPodName           = "pod_name"
 )
 
 const githubScaleSetSubsystem = "gha"
@@ -47,6 +48,7 @@ var (
 	startedJobsTotalLabels         = jobLabels
 	lastJobStartupDurationLabels   = jobLabels
 	jobQueueDurationLabels         = jobLabels
+	runnerLabels                   = append(jobLabels, labelKeyRunnerPodName)
 )
 
 var (
@@ -168,6 +170,15 @@ var (
 		},
 		lastJobExecutionDurationLabels,
 	)
+
+	runnerJob = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetSubsystem,
+			Name:      "runner_job",
+			Help:      "Job information for the runner.",
+		},
+		runnerLabels,
+	)
 )
 
 type baseLabels struct {
@@ -209,6 +220,12 @@ func (b *baseLabels) completedJobLabels(msg *actions.JobCompleted) prometheus.La
 
 func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
 	l := b.jobLabels(&msg.JobMessageBase)
+	return l
+}
+
+func (b *baseLabels) runnerLabels(msg *actions.JobMessageBase, runnerName string) prometheus.Labels {
+	l := b.jobLabels(msg)
+	l[labelKeyRunnerPodName] = runnerName
 	return l
 }
 
@@ -268,6 +285,7 @@ func NewExporter(config ExporterConfig) ServerPublisher {
 		jobLastQueueDurationSeconds,
 		jobLastStartupDurationSeconds,
 		jobLastExecutionDurationSeconds,
+		runnerJob,
 	)
 
 	mux := http.NewServeMux()
@@ -334,6 +352,9 @@ func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 		queueDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.QueueTime.Unix()
 		jobLastQueueDurationSeconds.With(l).Set(float64(queueDuration))
 	}
+
+	rl := e.runnerLabels(&msg.JobMessageBase, msg.RunnerName)
+	runnerJob.With(rl).Set(1)
 }
 
 func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
@@ -344,6 +365,9 @@ func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
 		executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
 		jobLastExecutionDurationSeconds.With(l).Set(float64(executionDuration))
 	}
+
+	rl := e.runnerLabels(&msg.JobMessageBase, msg.RunnerName)
+	runnerJob.Delete(rl)
 }
 
 func (m *exporter) PublishDesiredRunners(count int) {
