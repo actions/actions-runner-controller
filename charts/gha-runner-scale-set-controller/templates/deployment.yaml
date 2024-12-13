@@ -85,6 +85,12 @@ spec:
         {{- range .Values.flags.excludeLabelPropagationPrefixes }}
         - "--exclude-label-propagation-prefix={{ . }}"
         {{- end }}
+        {{- with .Values.flags.k8sClientRateLimiterQPS }}
+        - "--k8s-client-rate-limiter-qps={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.k8sClientRateLimiterBurst }}
+        - "--k8s-client-rate-limiter-burst={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         {{- with .Values.metrics }}
