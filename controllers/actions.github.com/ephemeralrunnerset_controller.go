@@ -177,7 +177,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		metrics.SetEphemeralRunnerCountsByStatus(
 			metrics.CommonLabels{
-				Name:         ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
+				Name:         ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName],
 				Namespace:    ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
 				Repository:   parsedURL.Repository,
 				Organization: parsedURL.Organization,

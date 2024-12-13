@@ -161,26 +161,29 @@ var (
 )
 
 type baseLabels struct {
-	scaleSetName      string
-	scaleSetNamespace string
-	enterprise        string
-	organization      string
-	repository        string
+	scaleSetName       string
+	scaleSetNamespace  string
+	runnerScaleSetName string
+	enterprise         string
+	organization       string
+	repository         string
 }
 
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
-		labelKeyEnterprise:   b.enterprise,
-		labelKeyOrganization: jobBase.OwnerName,
-		labelKeyRepository:   jobBase.RepositoryName,
-		labelKeyJobName:      jobBase.JobDisplayName,
-		labelKeyEventName:    jobBase.EventName,
+		labelKeyRunnerScaleSetName:      b.runnerScaleSetName,
+		labelKeyRunnerScaleSetNamespace: b.scaleSetNamespace,
+		labelKeyEnterprise:              b.enterprise,
+		labelKeyOrganization:            jobBase.OwnerName,
+		labelKeyRepository:              jobBase.RepositoryName,
+		labelKeyJobName:                 jobBase.JobDisplayName,
+		labelKeyEventName:               jobBase.EventName,
 	}
 }
 
 func (b *baseLabels) scaleSetLabels() prometheus.Labels {
 	return prometheus.Labels{
-		labelKeyRunnerScaleSetName:      b.scaleSetName,
+		labelKeyRunnerScaleSetName:      b.runnerScaleSetName,
 		labelKeyRunnerScaleSetNamespace: b.scaleSetNamespace,
 		labelKeyEnterprise:              b.enterprise,
 		labelKeyOrganization:            b.organization,
@@ -228,14 +231,15 @@ type exporter struct {
 }
 
 type ExporterConfig struct {
-	ScaleSetName      string
-	ScaleSetNamespace string
-	Enterprise        string
-	Organization      string
-	Repository        string
-	ServerAddr        string
-	ServerEndpoint    string
-	Logger            logr.Logger
+	ScaleSetName       string
+	ScaleSetNamespace  string
+	RunnerScaleSetName string
+	Enterprise         string
+	Organization       string
+	Repository         string
+	ServerAddr         string
+	ServerEndpoint     string
+	Logger             logr.Logger
 }
 
 func NewExporter(config ExporterConfig) ServerPublisher {
@@ -264,11 +268,12 @@ func NewExporter(config ExporterConfig) ServerPublisher {
 	return &exporter{
 		logger: config.Logger.WithName("metrics"),
 		baseLabels: baseLabels{
-			scaleSetName:      config.ScaleSetName,
-			scaleSetNamespace: config.ScaleSetNamespace,
-			enterprise:        config.Enterprise,
-			organization:      config.Organization,
-			repository:        config.Repository,
+			scaleSetName:       config.ScaleSetName,
+			scaleSetNamespace:  config.ScaleSetNamespace,
+			runnerScaleSetName: config.RunnerScaleSetName,
+			enterprise:         config.Enterprise,
+			organization:       config.Organization,
+			repository:         config.Repository,
 		},
 		srv: &http.Server{
 			Addr:    config.ServerAddr,

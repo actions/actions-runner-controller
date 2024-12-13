@@ -153,7 +153,7 @@ func (lm *listenerMetricsServerConfig) containerPort() (corev1.ContainerPort, er
 	}, nil
 }
 
-func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
+func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, cert string, runnerScaleSetName string) (*corev1.Secret, error) {
 	var (
 		metricsAddr     = ""
 		metricsEndpoint = ""
@@ -182,22 +182,23 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	}
 
 	config := listenerconfig.Config{
-		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigUrl,
-		AppID:                       appID,
-		AppInstallationID:           appInstallationID,
-		AppPrivateKey:               string(secret.Data["github_app_private_key"]),
-		Token:                       string(secret.Data["github_token"]),
-		EphemeralRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-		EphemeralRunnerSetName:      autoscalingListener.Spec.EphemeralRunnerSetName,
-		MaxRunners:                  autoscalingListener.Spec.MaxRunners,
-		MinRunners:                  autoscalingListener.Spec.MinRunners,
-		RunnerScaleSetId:            autoscalingListener.Spec.RunnerScaleSetId,
-		RunnerScaleSetName:          autoscalingListener.Spec.AutoscalingRunnerSetName,
-		ServerRootCA:                cert,
-		LogLevel:                    scaleSetListenerLogLevel,
-		LogFormat:                   scaleSetListenerLogFormat,
-		MetricsAddr:                 metricsAddr,
-		MetricsEndpoint:             metricsEndpoint,
+		ConfigureUrl:                  autoscalingListener.Spec.GitHubConfigUrl,
+		AppID:                         appID,
+		AppInstallationID:             appInstallationID,
+		AppPrivateKey:                 string(secret.Data["github_app_private_key"]),
+		Token:                         string(secret.Data["github_token"]),
+		EphemeralRunnerSetNamespace:   autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+		EphemeralRunnerSetName:        autoscalingListener.Spec.EphemeralRunnerSetName,
+		MaxRunners:                    autoscalingListener.Spec.MaxRunners,
+		MinRunners:                    autoscalingListener.Spec.MinRunners,
+		RunnerScaleSetId:              autoscalingListener.Spec.RunnerScaleSetId,
+		AutoscalingRunnerScaleSetName: autoscalingListener.Spec.AutoscalingRunnerSetName,
+		RunnerScaleSetName:            runnerScaleSetName,
+		ServerRootCA:                  cert,
+		LogLevel:                      scaleSetListenerLogLevel,
+		LogFormat:                     scaleSetListenerLogFormat,
+		MetricsAddr:                   metricsAddr,
+		MetricsEndpoint:               metricsEndpoint,
 	}
 
 	var buf bytes.Buffer
