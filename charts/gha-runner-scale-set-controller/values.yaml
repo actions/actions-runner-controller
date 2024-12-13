@@ -135,3 +135,7 @@ flags:
   ## Labels that match prefix specified in the list are excluded from propagation.
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
+
+  ## Defines the K8s client rate limiter parameters.
+  # k8sClientRateLimiterQPS: 20
+  # k8sClientRateLimiterBurst: 30
