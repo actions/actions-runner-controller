@@ -43,14 +43,13 @@ var (
 		labelKeyOrganization,
 		labelKeyEnterprise,
 		labelKeyJobName,
-		labelKeyJobWorkflowRef,
 		labelKeyEventName,
 	}
 
-	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult, labelKeyRunnerID, labelKeyRunnerName)
-	startedJobsTotalLabels     = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
-	jobStartupDurationLabels   = append(jobLabels, labelKeyRunnerID, labelKeyRunnerName)
+	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult, labelKeyJobWorkflowRef, labelKeyRunnerID, labelKeyRunnerName)
+	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult)
+	startedJobsTotalLabels     = append(jobLabels, labelKeyJobWorkflowRef, labelKeyRunnerID, labelKeyRunnerName)
+	jobStartupDurationLabels   = append(jobLabels)
 )
 
 var (
