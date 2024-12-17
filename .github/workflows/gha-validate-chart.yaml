@@ -8,12 +8,14 @@ on:
       - 'charts/**'
       - '.github/workflows/gha-validate-chart.yaml'
       - '!charts/actions-runner-controller/**'
+      - '!charts/actions-runner-controller-crds/**'
       - '!**.md'
   push:
     paths:
       - 'charts/**'
       - '.github/workflows/gha-validate-chart.yaml'
       - '!charts/actions-runner-controller/**'
+      - '!charts/actions-runner-controller-crds/**'
       - '!**.md'
   workflow_dispatch:
 env:
