@@ -151,8 +151,8 @@ func main() {
 	flag.BoolVar(&autoScalingRunnerSetOnly, "auto-scaling-runner-set-only", false, "Make controller only reconcile AutoRunnerScaleSet object.")
 	flag.StringVar(&updateStrategy, "update-strategy", "immediate", `Resources reconciliation strategy on upgrade with running/pending jobs. Valid values are: "immediate", "eventual". Defaults to "immediate".`)
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
-	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
-	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
+	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 5, "The QPS value of the K8s client rate limiter.")
+	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 10, "The burst value of the K8s client rate limiter.")
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
