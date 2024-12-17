@@ -4,6 +4,9 @@
 
 labels: {}
 
+crds:
+  annotations: {}
+
 replicaCount: 1
 
 webhookPort: 9443
