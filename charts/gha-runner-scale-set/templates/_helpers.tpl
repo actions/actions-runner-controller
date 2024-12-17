@@ -20,8 +20,12 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 If release name contains chart name it will be used as a full name.
 */}}
 {{- define "gha-runner-scale-set.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride -}}
+{{- else -}}
 {{- $name := default (include "gha-base-name" .) }}
 {{- printf "%s-%s" (include "gha-runner-scale-set.scale-set-name" .) $name | trunc 63 | trimSuffix "-" }}
+{{- end }}
 {{- end }}
 
 {{/*
