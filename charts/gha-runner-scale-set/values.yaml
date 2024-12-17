@@ -5,14 +5,16 @@ githubConfigUrl: ""
 ## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
 ## You can choose to use GitHub App or a PAT token
 githubConfigSecret:
-  ### GitHub Apps Configuration
-  ## NOTE: IDs MUST be strings, use quotes
-  #github_app_id: ""
-  #github_app_installation_id: ""
-  #github_app_private_key: |
 
-  ### GitHub PAT Configuration
-  github_token: ""
+### GitHub Apps Configuration
+## NOTE: IDs MUST be strings, use quotes
+# github_app_id: ""
+# github_app_installation_id: ""
+# github_app_private_key: |
+
+### GitHub PAT Configuration
+github_token: ""
+
 ## If you have a pre-define Kubernetes secret in the same namespace the gha-runner-scale-set is going to deploy,
 ## you can also reference it via `githubConfigSecret: pre-defined-secret`.
 ## You need to make sure your predefined secret has all the required secret data set properly.
