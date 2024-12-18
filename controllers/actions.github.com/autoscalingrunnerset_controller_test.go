@@ -585,6 +585,101 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		})
 	})
 
+	Context("When a scheduled override is active in an AutoscalingRunnerSet", func() {
+		It("It should override min runners in the AutoscalingListener", func() {
+			// Wait till the listener is created
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+			Expect(len(runnerSetList.Items)).To(Equal(1), "There should be 1 EphemeralRunnerSet")
+			runnerSet := runnerSetList.Items[0]
+
+			minOverride := 0
+
+			// Patch the AutoScalingRunnerSet with a scheduled override
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.ScheduledOverrides = []v1alpha1.ScheduledOverride{
+				{
+					StartTime:  metav1.Now(),
+					EndTime:    metav1.NewTime(metav1.Now().Add(1 * time.Hour)),
+					MinRunners: &minOverride,
+				},
+			}
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+			autoscalingRunnerSet = patched.DeepCopy()
+
+			// We should not re-create a new EphemeralRunnerSet
+			Consistently(
+				func() (string, error) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					if err != nil {
+						return "", err
+					}
+
+					if len(runnerSetList.Items) != 1 {
+						return "", fmt.Errorf("We should have only 1 EphemeralRunnerSet, but got %v", len(runnerSetList.Items))
+					}
+
+					return string(runnerSetList.Items[0].UID), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
+
+			// We should only re-create a new listener
+			Eventually(
+				func() (string, error) {
+					listener := new(v1alpha1.AutoscalingListener)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+					if err != nil {
+						return "", err
+					}
+
+					return string(listener.UID), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
+
+			// Check if the listener has the min runners override
+			Expect(listener.Spec.MinRunners).To(Equal(minOverride), "Listener should have the min runners override")
+
+			desiredScheduledOverridesSummary := fmt.Sprintf("min=%d status=active endTime=%s", *autoscalingRunnerSet.Spec.ScheduledOverrides[0].MinRunners, autoscalingRunnerSet.Spec.ScheduledOverrides[0].EndTime.Time)
+
+			desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
+				CurrentRunners:            0,
+				State:                     "",
+				PendingEphemeralRunners:   0,
+				RunningEphemeralRunners:   0,
+				FailedEphemeralRunners:    0,
+				ScheduledOverridesSummary: &desiredScheduledOverridesSummary,
+				DesiredMinRunners:         0,
+			}
+
+			Eventually(
+				func() (v1alpha1.AutoscalingRunnerSetStatus, error) {
+					updated := new(v1alpha1.AutoscalingRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+					if err != nil {
+						return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
+					}
+					return updated.Status, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+		})
+	})
+
 	It("Should update Status on EphemeralRunnerSet status Update", func() {
 		ars := new(v1alpha1.AutoscalingRunnerSet)
 		Eventually(
