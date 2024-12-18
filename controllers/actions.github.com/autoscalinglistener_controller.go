@@ -468,7 +468,7 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 
 		logger.Info("Creating listener config secret")
 
-		podConfig, err := r.ResourceBuilder.newScaleSetListenerConfig(autoscalingListener, secret, metricsConfig, cert)
+		podConfig, err := r.ResourceBuilder.newScaleSetListenerConfig(autoscalingListener, secret, metricsConfig, cert, autoscalingRunnerSet.Spec.RunnerScaleSetName)
 		if err != nil {
 			logger.Error(err, "Failed to build listener config secret")
 			return ctrl.Result{}, err
