@@ -101,6 +101,22 @@ args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "dind" }}
+    {{- if hasKey $container "resources"  }}
+resources:
+      {{ $container.resources | toYaml | nindent 2 }}
+    {{- else }}
+resources:
+  limits:
+    cpu: 2
+    memory: "8Gi"
+  requests:
+    cpu: 2
+    memory: "8Gi"
+    {{- end }}
+  {{- end }}
+{{- end }}
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
