@@ -65,7 +65,7 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
-        {{- with .Values.runnerMaxConcurrentReconciles }}
+        {{- with .Values.flags.runnerMaxConcurrentReconciles }}
         - "--runner-max-concurrent-reconciles={{ . }}"
         {{- end }}
         {{- with .Values.flags.updateStrategy }}
