@@ -141,7 +141,7 @@ spec:
       {{- else if eq $containerMode.type "kubernetes" }}
       - name: runner
         {{- include "gha-runner-scale-set.kubernetes-mode-runner-container" . | nindent 8 }}
-      {{- include "gha-runner-scale-set.non-runner-containers" . | nindent 6 }}
+      {{- include "gha-runner-scale-set.non-runner-non-dind-containers" . | nindent 6 }}
       {{- else }}
       {{- include "gha-runner-scale-set.default-mode-runner-containers" . | nindent 6 }}
       {{- end }}
