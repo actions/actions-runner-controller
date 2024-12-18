@@ -43,6 +43,10 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.10.1
+
+1. Fix helm chart bug related to `runnerMaxConcurrentReconciles` [#3858](https://github.com/actions/actions-runner-controller/pull/3858)
+
 ### 0.10.0
 
 This release includes major improvements to the runner provisioning duration. In short, you should see less latency between queueing a workflow run and having a runner available to execute the job.
@@ -59,7 +63,7 @@ Make sure to check [#3832](https://github.com/actions/actions-runner-controller/
 ### Minor changes
 
 1. Bump github.com/bradleyfalzon/ghinstallation/v2 from `2.8.0` to `2.12.0` [#3837](https://github.com/actions/actions-runner-controller/pull/3837)
-2. Bump golang.org/x/crypto from `0.22.0` to `0.31.0` [#3844](https://github.com/actions/actions-runner-controller/pull/3844)
+1. Bump golang.org/x/crypto from `0.22.0` to `0.31.0` [#3844](https://github.com/actions/actions-runner-controller/pull/3844)
 1. Update docs with details for the dashboard visualizations [#3696](https://github.com/actions/actions-runner-controller/pull/3696)
 
 ### v0.9.3
