@@ -11,7 +11,11 @@ gha-rs
 {{- end }}
 
 {{- define "gha-runner-scale-set.scale-set-name" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride -}}
+{{- else -}}
 {{ .Values.runnerScaleSetName | default .Release.Name }}
+{{- end }}
 {{- end }}
 
 {{/*
