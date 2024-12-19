@@ -81,11 +81,23 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 
 	effectiveMinRunners := 0
 	effectiveMaxRunners := math.MaxInt32
+	// TODO:
+	scaleUpFactor := "1"
 	if autoscalingRunnerSet.Spec.MaxRunners != nil {
 		effectiveMaxRunners = *autoscalingRunnerSet.Spec.MaxRunners
 	}
 	if autoscalingRunnerSet.Spec.MinRunners != nil {
 		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
+	}
+	if autoscalingRunnerSet.Spec.ScaleUpFactor != "" {
+		suf, err := strconv.ParseFloat(autoscalingRunnerSet.Spec.ScaleUpFactor, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Validation autoscaling spec.scaleUpFactor cannot be parsed into a float64: %v", err)
+		}
+		// TODO: 0 or 1
+		if suf > 0 {
+			scaleUpFactor = autoscalingRunnerSet.Spec.ScaleUpFactor
+		}
 	}
 
 	labels := b.mergeLabels(autoscalingRunnerSet.Labels, map[string]string{
@@ -121,6 +133,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			EphemeralRunnerSetName:        ephemeralRunnerSet.Name,
 			MinRunners:                    effectiveMinRunners,
 			MaxRunners:                    effectiveMaxRunners,
+			ScaleUpFactor:                 scaleUpFactor,
 			Image:                         image,
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
@@ -191,6 +204,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		EphemeralRunnerSetName:      autoscalingListener.Spec.EphemeralRunnerSetName,
 		MaxRunners:                  autoscalingListener.Spec.MaxRunners,
 		MinRunners:                  autoscalingListener.Spec.MinRunners,
+		ScaleUpFactor:               autoscalingListener.Spec.ScaleUpFactor,
 		RunnerScaleSetId:            autoscalingListener.Spec.RunnerScaleSetId,
 		RunnerScaleSetName:          autoscalingListener.Spec.AutoscalingRunnerSetName,
 		ServerRootCA:                cert,
