@@ -106,6 +106,11 @@ flags:
   ## Defaults to watch all namespaces when unset.
   # watchSingleNamespace: ""
 
+  ## The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
+  # Increase this value to improve the throughput of the controller.
+  # It may also increase the load on the API server and the external service (e.g. GitHub API).
+  runnerMaxConcurrentReconciles: 2
+
   ## Defines how the controller should handle upgrades while having running jobs.
   ##
   ## The strategies available are:
@@ -130,3 +135,7 @@ flags:
   ## Labels that match prefix specified in the list are excluded from propagation.
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
+
+  ## Defines the K8s client rate limiter parameters.
+  # k8sClientRateLimiterQPS: 20
+  # k8sClientRateLimiterBurst: 30
