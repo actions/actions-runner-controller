@@ -65,6 +65,9 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
+        {{- with .Values.flags.runnerMaxConcurrentReconciles }}
+        - "--runner-max-concurrent-reconciles={{ . }}"
+        {{- end }}
         {{- with .Values.flags.updateStrategy }}
         - "--update-strategy={{ . }}"
         {{- end }}
@@ -78,6 +81,15 @@ spec:
         - "--listener-metrics-addr=0"
         - "--listener-metrics-endpoint="
         - "--metrics-addr=0"
+        {{- end }}
+        {{- range .Values.flags.excludeLabelPropagationPrefixes }}
+        - "--exclude-label-propagation-prefix={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.k8sClientRateLimiterQPS }}
+        - "--k8s-client-rate-limiter-qps={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.k8sClientRateLimiterBurst }}
+        - "--k8s-client-rate-limiter-burst={{ . }}"
         {{- end }}
         command:
         - "/manager"

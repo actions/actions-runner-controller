@@ -47,7 +47,7 @@ runs:
         -d '{"ref": "main", "inputs": { "arc_name": "${{inputs.arc-name}}" } }'
 
     - name: Fetch workflow run & job ids
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       id: query_workflow
       with:
         script: |
@@ -128,7 +128,7 @@ runs:
 
     - name: Wait for workflow to start running
       if: inputs.wait-to-running == 'true' && inputs.wait-to-finish == 'false'
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           function sleep(ms) {
@@ -156,7 +156,7 @@ runs:
 
     - name: Wait for workflow to finish successfully
       if: inputs.wait-to-finish == 'true'
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           // Wait 5 minutes and make sure the workflow run we triggered completed with result 'success'
@@ -188,6 +188,19 @@ runs:
           }
           core.setFailed(`The triggered workflow run didn't finish properly using ${{inputs.arc-name}}`)
 
+    - name: Gather listener logs
+      shell: bash
+      if: always()
+      run: |
+        LISTENER_POD="$(kubectl get autoscalinglisteners.actions.github.com -n arc-systems -o jsonpath='{.items[*].metadata.name}')"
+        kubectl logs $LISTENER_POD -n ${{inputs.arc-controller-namespace}}
+    
+    - name: Gather coredns logs
+      shell: bash
+      if: always()
+      run: |
+        kubectl logs deployments/coredns -n kube-system 
+
     - name: cleanup
       if: inputs.wait-to-finish == 'true'
       shell: bash
@@ -195,7 +208,7 @@ runs:
         helm uninstall ${{ inputs.arc-name }} --namespace ${{inputs.arc-namespace}} --debug
         kubectl wait --timeout=30s --for=delete AutoScalingRunnerSet -n ${{inputs.arc-namespace}} -l app.kubernetes.io/instance=${{ inputs.arc-name }}
 
-    - name: Gather logs and cleanup
+    - name: Gather controller logs
       shell: bash
       if: always()
       run: |

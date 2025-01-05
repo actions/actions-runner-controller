@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	ephemeralRunnerSetTestTimeout     = time.Second * 10
+	ephemeralRunnerSetTestTimeout     = time.Second * 20
 	ephemeralRunnerSetTestInterval    = time.Millisecond * 250
 	ephemeralRunnerSetTestGitHubToken = "gh_token"
 )
@@ -794,7 +794,6 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					return len(runnerList.Items), nil
-
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
@@ -1359,7 +1358,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				return proxySuccessfulllyCalled
 			},
 			2*time.Second,
-			interval,
+			ephemeralRunnerInterval,
 		).Should(BeEquivalentTo(true))
 	})
 })

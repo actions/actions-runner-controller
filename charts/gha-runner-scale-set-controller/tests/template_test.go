@@ -1035,3 +1035,41 @@ func TestControllerDeployment_MetricsPorts(t *testing.T) {
 		assert.Equal(t, value.frequency, 1, fmt.Sprintf("frequency of %q is not 1", key))
 	}
 }
+
+func TestDeployment_excludeLabelPropagationPrefixes(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	chartContent, err := os.ReadFile(filepath.Join(helmChartPath, "Chart.yaml"))
+	require.NoError(t, err)
+
+	chart := new(Chart)
+	err = yaml.Unmarshal(chartContent, chart)
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"flags.excludeLabelPropagationPrefixes[0]": "prefix.com/",
+			"flags.excludeLabelPropagationPrefixes[1]": "complete.io/label",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+	var deployment appsv1.Deployment
+	helm.UnmarshalK8SYaml(t, output, &deployment)
+
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 1, "Expected one container")
+	container := deployment.Spec.Template.Spec.Containers[0]
+
+	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=prefix.com/")
+	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=complete.io/label")
+}

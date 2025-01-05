@@ -355,7 +355,7 @@ nodes:
     image: %s
 `, k.Name, image, image))
 
-		if err := os.WriteFile(f.Name(), kindConfig, 0644); err != nil {
+		if err := os.WriteFile(f.Name(), kindConfig, 0o644); err != nil {
 			return err
 		}
 
@@ -385,7 +385,7 @@ func (k *Kind) LoadImages(ctx context.Context, images []ContainerImage) error {
 		}
 
 		tmpDir := filepath.Join(wd, ".testing", k.Name)
-		if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 			return err
 		}
 		defer func() {

@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -72,10 +72,10 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
         with:
           # Pinning v0.9.1 for Buildx and BuildKit v0.10.6
           # BuildKit v0.11 which has a bug causing intermittent
@@ -84,14 +84,14 @@ jobs:
           driver-opts: image=moby/buildkit:v0.10.6
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push controller image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -140,8 +140,8 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
-        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -188,8 +188,8 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
-        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
 
