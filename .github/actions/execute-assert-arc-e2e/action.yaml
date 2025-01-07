@@ -192,8 +192,11 @@ runs:
       shell: bash
       if: always()
       run: |
-        LISTENER_POD="$(kubectl get autoscalinglisteners.actions.github.com -n ${{inputs.arc-controller-namespace}} -o jsonpath='{.items[*].metadata.name}')"
-        kubectl logs $LISTENER_POD -n ${{inputs.arc-controller-namespace}}
+        for i in $(kubectl get autoscalinglisteners.actions.github.com -n ${{inputs.arc-controller-namespace}} -o jsonpath='{.items[*].metadata.name}'); do
+          echo "===== Logs for pod: $i ====="
+          kubectl logs $i --prefix -n ${{inputs.arc-controller-namespace}}
+          echo ""
+        done
     
     - name: Gather coredns logs
       shell: bash
