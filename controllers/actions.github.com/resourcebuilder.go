@@ -72,6 +72,7 @@ func SetListenerEntrypoint(entrypoint string) {
 
 type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
+	ActionsClientGetter
 }
 
 // boolPtr returns a pointer to a bool value

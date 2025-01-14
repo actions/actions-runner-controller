@@ -32,6 +32,8 @@ import (
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault"
+	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -274,8 +276,18 @@ func main() {
 			log.WithName("actions-clients"),
 		)
 
+		actionsClientGetter, err := newActionsClientGetter(
+			mgr.GetClient(),
+			actionsMultiClient,
+		)
+		if err != nil {
+			log.Error(err, "unable to create actions client resolver")
+			os.Exit(1)
+		}
+
 		rb := actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
+			ActionsClientGetter:             actionsClientGetter,
 		}
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
@@ -308,7 +320,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {
@@ -491,4 +502,33 @@ func (s *commaSeparatedStringSlice) Set(value string) error {
 		*s = append(*s, v)
 	}
 	return nil
+}
+
+func newActionsClientGetter(k8sClient client.Client, multiClient actions.MultiClient) (actionsgithubcom.ActionsClientGetter, error) {
+	vaultType := os.Getenv("CONTROLLER_MANAGER_VAULT_TYPE")
+	if vaultType == "" {
+		return &actionsgithubcom.ActionsClientSecretResolver{
+			Client:      k8sClient,
+			MultiClient: multiClient,
+		}, nil
+	}
+
+	key := os.Getenv("CONTROLLER_MANAGER_VAULT_API_KEY")
+	var vault vault.Vault
+	switch vaultType {
+	case "azure":
+		v, err := azurekeyvault.New(azurekeyvault.Config{JWT: key})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Azure Key Vault client: %w", err)
+		}
+
+		vault = v
+	default:
+		return nil, fmt.Errorf("unsupported vault type: %q", vaultType)
+	}
+
+	return &actionsgithubcom.ActionsClientVaultResolver{
+		Vault:       vault,
+		MultiClient: multiClient,
+	}, nil
 }
