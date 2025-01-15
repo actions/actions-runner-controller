@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	listenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1110,7 +1110,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 
 					g.Expect(config.Data["config.json"]).ToNot(BeEmpty(), "listener configuration file should not be empty")
 
-					var listenerConfig listenerconfig.Config
+					var listenerConfig ghalistenerconfig.Config
 					err = json.Unmarshal(config.Data["config.json"], &listenerConfig)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
 

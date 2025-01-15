@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -9,20 +10,20 @@ import (
 	"os"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault"
 	"github.com/go-logr/logr"
 	"golang.org/x/net/http/httpproxy"
 )
 
 type Config struct {
-	ConfigureUrl string `json:"configure_url"`
-	// AppID can be an ID of the app or the client ID
-	AppID                       string                  `json:"app_id"`
-	AppInstallationID           int64                   `json:"app_installation_id"`
-	AppPrivateKey               string                  `json:"app_private_key"`
-	Token                       string                  `json:"token"`
+	ConfigureUrl   string `json:"configure_url"`
+	VaultType      string `json:"vault_type"`
+	VaultLookupKey string `json:"vault_lookup_key"`
+	appconfig.AppConfig
 	EphemeralRunnerSetNamespace string                  `json:"ephemeral_runner_set_namespace"`
 	EphemeralRunnerSetName      string                  `json:"ephemeral_runner_set_name"`
 	MaxRunners                  int                     `json:"max_runners"`
@@ -37,23 +38,57 @@ type Config struct {
 	Metrics                     *v1alpha1.MetricsConfig `json:"metrics"`
 }
 
-func Read(path string) (Config, error) {
-	f, err := os.Open(path)
+func Read(ctx context.Context, configPath string) (*Config, error) {
+	f, err := os.Open(configPath)
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 	defer f.Close()
 
 	var config Config
 	if err := json.NewDecoder(f).Decode(&config); err != nil {
-		return Config{}, fmt.Errorf("failed to decode config: %w", err)
+		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
+
+	if config.VaultType == "" {
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("failed to validate configuration: %v", err)
+		}
+
+		return &config, nil
+	}
+
+	if config.VaultLookupKey == "" {
+		panic(fmt.Errorf("vault type set to %q, but lookup key is empty", config.VaultType))
+	}
+
+	vaults, err := vault.InitAll("LISTENER_")
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize vaults: %v", err)
+	}
+
+	vault, ok := vaults[config.VaultType]
+	if !ok {
+		return nil, fmt.Errorf("vault %q is not initialized", config.VaultType)
+	}
+
+	appConfigRaw, err := vault.GetSecret(ctx, config.VaultLookupKey)
+	if err != nil {
+		return nil, err
+	}
+
+	appConfig, err := appconfig.FromString(appConfigRaw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read app config from string: %v", err)
+	}
+
+	config.AppConfig = *appConfig
 
 	if err := config.Validate(); err != nil {
-		return Config{}, fmt.Errorf("failed to validate config: %w", err)
+		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
-	return config, nil
+	return &config, ctx.Err()
 }
 
 // Validate checks the configuration for errors.

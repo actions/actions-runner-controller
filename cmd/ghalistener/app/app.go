@@ -17,7 +17,7 @@ import (
 // App is responsible for initializing required components and running the app.
 type App struct {
 	// configured fields
-	config config.Config
+	config *config.Config
 	logger logr.Logger
 
 	// initialized fields
@@ -38,8 +38,12 @@ type Worker interface {
 }
 
 func New(config config.Config) (*App, error) {
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate config: %w", err)
+	}
+
 	app := &App{
-		config: config,
+		config: &config,
 	}
 
 	ghConfig, err := actions.ParseGitHubConfigFromURL(config.ConfigureUrl)

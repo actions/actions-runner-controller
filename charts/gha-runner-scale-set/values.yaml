@@ -6,7 +6,7 @@ githubConfigUrl: ""
 ## You can choose to supply:
 ##   A) a PAT token,
 ##   B) a GitHub App, or
-##   C) a pre-defined Kubernetes secret.
+##   C) a pre-defined secret.
 ## The syntax for each of these variations is documented below.
 ## (Variation A) When using a PAT token, the syntax is as follows:
 githubConfigSecret:
@@ -28,8 +28,11 @@ githubConfigSecret:
 #      .
 #      private key line N
 #
-## (Variation C) When using a pre-defined Kubernetes secret in the same namespace that the gha-runner-scale-set is going to deploy,
-## the syntax is as follows:
+## (Variation C) When using a pre-defined secret.
+## The secret can be pulled either directly from Kubernetes, or from the vault, depending on configuration.
+## Kubernetes secret in the same namespace that the gha-runner-scale-set is going to deploy.
+## On the other hand, if the vault is configured, secret name will be used to fetch the app configuration.
+## The syntax is as follows:
 # githubConfigSecret: pre-defined-secret
 ## Notes on using pre-defined Kubernetes secrets:
 ##   You need to make sure your predefined secret has all the required secret data set properly.

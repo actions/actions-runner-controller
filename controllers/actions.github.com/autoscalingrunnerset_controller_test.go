@@ -71,9 +71,9 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientGetter: &ActionsClientSecretResolver{
-					Client:      k8sClient,
-					MultiClient: fake.NewMultiClient(),
+				ActionsClientPool: &ActionsClientPool{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
 				},
 			},
 		}
@@ -711,9 +711,9 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientGetter: &ActionsClientSecretResolver{
-						Client:      k8sClient,
-						MultiClient: multiClient,
+					ActionsClientPool: &ActionsClientPool{
+						k8sClient:   k8sClient,
+						multiClient: multiClient,
 					},
 				},
 			}
@@ -831,9 +831,9 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientGetter: &ActionsClientSecretResolver{
-						Client:      k8sClient,
-						MultiClient: fake.NewMultiClient(),
+					ActionsClientPool: &ActionsClientPool{
+						k8sClient:   k8sClient,
+						multiClient: fake.NewMultiClient(),
 					},
 				},
 			}
@@ -962,9 +962,9 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientGetter: &ActionsClientSecretResolver{
-						Client:      k8sClient,
-						MultiClient: multiClient,
+					ActionsClientPool: &ActionsClientPool{
+						k8sClient:   k8sClient,
+						multiClient: multiClient,
 					},
 				},
 			}
@@ -1150,9 +1150,9 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientGetter: &ActionsClientSecretResolver{
-						Client:      k8sClient,
-						MultiClient: fake.NewMultiClient(),
+					ActionsClientPool: &ActionsClientPool{
+						k8sClient:   k8sClient,
+						multiClient: fake.NewMultiClient(),
 					},
 				},
 			}
@@ -1163,9 +1163,9 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 		})
 
 		It("should be able to make requests to a server using root CAs", func() {
-			controller.ResourceBuilder.ActionsClientGetter = &ActionsClientSecretResolver{
-				Client:      k8sClient,
-				MultiClient: actions.NewMultiClient(logr.Discard()),
+			controller.ActionsClientPool = &ActionsClientPool{
+				k8sClient:   k8sClient,
+				multiClient: actions.NewMultiClient(logr.Discard()),
 			}
 
 			certsFolder := filepath.Join(
@@ -1392,9 +1392,9 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientGetter: &ActionsClientSecretResolver{
-					Client:      k8sClient,
-					MultiClient: fake.NewMultiClient(),
+				ActionsClientPool: &ActionsClientPool{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
 				},
 			},
 		}
@@ -1555,9 +1555,9 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientGetter: &ActionsClientSecretResolver{
-					Client:      k8sClient,
-					MultiClient: fake.NewMultiClient(),
+				ActionsClientPool: &ActionsClientPool{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
 				},
 			},
 		}
@@ -1768,9 +1768,9 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientGetter: &ActionsClientSecretResolver{
-					Client:      k8sClient,
-					MultiClient: fake.NewMultiClient(),
+				ActionsClientPool: &ActionsClientPool{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
 				},
 			},
 		}

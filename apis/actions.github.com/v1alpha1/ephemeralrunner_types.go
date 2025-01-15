@@ -67,6 +67,22 @@ func (er *EphemeralRunner) HasContainerHookConfigured() bool {
 	return false
 }
 
+func (er *EphemeralRunner) GitHubConfigSecret() string {
+	return er.Spec.GitHubConfigSecret
+}
+
+func (er *EphemeralRunner) GitHubConfigUrl() string {
+	return er.Spec.GitHubConfigUrl
+}
+
+func (er *EphemeralRunner) Proxy() *ProxyConfig {
+	return er.Spec.Proxy
+}
+
+func (er *EphemeralRunner) GitHubServerTLS() *GitHubServerTLSConfig {
+	return er.Spec.GitHubServerTLS
+}
+
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
 	// +required

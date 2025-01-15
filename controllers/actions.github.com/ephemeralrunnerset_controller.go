@@ -331,7 +331,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, nil
 	}
 
-	actionsClient, err := r.ActionsClientGetter.GetActionsClientForEphemeralRunnerSet(ctx, ephemeralRunnerSet)
+	actionsClient, err := r.ActionsClientPool.Get(ctx, ephemeralRunnerSet)
 	if err != nil {
 		return false, err
 	}
@@ -439,7 +439,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
 		return nil
 	}
-	actionsClient, err := r.ActionsClientGetter.GetActionsClientForEphemeralRunnerSet(ctx, ephemeralRunnerSet)
+	actionsClient, err := r.ActionsClientPool.Get(ctx, ephemeralRunnerSet)
 	if err != nil {
 		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
 	}

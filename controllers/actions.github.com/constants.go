@@ -43,6 +43,8 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+
+	AnnotationKeyGitHubVaultType = "actions.github.com/vault"
 )
 
 // Labels applied to listener roles
