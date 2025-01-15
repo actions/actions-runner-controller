@@ -366,6 +366,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--metrics-addr=0",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
+		"--runner-max-concurrent-reconciles=2",
 	}
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
@@ -518,6 +519,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -646,6 +648,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -686,6 +689,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -776,6 +780,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
