@@ -123,3 +123,17 @@ jobs:
         if: steps.list-changed.outputs.changed == 'true'
         run: |
           ct install --config charts/.ci/ct-config-gha.yaml
+  test-chart:
+    name: Test Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false
+      - name: Test gha-runner-scale-set
+        run: go test ./charts/gha-runner-scale-set/...
+      - name: Test gha-runner-scale-set-controller
+        run: go test ./charts/gha-runner-scale-set-controller/...
