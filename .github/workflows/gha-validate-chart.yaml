@@ -5,16 +5,16 @@ on:
     branches:
       - master
     paths:
-      - "charts/**"
-      - ".github/workflows/gha-validate-chart.yaml"
-      - "!charts/actions-runner-controller/**"
-      - "!**.md"
+      - 'charts/**'
+      - '.github/workflows/gha-validate-chart.yaml'
+      - '!charts/actions-runner-controller/**'
+      - '!**.md'
   push:
     paths:
-      - "charts/**"
-      - ".github/workflows/gha-validate-chart.yaml"
-      - "!charts/actions-runner-controller/**"
-      - "!**.md"
+      - 'charts/**'
+      - '.github/workflows/gha-validate-chart.yaml'
+      - '!charts/actions-runner-controller/**'
+      - '!**.md'
   workflow_dispatch:
 env:
   KUBE_SCORE_VERSION: 1.16.1
@@ -52,21 +52,20 @@ jobs:
           chmod 755 kube-score
 
       - name: Kube-score generated manifests
-        run:
-          helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
-          --ignore-test pod-networkpolicy
-          --ignore-test deployment-has-poddisruptionbudget
-          --ignore-test deployment-has-host-podantiaffinity
-          --ignore-test container-security-context
-          --ignore-test pod-probes
-          --ignore-test container-image-tag
-          --enable-optional-test container-security-context-privileged
-          --enable-optional-test container-security-context-readonlyrootfilesystem
+        run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
+              --ignore-test pod-networkpolicy
+              --ignore-test deployment-has-poddisruptionbudget
+              --ignore-test deployment-has-host-podantiaffinity
+              --ignore-test container-security-context
+              --ignore-test pod-probes
+              --ignore-test container-image-tag
+              --enable-optional-test container-security-context-privileged
+              --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.6.0
@@ -114,11 +113,11 @@ jobs:
       - name: Load image into cluster
         if: steps.list-changed.outputs.changed == 'true'
         run: |
-          export DOCKER_IMAGE_NAME=test-arc
-          export VERSION=dev
-          export IMG_RESULT=load
-          make docker-buildx
-          kind load docker-image test-arc:dev --name chart-testing
+            export DOCKER_IMAGE_NAME=test-arc
+            export VERSION=dev
+            export IMG_RESULT=load
+            make docker-buildx
+            kind load docker-image test-arc:dev --name chart-testing
 
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
