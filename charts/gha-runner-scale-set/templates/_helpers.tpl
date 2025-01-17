@@ -96,7 +96,7 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+image: harbor.gcp.pype.tech/devops/docker:dind
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
