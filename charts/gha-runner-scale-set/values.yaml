@@ -216,3 +216,7 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+## Optionally add annotations to the noPermission service account
+noPermissionServiceAccount:
+  annotations: {}
