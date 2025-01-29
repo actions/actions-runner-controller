@@ -7,22 +7,23 @@ import (
 )
 
 type Config struct {
-	ConfigureUrl                string `json:"configureUrl"`
-	AppID                       int64  `json:"appID"`
-	AppInstallationID           int64  `json:"appInstallationID"`
-	AppPrivateKey               string `json:"appPrivateKey"`
-	Token                       string `json:"token"`
-	EphemeralRunnerSetNamespace string `json:"ephemeralRunnerSetNamespace"`
-	EphemeralRunnerSetName      string `json:"ephemeralRunnerSetName"`
-	MaxRunners                  int    `json:"maxRunners"`
-	MinRunners                  int    `json:"minRunners"`
-	RunnerScaleSetId            int    `json:"runnerScaleSetId"`
-	RunnerScaleSetName          string `json:"runnerScaleSetName"`
-	ServerRootCA                string `json:"serverRootCA"`
-	LogLevel                    string `json:"logLevel"`
-	LogFormat                   string `json:"logFormat"`
-	MetricsAddr                 string `json:"metricsAddr"`
-	MetricsEndpoint             string `json:"metricsEndpoint"`
+	ConfigureUrl                  string `json:"configureUrl"`
+	AppID                         int64  `json:"appID"`
+	AppInstallationID             int64  `json:"appInstallationID"`
+	AppPrivateKey                 string `json:"appPrivateKey"`
+	Token                         string `json:"token"`
+	EphemeralRunnerSetNamespace   string `json:"ephemeralRunnerSetNamespace"`
+	EphemeralRunnerSetName        string `json:"ephemeralRunnerSetName"`
+	MaxRunners                    int    `json:"maxRunners"`
+	MinRunners                    int    `json:"minRunners"`
+	RunnerScaleSetId              int    `json:"runnerScaleSetId"`
+	RunnerScaleSetName            string `json:"runnerScaleSetName"`
+	AutoscalingRunnerScaleSetName string `json:"autoscalingRunnerScaleSetName"`
+	ServerRootCA                  string `json:"serverRootCA"`
+	LogLevel                      string `json:"logLevel"`
+	LogFormat                     string `json:"logFormat"`
+	MetricsAddr                   string `json:"metricsAddr"`
+	MetricsEndpoint               string `json:"metricsEndpoint"`
 }
 
 func Read(path string) (Config, error) {
