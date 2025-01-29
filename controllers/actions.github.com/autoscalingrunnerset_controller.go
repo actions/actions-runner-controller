@@ -234,7 +234,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	// Make sure the AutoscalingListener is up and running in the controller namespace
 	listener := new(v1alpha1.AutoscalingListener)
 	listenerFound := true
-	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
+	if err := r.Get(ctx, client.ObjectKey{Namespace: autoscalingRunnerSet.Namespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, listener); err != nil {
 		if !kerrors.IsNotFound(err) {
 			log.Error(err, "Failed to get AutoscalingListener resource")
 			return ctrl.Result{}, err
@@ -329,7 +329,7 @@ func (r *AutoscalingRunnerSetReconciler) drainingJobs(latestRunnerSetStatus *v1a
 func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {
 	logger.Info("Cleaning up the listener")
 	var listener v1alpha1.AutoscalingListener
-	err = r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, &listener)
+	err = r.Get(ctx, client.ObjectKey{Namespace: autoscalingRunnerSet.Namespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, &listener)
 	switch {
 	case err == nil:
 		if listener.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -651,7 +651,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		})
 	}
 
-	autoscalingListener, err := r.ResourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
+	autoscalingListener, err := r.ResourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
 	if err != nil {
 		log.Error(err, "Could not create AutoscalingListener spec")
 		return ctrl.Result{}, err
