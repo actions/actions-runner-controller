@@ -207,6 +207,19 @@ template:
         image: ghcr.io/actions/actions-runner:latest
         command: ["/home/runner/run.sh"]
 
+## hookTemplate is the podTemplate definition of the worker in containerMode.type=kubernetes
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-template-v1/#PodTemplate
+# hookTemplate:
+#   apiVersion: v1
+#   kind: PodTemplate
+#   spec:
+#     containers:
+#     - name: $job
+#       resources:
+#         requests:
+#           cpu: 32
+#           memory: 32Gi
+
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.
