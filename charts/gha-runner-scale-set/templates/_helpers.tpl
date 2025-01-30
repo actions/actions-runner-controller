@@ -83,27 +83,42 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
-{{- range $i, $val := .Values.template.spec.containers }}
-  {{- if eq $val.name "runner" }}
-image: {{ $val.image }}
+image: {{ (.Values.runner.dindInitContainer).image | default "ghcr.io/actions/actions-runner:latest" }}
+imagePullPolicy: {{ .Values.runner.dindInitContainer.imagePullPolicy }}
 command: ["cp"]
-args: ["-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+args:
+  - -r
+  - -v
+  - /home/runner/externals/.
+  - /home/runner/tmpDir/
+{{- with (.Values.runner.dindInitContainer).extraArgs }}
+  {{- toYaml . | nindent 2 -}}
+{{- end }}
 volumeMounts:
   - name: dind-externals
     mountPath: /home/runner/tmpDir
-  {{- end }}
+{{ if not (empty .Values.runner.dindInitContainer.resources) }}
+resources:
+  {{- toYaml .Values.runner.dindInitContainer.resources | nindent 2 -}}
 {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+image: {{ (.Values.runner.dindContainer).image | default "docker:dind" }}
+imagePullPolicy: {{ .Values.runner.dindInitContainer.imagePullPolicy }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+{{- with (.Values.runner.dindContainer).extraArgs -}}
+  {{- toYaml . | nindent 2 -}}
+{{- end }}
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
+{{- with (.Values.runner.dindContainer).extraEnv -}}
+  {{- toYaml . | nindent 2 -}}
+{{- end }}
 securityContext:
   privileged: true
 volumeMounts:
@@ -113,6 +128,13 @@ volumeMounts:
     mountPath: /var/run
   - name: dind-externals
     mountPath: /home/runner/externals
+{{- with (.Values.runner.dindContainer).extraVolumeMounts -}}
+  {{- toYaml . | nindent 2 -}}
+{{- end }}
+{{ if not (empty .Values.runner.dindContainer.resources) }}
+resources:
+  {{- toYaml .Values.runner.dindContainer.resources | nindent 2 -}}
+{{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
@@ -133,7 +155,7 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.dind-work-volume" -}}
 {{- $createWorkVolume := 1 }}
-  {{- range $i, $volume := .Values.template.spec.volumes }}
+  {{- range $i, $volume := (.Values.runner.extraVolumes) }}
     {{- if eq $volume.name "work" }}
       {{- $createWorkVolume = 0 }}
 - {{ $volume | toYaml | nindent 2 }}
@@ -147,7 +169,7 @@ volumeMounts:
 
 {{- define "gha-runner-scale-set.kubernetes-mode-work-volume" -}}
 {{- $createWorkVolume := 1 }}
-  {{- range $i, $volume := .Values.template.spec.volumes }}
+  {{- range $i, $volume := (.Values.runner.extraVolumes) }}
     {{- if eq $volume.name "work" }}
       {{- $createWorkVolume = 0 }}
 - {{ $volume | toYaml | nindent 2 }}
@@ -162,65 +184,67 @@ volumeMounts:
   {{- end }}
 {{- end }}
 
-{{- define "gha-runner-scale-set.non-work-volumes" -}}
-  {{- range $i, $volume := .Values.template.spec.volumes }}
-    {{- if ne $volume.name "work" }}
-- {{ $volume | toYaml | nindent 2 }}
-    {{- end }}
+{{- define "gha-runner-scale-set.extra-volumes" -}}
+  {{- $filtered := list -}}
+  {{- range $i, $volume := (.Values.runner.extraVolumes) }}
+    {{- if ne $volume.name "work" -}}
+      {{- $filtered = append $filtered $volume -}}
+    {{- end -}}
+  {{- end -}}
+  {{ if not (empty $filtered) }}
+  {{- toYaml $filtered -}}
   {{- end }}
 {{- end }}
 
-{{- define "gha-runner-scale-set.non-runner-containers" -}}
-  {{- range $i, $container := .Values.template.spec.containers }}
-    {{- if ne $container.name "runner" }}
-- {{ $container | toYaml | nindent 2 }}
-    {{- end }}
-  {{- end }}
+{{- define "gha-runner-scale-set.extra-containers" -}}
+  {{- with (.Values.runner.extraContainers) }}
+      {{- toYaml . | indent 2 -}}
+  {{- end -}}
 {{- end }}
 
-{{- define "gha-runner-scale-set.non-runner-non-dind-containers" -}}
-  {{- range $i, $container := .Values.template.spec.containers }}
-    {{- if and (ne $container.name "runner") (ne $container.name "dind") }}
-- {{ $container | toYaml | nindent 2 }}
-    {{- end }}
-  {{- end }}
+{{- define "gha-runner-scale-set.extra-init-containers" -}}
+  {{- with (.Values.runner.extraInitContainers) }}
+      {{- toYaml . | indent 2 -}}
+  {{- end -}}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-runner-container" -}}
+image: {{ .Values.runner.runnerContainer.image }}
+imagePullPolicy: {{ .Values.runner.runnerContainer.imagePullPolicy }}
+command: ["/home/runner/run.sh"]
+{{ if not (empty .Values.runner.runnerContainer.extraArgs) }}
+args:
+  {{- with .Values.runner.runnerContainer.extraArgs }}
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-{{- range $i, $container := .Values.template.spec.containers }}
-  {{- if eq $container.name "runner" }}
-    {{- range $key, $val := $container }}
-      {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
-{{ $key }}: {{ $val | toYaml | nindent 2 }}
-      {{- end }}
-    {{- end }}
-    {{- $setDockerHost := 1 }}
-    {{- $setRunnerWaitDocker := 1 }}
-    {{- $setNodeExtraCaCerts := 0 }}
-    {{- $setRunnerUpdateCaCerts := 0 }}
-    {{- if $tlsConfig.runnerMountPath }}
-      {{- $setNodeExtraCaCerts = 1 }}
-      {{- $setRunnerUpdateCaCerts = 1 }}
-    {{- end }}
+{{- $setDockerHost := 1 }}
+{{- $setRunnerWaitDocker := 1 }}
+{{- $setNodeExtraCaCerts := 0 }}
+{{- $setRunnerUpdateCaCerts := 0 }}
+{{- if $tlsConfig.runnerMountPath }}
+  {{- $setNodeExtraCaCerts = 1 }}
+  {{- $setRunnerUpdateCaCerts = 1 }}
+{{- end }}
 env:
-    {{- with $container.env }}
-      {{- range $i, $env := . }}
-        {{- if eq $env.name "DOCKER_HOST" }}
-          {{- $setDockerHost = 0 }}
-        {{- end }}
-        {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
-          {{- $setRunnerWaitDocker = 0 }}
-        {{- end }}
-        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
-          {{- $setNodeExtraCaCerts = 0 }}
-        {{- end }}
-        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
-          {{- $setRunnerUpdateCaCerts = 0 }}
-        {{- end }}
-  - {{ $env | toYaml | nindent 4 }}
+  {{- with .Values.runner.runnerContainer.extraEnv }}
+    {{- range $i, $env := . }}
+      {{- if eq $env.name "DOCKER_HOST" }}
+        {{- $setDockerHost = 0 }}
+      {{- end }}
+      {{- if eq $env.name "RUNNER_WAIT_FOR_DOCKER_IN_SECONDS" }}
+        {{- $setRunnerWaitDocker = 0 }}
+      {{- end }}
+      {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+        {{- $setNodeExtraCaCerts = 0 }}
+      {{- end }}
+      {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+        {{- $setRunnerUpdateCaCerts = 0 }}
       {{- end }}
     {{- end }}
+  {{- toYaml . | nindent 2 -}}
+  {{- end }}
     {{- if $setDockerHost }}
   - name: DOCKER_HOST
     value: unix:///var/run/docker.sock
@@ -244,76 +268,80 @@ env:
       {{- $mountGitHubServerTLS = 1 }}
     {{- end }}
 volumeMounts:
-    {{- with $container.volumeMounts }}
-      {{- range $i, $volMount := . }}
-        {{- if eq $volMount.name "work" }}
-          {{- $mountWork = 0 }}
-        {{- end }}
-        {{- if eq $volMount.name "dind-sock" }}
-          {{- $mountDindCert = 0 }}
-        {{- end }}
-        {{- if eq $volMount.name "github-server-tls-cert" }}
-          {{- $mountGitHubServerTLS = 0 }}
-        {{- end }}
-  - {{ $volMount | toYaml | nindent 4 }}
+  {{- with .Values.runner.runnerContainer.extraVolumeMounts }}
+    {{- range $i, $volMount := . }}
+      {{- if eq $volMount.name "work" }}
+        {{- $mountWork = 0 }}
+      {{- end }}
+      {{- if eq $volMount.name "dind-sock" }}
+        {{- $mountDindCert = 0 }}
+      {{- end }}
+      {{- if eq $volMount.name "github-server-tls-cert" }}
+        {{- $mountGitHubServerTLS = 0 }}
       {{- end }}
     {{- end }}
-    {{- if $mountWork }}
+    {{- toYaml . | nindent 2 -}}
+  {{- end }}
+  {{- if $mountWork }}
   - name: work
     mountPath: /home/runner/_work
-    {{- end }}
-    {{- if $mountDindCert }}
+  {{- end }}
+  {{- if $mountDindCert }}
   - name: dind-sock
     mountPath: /var/run
-    {{- end }}
-    {{- if $mountGitHubServerTLS }}
+  {{- end }}
+  {{- if $mountGitHubServerTLS }}
   - name: github-server-tls-cert
     mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
     subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
-    {{- end }}
   {{- end }}
+{{ if not (empty .Values.runner.runnerContainer.resources) }}
+resources:
+  {{- toYaml .Values.runner.runnerContainer.resources | nindent 2 -}}
 {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubernetes-mode-runner-container" -}}
+image: {{ .Values.runner.runnerContainer.image }}
+imagePullPolicy: {{ .Values.runner.runnerContainer.imagePullPolicy }}
+command: ["/home/runner/run.sh"]
+{{ if not (empty .Values.runner.runnerContainer.extraArgs) -}}
+args:
+  {{- with .Values.runner.runnerContainer.extraArgs -}}
+    {{- toYaml . | nindent 2 -}}
+  {{- end }}
+{{- end }}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-{{- range $i, $container := .Values.template.spec.containers }}
-  {{- if eq $container.name "runner" }}
-    {{- range $key, $val := $container }}
-      {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
-{{ $key }}: {{ $val | toYaml | nindent 2 }}
-      {{- end }}
-    {{- end }}
-    {{- $setContainerHooks := 1 }}
-    {{- $setPodName := 1 }}
-    {{- $setRequireJobContainer := 1 }}
-    {{- $setNodeExtraCaCerts := 0 }}
-    {{- $setRunnerUpdateCaCerts := 0 }}
-    {{- if $tlsConfig.runnerMountPath }}
-      {{- $setNodeExtraCaCerts = 1 }}
-      {{- $setRunnerUpdateCaCerts = 1 }}
-    {{- end }}
+{{- $setContainerHooks := 1 }}
+{{- $setPodName := 1 }}
+{{- $setRequireJobContainer := 1 }}
+{{- $setNodeExtraCaCerts := 0 }}
+{{- $setRunnerUpdateCaCerts := 0 }}
+{{- if $tlsConfig.runnerMountPath }}
+  {{- $setNodeExtraCaCerts = 1 }}
+  {{- $setRunnerUpdateCaCerts = 1 }}
+{{- end }}
 env:
-    {{- with $container.env }}
-      {{- range $i, $env := . }}
-        {{- if eq $env.name "ACTIONS_RUNNER_CONTAINER_HOOKS" }}
-          {{- $setContainerHooks = 0 }}
-        {{- end }}
-        {{- if eq $env.name "ACTIONS_RUNNER_POD_NAME" }}
-          {{- $setPodName = 0 }}
-        {{- end }}
-        {{- if eq $env.name "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER" }}
-          {{- $setRequireJobContainer = 0 }}
-        {{- end }}
-        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
-          {{- $setNodeExtraCaCerts = 0 }}
-        {{- end }}
-        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
-          {{- $setRunnerUpdateCaCerts = 0 }}
-        {{- end }}
-  - {{ $env | toYaml | nindent 4 }}
+  {{- with .Values.runner.runnerContainer.extraEnv }}
+    {{- range $i, $env := . }}
+      {{- if eq $env.name "ACTIONS_RUNNER_CONTAINER_HOOKS" }}
+        {{- $setContainerHooks = 0 }}
+      {{- end }}
+      {{- if eq $env.name "ACTIONS_RUNNER_POD_NAME" }}
+        {{- $setPodName = 0 }}
+      {{- end }}
+      {{- if eq $env.name "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER" }}
+        {{- $setRequireJobContainer = 0 }}
+      {{- end }}
+      {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+        {{- $setNodeExtraCaCerts = 0 }}
+      {{- end }}
+      {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+        {{- $setRunnerUpdateCaCerts = 0 }}
       {{- end }}
     {{- end }}
+  {{- toYaml . | nindent 2 -}}
+  {{- end }}
     {{- if $setContainerHooks }}
   - name: ACTIONS_RUNNER_CONTAINER_HOOKS
     value: /home/runner/k8s/index.js
@@ -342,95 +370,97 @@ env:
       {{- $mountGitHubServerTLS = 1 }}
     {{- end }}
 volumeMounts:
-    {{- with $container.volumeMounts }}
-      {{- range $i, $volMount := . }}
-        {{- if eq $volMount.name "work" }}
-          {{- $mountWork = 0 }}
-        {{- end }}
-        {{- if eq $volMount.name "github-server-tls-cert" }}
-          {{- $mountGitHubServerTLS = 0 }}
-        {{- end }}
-  - {{ $volMount | toYaml | nindent 4 }}
+  {{- with .Values.runner.runnerContainer.extraVolumeMounts }}
+    {{- range $i, $volMount := . }}
+      {{- if eq $volMount.name "work" }}
+        {{- $mountWork = 0 }}
+      {{- end }}
+      {{- if eq $volMount.name "github-server-tls-cert" }}
+        {{- $mountGitHubServerTLS = 0 }}
       {{- end }}
     {{- end }}
-    {{- if $mountWork }}
+    {{- toYaml . | nindent 2 -}}
+  {{- end }}
+  {{- if $mountWork }}
   - name: work
     mountPath: /home/runner/_work
-    {{- end }}
-    {{- if $mountGitHubServerTLS }}
+  {{- end }}
+  {{- if $mountGitHubServerTLS }}
   - name: github-server-tls-cert
     mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
     subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
-    {{- end }}
   {{- end }}
+{{ if not (empty .Values.runner.runnerContainer.resources) }}
+resources:
+  {{- toYaml .Values.runner.runnerContainer.resources | nindent 2 -}}
 {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.default-mode-runner-containers" -}}
+image: {{ .Values.runner.runnerContainer.image }}
+imagePullPolicy: {{ .Values.runner.runnerContainer.imagePullPolicy }}
+command: ["/home/runner/run.sh"]
+{{ if not (empty .Values.runner.runnerContainer.extraArgs) }}
+args:
+  {{- with .Values.runner.runnerContainer.extraArgs }}
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
 {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-{{- range $i, $container := .Values.template.spec.containers }}
-{{- if ne $container.name "runner" }}
-- {{ $container | toYaml | nindent 2 }}
-{{- else }}
-- name: {{ $container.name }}
-  {{- range $key, $val := $container }}
-    {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
-  {{ $key }}: {{ $val | toYaml | nindent 4 }}
+{{- $setNodeExtraCaCerts := 0 }}
+{{- $setRunnerUpdateCaCerts := 0 }}
+{{- if $tlsConfig.runnerMountPath }}
+  {{- $setNodeExtraCaCerts = 1 }}
+  {{- $setRunnerUpdateCaCerts = 1 }}
+{{- end }}
+{{- $mountGitHubServerTLS := 0 }}
+  {{- if or .Values.runner.runnerContainer.extraEnv $setNodeExtraCaCerts $setRunnerUpdateCaCerts }}
+env:
+  {{- with .Values.runner.runnerContainer.extraEnv }}
+    {{- range $i, $env := . }}
+      {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+        {{- $setNodeExtraCaCerts = 0 }}
+      {{- end }}
+      {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+        {{- $setRunnerUpdateCaCerts = 0 }}
+      {{- end }}
     {{- end }}
+    {{- toYaml . | nindent 2 -}}
   {{- end }}
-  {{- $setNodeExtraCaCerts := 0 }}
-  {{- $setRunnerUpdateCaCerts := 0 }}
+  {{- if $setNodeExtraCaCerts }}
+  - name: NODE_EXTRA_CA_CERTS
+    value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+  {{- end }}
+  {{- if $setRunnerUpdateCaCerts }}
+  - name: RUNNER_UPDATE_CA_CERTS
+    value: "1"
+  {{- end }}
   {{- if $tlsConfig.runnerMountPath }}
-    {{- $setNodeExtraCaCerts = 1 }}
-    {{- $setRunnerUpdateCaCerts = 1 }}
+    {{- $mountGitHubServerTLS = 1 }}
+  {{- end }}
   {{- end }}
 
-  {{- $mountGitHubServerTLS := 0 }}
-  {{- if or $container.env $setNodeExtraCaCerts $setRunnerUpdateCaCerts }}
-  env:
-    {{- with $container.env }}
-      {{- range $i, $env := . }}
-        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
-          {{- $setNodeExtraCaCerts = 0 }}
-        {{- end }}
-        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
-          {{- $setRunnerUpdateCaCerts = 0 }}
-        {{- end }}
-    - {{ $env | toYaml | nindent 6 }}
+  {{- if or .Values.runner.runnerContainer.extraVolumeMounts $mountGitHubServerTLS }}
+volumeMounts:
+  {{- with .Values.runner.runnerContainer.extraVolumeMounts }}
+    {{- range $i, $volMount := . }}
+      {{- if eq $volMount.name "github-server-tls-cert" }}
+        {{- $mountGitHubServerTLS = 0 }}
       {{- end }}
     {{- end }}
-    {{- if $setNodeExtraCaCerts }}
-    - name: NODE_EXTRA_CA_CERTS
-      value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
-    {{- end }}
-    {{- if $setRunnerUpdateCaCerts }}
-    - name: RUNNER_UPDATE_CA_CERTS
-      value: "1"
-    {{- end }}
-    {{- if $tlsConfig.runnerMountPath }}
-      {{- $mountGitHubServerTLS = 1 }}
-    {{- end }}
+  {{- toYaml . | nindent 2 -}}
   {{- end }}
-
-  {{- if or $container.volumeMounts $mountGitHubServerTLS }}
-  volumeMounts:
-    {{- with $container.volumeMounts }}
-      {{- range $i, $volMount := . }}
-        {{- if eq $volMount.name "github-server-tls-cert" }}
-          {{- $mountGitHubServerTLS = 0 }}
-        {{- end }}
-    - {{ $volMount | toYaml | nindent 6 }}
-      {{- end }}
-    {{- end }}
-    {{- if $mountGitHubServerTLS }}
-    - name: github-server-tls-cert
-      mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
-      subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
-    {{- end }}
-  {{- end}}
-{{- end }}
-{{- end }}
-{{- end }}
+  {{- if $mountGitHubServerTLS }}
+  - name: github-server-tls-cert
+    mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+  {{- end }}
+  {{- end }}
+{{ if not (empty .Values.runner.runnerContainer.resources) }}
+resources:
+  {{- toYaml .Values.runner.runnerContainer.resources | nindent 2 -}}
+{{- end}}
+{{- end}}
 
 {{- define "gha-runner-scale-set.managerRoleName" -}}
 {{- include "gha-runner-scale-set.fullname" . }}-manager

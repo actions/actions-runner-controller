@@ -1,0 +1,15 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+runner:
+  imagePullSecrets:
+    - name: myrregistrykey
+  runnerContainer:
+    image: myregistry/runner-image:latest
+    imagePullPolicy: "IfNotPresent"
+  dindInitContainer:
+    image: myregistry/dind-init-image:latest
+    imagePullPolicy: "IfNotPresent"
+  dindContainer:
+    image: myregistry/dind-image:latest
+    imagePullPolicy: "IfNotPresent"
