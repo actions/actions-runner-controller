@@ -52,6 +52,10 @@ type EphemeralRunnerReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	ActionsClient actions.MultiClient
+
+	ControllerNamespace                           string
+	ReadGitHubConfigSecretFromControllerNamespace bool
+
 	ResourceBuilder
 }
 
@@ -613,6 +617,14 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	return nil, nil
 }
 
+func (r *EphemeralRunnerReconciler) deriveConfigSecretNamespace(ephemeralRunner *v1alpha1.EphemeralRunner) string {
+	secretNamespace := ephemeralRunner.Namespace
+	if r.ReadGitHubConfigSecretFromControllerNamespace {
+		secretNamespace = r.ControllerNamespace
+	}
+	return secretNamespace
+}
+
 func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, log logr.Logger) (ctrl.Result, error) {
 	var envs []corev1.EnvVar
 	if runner.Spec.ProxySecretRef != "" {
@@ -733,7 +745,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 
 func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) (actions.ActionsService, error) {
 	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: runner.Spec.GitHubConfigSecret}, secret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: r.deriveConfigSecretNamespace(runner), Name: runner.Spec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 

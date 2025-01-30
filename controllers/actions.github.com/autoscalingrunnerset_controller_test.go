@@ -44,6 +44,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	var mgr ctrl.Manager
 	var controller *AutoscalingRunnerSetReconciler
 	var autoscalingNS *corev1.Namespace
+	var controllerNS *corev1.Namespace
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
 
@@ -61,7 +62,11 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		var namespaces []*corev1.Namespace
+		namespaces, mgr = createNamespaces(GinkgoT(), 2)
+		autoscalingNS = namespaces[0]
+		controllerNS = namespaces[1]
+
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller = &AutoscalingRunnerSetReconciler{
@@ -77,32 +82,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 
 		min := 1
 		max := 10
-		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-asrs",
-				Namespace: autoscalingNS.Name,
-				Labels: map[string]string{
-					LabelKeyKubernetesVersion: buildVersion,
-				},
-			},
-			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
-				GitHubConfigSecret: configSecret.Name,
-				MaxRunners:         &max,
-				MinRunners:         &min,
-				RunnerGroup:        "testgroup",
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "runner",
-								Image: "ghcr.io/actions/runner",
-							},
-						},
-					},
-				},
-			},
-		}
+		autoscalingRunnerSet = createAutoscalingRunnerSet("test-asrs", autoscalingNS, buildVersion, configSecret.Name, min, max)
 
 		err = k8sClient.Create(ctx, autoscalingRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create AutoScalingRunnerSet")
@@ -196,6 +176,46 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
 			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
 			Expect(len(runnerSetList.Items)).To(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
+		})
+
+		It("It should read GitHub config secret from controller namespace if ReadGitHubConfigSecretFromControllerNamespace is enabled", func() {
+			err := k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: configSecret.Name, Namespace: autoscalingNS.Name}})
+			Expect(err).ToNot(HaveOccurred(), "failed to delete github-config-secret")
+
+			controller2 := controller
+			controller2.ReadGitHubConfigSecretFromControllerNamespace = true
+			controller2.ControllerNamespace = controllerNS.Name
+
+			err = controller2.SetupWithManager(mgr)
+			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
+
+			controllerNamespaceConfigSecret := createDefaultSecret(GinkgoT(), k8sClient, controller2.ControllerNamespace)
+			runner := createAutoscalingRunnerSet("secret-test-asrs", autoscalingNS, buildVersion, controllerNamespaceConfigSecret.Name, 0, 1)
+			err = k8sClient.Create(ctx, runner)
+			Expect(err).NotTo(HaveOccurred(), "failed to create AutoscalingRunnerSet")
+
+			created := new(v1alpha1.AutoscalingRunnerSet)
+			// Check if runner scale set is created on service
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: runner.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+					if err != nil {
+						return "", err
+					}
+
+					if _, ok := created.Annotations[runnerScaleSetIdAnnotationKey]; !ok {
+						return "", nil
+					}
+
+					if _, ok := created.Annotations[AnnotationKeyGitHubRunnerGroupName]; !ok {
+						return "", nil
+					}
+
+					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdAnnotationKey], created.Annotations[AnnotationKeyGitHubRunnerGroupName]), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
+
 		})
 	})
 
@@ -1790,3 +1810,32 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 		).Should(BeTrue())
 	})
 })
+
+func createAutoscalingRunnerSet(name string, ns *corev1.Namespace, buildVersion string, secretName string, min, max int) *v1alpha1.AutoscalingRunnerSet {
+	return &v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns.Name,
+			Labels: map[string]string{
+				LabelKeyKubernetesVersion: buildVersion,
+			},
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl:    "https://github.com/owner/repo",
+			GitHubConfigSecret: secretName,
+			MaxRunners:         &max,
+			MinRunners:         &min,
+			RunnerGroup:        "testgroup",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "runner",
+							Image: "ghcr.io/actions/runner",
+						},
+					},
+				},
+			},
+		},
+	}
+}
