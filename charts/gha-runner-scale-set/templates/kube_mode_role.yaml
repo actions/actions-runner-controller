@@ -5,7 +5,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set.namespace" . }}
   finalizers:
     - actions.github.com/cleanup-protection
 rules:

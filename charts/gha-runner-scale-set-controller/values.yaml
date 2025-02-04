@@ -136,6 +136,10 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
-  ## Defines the K8s client rate limiter parameters.
+
+# Add the option to deploy in another namespace rather than .Release.Namespace.
+namespaceOverride: ""
+
+## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20
   # k8sClientRateLimiterBurst: 30

@@ -216,3 +216,6 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+# Add the option to deploy in another namespace rather than .Release.Namespace.
+namespaceOverride: ""
