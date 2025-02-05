@@ -22,6 +22,14 @@ spec:
       {{- end }}
       interval: {{ .Values.actionsMetrics.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.actionsMetrics.serviceMonitor.timeout }}
+      {{- if .Values.actionsMetrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+{{ tpl (toYaml .Values.actionsMetrics.serviceMonitor.metricRelabelings | indent 8) . }}
+      {{- end }}
+      {{- if .Values.actionsMetrics.serviceMonitor.relabelings }}
+      relabelings:
+  {{ tpl (toYaml .Values.actionsMetrics.serviceMonitor.relabelings | indent 8) . }}
+      {{- end }}
   selector:
     matchLabels:
       {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 6 }}

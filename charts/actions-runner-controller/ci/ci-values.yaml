@@ -6,21 +6,21 @@ image:
 podSecurityContext:
   fsGroup: 2000
 
-securityContext: 
+securityContext:
   capabilities:
     drop:
-    - ALL
+      - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 2000
 
-resources: 
+resources:
   limits:
     cpu: 100m
     memory: 128Mi
   requests:
     cpu: 100m
-    memory: 128Mi  
+    memory: 128Mi
 
 authSecret:
   create: false
@@ -28,3 +28,21 @@ authSecret:
 # Set the following to true to create a dummy secret, allowing the manager pod to start
 # This is only useful in CI
 createDummySecret: true
+
+metrics:
+  serviceMonitor:
+    enable: true
+    metricRelabelings:
+      - sourceLabels: [foo]
+        regex: bar
+        action: drop
+
+actionsMetricsServer:
+  enabled: true
+actionsMetrics:
+  serviceMonitor:
+    enable: true
+    metricRelabelings:
+      - sourceLabels: [__name__, workflow_name]
+        regex: github_workflow_.*;pages build and deployment
+        action: drop
