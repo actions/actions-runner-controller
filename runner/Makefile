@@ -8,7 +8,7 @@ TARGETPLATFORM ?= $(shell arch)
 
 RUNNER_VERSION ?= 2.322.0
 RUNNER_CONTAINER_HOOKS_VERSION ?= 0.6.2
-DOCKER_VERSION ?= 24.0.7
+DOCKER_VERSION ?= 27.3.1
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
