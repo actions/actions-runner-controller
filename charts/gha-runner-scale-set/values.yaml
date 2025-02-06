@@ -147,11 +147,12 @@ template:
   ##         - name: dind-sock
   ##           mountPath: /var/run
   ##     - name: dind
-  ##       image: docker:dind
+  ##       image: {{ .Values.template.spec.dind.image }}
   ##       args:
   ##         - dockerd
   ##         - --host=unix:///var/run/docker.sock
   ##         - --group=$(DOCKER_GROUP_GID)
+  ##         - --log-level={{ .Values.template.spec.dind.logLevel }}
   ##       env:
   ##         - name: DOCKER_GROUP_GID
   ##           value: "123"
@@ -202,6 +203,14 @@ template:
   ##                 requests:
   ##                   storage: 1Gi
   spec:
+    dind:
+      ## Log level of the Docker daemon. Use one of the following values: "debug", "info", "warn", "error", "fatal".
+      ## Defaults to "info".
+      logLevel: info
+      ## Set a dind image for sidecar container. Eg: use a specific registry in cloud environment to speed up the image pulling process and cut down external network traffic cost.
+      ## For AWS based deployments 'public.ecr.aws/docker/library/docker:dind' may be a good choice.
+      ## Defaults to "docker:dind".
+      image: docker:dind
     containers:
       - name: runner
         image: ghcr.io/actions/actions-runner:latest
