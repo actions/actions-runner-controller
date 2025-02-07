@@ -49,11 +49,11 @@ type RunnerReplicaSetStatus struct {
 	// +optional
 	Replicas *int `json:"replicas"`
 
-	// ReadyReplicas is the number of runners that are created and Runnning.
+	// ReadyReplicas is the number of runners that are created and Running.
 	ReadyReplicas *int `json:"readyReplicas"`
 
-	// AvailableReplicas is the number of runners that are created and Runnning.
-	// This is currently same as ReadyReplicas but perserved for future use.
+	// AvailableReplicas is the number of runners that are created and Running.
+	// This is currently same as ReadyReplicas but preserved for future use.
 	AvailableReplicas *int `json:"availableReplicas"`
 }
 
