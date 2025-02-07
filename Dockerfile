@@ -21,14 +21,14 @@ RUN go mod download
 # Usage:
 #   docker buildx build --tag repo/img:tag -f ./Dockerfile . --platform linux/amd64,linux/arm64,linux/arm/v7
 #
-# With the above commmand,
+# With the above command,
 # TARGETOS can be "linux", TARGETARCH can be "amd64", "arm64", and "arm", TARGETVARIANT can be "v7".
 
 ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT VERSION=dev COMMIT_SHA=dev
 
 # We intentionally avoid `--mount=type=cache,mode=0777,target=/go/pkg/mod` in the `go mod download` and the `go build` runs
 # to avoid https://github.com/moby/buildkit/issues/2334
-# We can use docker layer cache so the build is fast enogh anyway
+# We can use docker layer cache so the build is fast enough anyway
 # We also use per-platform GOCACHE for the same reason.
 ENV GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
 
