@@ -20,12 +20,12 @@ import (
 // we can delete the runner pod without disrupting a workflow job.
 //
 // This function returns a non-nil pointer to corev1.Pod as the first return value
-// if the runner is considered to have gracefully stopped, hence it's pod is safe for deletion.
+// if the runner is considered to have gracefully stopped, hence its pod is safe for deletion.
 //
 // It's a "tick" operation so a graceful stop can take multiple calls to complete.
-// This function is designed to complete a lengthy graceful stop process in a unblocking way.
+// This function is designed to complete a lengthy graceful stop process in an unblocking way.
 // When it wants to be retried later, the function returns a non-nil *ctrl.Result as the second return value, may or may not populating the error in the second return value.
-// The caller is expected to return the returned ctrl.Result and error to postpone the current reconcilation loop and trigger a scheduled retry.
+// The caller is expected to return the returned ctrl.Result and error to postpone the current reconciliation loop and trigger a scheduled retry.
 func tickRunnerGracefulStop(ctx context.Context, retryDelay time.Duration, log logr.Logger, ghClient *github.Client, c client.Client, enterprise, organization, repository, runner string, pod *corev1.Pod) (*corev1.Pod, *ctrl.Result, error) {
 	pod, err := annotatePodOnce(ctx, c, log, pod, AnnotationKeyUnregistrationStartTimestamp, time.Now().Format(time.RFC3339))
 	if err != nil {
@@ -95,7 +95,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 	code := runnerContainerExitCode(pod)
 
 	if pod != nil && pod.Annotations[AnnotationKeyUnregistrationCompleteTimestamp] != "" {
-		// If it's already unregistered in the previous reconcilation loop,
+		// If it's already unregistered in the previous reconciliation loop,
 		// you can safely assume that it won't get registered again so it's safe to delete the runner pod.
 		log.Info("Runner pod is marked as already unregistered.")
 	} else if runnerID == nil && !runnerPodOrContainerIsStopped(pod) && !podConditionTransitionTimeAfter(pod, corev1.PodReady, registrationTimeout) &&
@@ -114,7 +114,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 		// If we didn't handle this case here, ARC would end up with waiting forever until the
 		// PV provider(s) provision PVs for the pod, which seems to never happen.
 		//
-		// For reference, the below is an eaxmple of pod.status that you might see when it happened:
+		// For reference, the below is an example of pod.status that you might see when it happened:
 		// status:
 		//  conditions:
 		//  - lastProbeTime: null
@@ -146,7 +146,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 			"Unregistration started before runner ID is assigned and the runner was unable to obtain ID within registration timeout. "+
 				"Perhaps the runner has communication issue, or a firewall egress rule is dropping traffic to GitHub API, or GitHub API is unavailable? "+
 				"Marking unregistration as completed anyway because there's nothing ARC can do. "+
-				"This may result in in cancelling the job depending on your terminationGracePeriodSeconds and RUNNER_GRACEFUL_STOP_TIMEOUT settings.",
+				"This may result in cancelling the job depending on your terminationGracePeriodSeconds and RUNNER_GRACEFUL_STOP_TIMEOUT settings.",
 			"registrationTimeout", registrationTimeout,
 		)
 	} else if pod != nil && runnerPodOrContainerIsStopped(pod) {
@@ -242,7 +242,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 			}
 
 			// We want to prevent spamming the deletion attemps but returning ctrl.Result with RequeueAfter doesn't
-			// work as the reconcilation can happen earlier due to pod status update.
+			// work as the reconciliation can happen earlier due to pod status update.
 			// For ephemeral runners, we can expect it to stop and unregister itself on completion.
 			// So we can just wait for the completion without actively retrying unregistration.
 			ephemeral := getRunnerEnv(pod, EnvVarEphemeral)
@@ -266,7 +266,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 	} else if ok {
 		log.Info("Runner has just been unregistered.")
 	} else if pod == nil {
-		// `r.unregisterRunner()` will returns `false, nil` if the runner is not found on GitHub.
+		// `r.unregisterRunner()` will return `false, nil` if the runner is not found on GitHub.
 		// However, that doesn't always mean the pod can be safely removed.
 		//
 		// If the pod does not exist for the runner,
@@ -275,7 +275,7 @@ func ensureRunnerUnregistration(ctx context.Context, retryDelay time.Duration, l
 
 		log.Info("Runner was not found on GitHub and the runner pod was not found on Kuberntes.")
 	} else if ts := pod.Annotations[AnnotationKeyUnregistrationStartTimestamp]; ts != "" {
-		log.Info("Runner unregistration is in-progress. It can take forever to complete if if it's a static runner constantly running jobs."+
+		log.Info("Runner unregistration is in-progress. It can take forever to complete if it's a static runner constantly running jobs."+
 			" It can also take very long time if it's an ephemeral runner that is running a log-running job.", "error", err)
 
 		return &ctrl.Result{RequeueAfter: retryDelay}, nil
@@ -406,7 +406,7 @@ func setRunnerEnv(pod *corev1.Pod, key, value string) {
 // When the returned values is "Case 2. (false, nil)", the caller must handle the three possible sub-cases appropriately.
 // In other words, all those three sub-cases cannot be distinguished by this function alone.
 //
-//   - Case "2-1." can happen when e.g. ARC has successfully unregistered in a previous reconcilation loop or it was an ephemeral runner that finished it's job run(an ephemeral runner is designed to stop after a job run).
+//   - Case "2-1." can happen when e.g. ARC has successfully unregistered in a previous reconciliation loop or it was an ephemeral runner that finished its job run(an ephemeral runner is designed to stop after a job run).
 //     You'd need to maintain the runner state(i.e. if it's already unregistered or not) somewhere,
 //     so that you can either not call this function at all if the runner state says it's already unregistered, or determine that it's case "2-1." when you got (false, nil).
 //
@@ -414,8 +414,8 @@ func setRunnerEnv(pod *corev1.Pod, key, value string) {
 //     Waiting and retrying forever on this case is not a solution, because `config.sh` won't succeed with a wrong token hence the runner gets stuck in this state forever.
 //     There isn't a perfect solution to this, but a practical workaround would be implement a "grace period" in the caller side.
 //
-//   - Case "2-3." can happen when e.g. ARC recreated an ephemral runner pod in a previous reconcilation loop and then it was requested to delete the runner before the runner comes up.
-//     If handled inappropriately, this can cause a race condition betweeen a deletion of the runner pod and GitHub scheduling a workflow job onto the runner.
+//   - Case "2-3." can happen when e.g. ARC recreated an ephemeral runner pod in a previous reconciliation loop and then it was requested to delete the runner before the runner comes up.
+//     If handled inappropriately, this can cause a race condition between a deletion of the runner pod and GitHub scheduling a workflow job onto the runner.
 //
 // Once successfully detected case "2-1." or "2-2.", you can safely delete the runner pod because you know that the runner won't come back
 // as long as you recreate the runner pod.
@@ -427,7 +427,7 @@ func setRunnerEnv(pod *corev1.Pod, key, value string) {
 //
 // Beware though, you need extra care to set an appropriate grace period depending on your environment.
 // There isn't a single right grace period that works for everyone.
-// The longer the grace period is, the earlier a cluster resource shortage can occur due to throttoled runner pod deletions,
+// The longer the grace period is, the earlier a cluster resource shortage can occur due to throttled runner pod deletions,
 // while the shorter the grace period is, the more likely you may encounter the race issue.
 func unregisterRunner(ctx context.Context, client *github.Client, enterprise, org, repo string, id int64) (bool, error) {
 	// For the record, historically ARC did not try to call RemoveRunner on a busy runner, but it's no longer true.
@@ -445,7 +445,7 @@ func unregisterRunner(ctx context.Context, client *github.Client, enterprise, or
 	//
 	// - It can be "status=offline" at the same time but that's another story.
 	// - After https://github.com/actions/actions-runner-controller/pull/1127, ListRunners responses that are used to
-	//   determine if the runner is busy can be more outdated than before, as those responeses are now cached for 60 seconds.
+	//   determine if the runner is busy can be more outdated than before, as those responses are now cached for 60 seconds.
 	// - Note that 60 seconds is controlled by the Cache-Control response header provided by GitHub so we don't have a strict control on it but we assume it won't
 	//   change from 60 seconds.
 	//
