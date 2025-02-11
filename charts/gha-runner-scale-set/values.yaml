@@ -2,25 +2,40 @@
 ## ex: https://github.com/myorg/myrepo or https://github.com/myorg
 githubConfigUrl: "https://github.com/prosperllc"
 
-## githubConfigSecret is the k8s secrets to use when auth with GitHub API.
-## You can choose to use GitHub App or a PAT token
+## githubConfigSecret is the k8s secret information to use when authenticating via the GitHub API.
+## You can choose to supply:
+##   A) a PAT token, 
+##   B) a GitHub App, or 
+##   C) a pre-defined Kubernetes secret.
+## The syntax for each of these variations is documented below.
+## (Variation A) When using a PAT token, the syntax is as follows:
 githubConfigSecret: pre-defined-secret
-  ### GitHub Apps Configuration
-  ## NOTE: IDs MUST be strings, use quotes
-  #github_app_id: ""
-  #github_app_installation_id: ""
-  #github_app_private_key: |
-
-  ### GitHub PAT Configuration
-##github_token: ""
-## If you have a pre-define Kubernetes secret in the same namespace the gha-runner-scale-set is going to deploy,
-## you can also reference it via `githubConfigSecret: pre-defined-secret`.
-## You need to make sure your predefined secret has all the required secret data set properly.
+  # Example:  
+  # github_token: "ghp_sampleSampleSampleSampleSampleSample"
+   
+#
+## (Variation B) When using a GitHub App, the syntax is as follows:
+# githubConfigSecret:
+#   # NOTE: IDs MUST be strings, use quotes
+#   github_app_id: ""
+#   github_app_installation_id: ""
+#   github_app_private_key: |
+#      private key line 1
+#      private key line 2
+#      .
+#      .
+#      .
+#      private key line N
+#
+## (Variation C) When using a pre-defined Kubernetes secret in the same namespace that the gha-runner-scale-set is going to deploy,
+## the syntax is as follows:
+# githubConfigSecret: pre-defined-secret
+## Notes on using pre-defined Kubernetes secrets:
+##   You need to make sure your predefined secret has all the required secret data set properly.
 ##   For a pre-defined secret using GitHub PAT, the secret needs to be created like this:
 ##   > kubectl create secret generic pre-defined-secret --namespace=my_namespace --from-literal=github_token='ghp_your_pat'
 ##   For a pre-defined secret using GitHub App, the secret needs to be created like this:
 ##   > kubectl create secret generic pre-defined-secret --namespace=my_namespace --from-literal=github_app_id=123456 --from-literal=github_app_installation_id=654321 --from-literal=github_app_private_key='-----BEGIN CERTIFICATE-----*******'
-# githubConfigSecret: pre-defined-secret
 
 ## proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.
@@ -41,12 +56,12 @@ maxRunners: 20
 
 ## minRunners is the min number of idle runners. The target number of runners created will be
 ## calculated as a sum of minRunners and the number of jobs assigned to the scale set.
-minRunners: 5
+minRunners: 4
 
-#runner-scale-set1"
+# runnerGroup: "default"
 
 ## name of the runner scale set to create.  Defaults to the helm release name
-#runnerScaleSetName: "runner-scale-set1"
+# runnerScaleSetName: ""
 
 ## A self-signed CA certificate for communication with the GitHub server can be
 ## provided using a config map key selector. If `runnerMountPath` is set, for
@@ -88,7 +103,7 @@ containerMode:
 #   kubernetesModeServiceAccount:
 #     annotations:
 
-## template is the PodSpec for each listener Pod
+## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 # listenerTemplate:
 #   spec:
@@ -107,7 +122,6 @@ containerMode:
 
 ## template is the PodSpec for each runner Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
-
 template:
   spec:
     initContainers:
@@ -198,13 +212,16 @@ template:
           request: 
             cpu: "2"  
             memory: 4Gi
-
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.
 ## In case the helm chart can't find the right service account, you can explicitly pass in the following value
 ## to help it finish RoleBinding with the right service account.
 ## Note: if your controller is installed to only watch a single namespace, you have to pass these values explicitly.
+# controllerServiceAccount:
+#   namespace: arc-system
+#   name: test-arc-gha-runner-scale-set-controller
+
 controllerServiceAccount:
   namespace: prosper-gha-runners
   name: prosper-runner-controller-gha-rs-controller
