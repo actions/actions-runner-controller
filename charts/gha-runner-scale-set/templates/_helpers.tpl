@@ -229,7 +229,7 @@ env:
     {{- end }}
     {{- if $setRunnerWaitDocker }}
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
-    value: "240"
+    value: "120"
     {{- end }}
     {{- if $setNodeExtraCaCerts }}
   - name: NODE_EXTRA_CA_CERTS
