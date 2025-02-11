@@ -72,6 +72,8 @@ tolerations: []
 
 affinity: {}
 
+topologySpreadConstraints: []
+
 # Mount volumes in the container.
 volumes: []
 volumeMounts: []
@@ -81,9 +83,9 @@ volumeMounts: []
 # PriorityClass: system-cluster-critical
 priorityClassName: ""
 
-## If `metrics:` object is not provided, or commented out, the following flags 
-## will be applied the controller-manager and listener pods with empty values: 
-## `--metrics-addr`, `--listener-metrics-addr`, `--listener-metrics-endpoint`. 
+## If `metrics:` object is not provided, or commented out, the following flags
+## will be applied the controller-manager and listener pods with empty values:
+## `--metrics-addr`, `--listener-metrics-addr`, `--listener-metrics-endpoint`.
 ## This will disable metrics.
 ##
 ## To enable metrics, uncomment the following lines.
@@ -103,6 +105,11 @@ flags:
   ## Restricts the controller to only watch resources in the desired namespace.
   ## Defaults to watch all namespaces when unset.
   watchSingleNamespace: "prosper-gha-runners"
+
+  ## The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
+  # Increase this value to improve the throughput of the controller.
+  # It may also increase the load on the API server and the external service (e.g. GitHub API).
+  runnerMaxConcurrentReconciles: 2
 
   ## Defines how the controller should handle upgrades while having running jobs.
   ##
@@ -128,3 +135,7 @@ flags:
   ## Labels that match prefix specified in the list are excluded from propagation.
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
+
+  ## Defines the K8s client rate limiter parameters.
+  # k8sClientRateLimiterQPS: 20
+  # k8sClientRateLimiterBurst: 30
