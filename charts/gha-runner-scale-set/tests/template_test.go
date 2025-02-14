@@ -742,37 +742,6 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraInitContainers(t *testin
 	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[2].Command[0], "InitContainers[2] Command[0] should be ls")
 }
 
-func TestTemplateRenderedKubernetesModeServiceAccountAnnotations(t *testing.T) {
-	t.Parallel()
-
-	// Path to the helm chart we will test
-	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
-	require.NoError(t, err)
-
-	testValuesPath, err := filepath.Abs("../tests/values_kubernetes_mode_service_account_annotations.yaml")
-	require.NoError(t, err)
-
-	releaseName := "test-runners"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
-
-	options := &helm.Options{
-		Logger: logger.Discard,
-		SetValues: map[string]string{
-			"controllerServiceAccount.name":      "arc",
-			"controllerServiceAccount.namespace": "arc-system",
-		},
-		ValuesFiles:    []string{testValuesPath},
-		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
-	}
-
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_serviceaccount.yaml"})
-
-	var sa corev1.ServiceAccount
-	helm.UnmarshalK8SYaml(t, output, &sa)
-
-	assert.Equal(t, "arn:aws:iam::123456789012:role/sample-role", sa.Annotations["eks.amazonaws.com/role-arn"], "Annotations should be arn:aws:iam::123456789012:role/sample-role")
-}
-
 func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
 	t.Parallel()
 
@@ -2142,4 +2111,207 @@ func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
 	assert.NotEmpty(t, secondHash)
 	assert.NotEqual(t, firstHash, secondHash)
 	assert.LessOrEqual(t, len(secondHash), 63)
+}
+
+func TestCustomLabels(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                              "https://github.com/actions",
+			"githubConfigSecret.github_token":                              "gh_token12345",
+			"controllerServiceAccount.name":                                "arc",
+			"containerMode.type":                                           "kubernetes",
+			"controllerServiceAccount.namespace":                           "arc-system",
+			`labels.argocd\.argoproj\.io/sync-wave`:                        `"1"`,
+			`labels.app\.kubernetes\.io/part-of`:                           "no-override", // this shouldn't be overwritten
+			"resourceMeta.autoscalingRunnerSet.labels.ars-custom":          "ars-custom-value",
+			"resourceMeta.githubConfigSecret.labels.gh-custom":             "gh-custom-value",
+			"resourceMeta.kubernetesModeRole.labels.kmr-custom":            "kmr-custom-value",
+			"resourceMeta.kubernetesModeRoleBinding.labels.kmrb-custom":    "kmrb-custom-value",
+			"resourceMeta.kubernetesModeServiceAccount.labels.kmsa-custom": "kmsa-custom-value",
+			"resourceMeta.managerRole.labels.mr-custom":                    "mr-custom-value",
+			"resourceMeta.managerRoleBinding.labels.mrb-custom":            "mrb-custom-value",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
+
+	const targetLabel = "argocd.argoproj.io/sync-wave"
+	const wantCustomValue = `"1"`
+	const reservedLabel = "app.kubernetes.io/part-of"
+	const wantReservedValue = "gha-rs"
+
+	var githubSecret corev1.Secret
+	helm.UnmarshalK8SYaml(t, output, &githubSecret)
+	assert.Equal(t, wantCustomValue, githubSecret.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, githubSecret.Labels[reservedLabel])
+	assert.Equal(t, "gh-custom-value", githubSecret.Labels["gh-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role.yaml"})
+	var role rbacv1.Role
+	helm.UnmarshalK8SYaml(t, output, &role)
+	assert.Equal(t, wantCustomValue, role.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, role.Labels[reservedLabel])
+	assert.Equal(t, "kmr-custom-value", role.Labels["kmr-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role_binding.yaml"})
+	var roleBinding rbacv1.RoleBinding
+	helm.UnmarshalK8SYaml(t, output, &roleBinding)
+	assert.Equal(t, wantCustomValue, roleBinding.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, roleBinding.Labels[reservedLabel])
+	assert.Equal(t, "kmrb-custom-value", roleBinding.Labels["kmrb-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+	assert.Equal(t, wantCustomValue, ars.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, ars.Labels[reservedLabel])
+	assert.Equal(t, "ars-custom-value", ars.Labels["ars-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_serviceaccount.yaml"})
+	var serviceAccount corev1.ServiceAccount
+	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
+	assert.Equal(t, wantCustomValue, serviceAccount.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, serviceAccount.Labels[reservedLabel])
+	assert.Equal(t, "kmsa-custom-value", serviceAccount.Labels["kmsa-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_role.yaml"})
+	var managerRole rbacv1.Role
+	helm.UnmarshalK8SYaml(t, output, &managerRole)
+	assert.Equal(t, wantCustomValue, managerRole.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, managerRole.Labels[reservedLabel])
+	assert.Equal(t, "mr-custom-value", managerRole.Labels["mr-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_role_binding.yaml"})
+	var managerRoleBinding rbacv1.RoleBinding
+	helm.UnmarshalK8SYaml(t, output, &managerRoleBinding)
+	assert.Equal(t, wantCustomValue, managerRoleBinding.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, managerRoleBinding.Labels[reservedLabel])
+	assert.Equal(t, "mrb-custom-value", managerRoleBinding.Labels["mrb-custom"])
+
+	options = &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                            "https://github.com/actions",
+			"githubConfigSecret.github_token":                            "gh_token12345",
+			"controllerServiceAccount.name":                              "arc",
+			"controllerServiceAccount.namespace":                         "arc-system",
+			`labels.argocd\.argoproj\.io/sync-wave`:                      `"1"`,
+			"resourceMeta.noPermissionServiceAccount.labels.npsa-custom": "npsa-custom-value",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/no_permission_serviceaccount.yaml"})
+	var noPermissionServiceAccount corev1.ServiceAccount
+	helm.UnmarshalK8SYaml(t, output, &noPermissionServiceAccount)
+	assert.Equal(t, wantCustomValue, noPermissionServiceAccount.Labels[targetLabel])
+	assert.Equal(t, wantReservedValue, noPermissionServiceAccount.Labels[reservedLabel])
+	assert.Equal(t, "npsa-custom-value", noPermissionServiceAccount.Labels["npsa-custom"])
+}
+
+func TestCustomAnnotations(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                                   "https://github.com/actions",
+			"githubConfigSecret.github_token":                                   "gh_token12345",
+			"containerMode.type":                                                "kubernetes",
+			"controllerServiceAccount.name":                                     "arc",
+			"controllerServiceAccount.namespace":                                "arc-system",
+			`annotations.argocd\.argoproj\.io/sync-wave`:                        `"1"`,
+			"resourceMeta.autoscalingRunnerSet.annotations.ars-custom":          "ars-custom-value",
+			"resourceMeta.githubConfigSecret.annotations.gh-custom":             "gh-custom-value",
+			"resourceMeta.kubernetesModeRole.annotations.kmr-custom":            "kmr-custom-value",
+			"resourceMeta.kubernetesModeRoleBinding.annotations.kmrb-custom":    "kmrb-custom-value",
+			"resourceMeta.kubernetesModeServiceAccount.annotations.kmsa-custom": "kmsa-custom-value",
+			"resourceMeta.managerRole.annotations.mr-custom":                    "mr-custom-value",
+			"resourceMeta.managerRoleBinding.annotations.mrb-custom":            "mrb-custom-value",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	const targetAnnotations = "argocd.argoproj.io/sync-wave"
+	const wantCustomValue = `"1"`
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
+
+	var githubSecret corev1.Secret
+	helm.UnmarshalK8SYaml(t, output, &githubSecret)
+	assert.Equal(t, wantCustomValue, githubSecret.Annotations[targetAnnotations])
+	assert.Equal(t, "gh-custom-value", githubSecret.Annotations["gh-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role.yaml"})
+	var role rbacv1.Role
+	helm.UnmarshalK8SYaml(t, output, &role)
+	assert.Equal(t, wantCustomValue, role.Annotations[targetAnnotations])
+	assert.Equal(t, "kmr-custom-value", role.Annotations["kmr-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_role_binding.yaml"})
+	var roleBinding rbacv1.RoleBinding
+	helm.UnmarshalK8SYaml(t, output, &roleBinding)
+	assert.Equal(t, wantCustomValue, roleBinding.Annotations[targetAnnotations])
+	assert.Equal(t, "kmrb-custom-value", roleBinding.Annotations["kmrb-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+	assert.Equal(t, wantCustomValue, ars.Annotations[targetAnnotations])
+	assert.Equal(t, "ars-custom-value", ars.Annotations["ars-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_serviceaccount.yaml"})
+	var serviceAccount corev1.ServiceAccount
+	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
+	assert.Equal(t, wantCustomValue, serviceAccount.Annotations[targetAnnotations])
+	assert.Equal(t, "kmsa-custom-value", serviceAccount.Annotations["kmsa-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_role.yaml"})
+	var managerRole rbacv1.Role
+	helm.UnmarshalK8SYaml(t, output, &managerRole)
+	assert.Equal(t, wantCustomValue, managerRole.Annotations[targetAnnotations])
+	assert.Equal(t, "mr-custom-value", managerRole.Annotations["mr-custom"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_role_binding.yaml"})
+	var managerRoleBinding rbacv1.RoleBinding
+	helm.UnmarshalK8SYaml(t, output, &managerRoleBinding)
+	assert.Equal(t, wantCustomValue, managerRoleBinding.Annotations[targetAnnotations])
+	assert.Equal(t, "mrb-custom-value", managerRoleBinding.Annotations["mrb-custom"])
+
+	options = &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                                 "https://github.com/actions",
+			"githubConfigSecret.github_token":                                 "gh_token12345",
+			"controllerServiceAccount.name":                                   "arc",
+			"controllerServiceAccount.namespace":                              "arc-system",
+			`annotations.argocd\.argoproj\.io/sync-wave`:                      `"1"`,
+			"resourceMeta.noPermissionServiceAccount.annotations.npsa-custom": "npsa-custom-value",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/no_permission_serviceaccount.yaml"})
+	var noPermissionServiceAccount corev1.ServiceAccount
+	helm.UnmarshalK8SYaml(t, output, &noPermissionServiceAccount)
+	assert.Equal(t, wantCustomValue, noPermissionServiceAccount.Annotations[targetAnnotations])
+	assert.Equal(t, "npsa-custom-value", noPermissionServiceAccount.Annotations["npsa-custom"])
 }
