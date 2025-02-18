@@ -228,6 +228,12 @@ template:
 # labels:
 #   key: value
 
+## If you want more fine-grained control over annotations applied to particular resource created by this chart,
+## you can use `resourceMeta`.
+## Order of applying labels and annotations is:
+## 1. Apply labels/annotations globally, using `annotations` and `labels` field
+## 2. Apply `resourceMeta` labels/annotations
+## 3. Apply reserved labels/annotations
 # resourceMeta:
 #   autoscalingRunnerSet:
 #     labels:
