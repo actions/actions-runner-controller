@@ -2,7 +2,7 @@
 We will use a self managed CA if one is not provided by cert-manager
 */}}
 {{- $ca := genCA "actions-runner-ca" 3650 }}
-{{- $cert := genSignedCert (printf "%s.%s.svc" (include "actions-runner-controller.webhookServiceName" .) .Release.Namespace) nil (list (printf "%s.%s.svc" (include "actions-runner-controller.webhookServiceName" .) .Release.Namespace)) 3650 $ca }}
+{{- $cert := genSignedCert (printf "%s.%s.svc" (include "actions-runner-controller.webhookServiceName" .) (include "actions-runner-controller.namespace" .)) nil (list (printf "%s.%s.svc" (include "actions-runner-controller.webhookServiceName" .) (include "actions-runner-controller.namespace" .))) 3650 $ca }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -11,7 +11,7 @@ metadata:
   name: {{ include "actions-runner-controller.fullname" . }}-mutating-webhook-configuration
   {{- if .Values.certManagerEnabled }}
   annotations:
-    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+    cert-manager.io/inject-ca-from: {{ include "actions-runner-controller.namespace" . }}/{{ include "actions-runner-controller.servingCertName" . }}
   {{- end }}
 webhooks:
 - admissionReviewVersions:
@@ -19,7 +19,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -29,7 +29,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /mutate-actions-summerwind-dev-v1alpha1-runner
   failurePolicy: Fail
   name: mutate.runner.actions.summerwind.dev
@@ -50,7 +50,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -60,7 +60,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /mutate-actions-summerwind-dev-v1alpha1-runnerdeployment
   failurePolicy: Fail
   name: mutate.runnerdeployment.actions.summerwind.dev
@@ -81,7 +81,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -91,7 +91,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset
   failurePolicy: Fail
   name: mutate.runnerreplicaset.actions.summerwind.dev
@@ -112,7 +112,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -122,7 +122,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /mutate-runner-set-pod
   failurePolicy: Fail
   name: mutate-runner-pod.webhook.actions.summerwind.dev
@@ -148,7 +148,7 @@ metadata:
   name: {{ include "actions-runner-controller.fullname" . }}-validating-webhook-configuration
   {{- if .Values.certManagerEnabled }}
   annotations:
-    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+    cert-manager.io/inject-ca-from: {{ include "actions-runner-controller.namespace" . }}/{{ include "actions-runner-controller.servingCertName" . }}
   {{- end }}
 webhooks:
 - admissionReviewVersions:
@@ -156,7 +156,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -166,7 +166,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /validate-actions-summerwind-dev-v1alpha1-runner
   failurePolicy: Fail
   name: validate.runner.actions.summerwind.dev
@@ -187,7 +187,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -197,7 +197,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /validate-actions-summerwind-dev-v1alpha1-runnerdeployment
   failurePolicy: Fail
   name: validate.runnerdeployment.actions.summerwind.dev
@@ -218,7 +218,7 @@ webhooks:
   {{- if .Values.scope.singleNamespace }}
   namespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+      kubernetes.io/metadata.name: {{ default (include "actions-runner-controller.namespace" .) .Values.scope.watchNamespace }}
   {{- end }}
   clientConfig:
     {{- if .Values.admissionWebHooks.caBundle }}
@@ -228,7 +228,7 @@ webhooks:
     {{- end }}
     service:
       name: {{ include "actions-runner-controller.webhookServiceName" . }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ include "actions-runner-controller.namespace" . }}
       path: /validate-actions-summerwind-dev-v1alpha1-runnerreplicaset
   failurePolicy: Fail
   name: validate.runnerreplicaset.actions.summerwind.dev
@@ -250,7 +250,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: {{ include "actions-runner-controller.servingCertName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "actions-runner-controller.namespace" . }}
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
 type: kubernetes.io/tls
