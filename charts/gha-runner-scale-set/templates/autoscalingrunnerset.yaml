@@ -127,6 +127,10 @@ spec:
       - name: init-dind-externals
         {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
         {{- end }}
+        {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
+      - name: dind
+        {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
+        {{- end }}
         {{- with .Values.template.spec.initContainers }}
       {{- toYaml . | nindent 6 }}
         {{- end }}
@@ -135,8 +139,10 @@ spec:
       {{- if eq $containerMode.type "dind" }}
       - name: runner
         {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
+        {{- if not (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
       - name: dind
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
+        {{- end }}
       {{- include "gha-runner-scale-set.non-runner-non-dind-containers" . | nindent 6 }}
       {{- else if eq $containerMode.type "kubernetes" }}
       - name: runner
