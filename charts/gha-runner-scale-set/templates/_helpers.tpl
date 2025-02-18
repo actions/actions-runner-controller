@@ -96,11 +96,17 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+image: {{ default "docker:dind" .Values.dindConfig.image }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+  {{- if .Values.dindConfig.bip }}
+  - --bip={{ .Values.dindConfig.bip }}
+  {{- end }}
+  {{- if .Values.dindConfig.defaultAddressPool }}
+  - --default-address-pool=base={{ .Values.dindConfig.defaultAddressPool.base}},size={{ .Values.dindConfig.defaultAddressPool.size}}
+  {{- end }}
 env:
   - name: DOCKER_GROUP_GID
     value: "123"

@@ -103,6 +103,14 @@ githubConfigSecret:
 #   kubernetesModeServiceAccount:
 #     annotations:
 
+## The following is the customization for dind image and network configuration
+# dindConfig:
+#   image: docker:20.10.7-dind
+#   bip: 192.168.200.1/24
+#   defaultAddressPool:
+#     base: 192.168.201.1/24
+#     size: 24
+
 ## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 # listenerTemplate:
@@ -216,3 +224,11 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+topologySpreadConstraints: []
