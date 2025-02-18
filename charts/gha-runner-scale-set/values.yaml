@@ -120,92 +120,47 @@ githubConfigSecret:
 #     - name: side-car
 #       image: example-sidecar
 
-## template is the PodSpec for each runner Pod
-## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
-template:
-  ## template.spec will be modified if you change the container mode
-  ## with containerMode.type=dind, we will populate the template.spec with following pod spec
-  ## template:
-  ##   spec:
-  ##     initContainers:
-  ##     - name: init-dind-externals
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
-  ##       volumeMounts:
-  ##         - name: dind-externals
-  ##           mountPath: /home/runner/tmpDir
-  ##     containers:
-  ##     - name: runner
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["/home/runner/run.sh"]
-  ##       env:
-  ##         - name: DOCKER_HOST
-  ##           value: unix:///var/run/docker.sock
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##         - name: dind-sock
-  ##           mountPath: /var/run
-  ##     - name: dind
-  ##       image: docker:dind
-  ##       args:
-  ##         - dockerd
-  ##         - --host=unix:///var/run/docker.sock
-  ##         - --group=$(DOCKER_GROUP_GID)
-  ##       env:
-  ##         - name: DOCKER_GROUP_GID
-  ##           value: "123"
-  ##       securityContext:
-  ##         privileged: true
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##         - name: dind-sock
-  ##           mountPath: /var/run
-  ##         - name: dind-externals
-  ##           mountPath: /home/runner/externals
-  ##     volumes:
-  ##     - name: work
-  ##       emptyDir: {}
-  ##     - name: dind-sock
-  ##       emptyDir: {}
-  ##     - name: dind-externals
-  ##       emptyDir: {}
-  ######################################################################################################
-  ## with containerMode.type=kubernetes, we will populate the template.spec with following pod spec
-  ## template:
-  ##   spec:
-  ##     containers:
-  ##     - name: runner
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["/home/runner/run.sh"]
-  ##       env:
-  ##         - name: ACTIONS_RUNNER_CONTAINER_HOOKS
-  ##           value: /home/runner/k8s/index.js
-  ##         - name: ACTIONS_RUNNER_POD_NAME
-  ##           valueFrom:
-  ##             fieldRef:
-  ##               fieldPath: metadata.name
-  ##         - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
-  ##           value: "true"
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##     volumes:
-  ##       - name: work
-  ##         ephemeral:
-  ##           volumeClaimTemplate:
-  ##             spec:
-  ##               accessModes: [ "ReadWriteOnce" ]
-  ##               storageClassName: "local-path"
-  ##               resources:
-  ##                 requests:
-  ##                   storage: 1Gi
-  spec:
-    containers:
-      - name: runner
-        image: ghcr.io/actions/actions-runner:latest
-        command: ["/home/runner/run.sh"]
+
+
+# Configuration for the runner Pod
+runner:
+    restartPolicy: Never
+    serviceAccountName: "" # optional, if not set, serviceAccountName will be auto-generated
+    imagePullSecrets: []
+    extraMetadata: {}
+    extraVolumes: []
+    extraContainers: []
+    extraInitContainers: []
+    extraPodSpec: {}
+
+    # -- Optionally specify spec for the runner container.
+    runnerContainer:
+      image: "ghcr.io/actions/actions-runner:latest"
+      imagePullPolicy: "Always"
+      extraArgs: []
+      extraEnv: []
+      extraVolumeMounts: []
+      resources: {}
+
+    # -- Optionally specify spec for the dind init container.
+    # ignored if containerMode.type is not dind.
+    dindInitContainer:
+      image: "ghcr.io/actions/actions-runner:latest"
+      imagePullPolicy: "Always"
+      extraArgs: []
+      extraEnv: []
+      extraVolumeMounts: []
+      resources: {}
+
+    # -- Optionally specify spec for the dind container.
+    # ignored if containerMode.type is not dind.
+    dindContainer:
+      image: "docker:dind"
+      imagePullPolicy: "Always"
+      extraArgs: []
+      extraEnv: []
+      extraVolumeMounts: []
+      resources: {}
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
