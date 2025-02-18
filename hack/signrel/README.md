@@ -1,14 +1,12 @@
 # signrel
 
-`signrel` is the utility command for downloading `actions-runner-controller` release assets, sigining those, and uploading the signature files.
+`signrel` is a utility command that downloads `actions-runner-controller` release assets, signs them, and uploads the resulting signature files.
 
 ## Verifying Release Assets
 
-For users, browse https://keys.openpgp.org/search?q=D8078411E3D8400B574EDB0441B69B728F095A87 and download the public key, or refer to [the instruction](https://keys.openpgp.org/about/usage#gnupg-retrieve) to import the key onto your machine.
+To get started, browse to <https://keys.openpgp.org/search?q=D8078411E3D8400B574EDB0441B69B728F095A87> to download the public key, or refer to [the instructions](https://keys.openpgp.org/about/usage#gnupg-retrieve) to import the key onto your machine.
 
-Next, you'll want to verify the signature of the download asset somehow.
-
-With `gpg`, you would usually do that by downloading both the asset and the signature files from our specific release page, and run `gpg --verify` like:
+Next, verify the signature of the downloaded asset. Using `gpg`, you can do this by downloading both the asset and its signature from our release page, then running `gpg --verify` like so:
 
 ```console
 # Download the asset
@@ -21,7 +19,7 @@ curl -LO https://github.com/actions/actions-runner-controller/releases/download/
 gpg --verify actions-runner-controller.yaml{.asc,}
 ```
 
-On succesful verification, the gpg command would output:
+On successful verification, the `gpg` command will output something similar to:
 
 ```
 gpg: Signature made Tue 10 May 2022 04:15:32 AM UTC
@@ -35,7 +33,7 @@ gpg: Good signature from "Yusuke Kuoka <ykuoka@gmail.com>" [ultimate]
 
 ## Signing Release Assets
 
-Assuming you are a maintainer of the project who has admin permission, run the command like the below to sign assets and upload the signature files:
+If you are a maintainer of the project with admin permission, you can run the following commands to sign assets and upload the signature files:
 
 ```console
 $ cd hack/signrel
@@ -60,8 +58,8 @@ Upload completed: *snip*
 actions-runner-controller-0.17.2.tgz.asc"}
 ```
 
-To retrieve all the available release tags, run:
+To retrieve all available release tags, run:
 
-```
+```console
 $ go run . tags | jq -r .[].tag_name
 ```

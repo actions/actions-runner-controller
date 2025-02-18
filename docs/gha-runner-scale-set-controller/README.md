@@ -31,7 +31,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 [![Watch the walkthrough](thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
 
-> Will take you to Youtube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
+> Will take you to YouTube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
 
 ## Setup
 
@@ -201,7 +201,7 @@ Please evaluate these changes carefully before upgrading.
 1. Document customization for containerModes [#2777](https://github.com/actions/actions-runner-controller/pull/2777)
 1. Bump github.com/cloudflare/circl from 1.1.0 to 1.3.3 [#2628](https://github.com/actions/actions-runner-controller/pull/2628)
 1. chore(deps): bump github.com/stretchr/testify from 1.8.2 to 1.8.4 [#2716](https://github.com/actions/actions-runner-controller/pull/2716)
-1. Move gha-* docs out of preview [#2779](https://github.com/actions/actions-runner-controller/pull/2779)
+1. Move gha-\* docs out of preview [#2779](https://github.com/actions/actions-runner-controller/pull/2779)
 1. Prepare 0.5.0 release [#2783](https://github.com/actions/actions-runner-controller/pull/2783)
 1. Security fix [#2676](https://github.com/actions/actions-runner-controller/pull/2676)
 
