@@ -58,6 +58,11 @@ githubConfigSecret:
 ## calculated as a sum of minRunners and the number of jobs assigned to the scale set.
 # minRunners: 0
 
+## scheduledOverrides is a list of scheduled overrides to the minReplicas.
+## See docs for more info: https://github.com/actions/actions-runner-controller/blob/master/docs/automatically-scaling-runners.md#scheduled-overrides
+## Please note that the field minReplicas was renamed to minRunners
+# scheduledOverrides: []
+
 # runnerGroup: "default"
 
 ## name of the runner scale set to create.  Defaults to the helm release name
@@ -206,7 +211,6 @@ template:
       - name: runner
         image: ghcr.io/actions/actions-runner:latest
         command: ["/home/runner/run.sh"]
-
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.
