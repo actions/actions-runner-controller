@@ -1,3 +1,4 @@
+{{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.autoscalingRunnerSet) }}
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
 metadata:
@@ -10,9 +11,25 @@ metadata:
   name: {{ include "gha-runner-scale-set.scale-set-name" . }}
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.autoscalingRunnerSet.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
     app.kubernetes.io/component: "autoscaling-runner-set"
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
   annotations:
+    {{- with .Values.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.autoscalingRunnerSet.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
     actions.github.com/values-hash: {{ toJson .Values | sha256sum | trunc 63 }}
     {{- $containerMode := .Values.containerMode }}
     {{- if not (kindIs "string" .Values.githubConfigSecret) }}

@@ -4,15 +4,15 @@ githubConfigUrl: ""
 
 ## githubConfigSecret is the k8s secret information to use when authenticating via the GitHub API.
 ## You can choose to supply:
-##   A) a PAT token, 
-##   B) a GitHub App, or 
+##   A) a PAT token,
+##   B) a GitHub App, or
 ##   C) a pre-defined Kubernetes secret.
 ## The syntax for each of these variations is documented below.
 ## (Variation A) When using a PAT token, the syntax is as follows:
 githubConfigSecret:
-  # Example:  
+  # Example:
   # github_token: "ghp_sampleSampleSampleSampleSampleSample"
-  github_token: ""  
+  github_token: ""
 #
 ## (Variation B) When using a GitHub App, the syntax is as follows:
 # githubConfigSecret:
@@ -100,8 +100,7 @@ githubConfigSecret:
 #     resources:
 #       requests:
 #         storage: 1Gi
-#   kubernetesModeServiceAccount:
-#     annotations:
+#
 
 ## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
@@ -216,3 +215,63 @@ template:
 # controllerServiceAccount:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
+
+## Optional annotations and labels applied to all resources created by helm installation
+##
+## Annotations applied to all resources created by this helm chart. Annotations will not override the default ones, so make sure
+## the custom annotation is not reserved.
+# annotations:
+#   key: value
+##
+## Labels applied to all resources created by this helm chart. Labels will not override the default ones, so make sure
+## the custom label is not reserved.
+# labels:
+#   key: value
+
+## If you want more fine-grained control over annotations applied to particular resource created by this chart,
+## you can use `resourceMeta`.
+## Order of applying labels and annotations is:
+## 1. Apply labels/annotations globally, using `annotations` and `labels` field
+## 2. Apply `resourceMeta` labels/annotations
+## 3. Apply reserved labels/annotations
+# resourceMeta:
+#   autoscalingRunnerSet:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   githubConfigSecret:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   kubernetesModeRole:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   kubernetesModeRoleBinding:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   kubernetesModeServiceAccount:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   managerRole:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   managerRoleBinding:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   noPermissionServiceAccount:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
