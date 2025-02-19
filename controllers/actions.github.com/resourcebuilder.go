@@ -747,7 +747,7 @@ func trimLabelValue(val string) string {
 	if len(val) > 63 {
 		return val[:63-len(trimLabelVauleSuffix)] + trimLabelVauleSuffix
 	}
-	return val
+	return strings.Trim(val, "-_.")
 }
 
 func (b *ResourceBuilder) mergeLabels(base, overwrite map[string]string) map[string]string {
