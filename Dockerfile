@@ -51,7 +51,6 @@ WORKDIR /
 COPY --from=builder /out/manager .
 COPY --from=builder /out/github-webhook-server .
 COPY --from=builder /out/actions-metrics-server .
-COPY --from=builder /out/github-runnerscaleset-listener .
 COPY --from=builder /out/ghalistener .
 COPY --from=builder /out/sleep .
 
