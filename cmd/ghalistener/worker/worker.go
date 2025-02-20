@@ -221,7 +221,7 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 	return w.lastPatch, nil
 }
 
-// calculateDesiredState calculates the desired state of the worker based on the desired count and the the number of jobs completed.
+// calculateDesiredState calculates the desired state of the worker based on the desired count and the number of jobs completed.
 func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
 	// Max runners should always be set by the resource builder either to the configured value,
 	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).

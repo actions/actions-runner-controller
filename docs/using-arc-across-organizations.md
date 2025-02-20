@@ -7,7 +7,7 @@
 
 > This feature requires controller version => [v0.26.0](https://github.com/actions/actions-runner-controller/releases/tag/v0.26.0)
 
-In a large enterprise, there might be many GitHub organizations that requires self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](deploying-arc-runners.md#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
+In a large enterprise, there might be many GitHub organizations that require self-hosted runners. Previously, the only way to provide ARC-managed self-hosted runners in such environment was [Deploying Multiple Controllers](deploying-arc-runners.md#deploying-multiple-controllers), which incurs overhead due to it requires one ARC installation per GitHub organization.
 
 With multitenancy, you can let ARC manage self-hosted runners across organizations. It's enabled by default and the only thing you need to start using it is to set the `spec.githubAPICredentialsFrom.secretRef.name` fields for the following resources:
 
