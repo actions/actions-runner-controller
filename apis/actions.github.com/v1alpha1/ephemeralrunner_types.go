@@ -57,7 +57,7 @@ func (er *EphemeralRunner) HasContainerHookConfigured() bool {
 		}
 
 		for _, env := range er.Spec.Spec.Containers[i].Env {
-			if env.Name == "ACTIONS_RUNNER_CONTAINER_HOOK" {
+			if env.Name == "ACTIONS_RUNNER_CONTAINER_HOOKS" {
 				return true
 			}
 		}

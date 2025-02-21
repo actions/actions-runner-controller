@@ -59,7 +59,7 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 							},
 							Env: []corev1.EnvVar{
 								{
-									Name:  "ACTIONS_RUNNER_CONTAINER_HOOK",
+									Name:  "ACTIONS_RUNNER_CONTAINER_HOOKS",
 									Value: "/tmp/hook/index.js",
 								},
 							},
