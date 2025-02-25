@@ -44,8 +44,8 @@ var (
 
 	completedJobsTotalLabels   = append(jobLabels, labelKeyJobResult)
 	jobExecutionDurationLabels = append(jobLabels, labelKeyJobResult)
-	startedJobsTotalLabels     = append(jobLabels)
-	jobStartupDurationLabels   = append(jobLabels)
+	startedJobsTotalLabels     = jobLabels
+	jobStartupDurationLabels   = jobLabels
 )
 
 var (
@@ -218,11 +218,11 @@ type baseLabels struct {
 
 func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
-		labelKeyEnterprise:     b.enterprise,
-		labelKeyOrganization:   jobBase.OwnerName,
-		labelKeyRepository:     jobBase.RepositoryName,
-		labelKeyJobName:        jobBase.JobDisplayName,
-		labelKeyEventName:      jobBase.EventName,
+		labelKeyEnterprise:   b.enterprise,
+		labelKeyOrganization: jobBase.OwnerName,
+		labelKeyRepository:   jobBase.RepositoryName,
+		labelKeyJobName:      jobBase.JobDisplayName,
+		labelKeyEventName:    jobBase.EventName,
 	}
 }
 
