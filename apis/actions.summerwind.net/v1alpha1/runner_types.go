@@ -317,11 +317,11 @@ type RunnerStatusRegistration struct {
 type WorkVolumeClaimTemplate struct {
 	StorageClassName string                              `json:"storageClassName"`
 	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
-	Resources        corev1.ResourceRequirements         `json:"resources"`
+	Resources        corev1.VolumeResourceRequirements   `json:"resources"`
 }
 
 func (w *WorkVolumeClaimTemplate) validate() error {
-	if w.AccessModes == nil || len(w.AccessModes) == 0 {
+	if len(w.AccessModes) == 0 {
 		return errors.New("Access mode should have at least one mode specified")
 	}
 

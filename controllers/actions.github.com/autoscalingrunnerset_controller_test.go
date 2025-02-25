@@ -933,7 +933,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 		var configSecret *corev1.Secret
 		var controller *AutoscalingRunnerSetReconciler
 
-		BeforeEach(func() {
+		BeforeAll(func() {
 			ctx = context.Background()
 			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)

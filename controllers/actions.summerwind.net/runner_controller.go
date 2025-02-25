@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
@@ -817,7 +818,6 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 	if runnerSpec.DockerVarRunVolumeSizeLimit == nil {
 		runnerSpec.DockerVarRunVolumeSizeLimit = resource.NewScaledQuantity(1, resource.Mega)
-
 	}
 
 	// Be aware some of the environment variables are used
