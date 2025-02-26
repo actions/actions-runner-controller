@@ -51,7 +51,9 @@ type EphemeralRunnerSetReconciler struct {
 	Scheme        *runtime.Scheme
 	ActionsClient actions.MultiClient
 
-	PublishMetrics bool
+	PublishMetrics                                bool
+	ControllerNamespace                           string
+	ReadGitHubConfigSecretFromControllerNamespace bool
 
 	ResourceBuilder
 }
@@ -504,7 +506,7 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 
 func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) (actions.ActionsService, error) {
 	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: r.deriveConfigSecretNamespace(rs), Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 
@@ -520,6 +522,14 @@ func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs 
 		secret.Data,
 		opts...,
 	)
+}
+
+func (r *EphemeralRunnerSetReconciler) deriveConfigSecretNamespace(rs *v1alpha1.EphemeralRunnerSet) string {
+	secretNamespace := rs.Namespace
+	if r.ReadGitHubConfigSecretFromControllerNamespace {
+		secretNamespace = r.ControllerNamespace
+	}
+	return secretNamespace
 }
 
 func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) ([]actions.ClientOption, error) {

@@ -71,6 +71,9 @@ spec:
         {{- with .Values.flags.updateStrategy }}
         - "--update-strategy={{ . }}"
         {{- end }}
+        {{- if .Values.flags.readGitHubConfigSecretFromControllerNamespace }}
+        - "--read-github-config-secret-from-controller-namespace"
+        {{- end }}
         {{- if .Values.metrics }}
         {{- with .Values.metrics }}
         - "--listener-metrics-addr={{ .listenerAddr }}"

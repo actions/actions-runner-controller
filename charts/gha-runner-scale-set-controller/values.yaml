@@ -127,6 +127,12 @@ flags:
   ##   that you don't have any overprovisioning of runners.
   updateStrategy: "immediate"
 
+  ## This flag determines whether the githubConfigSecret on the AutoscalingRunnerSet will be read from the
+  ## namespace that the controller is running in or the namespace that the AutoscalingRunnerSet resource is in.
+  ##
+  ## Defaults to false, so the secret will be read from the namespace that the runner lives in.
+  readGitHubConfigSecretFromControllerNamespace: false
+
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
   ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.

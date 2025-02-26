@@ -94,11 +94,12 @@ func main() {
 		runnerImagePullSecrets stringSlice
 		runnerPodDefaults      actionssummerwindnet.RunnerPodDefaults
 
-		namespace                       string
-		logLevel                        string
-		logFormat                       string
-		watchSingleNamespace            string
-		excludeLabelPropagationPrefixes stringSlice
+		namespace                                     string
+		logLevel                                      string
+		logFormat                                     string
+		watchSingleNamespace                          string
+		readGithubConfigSecretFromControllerNamespace bool
+		excludeLabelPropagationPrefixes               stringSlice
 
 		autoScalerImagePullSecrets stringSlice
 
@@ -145,6 +146,7 @@ func main() {
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&watchSingleNamespace, "watch-single-namespace", "", "Restrict to watch for custom resources in a single namespace.")
+	flag.BoolVar(&readGithubConfigSecretFromControllerNamespace, "read-github-config-secret-from-controller-namespace", false, "Read AutoscalingRunnerSet githubConfigSecret from controller namespace.")
 	flag.Var(&excludeLabelPropagationPrefixes, "exclude-label-propagation-prefix", "The list of prefixes that should be excluded from label propagation")
 	flag.StringVar(&logLevel, "log-level", logging.LogLevelDebug, `The verbosity of the logging. Valid values are "debug", "info", "warn", "error". Defaults to "debug".`)
 	flag.StringVar(&logFormat, "log-format", "text", `The log format. Valid options are "text" and "json". Defaults to "text"`)
@@ -279,25 +281,28 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
-			Client:                             mgr.GetClient(),
-			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
-			Scheme:                             mgr.GetScheme(),
-			ControllerNamespace:                managerNamespace,
-			DefaultRunnerScaleSetListenerImage: managerImage,
-			ActionsClient:                      actionsMultiClient,
-			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
+			Client:              mgr.GetClient(),
+			Log:                 log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
+			Scheme:              mgr.GetScheme(),
+			ControllerNamespace: managerNamespace,
+			ReadGitHubConfigSecretFromControllerNamespace: readGithubConfigSecretFromControllerNamespace,
+			DefaultRunnerScaleSetListenerImage:            managerImage,
+			ActionsClient:                                 actionsMultiClient,
+			UpdateStrategy:                                actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
-			ResourceBuilder: rb,
+			ResourceBuilder:                               rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:          mgr.GetClient(),
-			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
+			Client:              mgr.GetClient(),
+			Log:                 log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:              mgr.GetScheme(),
+			ActionsClient:       actionsMultiClient,
+			ControllerNamespace: managerNamespace,
+			ReadGitHubConfigSecretFromControllerNamespace: readGithubConfigSecretFromControllerNamespace,
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
@@ -305,11 +310,13 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
-			Client:          mgr.GetClient(),
-			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
-			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
-			PublishMetrics:  metricsAddr != "0",
+			Client:              mgr.GetClient(),
+			Log:                 log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
+			Scheme:              mgr.GetScheme(),
+			ActionsClient:       actionsMultiClient,
+			PublishMetrics:      metricsAddr != "0",
+			ControllerNamespace: managerNamespace,
+			ReadGitHubConfigSecretFromControllerNamespace: readGithubConfigSecretFromControllerNamespace,
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
@@ -317,12 +324,13 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
-			Client:                  mgr.GetClient(),
-			Log:                     log.WithName("AutoscalingListener").WithValues("version", build.Version),
-			Scheme:                  mgr.GetScheme(),
-			ListenerMetricsAddr:     listenerMetricsAddr,
-			ListenerMetricsEndpoint: listenerMetricsEndpoint,
-			ResourceBuilder:         rb,
+			Client: mgr.GetClient(),
+			Log:    log.WithName("AutoscalingListener").WithValues("version", build.Version),
+			Scheme: mgr.GetScheme(),
+			ReadGitHubConfigSecretFromControllerNamespace: readGithubConfigSecretFromControllerNamespace,
+			ListenerMetricsAddr:                           listenerMetricsAddr,
+			ListenerMetricsEndpoint:                       listenerMetricsEndpoint,
+			ResourceBuilder:                               rb,
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
