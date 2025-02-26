@@ -1045,7 +1045,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 
 	var container string
 	if kubernetesContainerMode {
-		container = "golang:1.18"
+		container = "golang:1.24"
 	}
 
 	for _, j := range testJobs {
@@ -1106,7 +1106,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.22.4",
+						GoVersion: "1.24.0",
 					},
 				},
 			)
@@ -1236,7 +1236,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 			testing.Step{
 				Uses: "azure/setup-kubectl@v1",
 				With: &testing.With{
-					Version: "v1.22.4",
+					Version: "v1.24.0",
 				},
 			},
 			testing.Step{
