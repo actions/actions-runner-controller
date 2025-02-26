@@ -17,6 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -37,31 +40,44 @@ func (r *RunnerReplicaSet) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // +kubebuilder:webhook:path=/mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset,verbs=create;update,mutating=true,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerreplicasets,versions=v1alpha1,name=mutate.runnerreplicaset.actions.summerwind.dev,sideEffects=None,admissionReviewVersions=v1beta1
 
-var _ webhook.Defaulter = &RunnerReplicaSet{}
+var _ webhook.CustomDefaulter = &RunnerReplicaSetDefaulter{}
+
+type RunnerReplicaSetDefaulter struct{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *RunnerReplicaSet) Default() {
+func (*RunnerReplicaSetDefaulter) Default(context.Context, runtime.Object) error {
 	// Nothing to do.
+	return nil
 }
 
 // +kubebuilder:webhook:path=/validate-actions-summerwind-dev-v1alpha1-runnerreplicaset,verbs=create;update,mutating=false,failurePolicy=fail,groups=actions.summerwind.dev,resources=runnerreplicasets,versions=v1alpha1,name=validate.runnerreplicaset.actions.summerwind.dev,sideEffects=None,admissionReviewVersions=v1beta1
 
-var _ webhook.Validator = &RunnerReplicaSet{}
+var _ webhook.CustomValidator = &RunnerReplicaSetValidator{}
+
+type RunnerReplicaSetValidator struct{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *RunnerReplicaSet) ValidateCreate() (admission.Warnings, error) {
+func (*RunnerReplicaSetValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	r, ok := obj.(*RunnerReplicaSet)
+	if !ok {
+		return nil, fmt.Errorf("expected RunnerReplicaSet object, got %T", obj)
+	}
 	runnerReplicaSetLog.Info("validate resource to be created", "name", r.Name)
 	return nil, r.Validate()
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *RunnerReplicaSet) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (*RunnerReplicaSetValidator) ValidateUpdate(ctx context.Context, old, obj runtime.Object) (admission.Warnings, error) {
+	r, ok := obj.(*RunnerReplicaSet)
+	if !ok {
+		return nil, fmt.Errorf("expected RunnerReplicaSet object, got %T", obj)
+	}
 	runnerReplicaSetLog.Info("validate resource to be updated", "name", r.Name)
 	return nil, r.Validate()
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *RunnerReplicaSet) ValidateDelete() (admission.Warnings, error) {
+func (*RunnerReplicaSetValidator) ValidateDelete(context.Context, runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
