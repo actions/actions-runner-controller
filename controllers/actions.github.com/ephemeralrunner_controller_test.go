@@ -379,16 +379,21 @@ var _ = Describe("EphemeralRunner", func() {
 				podCopy := pod.DeepCopy()
 				pod.Status.Phase = phase
 				// set container state to force status update
-				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
-					Name:  EphemeralRunnerContainerName,
-					State: corev1.ContainerState{},
-				})
+				pod.Status.ContainerStatuses = append(
+					pod.Status.ContainerStatuses,
+					corev1.ContainerStatus{
+						Name:  EphemeralRunnerContainerName,
+						State: corev1.ContainerState{},
+					},
+				)
+
 				err := k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
 				Expect(err).To(BeNil(), "failed to patch pod status")
 
+				var updated *v1alpha1.EphemeralRunner
 				Eventually(
 					func() (corev1.PodPhase, error) {
-						updated := new(v1alpha1.EphemeralRunner)
+						updated = new(v1alpha1.EphemeralRunner)
 						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
 						if err != nil {
 							return "", err
@@ -399,6 +404,95 @@ var _ = Describe("EphemeralRunner", func() {
 					ephemeralRunnerInterval,
 				).Should(BeEquivalentTo(phase))
 			}
+		})
+
+		It("It should update ready based on the latest condition", func() {
+			pod := new(corev1.Pod)
+			Eventually(func() (bool, error) {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
+					return false, err
+				}
+				return true, nil
+			}).Should(BeEquivalentTo(true))
+
+			newPod := pod.DeepCopy()
+			newPod.Status.Conditions = []corev1.PodCondition{
+				{
+					Type:               corev1.PodScheduled,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+				},
+				{
+					Type:               corev1.PodInitialized,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+				},
+				{
+					Type:               corev1.ContainersReady,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+				},
+				{
+					Type:               corev1.PodReady,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+			newPod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+				Name:  EphemeralRunnerContainerName,
+				State: corev1.ContainerState{},
+			})
+			err := k8sClient.Status().Patch(ctx, newPod, client.MergeFrom(pod))
+			Expect(err).To(BeNil(), "failed to patch pod status")
+
+			var er *v1alpha1.EphemeralRunner
+			Eventually(
+				func() (bool, error) {
+					er = new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+					if err != nil {
+						return false, err
+					}
+					return er.Status.Ready, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+
+			// Fetch the pod again
+			Eventually(
+				func() (bool, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+
+			newPod = pod.DeepCopy()
+			newPod.Status.Conditions = append(newPod.Status.Conditions, corev1.PodCondition{
+				Type:               corev1.PodReady,
+				Status:             corev1.ConditionFalse,
+				LastTransitionTime: metav1.Time{Time: metav1.Now().Add(1 * time.Second)},
+			})
+
+			err = k8sClient.Status().Patch(ctx, newPod, client.MergeFrom(pod))
+			Expect(err).To(BeNil(), "expected no errors when updating new pod status")
+
+			Eventually(
+				func() (bool, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					if err != nil {
+						return false, err
+					}
+					return ephemeralRunner.Status.Ready, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(false))
 		})
 
 		It("It should not update phase if container state does not exist", func() {
