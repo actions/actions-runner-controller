@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	listenerconfig "github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
+	listenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"

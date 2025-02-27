@@ -87,7 +87,7 @@ test-with-deps: kube-apiserver etcd kubectl
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager main.go
-	go build -o bin/github-runnerscaleset-listener ./cmd/githubrunnerscalesetlistener
+	go build -o bin/github-runnerscaleset-listener ./cmd/ghalistener
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
