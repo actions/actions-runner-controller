@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // secret constants
@@ -111,6 +112,16 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			Namespace:   namespace,
 			Labels:      labels,
 			Annotations: annotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingRunnerSet.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingRunnerSet.GroupVersionKind().Kind,
+					Name:               autoscalingRunnerSet.Name,
+					UID:                autoscalingRunnerSet.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
@@ -209,6 +220,16 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scaleSetListenerConfigName(autoscalingListener),
 			Namespace: autoscalingListener.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GroupVersionKind().Kind,
+					Name:               autoscalingListener.Name,
+					UID:                autoscalingListener.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Data: map[string][]byte{
 			"config.json": buf.Bytes(),
@@ -284,6 +305,16 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
 			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GroupVersionKind().Kind,
+					Name:               autoscalingListener.Name,
+					UID:                autoscalingListener.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Spec: podSpec,
 	}
@@ -418,6 +449,16 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 			}),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GroupVersionKind().Kind,
+					Name:               autoscalingListener.Name,
+					UID:                autoscalingListener.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 	}
 }
@@ -436,6 +477,16 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 				labelKeyListenerName:            autoscalingListener.Name,
 				"role-policy-rules-hash":        rulesHash,
 			}),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GroupVersionKind().Kind,
+					Name:               autoscalingListener.Name,
+					UID:                autoscalingListener.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Rules: rules,
 	}
@@ -471,6 +522,16 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 				"role-binding-role-ref-hash":    roleRefHash,
 				"role-binding-subject-hash":     subjectHash,
 			}),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GroupVersionKind().Kind,
+					Name:               autoscalingListener.Name,
+					UID:                autoscalingListener.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		RoleRef:  roleRef,
 		Subjects: subjects,
@@ -491,6 +552,16 @@ func (b *ResourceBuilder) newScaleSetListenerSecretMirror(autoscalingListener *v
 				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				"secret-data-hash":              dataHash,
 			}),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GroupVersionKind().Kind,
+					Name:               autoscalingListener.Name,
+					UID:                autoscalingListener.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Data: secret.DeepCopy().Data,
 	}
@@ -530,6 +601,16 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			Namespace:    autoscalingRunnerSet.ObjectMeta.Namespace,
 			Labels:       labels,
 			Annotations:  newAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingRunnerSet.GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingRunnerSet.GroupVersionKind().Kind,
+					Name:               autoscalingRunnerSet.Name,
+					UID:                autoscalingRunnerSet.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
@@ -569,6 +650,16 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         ephemeralRunnerSet.GroupVersionKind().GroupVersion().String(),
+					Kind:               ephemeralRunnerSet.GroupVersionKind().Kind,
+					Name:               ephemeralRunnerSet.Name,
+					UID:                ephemeralRunnerSet.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}
@@ -607,6 +698,16 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 		Namespace:   runner.ObjectMeta.Namespace,
 		Labels:      labels,
 		Annotations: annotations,
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         runner.GroupVersionKind().GroupVersion().String(),
+				Kind:               runner.GroupVersionKind().Kind,
+				Name:               runner.Name,
+				UID:                runner.UID,
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(true),
+			},
+		},
 	}
 
 	newPod.ObjectMeta = objectMeta
@@ -647,6 +748,16 @@ func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ephemeralRunner.Name,
 			Namespace: ephemeralRunner.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         ephemeralRunner.GroupVersionKind().GroupVersion().String(),
+					Kind:               ephemeralRunner.GroupVersionKind().Kind,
+					Name:               ephemeralRunner.Name,
+					UID:                ephemeralRunner.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
 		},
 		Data: map[string][]byte{
 			jitTokenKey: []byte(ephemeralRunner.Status.RunnerJITConfig),
