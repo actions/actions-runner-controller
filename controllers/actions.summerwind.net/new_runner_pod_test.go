@@ -46,7 +46,7 @@ func newWorkGenericEphemeralVolume(t *testing.T, storageReq string) corev1.Volum
 							corev1.ReadWriteOnce,
 						},
 						StorageClassName: strPtr("runner-work-dir"),
-						Resources: corev1.ResourceRequirements{
+						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceStorage: GBs,
 							},

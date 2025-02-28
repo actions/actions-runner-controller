@@ -29,7 +29,7 @@ type PodRunnerTokenInjector struct {
 	Log          logr.Logger
 	Recorder     record.EventRecorder
 	GitHubClient *MultiGitHubClient
-	decoder      *admission.Decoder
+	decoder      admission.Decoder
 }
 
 func (t *PodRunnerTokenInjector) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -104,7 +104,7 @@ func getEnv(container *corev1.Container, key string) (string, bool) {
 	return "", false
 }
 
-func (t *PodRunnerTokenInjector) InjectDecoder(d *admission.Decoder) error {
+func (t *PodRunnerTokenInjector) InjectDecoder(d admission.Decoder) error {
 	t.decoder = d
 	return nil
 }
