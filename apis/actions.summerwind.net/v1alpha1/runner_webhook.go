@@ -35,6 +35,8 @@ var runnerLog = logf.Log.WithName("runner-resource")
 func (r *Runner) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
+		WithDefaulter(&RunnerDefaulter{}).
+		WithValidator(&RunnerValidator{}).
 		Complete()
 }
 

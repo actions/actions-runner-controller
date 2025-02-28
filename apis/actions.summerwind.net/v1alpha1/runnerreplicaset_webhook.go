@@ -35,6 +35,8 @@ var runnerReplicaSetLog = logf.Log.WithName("runnerreplicaset-resource")
 func (r *RunnerReplicaSet) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
+		WithDefaulter(&RunnerReplicaSetDefaulter{}).
+		WithValidator(&RunnerReplicaSetValidator{}).
 		Complete()
 }
 

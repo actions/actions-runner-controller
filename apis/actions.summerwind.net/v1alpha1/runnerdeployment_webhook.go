@@ -35,6 +35,8 @@ var runnerDeploymentLog = logf.Log.WithName("runnerdeployment-resource")
 func (r *RunnerDeployment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
+		WithDefaulter(&RunnerDeploymentDefaulter{}).
+		WithValidator(&RunnerDeploymentValidator{}).
 		Complete()
 }
 
