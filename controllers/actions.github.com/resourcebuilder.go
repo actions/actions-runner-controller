@@ -614,7 +614,7 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	newPod.Spec.Containers = make([]corev1.Container, 0, len(runner.Spec.PodTemplateSpec.Spec.Containers))
 
 	for _, c := range runner.Spec.PodTemplateSpec.Spec.Containers {
-		if c.Name == EphemeralRunnerContainerName {
+		if c.Name == v1alpha1.EphemeralRunnerContainerName {
 			c.Env = append(
 				c.Env,
 				corev1.EnvVar{
