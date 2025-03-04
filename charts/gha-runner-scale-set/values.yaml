@@ -63,6 +63,9 @@ githubConfigSecret:
 ## name of the runner scale set to create.  Defaults to the helm release name
 # runnerScaleSetName: ""
 
+## name of the autoscalingrunnersets deployment in kubernetes to create.  Defaults to the runnerScaleSetName
+# deploymentName: ""
+
 ## A self-signed CA certificate for communication with the GitHub server can be
 ## provided using a config map key selector. If `runnerMountPath` is set, for
 ## each runner pod ARC will:
