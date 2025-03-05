@@ -218,7 +218,7 @@ env:
         {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
           {{- $setRunnerUpdateCaCerts = 0 }}
         {{- end }}
-  - {{ $env | toYaml | nindent 4 }}
+  - {{ $env | toYaml | nindent 4 | trim }}
       {{- end }}
     {{- end }}
     {{- if $setDockerHost }}
