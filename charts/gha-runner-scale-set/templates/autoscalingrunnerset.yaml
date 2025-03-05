@@ -20,12 +20,12 @@ metadata:
     {{- end }}
     actions.github.com/cleanup-manager-role-binding: {{ include "gha-runner-scale-set.managerRoleBindingName" . }}
     actions.github.com/cleanup-manager-role-name: {{ include "gha-runner-scale-set.managerRoleName" . }}
-    {{- if and $containerMode (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    {{- if and $containerMode (eq $containerMode.type "kubernetes") (not .Values.runner.serviceAccountName) }}
     actions.github.com/cleanup-kubernetes-mode-role-binding-name: {{ include "gha-runner-scale-set.kubeModeRoleBindingName" . }}
     actions.github.com/cleanup-kubernetes-mode-role-name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
     actions.github.com/cleanup-kubernetes-mode-service-account-name: {{ include "gha-runner-scale-set.kubeModeServiceAccountName" . }}
     {{- end }}
-    {{- if and (ne $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+    {{- if and (ne $containerMode.type "kubernetes") (not .Values.runner.serviceAccountName) }}
     actions.github.com/cleanup-no-permission-service-account-name: {{ include "gha-runner-scale-set.noPermissionServiceAccountName" . }}
     {{- end }}
 spec:
@@ -95,7 +95,7 @@ spec:
   {{- end }}
 
   template:
-    {{- with .Values.template.metadata }}
+    {{- with .Values.runner.extraMetadata }}
     metadata:
       {{- with .labels }}
       labels:
@@ -107,29 +107,24 @@ spec:
       {{- end }}
     {{- end }}
     spec:
-      {{- range $key, $val := .Values.template.spec }}
-        {{- if and (ne $key "containers") (ne $key "volumes") (ne $key "initContainers") (ne $key "serviceAccountName") }}
-      {{ $key }}: {{ $val | toYaml | nindent 8 }}
-        {{- end }}
-      {{- end }}
-      {{- if not .Values.template.spec.restartPolicy }}
-      restartPolicy: Never
-      {{- end }}
+      restartPolicy: {{ .Values.runner.restartPolicy }}
       {{- $containerMode := .Values.containerMode }}
       {{- if eq $containerMode.type "kubernetes" }}
-      serviceAccountName: {{ default (include "gha-runner-scale-set.kubeModeServiceAccountName" .) .Values.template.spec.serviceAccountName }}
+      serviceAccountName: {{ default (include "gha-runner-scale-set.kubeModeServiceAccountName" .) .Values.runner.serviceAccountName }}
       {{- else }}
-      serviceAccountName: {{ default (include "gha-runner-scale-set.noPermissionServiceAccountName" .) .Values.template.spec.serviceAccountName }}
+      serviceAccountName: {{ default (include "gha-runner-scale-set.noPermissionServiceAccountName" .) .Values.runner.serviceAccountName }}
       {{- end }}
-      {{- if or .Values.template.spec.initContainers (eq $containerMode.type "dind") }}
+      {{ if not (empty .Values.runner.imagePullSecrets) }}
+      imagePullSecrets:
+        {{- toYaml .Values.runner.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if or (not (empty .Values.runner.extraInitContainers)) (eq $containerMode.type "dind") }}
       initContainers:
         {{- if eq $containerMode.type "dind" }}
       - name: init-dind-externals
         {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
         {{- end }}
-        {{- with .Values.template.spec.initContainers }}
-      {{- toYaml . | nindent 6 }}
-        {{- end }}
+      {{- include "gha-runner-scale-set.extra-init-containers" . | nindent 4 }}
       {{- end }}
       containers:
       {{- if eq $containerMode.type "dind" }}
@@ -137,16 +132,18 @@ spec:
         {{- include "gha-runner-scale-set.dind-runner-container" . | nindent 8 }}
       - name: dind
         {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
-      {{- include "gha-runner-scale-set.non-runner-non-dind-containers" . | nindent 6 }}
+      {{- include "gha-runner-scale-set.extra-containers" . | nindent 4 }}
       {{- else if eq $containerMode.type "kubernetes" }}
       - name: runner
         {{- include "gha-runner-scale-set.kubernetes-mode-runner-container" . | nindent 8 }}
-      {{- include "gha-runner-scale-set.non-runner-containers" . | nindent 6 }}
+      {{- include "gha-runner-scale-set.extra-containers" . | nindent 4 }}
       {{- else }}
-      {{- include "gha-runner-scale-set.default-mode-runner-containers" . | nindent 6 }}
+      - name: runner
+        {{- include "gha-runner-scale-set.default-mode-runner-containers" . | nindent 8 }}
+      {{- include "gha-runner-scale-set.extra-containers" . | nindent 4 }}
       {{- end }}
       {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-      {{- if or .Values.template.spec.volumes (eq $containerMode.type "dind") (eq $containerMode.type "kubernetes") $tlsConfig.runnerMountPath }}
+      {{- if or .Values.runner.extraVolumes (eq $containerMode.type "dind") (eq $containerMode.type "kubernetes") $tlsConfig.runnerMountPath }}
       volumes:
         {{- if $tlsConfig.runnerMountPath }}
           {{- include "gha-runner-scale-set.tls-volume" $tlsConfig | nindent 6 }}
@@ -154,13 +151,16 @@ spec:
         {{- if eq $containerMode.type "dind" }}
           {{- include "gha-runner-scale-set.dind-volume" . | nindent 6 }}
           {{- include "gha-runner-scale-set.dind-work-volume" . | nindent 6 }}
-          {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.extra-volumes" . | nindent 6 }}
         {{- else if eq $containerMode.type "kubernetes" }}
           {{- include "gha-runner-scale-set.kubernetes-mode-work-volume" . | nindent 6 }}
-          {{- include "gha-runner-scale-set.non-work-volumes" . | nindent 6 }}
+          {{- include "gha-runner-scale-set.extra-volumes" . | nindent 6 }}
         {{- else }}
-          {{- with .Values.template.spec.volumes }}
-        {{- toYaml . | nindent 6 }}
+          {{- with .Values.runner.extraVolumes }}
+            {{- toYaml . | nindent 6 }}
+          {{- end }}
           {{- end }}
         {{- end }}
+      {{- with .Values.runner.extraPodSpec }}
+        {{- toYaml . | nindent 6 }}
       {{- end }}

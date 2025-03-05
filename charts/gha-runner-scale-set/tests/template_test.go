@@ -283,7 +283,7 @@ func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 		SetValues: map[string]string{
 			"githubConfigUrl":                    "https://github.com/actions",
 			"githubConfigSecret.github_token":    "gh_token12345",
-			"template.spec.serviceAccountName":   "test-service-account",
+			"runner.serviceAccountName":          "test-service-account",
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
 		},
@@ -420,14 +420,14 @@ func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
 	options := &helm.Options{
 		Logger: logger.Discard,
 		SetValues: map[string]string{
-			"githubConfigUrl":                     "https://github.com/actions",
-			"githubConfigSecret.github_token":     "gh_token12345",
-			"template.metadata.labels.test1":      "test1",
-			"template.metadata.labels.test2":      "test2",
-			"template.metadata.annotations.test3": "test3",
-			"template.metadata.annotations.test4": "test4",
-			"controllerServiceAccount.name":       "arc",
-			"controllerServiceAccount.namespace":  "arc-system",
+			"githubConfigUrl":                        "https://github.com/actions",
+			"githubConfigSecret.github_token":        "gh_token12345",
+			"runner.extraMetadata.labels.test1":      "test1",
+			"runner.extraMetadata.labels.test2":      "test2",
+			"runner.extraMetadata.annotations.test3": "test3",
+			"runner.extraMetadata.annotations.test4": "test4",
+			"controllerServiceAccount.name":          "arc",
+			"controllerServiceAccount.namespace":     "arc-system",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -1781,7 +1781,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RestartPolicy(t *testing.T) {
 			"githubConfigSecret.github_token":    "gh_token12345",
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
-			"template.spec.restartPolicy":        "Always",
+			"runner.restartPolicy":               "Always",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -2142,4 +2142,47 @@ func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
 	assert.NotEmpty(t, secondHash)
 	assert.NotEqual(t, firstHash, secondHash)
 	assert.LessOrEqual(t, len(secondHash), 63)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ImagePullSecrets(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_image.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+			"containerMode.type":                 "dind",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, "myrregistrykey", ars.Spec.Template.Spec.ImagePullSecrets[0].Name, "Container image should be myregistry/runner-image:latest")
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "There should be 2 containers")
+	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
+	assert.Equal(t, "myregistry/runner-image:latest", ars.Spec.Template.Spec.Containers[0].Image, "Container image should be myregistry/runner-image:latest")
+	assert.Equal(t, corev1.PullIfNotPresent, ars.Spec.Template.Spec.Containers[0].ImagePullPolicy, "Container imagePullPolicy should be Always")
+	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name, "Container name should be dind")
+	assert.Equal(t, "myregistry/dind-image:latest", ars.Spec.Template.Spec.Containers[1].Image, "Container image should be myregistry/dind-image:latest")
+	assert.Equal(t, corev1.PullIfNotPresent, ars.Spec.Template.Spec.Containers[1].ImagePullPolicy, "Container imagePullPolicy should be Always")
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 1, "There should be 1 init-container")
+	assert.Equal(t, "init-dind-externals", ars.Spec.Template.Spec.InitContainers[0].Name, "Container name should be init-dind-externals")
+	assert.Equal(t, "myregistry/dind-init-image:latest", ars.Spec.Template.Spec.InitContainers[0].Image, "Container image should be myregistry/dind-init-image:latest")
+	assert.Equal(t, corev1.PullIfNotPresent, ars.Spec.Template.Spec.InitContainers[0].ImagePullPolicy, "Container imagePullPolicy should be Always")
 }

@@ -1,5 +1,5 @@
 {{- $containerMode := .Values.containerMode }}
-{{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+{{- if and (eq $containerMode.type "kubernetes") (not .Values.runner.serviceAccountName) }}
 # default permission for runner pod service account in kubernetes mode (container hook)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
