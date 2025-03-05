@@ -136,7 +136,6 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
-
 # Add the option to deploy in another namespace rather than .Release.Namespace.
 namespaceOverride: ""
 
