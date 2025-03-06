@@ -6,6 +6,8 @@ kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
   namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
   finalizers:
     - actions.github.com/cleanup-protection
 rules:
