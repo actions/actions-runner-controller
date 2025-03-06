@@ -87,7 +87,7 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
   {{- if eq $val.name "runner" }}
 image: {{ $val.image }}
 command: ["cp"]
-args: ["-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
   - name: dind-externals
     mountPath: /home/runner/tmpDir
@@ -218,7 +218,7 @@ env:
         {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
           {{- $setRunnerUpdateCaCerts = 0 }}
         {{- end }}
-  - {{ $env | toYaml | nindent 4 }}
+  - {{ $env | toYaml | nindent 4 | trim }}
       {{- end }}
     {{- end }}
     {{- if $setDockerHost }}
