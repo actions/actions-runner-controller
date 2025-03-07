@@ -2,10 +2,11 @@ package tests
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	actionsgithubcom "github.com/actions/actions-runner-controller/controllers/actions.github.com"
