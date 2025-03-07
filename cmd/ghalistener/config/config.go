@@ -46,14 +46,15 @@ func Read(path string) (Config, error) {
 		return Config{}, fmt.Errorf("failed to decode config: %w", err)
 	}
 
-	if err := config.validate(); err != nil {
+	if err := config.Validate(); err != nil {
 		return Config{}, fmt.Errorf("failed to validate config: %w", err)
 	}
 
 	return config, nil
 }
 
-func (c *Config) validate() error {
+// Validate checks the configuration for errors.
+func (c *Config) Validate() error {
 	if len(c.ConfigureUrl) == 0 {
 		return fmt.Errorf("GitHubConfigUrl is not provided")
 	}

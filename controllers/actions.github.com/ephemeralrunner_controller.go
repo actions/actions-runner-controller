@@ -712,22 +712,41 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return nil
 	}
-	if ephemeralRunner.Status.Phase == pod.Status.Phase {
+
+	var ready bool
+	var lastTransitionTime time.Time
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.LastTransitionTime.After(lastTransitionTime) {
+			ready = condition.Status == corev1.ConditionTrue
+			lastTransitionTime = condition.LastTransitionTime.Time
+		}
+	}
+
+	phaseChanged := ephemeralRunner.Status.Phase != pod.Status.Phase
+	readyChanged := ready != ephemeralRunner.Status.Ready
+
+	if !phaseChanged && !readyChanged {
 		return nil
 	}
 
-	log.Info("Updating ephemeral runner status with pod phase", "statusPhase", pod.Status.Phase, "statusReason", pod.Status.Reason, "statusMessage", pod.Status.Message)
+	log.Info(
+		"Updating ephemeral runner status",
+		"statusPhase", pod.Status.Phase,
+		"statusReason", pod.Status.Reason,
+		"statusMessage", pod.Status.Message,
+		"ready", ready,
+	)
 	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = pod.Status.Phase
-		obj.Status.Ready = obj.Status.Ready || (pod.Status.Phase == corev1.PodRunning)
+		obj.Status.Ready = ready
 		obj.Status.Reason = pod.Status.Reason
 		obj.Status.Message = pod.Status.Message
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update runner status for Phase/Reason/Message: %v", err)
+		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %v", err)
 	}
 
-	log.Info("Updated ephemeral runner status with pod phase")
+	log.Info("Updated ephemeral runner status")
 	return nil
 }
 
