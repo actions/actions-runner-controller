@@ -217,5 +217,5 @@ template:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
 
-# Add the option to deploy in another namespace rather than .Release.Namespace.
+# Overrides the default `.Release.Namespace` for all resources in this chart.
 namespaceOverride: ""
