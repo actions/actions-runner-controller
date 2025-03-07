@@ -2326,133 +2326,143 @@ func TestNamespaceOverride(t *testing.T) {
 	releaseNamespace := "test-" + strings.ToLower(random.UniqueId())
 	namespaceOverride := "test-" + strings.ToLower(random.UniqueId())
 
-	options := map[string]*helm.Options{
-		"_": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride": namespaceOverride,
-			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
-		},
+	tt := map[string]struct {
+		file    string
+		options *helm.Options
+	}{
 		"manager_role": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "manager_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"manager_role_binding": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "manager_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"no_permission_serviceaccount": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "no_permission_serviceaccount.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"autoscalingrunnerset": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "autoscalingrunnerset.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"githubsecret": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "githubsecret.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"kube_mode_role": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"containerMode.type":                 "kubernetes",
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "kube_mode_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"containerMode.type":                 "kubernetes",
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"kube_mode_role_binding": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"containerMode.type":                 "kubernetes",
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "kube_mode_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"containerMode.type":                 "kubernetes",
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 		"kube_mode_serviceaccount": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":                  namespaceOverride,
-				"containerMode.type":                 "kubernetes",
-				"controllerServiceAccount.name":      "foo",
-				"controllerServiceAccount.namespace": "bar",
-				"githubConfigSecret.github_token":    "gh_token12345",
-				"githubConfigUrl":                    "https://github.com",
+			file: "kube_mode_serviceaccount.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":                  namespaceOverride,
+					"containerMode.type":                 "kubernetes",
+					"controllerServiceAccount.name":      "foo",
+					"controllerServiceAccount.namespace": "bar",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"githubConfigUrl":                    "https://github.com",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 		},
 	}
-	templateFiles, err := os.ReadDir(filepath.Join(chartPath, "templates"))
-	require.NoError(t, err)
 
-	for _, f := range templateFiles {
-		fileExtension := filepath.Ext(f.Name())
-		if fileExtension != ".yaml" && fileExtension != ".yml" {
-			continue
-		}
-		templateFile := filepath.Join("templates", f.Name())
-		opts := options["_"]
-		for k := range options {
-			if strings.TrimSuffix(f.Name(), fileExtension) == k {
-				opts = options[k]
-				break
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			templateFile := filepath.Join("templates", tc.file)
+
+			output, err := helm.RenderTemplateE(t, tc.options, chartPath, releaseName, []string{templateFile})
+			if err != nil {
+				t.Errorf("Error rendering template %s from chart %s: %s", tc.file, chartPath, err)
 			}
-		}
-		output, err := helm.RenderTemplateE(t, opts, chartPath, releaseName, []string{templateFile})
 
-		if err != nil {
-			t.Errorf("Error rendering template %s from chart %s: %s", f.Name(), chartPath, err)
-		}
-
-		var renderedObject map[string]interface{}
-		helm.UnmarshalK8SYaml(t, output, &renderedObject)
-
-		if renderedObject["metadata"].(map[string]interface{})["namespace"] != nil {
-			assert.Equal(t, namespaceOverride, renderedObject["metadata"].(map[string]interface{})["namespace"], fmt.Sprintf("template %s from chart %s should have namespace %s", f.Name(), chartPath, namespaceOverride))
-		}
+			type object struct {
+				Metadata metav1.ObjectMeta
+			}
+			var renderedObject object
+			helm.UnmarshalK8SYaml(t, output, &renderedObject)
+			assert.Equal(t, namespaceOverride, renderedObject.Metadata.Namespace)
+		})
 	}
 }
