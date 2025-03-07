@@ -1,11 +1,29 @@
+{{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.managerRole) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.managerRoleName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.managerRole.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
     app.kubernetes.io/component: manager-role
+  annotations:
+    {{- with .Values.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.managerRole.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
   finalizers:
     - actions.github.com/cleanup-protection
 rules:
