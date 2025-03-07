@@ -442,7 +442,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 			}
 			newPod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
-				Name:  EphemeralRunnerContainerName,
+				Name:  v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{},
 			})
 			err := k8sClient.Status().Patch(ctx, newPod, client.MergeFrom(pod))
