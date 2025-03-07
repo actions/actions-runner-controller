@@ -11,21 +11,22 @@ Actions Runner Controller (ARC) is a Kubernetes operator that orchestrates and s
 With ARC, you can create runner scale sets that automatically scale based on the number of workflows running in your repository, organization, or enterprise. Because controlled runners can be ephemeral and based on containers, new runner instances can scale up or down rapidly and cleanly. For more information about autoscaling, see ["Autoscaling with self-hosted runners."](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners)
 
 You can set up ARC on Kubernetes using Helm, then create and run a workflow that uses runner scale sets. For more information about runner scale sets, see ["Deploying runner scale sets with Actions Runner Controller."](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/deploying-runner-scale-sets-with-actions-runner-controller#runner-scale-set)
+
 ## People
 
 Actions Runner Controller (ARC) is an open-source project currently developed and maintained in collaboration with the GitHub Actions team, external maintainers @mumoshu and @toast-gear, various [contributors](https://github.com/actions/actions-runner-controller/graphs/contributors), and the [awesome community](https://github.com/actions/actions-runner-controller/discussions).
 
 If you think the project is awesome and is adding value to your business, please consider directly sponsoring [community maintainers](https://github.com/sponsors/actions-runner-controller) and individual contributors via GitHub Sponsors.
 
-In case you are already the employer of one of contributors, sponsoring via GitHub Sponsors might not be an option. Just support them in other means!
+If you are already the employer of one of the contributors, sponsoring via GitHub Sponsors might not be an option. Just support them by other means!
 
 See [the sponsorship dashboard](https://github.com/sponsors/actions-runner-controller) for the former and the current sponsors.
 
 ## Getting Started
 
-To give ARC a try with just a handful of commands, Please refer to the [Quickstart guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
+To give ARC a try with just a handful of commands, please refer to the [Quickstart guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/quickstart-for-actions-runner-controller).
 
-For an overview of ARC, please refer to [About ARC](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/about-actions-runner-controller)
+For an overview of ARC, please refer to [About ARC](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/about-actions-runner-controller).
 
 With the introduction of [autoscaling runner scale sets](https://github.com/actions/actions-runner-controller/discussions/2775), the existing [autoscaling modes](./docs/automatically-scaling-runners.md) are now legacy. The legacy modes have certain use cases and will continue to be maintained by the community only.
 
@@ -37,7 +38,7 @@ ARC documentation is available on [docs.github.com](https://docs.github.com/en/a
 
 ### Legacy documentation
 
-The following documentation is for the legacy autoscaling modes that continue to be maintained by the community
+The following documentation is for the legacy autoscaling modes that continue to be maintained by the community:
 
 - [Quickstart guide](/docs/quickstart.md)
 - [About ARC](/docs/about-arc.md)
