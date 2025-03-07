@@ -62,12 +62,12 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- fail "Values.githubConfigSecret is required for setting auth with GitHub server." }}
     {{- end }}
   {{- else }}
-{{- include "gha-runner-scale-set.fullname" . }}-github-secret
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-github-secret
   {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.noPermissionServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-no-permission
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-no-permission
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeRoleName" -}}
@@ -79,7 +79,7 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
