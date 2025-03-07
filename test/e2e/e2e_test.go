@@ -654,7 +654,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 			t.Logf("%v", ioerr)
 			return err
 		}
-		t.Logf(string(b))
+		t.Log(string(b))
 		return err
 	}
 
@@ -667,7 +667,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 				t.Logf("%v", ioerr)
 				return err
 			}
-			t.Logf(string(b))
+			t.Log(string(b))
 			return err
 		}
 	}
@@ -679,7 +679,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 				t.Logf("%v", ioerr)
 				return err
 			}
-			t.Logf(string(b))
+			t.Log(string(b))
 			return err
 		}
 	}
@@ -693,7 +693,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 				t.Logf("%v", ioerr)
 				return err
 			}
-			t.Logf(string(b))
+			t.Log(string(b))
 			return err
 		}
 	}
