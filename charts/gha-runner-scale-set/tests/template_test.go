@@ -2,6 +2,7 @@ package tests
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -2142,4 +2143,44 @@ func TestAutoscalingRunnerSetAnnotationValuesHash(t *testing.T) {
 	assert.NotEmpty(t, secondHash)
 	assert.NotEqual(t, firstHash, secondHash)
 	assert.LessOrEqual(t, len(secondHash), 63)
+}
+
+func TestNamespaceOverride(t *testing.T) {
+	t.Parallel()
+
+	chartPath := "../../gha-runner-scale-set"
+
+	releaseName := "test"
+	releaseNamespace := "test-" + strings.ToLower(random.UniqueId())
+	namespaceOverride := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"namespaceOverride": namespaceOverride,
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+	}
+	templateFiles, err := os.ReadDir(filepath.Join(chartPath, "templates"))
+	require.NoError(t, err)
+
+	for _, f := range templateFiles {
+		if filepath.Ext(f.Name()) != ".yaml" && filepath.Ext(f.Name()) != ".yml" {
+			continue
+		}
+		templateFile := filepath.Join("templates", f.Name())
+		output, err := helm.RenderTemplateE(t, options, chartPath, releaseName, []string{templateFile})
+
+		if err != nil {
+			// template is conditional or has dependencies, skip
+			continue
+		}
+
+		var renderedObject map[string]interface{}
+		helm.UnmarshalK8SYaml(t, output, &renderedObject)
+
+		if renderedObject["metadata"].(map[string]interface{})["namespace"] != nil {
+			assert.Equal(t, namespaceOverride, renderedObject["metadata"].(map[string]interface{})["namespace"], fmt.Sprintf("template %s from chart %s should have namespace %s", f.Name(), chartPath, namespaceOverride))
+		}
+	}
 }

@@ -136,7 +136,7 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
-# Add the option to deploy in another namespace rather than .Release.Namespace.
+# Overrides the default `.Release.Namespace` for all resources in this chart.
 namespaceOverride: ""
 
 ## Defines the K8s client rate limiter parameters.
