@@ -1,4 +1,5 @@
 {{- $containerMode := .Values.containerMode }}
+{{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRole) }}
 {{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
 # default permission for runner pod service account in kubernetes mode (container hook)
 apiVersion: rbac.authorization.k8s.io/v1
@@ -6,6 +7,25 @@ kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.kubernetesModeRole.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.kubernetesModeRole.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
   finalizers:
     - actions.github.com/cleanup-protection
 rules:
