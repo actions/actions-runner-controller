@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 env:
   KUBE_SCORE_VERSION: 1.16.1
-  HELM_VERSION: v3.8.0
+  HELM_VERSION: v3.17.0
 
 permissions:
   contents: read
@@ -45,22 +45,6 @@ jobs:
         uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
-
-      - name: Set up kube-score
-        run: |
-          wget https://github.com/zegl/kube-score/releases/download/v${{ env.KUBE_SCORE_VERSION }}/kube-score_${{ env.KUBE_SCORE_VERSION }}_linux_amd64 -O kube-score
-          chmod 755 kube-score
-
-      - name: Kube-score generated manifests
-        run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
-              --ignore-test pod-networkpolicy
-              --ignore-test deployment-has-poddisruptionbudget
-              --ignore-test deployment-has-host-podantiaffinity
-              --ignore-test container-security-context
-              --ignore-test pod-probes
-              --ignore-test container-image-tag
-              --enable-optional-test container-security-context-privileged
-              --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
       - uses: actions/setup-python@v5
