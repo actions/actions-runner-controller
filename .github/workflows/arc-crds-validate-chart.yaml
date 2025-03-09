@@ -1,4 +1,4 @@
-name: Validate Helm Chart
+name: (crds) Validate Helm Chart
 
 on:
   pull_request:
@@ -6,19 +6,17 @@ on:
       - master
     paths:
       - 'charts/**'
-      - '.github/workflows/arc-validate-chart.yaml'
-      - '!charts/actions-runner-controller/docs/**'
+      - '.github/workflows/arc-crds-validate-chart.yaml'
+      - '!charts/actions-runner-controller/**'
       - '!**.md'
-      - '!charts/actions-runner-controller-crds/**'
       - '!charts/gha-runner-scale-set-controller/**'
       - '!charts/gha-runner-scale-set/**'
   push:
     paths:
       - 'charts/**'
-      - '.github/workflows/arc-validate-chart.yaml'
-      - '!charts/actions-runner-controller/docs/**'
+      - '.github/workflows/arc-crds-validate-chart.yaml'
+      - '!charts/actions-runner-controller/**'
       - '!**.md'
-      - '!charts/actions-runner-controller-crds/**'
       - '!charts/gha-runner-scale-set-controller/**'
       - '!charts/gha-runner-scale-set/**'
   workflow_dispatch:
@@ -30,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  # This will make sure we only apply the concurrency limits on pull requests
+  # This will make sure we only apply the concurrency limits on pull requests 
   # but not pushes to master branch by making the concurrency group name unique
   # for pushes
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -42,13 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
-        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
+        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -56,7 +54,6 @@ jobs:
         run: |
           wget https://github.com/zegl/kube-score/releases/download/v${{ env.KUBE_SCORE_VERSION }}/kube-score_${{ env.KUBE_SCORE_VERSION }}_linux_amd64 -O kube-score
           chmod 755 kube-score
-
       - name: Kube-score generated manifests
         run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
               --ignore-test pod-networkpolicy
@@ -69,25 +66,23 @@ jobs:
               --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.7'
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.6.0
+        uses: helm/chart-testing-action@v2.4.0
 
       - name: Run chart-testing (list-changed)
         id: list-changed
         run: |
           changed=$(ct list-changed --config charts/.ci/ct-config.yaml)
           if [[ -n "$changed" ]]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "::set-output name=changed::true"
           fi
-
       - name: Run chart-testing (lint)
         run: |
           ct lint --config charts/.ci/ct-config.yaml
-
       - name: Create kind cluster
         uses: helm/kind-action@v1.4.0
         if: steps.list-changed.outputs.changed == 'true'
@@ -98,10 +93,7 @@ jobs:
         run: |
           helm repo add jetstack https://charts.jetstack.io --force-update
           helm install cert-manager jetstack/cert-manager --set installCRDs=true --wait
-
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
-        # We exclude the CRDs chart because the CRDs are already installed by actions-runner-controller chart.
         run: |
-          ct install --config charts/.ci/ct-config.yaml \
-            --excluded-charts actions-runner-crds
+          ct install --config charts/.ci/ct-config-crds.yaml
