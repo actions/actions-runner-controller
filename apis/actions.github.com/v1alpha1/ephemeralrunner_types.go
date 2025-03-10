@@ -21,7 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-
 // EphemeralRunnerContainerName is the name of the runner container.
 // It represents the name of the container running the self-hosted runner image.
 const EphemeralRunnerContainerName = "runner"
