@@ -1,4 +1,15 @@
 {{/*
+Allow overriding the namespace for the resources.
+*/}}
+{{- define "actions-runner-controller.namespace" -}}
+{{- if .Values.namespaceOverride }}
+  {{- .Values.namespaceOverride }}
+{{- else }}
+  {{- .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "actions-runner-controller.name" -}}

@@ -136,6 +136,9 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
-  ## Defines the K8s client rate limiter parameters.
+# Overrides the default `.Release.Namespace` for all resources in this chart.
+namespaceOverride: ""
+
+## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20
   # k8sClientRateLimiterBurst: 30

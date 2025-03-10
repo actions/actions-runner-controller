@@ -1078,3 +1078,114 @@ func TestDeployment_excludeLabelPropagationPrefixes(t *testing.T) {
 	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=prefix.com/")
 	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=complete.io/label")
 }
+func TestNamespaceOverride(t *testing.T) {
+	t.Parallel()
+
+	chartPath := "../../gha-runner-scale-set-controller"
+
+	releaseName := "test"
+	releaseNamespace := "test-" + strings.ToLower(random.UniqueId())
+	namespaceOverride := "test-" + strings.ToLower(random.UniqueId())
+
+	mustNotHaveNamespaceOverriden := []string{
+		"manager_single_namespace_watch_role",
+		"manager_single_namespace_watch_role_binding",
+	}
+	options := map[string]*helm.Options{
+		"_": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride": namespaceOverride,
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+		"leader_election_role": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride": namespaceOverride,
+				"replicaCount":      "2",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+		"leader_election_role_binding": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride": namespaceOverride,
+				"replicaCount":      "2",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+		"manager_single_namespace_controller_role": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride":          namespaceOverride,
+				"flags.watchSingleNamespace": "true",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+		"manager_single_namespace_controller_role_binding": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride":          namespaceOverride,
+				"flags.watchSingleNamespace": "true",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+		"manager_single_namespace_watch_role": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride":          namespaceOverride,
+				"flags.watchSingleNamespace": "true",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+		"manager_single_namespace_watch_role_binding": {
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"namespaceOverride":          namespaceOverride,
+				"flags.watchSingleNamespace": "true",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+		},
+	}
+	templateFiles, err := os.ReadDir(filepath.Join(chartPath, "templates"))
+	require.NoError(t, err)
+
+	for _, f := range templateFiles {
+		fileExtension := filepath.Ext(f.Name())
+		if fileExtension != ".yaml" && fileExtension != ".yml" {
+			continue
+		}
+		templateFile := filepath.Join("templates", f.Name())
+		opts := options["_"]
+		for k := range options {
+			if strings.TrimSuffix(f.Name(), fileExtension) == k {
+				opts = options[k]
+				break
+			}
+		}
+		output, err := helm.RenderTemplateE(t, opts, chartPath, releaseName, []string{templateFile})
+
+		if err != nil {
+			t.Errorf("Error rendering template %s from chart %s: %s", f.Name(), chartPath, err)
+		}
+
+		var renderedObject map[string]interface{}
+		helm.UnmarshalK8SYaml(t, output, &renderedObject)
+
+		if renderedObject["metadata"].(map[string]interface{})["namespace"] != nil {
+			mustHaveNamespaceOverriden := true
+			for _, ignoredItem := range mustNotHaveNamespaceOverriden {
+				if strings.TrimSuffix(f.Name(), fileExtension) == ignoredItem {
+					mustHaveNamespaceOverriden = false
+					break
+				}
+			}
+			if mustHaveNamespaceOverriden {
+				assert.Equal(t, namespaceOverride, renderedObject["metadata"].(map[string]interface{})["namespace"], fmt.Sprintf("template %s from chart %s should have namespace %s", f.Name(), chartPath, namespaceOverride))
+			} else {
+				assert.NotEqual(t, namespaceOverride, renderedObject["metadata"].(map[string]interface{})["namespace"], fmt.Sprintf("template %s from chart %s should not have namespace %s", f.Name(), chartPath, namespaceOverride))
+			}
+		}
+	}
+}
