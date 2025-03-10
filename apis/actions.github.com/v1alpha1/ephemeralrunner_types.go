@@ -21,6 +21,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// EphemeralRunnerContainerName is the name of the runner container.
+// It represents the name of the container running the self-hosted runner image.
+const EphemeralRunnerContainerName = "runner"
+
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
@@ -44,6 +48,23 @@ type EphemeralRunner struct {
 
 func (er *EphemeralRunner) IsDone() bool {
 	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
+}
+
+func (er *EphemeralRunner) HasContainerHookConfigured() bool {
+	for i := range er.Spec.Spec.Containers {
+		if er.Spec.Spec.Containers[i].Name != EphemeralRunnerContainerName {
+			continue
+		}
+
+		for _, env := range er.Spec.Spec.Containers[i].Env {
+			if env.Name == "ACTIONS_RUNNER_CONTAINER_HOOKS" {
+				return true
+			}
+		}
+
+		return false
+	}
+	return false
 }
 
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
