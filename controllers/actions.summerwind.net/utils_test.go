@@ -41,7 +41,7 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 	workVolumeClaimTemplate := v1alpha1.WorkVolumeClaimTemplate{
 		StorageClassName: storageClassName,
 		AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce, corev1.ReadWriteMany},
-		Resources:        corev1.ResourceRequirements{},
+		Resources:        corev1.VolumeResourceRequirements{},
 	}
 	want := corev1.Volume{
 		Name: "work",
@@ -51,7 +51,7 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce, corev1.ReadWriteMany},
 						StorageClassName: &storageClassName,
-						Resources:        corev1.ResourceRequirements{},
+						Resources:        corev1.VolumeResourceRequirements{},
 					},
 				},
 			},
@@ -107,11 +107,10 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 }
 
 func Test_workVolumeClaimTemplateV1VolumeMount(t *testing.T) {
-
 	workVolumeClaimTemplate := v1alpha1.WorkVolumeClaimTemplate{
 		StorageClassName: "local-storage",
 		AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce, corev1.ReadWriteMany},
-		Resources:        corev1.ResourceRequirements{},
+		Resources:        corev1.VolumeResourceRequirements{},
 	}
 
 	mountPath := "/test/_work"

@@ -317,19 +317,19 @@ type RunnerStatusRegistration struct {
 type WorkVolumeClaimTemplate struct {
 	StorageClassName string                              `json:"storageClassName"`
 	AccessModes      []corev1.PersistentVolumeAccessMode `json:"accessModes"`
-	Resources        corev1.ResourceRequirements         `json:"resources"`
+	Resources        corev1.VolumeResourceRequirements   `json:"resources"`
 }
 
 func (w *WorkVolumeClaimTemplate) validate() error {
-	if w.AccessModes == nil || len(w.AccessModes) == 0 {
-		return errors.New("Access mode should have at least one mode specified")
+	if len(w.AccessModes) == 0 {
+		return errors.New("access mode should have at least one mode specified")
 	}
 
 	for _, accessMode := range w.AccessModes {
 		switch accessMode {
 		case corev1.ReadWriteOnce, corev1.ReadWriteMany:
 		default:
-			return fmt.Errorf("Access mode %v is not supported", accessMode)
+			return fmt.Errorf("access mode %v is not supported", accessMode)
 		}
 	}
 	return nil

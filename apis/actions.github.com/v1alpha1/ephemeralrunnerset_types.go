@@ -26,7 +26,7 @@ type EphemeralRunnerSetSpec struct {
 	Replicas int `json:"replicas,omitempty"`
 	// PatchID is the unique identifier for the patch issued by the listener app
 	PatchID int `json:"patchID"`
-
+	// EphemeralRunnerSpec is the spec of the ephemeral runner
 	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
 }
 
@@ -34,9 +34,6 @@ type EphemeralRunnerSetSpec struct {
 type EphemeralRunnerSetStatus struct {
 	// CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
 	CurrentReplicas int `json:"currentReplicas"`
-
-	// EphemeralRunner counts separated by the stage ephemeral runners are in
-
 	// +optional
 	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
 	// +optional
@@ -49,10 +46,10 @@ type EphemeralRunnerSetStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name="DesiredReplicas",type="integer"
 // +kubebuilder:printcolumn:JSONPath=".status.currentReplicas", name="CurrentReplicas",type="integer"
-//+kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 
 // EphemeralRunnerSet is the Schema for the ephemeralrunnersets API
 type EphemeralRunnerSet struct {
@@ -63,7 +60,7 @@ type EphemeralRunnerSet struct {
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // EphemeralRunnerSetList contains a list of EphemeralRunnerSet
 type EphemeralRunnerSetList struct {
