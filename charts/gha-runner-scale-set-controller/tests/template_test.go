@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Chart struct {
@@ -1087,105 +1088,160 @@ func TestNamespaceOverride(t *testing.T) {
 	releaseNamespace := "test-" + strings.ToLower(random.UniqueId())
 	namespaceOverride := "test-" + strings.ToLower(random.UniqueId())
 
-	mustNotHaveNamespaceOverriden := []string{
-		"manager_single_namespace_watch_role",
-		"manager_single_namespace_watch_role_binding",
-	}
-	options := map[string]*helm.Options{
-		"_": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride": namespaceOverride,
+	tt := map[string]struct {
+		file          string
+		options       *helm.Options
+		wantNamespace string
+	}{
+		"deployment": {
+			file: "deployment.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
-		},
-		"leader_election_role": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride": namespaceOverride,
-				"replicaCount":      "2",
-			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			wantNamespace: namespaceOverride,
 		},
 		"leader_election_role_binding": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride": namespaceOverride,
-				"replicaCount":      "2",
+			file: "leader_election_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			wantNamespace: namespaceOverride,
+		},
+		"leader_election_role": {
+			file: "leader_election_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_cluster_role_binding": {
+			file: "manager_cluster_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_cluster_role": {
+			file: "manager_cluster_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_listener_role_binding": {
+			file: "manager_listener_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_listener_role": {
+			file: "manager_listener_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
 		},
 		"manager_single_namespace_controller_role": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":          namespaceOverride,
-				"flags.watchSingleNamespace": "true",
+			file: "manager_single_namespace_controller_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "true",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			wantNamespace: namespaceOverride,
 		},
 		"manager_single_namespace_controller_role_binding": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":          namespaceOverride,
-				"flags.watchSingleNamespace": "true",
+			file: "manager_single_namespace_controller_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "true",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			wantNamespace: namespaceOverride,
 		},
 		"manager_single_namespace_watch_role": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":          namespaceOverride,
-				"flags.watchSingleNamespace": "true",
+			file: "manager_single_namespace_watch_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "target-ns",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			wantNamespace: "target-ns",
 		},
 		"manager_single_namespace_watch_role_binding": {
-			Logger: logger.Discard,
-			SetValues: map[string]string{
-				"namespaceOverride":          namespaceOverride,
-				"flags.watchSingleNamespace": "true",
+			file: "manager_single_namespace_watch_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "target-ns",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
 			},
-			KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			wantNamespace: "target-ns",
 		},
 	}
-	templateFiles, err := os.ReadDir(filepath.Join(chartPath, "templates"))
-	require.NoError(t, err)
 
-	for _, f := range templateFiles {
-		fileExtension := filepath.Ext(f.Name())
-		if fileExtension != ".yaml" && fileExtension != ".yml" {
-			continue
-		}
-		templateFile := filepath.Join("templates", f.Name())
-		opts := options["_"]
-		for k := range options {
-			if strings.TrimSuffix(f.Name(), fileExtension) == k {
-				opts = options[k]
-				break
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			templateFile := filepath.Join("templates", tc.file)
+
+			output, err := helm.RenderTemplateE(t, tc.options, chartPath, releaseName, []string{templateFile})
+			if err != nil {
+				t.Errorf("Error rendering template %s from chart %s: %s", tc.file, chartPath, err)
 			}
-		}
-		output, err := helm.RenderTemplateE(t, opts, chartPath, releaseName, []string{templateFile})
 
-		if err != nil {
-			t.Errorf("Error rendering template %s from chart %s: %s", f.Name(), chartPath, err)
-		}
-
-		var renderedObject map[string]interface{}
-		helm.UnmarshalK8SYaml(t, output, &renderedObject)
-
-		if renderedObject["metadata"].(map[string]interface{})["namespace"] != nil {
-			mustHaveNamespaceOverriden := true
-			for _, ignoredItem := range mustNotHaveNamespaceOverriden {
-				if strings.TrimSuffix(f.Name(), fileExtension) == ignoredItem {
-					mustHaveNamespaceOverriden = false
-					break
-				}
+			type object struct {
+				Metadata metav1.ObjectMeta
 			}
-			if mustHaveNamespaceOverriden {
-				assert.Equal(t, namespaceOverride, renderedObject["metadata"].(map[string]interface{})["namespace"], fmt.Sprintf("template %s from chart %s should have namespace %s", f.Name(), chartPath, namespaceOverride))
-			} else {
-				assert.NotEqual(t, namespaceOverride, renderedObject["metadata"].(map[string]interface{})["namespace"], fmt.Sprintf("template %s from chart %s should not have namespace %s", f.Name(), chartPath, namespaceOverride))
-			}
-		}
+			var renderedObject object
+			helm.UnmarshalK8SYaml(t, output, &renderedObject)
+			assert.Equal(t, tc.wantNamespace, renderedObject.Metadata.Namespace)
+		})
 	}
 }
