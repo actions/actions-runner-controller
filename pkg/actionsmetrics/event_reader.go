@@ -64,6 +64,10 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 		keysAndValues = []interface{}{"job_id", fmt.Sprint(*e.WorkflowJob.ID)}
 	)
 
+	if len(e.WorkflowJob.Labels) == 0 {
+		return
+	}
+
 	runsOn := strings.Join(e.WorkflowJob.Labels, `,`)
 	labels["runs_on"] = runsOn
 
@@ -74,10 +78,6 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 		if n := e.Repo.Name; n != nil {
 			labels["repository"] = *n
 			keysAndValues = append(keysAndValues, "repository", *n)
-		}
-		if n := e.Repo.FullName; n != nil {
-			labels["repository_full_name"] = *n
-			keysAndValues = append(keysAndValues, "repository_full_name", *n)
 		}
 
 		if e.Repo.Owner != nil {
@@ -98,24 +98,26 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	labels["organization"] = org
 
 	var wn string
-	var hb string
 	if e.WorkflowJob != nil {
 		if n := e.WorkflowJob.WorkflowName; n != nil {
 			wn = *n
 			keysAndValues = append(keysAndValues, "workflow_name", *n)
 		}
-		if n := e.WorkflowJob.HeadBranch; n != nil {
-			hb = *n
-			keysAndValues = append(keysAndValues, "head_branch", *n)
-		}
 	}
 	labels["workflow_name"] = wn
-	labels["head_branch"] = hb
+
+	is_main_branch := "false"
+
+ if e.WorkflowJob.HeadBranch != nil && (strings.EqualFold(*e.WorkflowJob.HeadBranch, "main") || strings.EqualFold(*e.WorkflowJob.HeadBranch, "master")) {
+     is_main_branch = "true"
+ }
+
+	labels["is_main_branch"] = is_main_branch
 
 	log := reader.Log.WithValues(keysAndValues...)
 
 	// switch on job status
-	switch action := e.GetAction(); action {
+	switch action := *e.WorkflowJob.Status; strings.ToLower(action) {
 	case "queued":
 		githubWorkflowJobsQueuedTotal.With(labels).Inc()
 
@@ -131,13 +133,17 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			log.Error(err, "reading workflow job log")
 			return
 		} else {
-			log.Info("reading workflow_job logs")
+   log.Info("reading workflow_job logs for in progress job", "workflow_job_status", *e.WorkflowJob.Status, "parseResult", parseResult)
 		}
 
 		githubWorkflowJobQueueDurationSeconds.With(labels).Observe(parseResult.QueueTime.Seconds())
 
 	case "completed":
-		githubWorkflowJobsCompletedTotal.With(labels).Inc()
+		var rn string
+		if n := e.WorkflowJob.RunnerName; n != nil {
+			rn = *n
+		}
+		githubWorkflowJobsCompletedTotal.With(extraLabel("runner_name", rn, labels)).Inc()
 
 		// job_conclusion -> (neutral, success, skipped, cancelled, timed_out, action_required, failure)
 		githubWorkflowJobConclusionsTotal.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Inc()
@@ -162,7 +168,7 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			s := parseResult.RunTime.Seconds()
 			runTimeSeconds = &s
 
-			log.WithValues(keysAndValues...).Info("reading workflow_job logs", "exit_code", exitCode)
+   log.Info("reading workflow_job logs for completed job", "exit_code", exitCode, "run_time_seconds", *runTimeSeconds, "parseResult", parseResult)
 		}
 
 		if *e.WorkflowJob.Conclusion == "failure" {
@@ -199,8 +205,10 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 			).Inc()
 		}
 
-		if runTimeSeconds != nil {
-			githubWorkflowJobRunDurationSeconds.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Observe(*runTimeSeconds)
+		if *e.WorkflowJob.Conclusion != "cancelled" && *e.WorkflowJob.Conclusion != "skipped" && *e.WorkflowJob.Conclusion != "timed_out" {
+			if runTimeSeconds != nil {
+				githubWorkflowJobRunDurationSeconds.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Observe(*runTimeSeconds)
+			}
 		}
 	}
 }
@@ -232,6 +240,15 @@ func (reader *EventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *
 	if err != nil {
 		return nil, err
 	}
+	if *e.WorkflowJob.Status == "in_progress" {
+		if strings.Contains(url.String(), "actions-results") {
+			return &ParseResult{
+				ExitCode:  "",
+				QueueTime: time.Duration(0),
+				RunTime:   time.Duration(0),
+			}, nil
+		}
+	}
 	jobLogs, err := http.DefaultClient.Get(url.String())
 	if err != nil {
 		return nil, err
@@ -252,7 +269,8 @@ func (reader *EventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *
 		lines := bufio.NewScanner(jobLogs.Body)
 
 		for lines.Scan() {
-			matches := logLine.FindStringSubmatch(lines.Text())
+			ln := strings.ReplaceAll(lines.Text(), "\uFEFF", "")
+			matches := logLine.FindStringSubmatch(ln)
 			if matches == nil {
 				continue
 			}
@@ -273,7 +291,7 @@ func (reader *EventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *
 				continue
 			}
 
-			if strings.HasPrefix(line, "Job is about to start running on the runner:") {
+			if strings.HasPrefix(strings.ToLower(line), strings.ToLower("Job is about to start running on the runner:")) || strings.HasPrefix(strings.ToLower(line), strings.ToLower("Current runner version:")) {
 				startedTime, _ = time.Parse(time.RFC3339, timestamp)
 				continue
 			}
