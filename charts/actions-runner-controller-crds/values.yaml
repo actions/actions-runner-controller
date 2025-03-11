@@ -1,0 +1,6 @@
+# Custom resource configuration
+
+# Keep CRDs on chart uninstall
+keep: true
+# Annotations to be added to all CRDs
+annotations: {}
