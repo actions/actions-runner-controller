@@ -31,7 +31,7 @@ type ListRunnersHandler struct {
 
 func (h *ListRunnersHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(h.Status)
-	fmt.Fprintf(w, h.Body)
+	fmt.Fprintf(w, "%s", h.Body)
 }
 
 type Handler struct {
@@ -52,7 +52,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	fmt.Fprintf(w, h.Body)
+	fmt.Fprintf(w, "%s", h.Body)
 }
 
 type MapHandler struct {

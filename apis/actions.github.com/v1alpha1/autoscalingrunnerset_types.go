@@ -31,16 +31,16 @@ import (
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
-//+kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
@@ -242,7 +242,7 @@ type AutoscalingRunnerSetStatus struct {
 
 	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
 
-	//+optional
+	// +optional
 	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
 	// +optional
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
@@ -278,7 +278,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	return hash.ComputeTemplateHash(&spec)
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // AutoscalingRunnerSetList contains a list of AutoscalingRunnerSet
 type AutoscalingRunnerSetList struct {
