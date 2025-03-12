@@ -46,7 +46,7 @@ func TestCustomerServerRootCA(t *testing.T) {
 	require.NoError(t, err)
 	certsString = string(rootCA)
 
-	intermediate, err := os.ReadFile(filepath.Join(certsFolder, "intermediate.pem"))
+	intermediate, err := os.ReadFile(filepath.Join(certsFolder, "intermediate.crt"))
 	require.NoError(t, err)
 	certsString = certsString + string(intermediate)
 
