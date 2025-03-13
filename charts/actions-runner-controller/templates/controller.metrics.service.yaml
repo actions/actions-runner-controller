@@ -4,7 +4,7 @@ metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
   name: {{ include "actions-runner-controller.metricsServiceName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "actions-runner-controller.namespace" . }}
   {{- with .Values.metrics.serviceAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
