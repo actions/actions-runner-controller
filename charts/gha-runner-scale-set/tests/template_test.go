@@ -2449,14 +2449,14 @@ func TestNamespaceOverride(t *testing.T) {
 	}
 
 	for name, tc := range tt {
-		_tc := tc
+		c := tc
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			templateFile := filepath.Join("./templates", _tc.file)
+			templateFile := filepath.Join("./templates", c.file)
 
-			output, err := helm.RenderTemplateE(t, _tc.options, chartPath, releaseName, []string{templateFile})
+			output, err := helm.RenderTemplateE(t, c.options, chartPath, releaseName, []string{templateFile})
 			if err != nil {
-				t.Errorf("Error rendering template %s from chart %s: %s", _tc.file, chartPath, err)
+				t.Errorf("Error rendering template %s from chart %s: %s", c.file, chartPath, err)
 			}
 
 			type object struct {
