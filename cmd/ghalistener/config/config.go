@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
@@ -16,22 +17,23 @@ import (
 )
 
 type Config struct {
-	ConfigureUrl                string `json:"configure_url"`
-	AppID                       int64  `json:"app_id"`
-	AppInstallationID           int64  `json:"app_installation_id"`
-	AppPrivateKey               string `json:"app_private_key"`
-	Token                       string `json:"token"`
-	EphemeralRunnerSetNamespace string `json:"ephemeral_runner_set_namespace"`
-	EphemeralRunnerSetName      string `json:"ephemeral_runner_set_name"`
-	MaxRunners                  int    `json:"max_runners"`
-	MinRunners                  int    `json:"min_runners"`
-	RunnerScaleSetId            int    `json:"runner_scale_set_id"`
-	RunnerScaleSetName          string `json:"runner_scale_set_name"`
-	ServerRootCA                string `json:"server_root_ca"`
-	LogLevel                    string `json:"log_level"`
-	LogFormat                   string `json:"log_format"`
-	MetricsAddr                 string `json:"metrics_addr"`
-	MetricsEndpoint             string `json:"metrics_endpoint"`
+	ConfigureUrl                string                            `json:"configure_url"`
+	AppID                       int64                             `json:"app_id"`
+	AppInstallationID           int64                             `json:"app_installation_id"`
+	AppPrivateKey               string                            `json:"app_private_key"`
+	Token                       string                            `json:"token"`
+	EphemeralRunnerSetNamespace string                            `json:"ephemeral_runner_set_namespace"`
+	EphemeralRunnerSetName      string                            `json:"ephemeral_runner_set_name"`
+	MaxRunners                  int                               `json:"max_runners"`
+	MinRunners                  int                               `json:"min_runners"`
+	RunnerScaleSetId            int                               `json:"runner_scale_set_id"`
+	RunnerScaleSetName          string                            `json:"runner_scale_set_name"`
+	ServerRootCA                string                            `json:"server_root_ca"`
+	LogLevel                    string                            `json:"log_level"`
+	LogFormat                   string                            `json:"log_format"`
+	MetricsAddr                 string                            `json:"metrics_addr"`
+	MetricsEndpoint             string                            `json:"metrics_endpoint"`
+	Metrics                     map[string]*v1alpha1.MetricConfig `json:"metrics"`
 }
 
 func Read(path string) (Config, error) {

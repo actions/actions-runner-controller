@@ -119,6 +119,35 @@ githubConfigSecret:
 #     - name: side-car
 #       image: example-sidecar
 
+listenerMetrics:
+  counters:
+    gha_started_jobs_total:
+      labels: []
+    gha_completed_jobs_total:
+      labels: []
+  gauges:
+    gha_assigned_jobs:
+      labels: []
+    gha_running_jobs:
+      labels: []
+    gha_registered_runners:
+      labels: []
+    gha_busy_runners:
+      labels: []
+    gha_min_runners:
+      labels: []
+    gha_max_runners:
+      labels: []
+    gha_desired_runners:
+      labels: []
+    gha_idle_runners:
+      labels: []
+  histograms:
+    gha_job_startup_duration_seconds:
+      labels: []
+    gha_job_execution_duration_seconds:
+      labels: []
+
 ## template is the PodSpec for each runner Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:

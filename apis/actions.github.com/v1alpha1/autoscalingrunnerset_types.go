@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -73,6 +74,9 @@ type AutoscalingRunnerSetSpec struct {
 
 	// Required
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+
+	// +optional
+	ListenerMetrics *MetricsConfig `json:"metrics,omitempty"`
 
 	// +optional
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
@@ -230,6 +234,29 @@ type ProxyServerConfig struct {
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
+}
+
+// MetricsConfig holds configuration parameters for each metric type
+type MetricsConfig struct {
+	Counters   map[string]*CounterMetric   `json:"counters"`
+	Gauges     map[string]*GaugeMetric     `json:"gauges"`
+	Histograms map[string]*HistogramMetric `json:"histograms"`
+}
+
+// CounterMetric holds configuration of a single metric of type Counter
+type CounterMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// GaugeMetric holds configuration of a single metric of type Gauge
+type GaugeMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// HistogramMetric holds configuration of a single metric of type Histogram
+type HistogramMetric struct {
+	Labels  []string      `json:"labels"`
+	Buckets []json.Number `json:"buckets,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
