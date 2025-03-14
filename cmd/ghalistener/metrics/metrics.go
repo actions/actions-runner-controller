@@ -3,8 +3,10 @@ package metrics
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +25,37 @@ const (
 )
 
 const githubScaleSetSubsystem = "gha"
+
+// Names of all metrics available on the listener
+const (
+	MetricAssignedJobs                = "gha_assigned_jobs"
+	MetricRunningJobs                 = "gha_running_jobs"
+	MetricRegisteredRunners           = "gha_registered_runners"
+	MetricBusyRunners                 = "gha_busy_runners"
+	MetricMinRunners                  = "gha_min_runners"
+	MetricMaxRunners                  = "gha_max_runners"
+	MetricDesiredRunners              = "gha_desired_runners"
+	MetricIdleRunners                 = "gha_idle_runners"
+	MetricStartedJobsTotal            = "gha_started_jobs_total"
+	MetricCompletedJobsTotal          = "gha_completed_jobs_total"
+	MetricJobStartupDurationSeconds   = "gha_job_startup_duration_seconds"
+	MetricJobExecutionDurationSeconds = "gha_job_execution_duration_seconds"
+)
+
+var metricsHelp = map[string]string{
+	MetricAssignedJobs:                "Number of jobs assigned to this scale set.",
+	MetricRunningJobs:                 "Number of jobs running (or about to be run).",
+	MetricRegisteredRunners:           "Number of runners registered by the scale set.",
+	MetricBusyRunners:                 "Number of registered runners running a job.",
+	MetricMinRunners:                  "Minimum number of runners.",
+	MetricMaxRunners:                  "Maximum number of runners.",
+	MetricDesiredRunners:              "Number of runners desired by the scale set.",
+	MetricIdleRunners:                 "Number of registered runners not running a job.",
+	MetricStartedJobsTotal:            "Total number of jobs started.",
+	MetricCompletedJobsTotal:          "Total number of jobs completed.",
+	MetricJobStartupDurationSeconds:   "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
+	MetricJobExecutionDurationSeconds: "Time spent executing workflow jobs by the scale set (in seconds).",
+}
 
 // labels
 var (
@@ -208,17 +241,9 @@ var runtimeBuckets []float64 = []float64{
 	3600,
 }
 
-type baseLabels struct {
-	scaleSetName      string
-	scaleSetNamespace string
-	enterprise        string
-	organization      string
-	repository        string
-}
-
-func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
+func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
 	return prometheus.Labels{
-		labelKeyEnterprise:   b.enterprise,
+		labelKeyEnterprise:   e.scaleSetLabels[labelKeyEnterprise],
 		labelKeyOrganization: jobBase.OwnerName,
 		labelKeyRepository:   jobBase.RepositoryName,
 		labelKeyJobName:      jobBase.JobDisplayName,
@@ -226,25 +251,14 @@ func (b *baseLabels) jobLabels(jobBase *actions.JobMessageBase) prometheus.Label
 	}
 }
 
-func (b *baseLabels) scaleSetLabels() prometheus.Labels {
-	return prometheus.Labels{
-		labelKeyRunnerScaleSetName:      b.scaleSetName,
-		labelKeyRunnerScaleSetNamespace: b.scaleSetNamespace,
-		labelKeyEnterprise:              b.enterprise,
-		labelKeyOrganization:            b.organization,
-		labelKeyRepository:              b.repository,
-	}
-}
-
-func (b *baseLabels) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
-	l := b.jobLabels(&msg.JobMessageBase)
+func (e *exporter) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
+	l := e.jobLabels(&msg.JobMessageBase)
 	l[labelKeyJobResult] = msg.Result
 	return l
 }
 
-func (b *baseLabels) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
-	l := b.jobLabels(&msg.JobMessageBase)
-	return l
+func (e *exporter) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
+	return e.jobLabels(&msg.JobMessageBase)
 }
 
 //go:generate mockery --name Publisher --output ./mocks --outpkg mocks --case underscore
@@ -257,22 +271,44 @@ type Publisher interface {
 }
 
 //go:generate mockery --name ServerPublisher --output ./mocks --outpkg mocks --case underscore
-type ServerPublisher interface {
+type ServerExporter interface {
 	Publisher
 	ListenAndServe(ctx context.Context) error
 }
 
 var (
-	_ Publisher       = &discard{}
-	_ ServerPublisher = &exporter{}
+	_ Publisher      = &discard{}
+	_ ServerExporter = &exporter{}
 )
 
 var Discard Publisher = &discard{}
 
 type exporter struct {
-	logger logr.Logger
-	baseLabels
+	logger         logr.Logger
+	scaleSetLabels prometheus.Labels
+	*metrics
 	srv *http.Server
+}
+
+type metrics struct {
+	counters   map[string]*counterMetric
+	gauges     map[string]*gaugeMetric
+	histograms map[string]*histogramMetric
+}
+
+type counterMetric struct {
+	counter *prometheus.CounterVec
+	config  *v1alpha1.CounterMetric
+}
+
+type gaugeMetric struct {
+	gauge  *prometheus.GaugeVec
+	config *v1alpha1.GaugeMetric
+}
+
+type histogramMetric struct {
+	histogram *prometheus.HistogramVec
+	config    *v1alpha1.HistogramMetric
 }
 
 type ExporterConfig struct {
@@ -284,24 +320,82 @@ type ExporterConfig struct {
 	ServerAddr        string
 	ServerEndpoint    string
 	Logger            logr.Logger
+	Metrics           v1alpha1.MetricsConfig
 }
 
-func NewExporter(config ExporterConfig) ServerPublisher {
+func NewExporter(config ExporterConfig) ServerExporter {
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(
-		assignedJobs,
-		runningJobs,
-		registeredRunners,
-		busyRunners,
-		minRunners,
-		maxRunners,
-		desiredRunners,
-		idleRunners,
-		startedJobsTotal,
-		completedJobsTotal,
-		jobStartupDurationSeconds,
-		jobExecutionDurationSeconds,
-	)
+
+	metrics := &metrics{
+		counters:   make(map[string]*counterMetric, len(config.Metrics.Gauges)),
+		gauges:     make(map[string]*gaugeMetric, len(config.Metrics.Counters)),
+		histograms: make(map[string]*histogramMetric, len(config.Metrics.Histograms)),
+	}
+	for name, cfg := range config.Metrics.Gauges {
+		g := prometheus.V2.NewGaugeVec(prometheus.GaugeVecOpts{
+			GaugeOpts: prometheus.GaugeOpts{
+				Subsystem: githubScaleSetSubsystem,
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Help:      metricsHelp[name],
+			},
+			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
+		})
+		reg.MustRegister(g)
+		metrics.gauges[name] = &gaugeMetric{
+			gauge:  g,
+			config: cfg,
+		}
+	}
+
+	for name, cfg := range config.Metrics.Counters {
+		c := prometheus.V2.NewCounterVec(prometheus.CounterVecOpts{
+			CounterOpts: prometheus.CounterOpts{
+				Subsystem: githubScaleSetSubsystem,
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Help:      metricsHelp[name],
+			},
+			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
+		})
+		reg.MustRegister(c)
+		metrics.counters[name] = &counterMetric{
+			counter: c,
+			config:  cfg,
+		}
+	}
+
+	for name, cfg := range config.Metrics.Histograms {
+		buckets := runtimeBuckets
+		if len(cfg.Buckets) > 0 {
+			b := make([]float64, 0, len(cfg.Buckets))
+			ok := true
+			for _, v := range cfg.Buckets {
+				f, err := v.Float64()
+				if err != nil {
+					ok = false
+					config.Logger.Error(err, "Failed to parse number in %q bucket: %w; continuing with the default buckets", name, err)
+					break
+				}
+				b = append(b, f)
+			}
+			if ok {
+				buckets = b
+			}
+		}
+		h := prometheus.V2.NewHistogramVec(prometheus.HistogramVecOpts{
+			HistogramOpts: prometheus.HistogramOpts{
+				Subsystem: githubScaleSetSubsystem,
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Help:      metricsHelp[name],
+				Buckets:   buckets,
+			},
+			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
+		})
+		reg.MustRegister(h)
+		metrics.histograms[name] = &histogramMetric{
+			histogram: h,
+			config:    cfg,
+		}
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle(
@@ -311,13 +405,14 @@ func NewExporter(config ExporterConfig) ServerPublisher {
 
 	return &exporter{
 		logger: config.Logger.WithName("metrics"),
-		baseLabels: baseLabels{
-			scaleSetName:      config.ScaleSetName,
-			scaleSetNamespace: config.ScaleSetNamespace,
-			enterprise:        config.Enterprise,
-			organization:      config.Organization,
-			repository:        config.Repository,
+		scaleSetLabels: prometheus.Labels{
+			labelKeyRunnerScaleSetName:      config.ScaleSetName,
+			labelKeyRunnerScaleSetNamespace: config.ScaleSetNamespace,
+			labelKeyEnterprise:              config.Enterprise,
+			labelKeyOrganization:            config.Organization,
+			labelKeyRepository:              config.Repository,
 		},
+		metrics: metrics,
 		srv: &http.Server{
 			Addr:    config.ServerAddr,
 			Handler: mux,
@@ -337,40 +432,73 @@ func (e *exporter) ListenAndServe(ctx context.Context) error {
 	return e.srv.ListenAndServe()
 }
 
-func (m *exporter) PublishStatic(min, max int) {
-	l := m.scaleSetLabels()
-	maxRunners.With(l).Set(float64(max))
-	minRunners.With(l).Set(float64(min))
+func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float64) {
+	m, ok := e.metrics.gauges[name]
+	if !ok {
+		return
+	}
+	labels := make(prometheus.Labels, len(m.config.Labels))
+	for _, label := range m.config.Labels {
+		labels[label] = allLabels[label]
+	}
+	m.gauge.With(labels).Set(val)
+}
+
+func (e *exporter) incCounter(name string, allLabels prometheus.Labels) {
+	m, ok := e.metrics.counters[name]
+	if !ok {
+		return
+	}
+	labels := make(prometheus.Labels, len(m.config.Labels))
+	for _, label := range m.config.Labels {
+		labels[label] = allLabels[label]
+	}
+	m.counter.With(labels).Inc()
+}
+
+func (e *exporter) observeHistogram(name string, allLabels prometheus.Labels, val float64) {
+	m, ok := e.metrics.histograms[name]
+	if !ok {
+		return
+	}
+	labels := make(prometheus.Labels, len(m.config.Labels))
+	for _, label := range m.config.Labels {
+		labels[label] = allLabels[label]
+	}
+	m.histogram.With(labels).Observe(val)
+}
+
+func (e *exporter) PublishStatic(min, max int) {
+	e.setGauge(MetricMaxRunners, e.scaleSetLabels, float64(max))
+	e.setGauge(MetricMinRunners, e.scaleSetLabels, float64(min))
 }
 
 func (e *exporter) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
-	l := e.scaleSetLabels()
-
-	assignedJobs.With(l).Set(float64(stats.TotalAssignedJobs))
-	runningJobs.With(l).Set(float64(stats.TotalRunningJobs))
-	registeredRunners.With(l).Set(float64(stats.TotalRegisteredRunners))
-	busyRunners.With(l).Set(float64(stats.TotalBusyRunners))
-	idleRunners.With(l).Set(float64(stats.TotalIdleRunners))
+	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
+	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
+	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))
+	e.setGauge(MetricBusyRunners, e.scaleSetLabels, float64(float64(stats.TotalRegisteredRunners)))
+	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 
 func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 	l := e.startedJobLabels(msg)
-	startedJobsTotal.With(l).Inc()
+	e.incCounter(MetricStartedJobsTotal, l)
 
 	startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
-	jobStartupDurationSeconds.With(l).Observe(float64(startupDuration))
+	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
 }
 
 func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
 	l := e.completedJobLabels(msg)
-	completedJobsTotal.With(l).Inc()
+	e.incCounter(MetricCompletedJobsTotal, l)
 
 	executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
-	jobExecutionDurationSeconds.With(l).Observe(float64(executionDuration))
+	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(executionDuration))
 }
 
-func (m *exporter) PublishDesiredRunners(count int) {
-	desiredRunners.With(m.scaleSetLabels()).Set(float64(count))
+func (e *exporter) PublishDesiredRunners(count int) {
+	e.setGauge(MetricDesiredRunners, e.scaleSetLabels, float64(count))
 }
 
 type discard struct{}

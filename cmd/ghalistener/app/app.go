@@ -23,7 +23,7 @@ type App struct {
 	// initialized fields
 	listener Listener
 	worker   Worker
-	metrics  metrics.ServerPublisher
+	metrics  metrics.ServerExporter
 }
 
 //go:generate mockery --name Listener --output ./mocks --outpkg mocks --case underscore
