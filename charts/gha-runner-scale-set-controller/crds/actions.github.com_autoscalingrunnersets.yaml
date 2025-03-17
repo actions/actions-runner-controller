@@ -99,6 +99,54 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                   type: object
+                listenerMetrics:
+                  description: MetricsConfig holds configuration parameters for each metric type
+                  properties:
+                    counters:
+                      additionalProperties:
+                        description: CounterMetric holds configuration of a single metric of type Counter
+                        properties:
+                          labels:
+                            items:
+                              type: string
+                            type: array
+                        required:
+                          - labels
+                        type: object
+                      type: object
+                    gauges:
+                      additionalProperties:
+                        description: GaugeMetric holds configuration of a single metric of type Gauge
+                        properties:
+                          labels:
+                            items:
+                              type: string
+                            type: array
+                        required:
+                          - labels
+                        type: object
+                      type: object
+                    histograms:
+                      additionalProperties:
+                        description: HistogramMetric holds configuration of a single metric of type Histogram
+                        properties:
+                          buckets:
+                            items:
+                              type: number
+                            type: array
+                          labels:
+                            items:
+                              type: string
+                            type: array
+                        required:
+                          - labels
+                        type: object
+                      type: object
+                  required:
+                    - counters
+                    - gauges
+                    - histograms
+                  type: object
                 listenerTemplate:
                   description: PodTemplateSpec describes the data a pod should have when created from a template
                   properties:
@@ -7772,55 +7820,6 @@ spec:
                 maxRunners:
                   minimum: 0
                   type: integer
-                metrics:
-                  description: MetricsConfig holds configuration parameters for each metric type
-                  properties:
-                    counters:
-                      additionalProperties:
-                        description: CounterMetric holds configuration of a single metric of type Counter
-                        properties:
-                          labels:
-                            items:
-                              type: string
-                            type: array
-                        required:
-                          - labels
-                        type: object
-                      type: object
-                    gauges:
-                      additionalProperties:
-                        description: GaugeMetric holds configuration of a single metric of type Gauge
-                        properties:
-                          labels:
-                            items:
-                              type: string
-                            type: array
-                        required:
-                          - labels
-                        type: object
-                      type: object
-                    histograms:
-                      additionalProperties:
-                        description: HistogramMetric holds configuration of a single metric of type Histogram
-                        properties:
-                          buckets:
-                            items:
-                              description: A Number represents a JSON number literal.
-                              type: string
-                            type: array
-                          labels:
-                            items:
-                              type: string
-                            type: array
-                        required:
-                          - labels
-                        type: object
-                      type: object
-                  required:
-                    - counters
-                    - gauges
-                    - histograms
-                  type: object
                 minRunners:
                   minimum: 0
                   type: integer

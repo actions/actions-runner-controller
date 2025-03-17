@@ -142,76 +142,7 @@ type ExporterConfig struct {
 func NewExporter(config ExporterConfig) ServerExporter {
 	reg := prometheus.NewRegistry()
 
-	metrics := &metrics{
-		counters:   make(map[string]*counterMetric, len(config.Metrics.Gauges)),
-		gauges:     make(map[string]*gaugeMetric, len(config.Metrics.Counters)),
-		histograms: make(map[string]*histogramMetric, len(config.Metrics.Histograms)),
-	}
-	for name, cfg := range config.Metrics.Gauges {
-		g := prometheus.V2.NewGaugeVec(prometheus.GaugeVecOpts{
-			GaugeOpts: prometheus.GaugeOpts{
-				Subsystem: githubScaleSetSubsystem,
-				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
-				Help:      metricsHelp[name],
-			},
-			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
-		})
-		reg.MustRegister(g)
-		metrics.gauges[name] = &gaugeMetric{
-			gauge:  g,
-			config: cfg,
-		}
-	}
-
-	for name, cfg := range config.Metrics.Counters {
-		c := prometheus.V2.NewCounterVec(prometheus.CounterVecOpts{
-			CounterOpts: prometheus.CounterOpts{
-				Subsystem: githubScaleSetSubsystem,
-				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
-				Help:      metricsHelp[name],
-			},
-			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
-		})
-		reg.MustRegister(c)
-		metrics.counters[name] = &counterMetric{
-			counter: c,
-			config:  cfg,
-		}
-	}
-
-	for name, cfg := range config.Metrics.Histograms {
-		buckets := defaultRuntimeBuckets
-		if len(cfg.Buckets) > 0 {
-			b := make([]float64, 0, len(cfg.Buckets))
-			ok := true
-			for _, v := range cfg.Buckets {
-				f, err := v.Float64()
-				if err != nil {
-					ok = false
-					config.Logger.Error(err, "Failed to parse number in %q bucket: %w; continuing with the default buckets", name, err)
-					break
-				}
-				b = append(b, f)
-			}
-			if ok {
-				buckets = b
-			}
-		}
-		h := prometheus.V2.NewHistogramVec(prometheus.HistogramVecOpts{
-			HistogramOpts: prometheus.HistogramOpts{
-				Subsystem: githubScaleSetSubsystem,
-				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
-				Help:      metricsHelp[name],
-				Buckets:   buckets,
-			},
-			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
-		})
-		reg.MustRegister(h)
-		metrics.histograms[name] = &histogramMetric{
-			histogram: h,
-			config:    cfg,
-		}
-	}
+	metrics := installMetrics(config.Metrics, reg)
 
 	mux := http.NewServeMux()
 	mux.Handle(
@@ -234,6 +165,68 @@ func NewExporter(config ExporterConfig) ServerExporter {
 			Handler: mux,
 		},
 	}
+}
+
+func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry) *metrics {
+	metrics := &metrics{
+		counters:   make(map[string]*counterMetric, len(config.Gauges)),
+		gauges:     make(map[string]*gaugeMetric, len(config.Counters)),
+		histograms: make(map[string]*histogramMetric, len(config.Histograms)),
+	}
+	for name, cfg := range config.Gauges {
+		g := prometheus.V2.NewGaugeVec(prometheus.GaugeVecOpts{
+			GaugeOpts: prometheus.GaugeOpts{
+				Subsystem: githubScaleSetSubsystem,
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Help:      metricsHelp[name],
+			},
+			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
+		})
+		reg.MustRegister(g)
+		metrics.gauges[name] = &gaugeMetric{
+			gauge:  g,
+			config: cfg,
+		}
+	}
+
+	for name, cfg := range config.Counters {
+		c := prometheus.V2.NewCounterVec(prometheus.CounterVecOpts{
+			CounterOpts: prometheus.CounterOpts{
+				Subsystem: githubScaleSetSubsystem,
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Help:      metricsHelp[name],
+			},
+			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
+		})
+		reg.MustRegister(c)
+		metrics.counters[name] = &counterMetric{
+			counter: c,
+			config:  cfg,
+		}
+	}
+
+	for name, cfg := range config.Histograms {
+		buckets := defaultRuntimeBuckets
+		if len(cfg.Buckets) > 0 {
+			buckets = cfg.Buckets
+		}
+		h := prometheus.V2.NewHistogramVec(prometheus.HistogramVecOpts{
+			HistogramOpts: prometheus.HistogramOpts{
+				Subsystem: githubScaleSetSubsystem,
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Help:      metricsHelp[name],
+				Buckets:   buckets,
+			},
+			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
+		})
+		reg.MustRegister(h)
+		metrics.histograms[name] = &histogramMetric{
+			histogram: h,
+			config:    cfg,
+		}
+	}
+
+	return metrics
 }
 
 func (e *exporter) ListenAndServe(ctx context.Context) error {

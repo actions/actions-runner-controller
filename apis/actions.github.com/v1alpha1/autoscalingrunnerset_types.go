@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -76,7 +75,7 @@ type AutoscalingRunnerSetSpec struct {
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
-	ListenerMetrics *MetricsConfig `json:"metrics,omitempty"`
+	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
 
 	// +optional
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
@@ -255,8 +254,8 @@ type GaugeMetric struct {
 
 // HistogramMetric holds configuration of a single metric of type Histogram
 type HistogramMetric struct {
-	Labels  []string      `json:"labels"`
-	Buckets []json.Number `json:"buckets,omitempty"`
+	Labels  []string  `json:"labels"`
+	Buckets []float64 `json:"buckets,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet

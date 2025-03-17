@@ -21,7 +21,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"encoding/json"
 	"k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -527,7 +526,7 @@ func (in *HistogramMetric) DeepCopyInto(out *HistogramMetric) {
 	}
 	if in.Buckets != nil {
 		in, out := &in.Buckets, &out.Buckets
-		*out = make([]json.Number, len(*in))
+		*out = make([]float64, len(*in))
 		copy(*out, *in)
 	}
 }

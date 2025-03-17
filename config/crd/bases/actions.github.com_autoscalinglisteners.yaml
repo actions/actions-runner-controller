@@ -152,8 +152,7 @@ spec:
                         properties:
                           buckets:
                             items:
-                              description: A Number represents a JSON number literal.
-                              type: string
+                              type: number
                             type: array
                           labels:
                             items:
