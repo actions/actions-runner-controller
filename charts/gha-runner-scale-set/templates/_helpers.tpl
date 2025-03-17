@@ -14,6 +14,10 @@ gha-rs
 {{ .Values.runnerScaleSetName | default .Release.Name }}
 {{- end }}
 
+{{- define "gha-runner-scale-set.deployment-name" -}}
+{{ (.Values.deploymentName | default (include "gha-runner-scale-set.scale-set-name" .)) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
@@ -62,24 +66,24 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- fail "Values.githubConfigSecret is required for setting auth with GitHub server." }}
     {{- end }}
   {{- else }}
-{{- include "gha-runner-scale-set.fullname" . }}-github-secret
+{{- include "gha-runner-scale-set.deployment-name" . }}-github-secret
   {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.noPermissionServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-no-permission
+{{- include "gha-runner-scale-set.deployment-name" . }}-no-permission
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeRoleName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
+{{- include "gha-runner-scale-set.deployment-name" . }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeRoleBindingName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
+{{- include "gha-runner-scale-set.deployment-name" . }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
+{{- include "gha-runner-scale-set.deployment-name" . }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
@@ -433,11 +437,11 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.managerRoleName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-manager
+{{- include "gha-runner-scale-set.deployment-name" . }}-manager
 {{- end }}
 
 {{- define "gha-runner-scale-set.managerRoleBindingName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-manager
+{{- include "gha-runner-scale-set.deployment-name" . }}-manager
 {{- end }}
 
 {{- define "gha-runner-scale-set.managerServiceAccountName" -}}
