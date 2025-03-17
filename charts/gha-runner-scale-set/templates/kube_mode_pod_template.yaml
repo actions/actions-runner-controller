@@ -1,0 +1,14 @@
+{{- if (.Values.hookTemplate) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gha-runner-scale-set.hookTemplate" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
+  finalizers:
+    - actions.github.com/cleanup-protection
+data:
+  hookTemplate.yaml: |
+    {{- .Values.hookTemplate | toYaml | nindent 4 -}}
+{{- end}}
