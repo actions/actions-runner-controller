@@ -10,5 +10,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "actions-runner-controller-github-webhook-server.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ include "actions-runner-controller.namespace" . }}
 {{- end }}

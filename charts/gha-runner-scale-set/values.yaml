@@ -216,6 +216,9 @@ template:
 #   namespace: arc-system
 #   name: test-arc-gha-runner-scale-set-controller
 
+# Overrides the default `.Release.Namespace` for all resources in this chart.
+namespaceOverride: ""
+
 ## Optional annotations and labels applied to all resources created by helm installation
 ##
 ## Annotations applied to all resources created by this helm chart. Annotations will not override the default ones, so make sure

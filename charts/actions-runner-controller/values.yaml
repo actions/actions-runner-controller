@@ -420,3 +420,6 @@ actionsMetricsServer:
     #      - chart-example.local
   terminationGracePeriodSeconds: 10
   lifecycle: {}
+
+# Add the option to deploy in another namespace rather than .Release.Namespace.
+namespaceOverride: ""
