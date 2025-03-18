@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -42,19 +43,31 @@ const (
 	MetricJobExecutionDurationSeconds = "gha_job_execution_duration_seconds"
 )
 
-var metricsHelp = map[string]string{
-	MetricAssignedJobs:                "Number of jobs assigned to this scale set.",
-	MetricRunningJobs:                 "Number of jobs running (or about to be run).",
-	MetricRegisteredRunners:           "Number of runners registered by the scale set.",
-	MetricBusyRunners:                 "Number of registered runners running a job.",
-	MetricMinRunners:                  "Minimum number of runners.",
-	MetricMaxRunners:                  "Maximum number of runners.",
-	MetricDesiredRunners:              "Number of runners desired by the scale set.",
-	MetricIdleRunners:                 "Number of registered runners not running a job.",
-	MetricStartedJobsTotal:            "Total number of jobs started.",
-	MetricCompletedJobsTotal:          "Total number of jobs completed.",
-	MetricJobStartupDurationSeconds:   "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
-	MetricJobExecutionDurationSeconds: "Time spent executing workflow jobs by the scale set (in seconds).",
+type metricsHelpRegistry struct {
+	counters   map[string]string
+	gauges     map[string]string
+	histograms map[string]string
+}
+
+var metricsHelp = metricsHelpRegistry{
+	counters: map[string]string{
+		MetricStartedJobsTotal:   "Total number of jobs started.",
+		MetricCompletedJobsTotal: "Total number of jobs completed.",
+	},
+	gauges: map[string]string{
+		MetricAssignedJobs:      "Number of jobs assigned to this scale set.",
+		MetricRunningJobs:       "Number of jobs running (or about to be run).",
+		MetricRegisteredRunners: "Number of runners registered by the scale set.",
+		MetricBusyRunners:       "Number of registered runners running a job.",
+		MetricMinRunners:        "Minimum number of runners.",
+		MetricMaxRunners:        "Maximum number of runners.",
+		MetricDesiredRunners:    "Number of runners desired by the scale set.",
+		MetricIdleRunners:       "Number of registered runners not running a job.",
+	},
+	histograms: map[string]string{
+		MetricJobStartupDurationSeconds:   "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
+		MetricJobExecutionDurationSeconds: "Time spent executing workflow jobs by the scale set (in seconds).",
+	},
 }
 
 func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
@@ -142,7 +155,7 @@ type ExporterConfig struct {
 func NewExporter(config ExporterConfig) ServerExporter {
 	reg := prometheus.NewRegistry()
 
-	metrics := installMetrics(config.Metrics, reg)
+	metrics := installMetrics(config.Metrics, reg, config.Logger)
 
 	mux := http.NewServeMux()
 	mux.Handle(
@@ -167,18 +180,26 @@ func NewExporter(config ExporterConfig) ServerExporter {
 	}
 }
 
-func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry) *metrics {
+var errUnknownMetricName = errors.New("unknown metric name")
+
+func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, logger logr.Logger) *metrics {
 	metrics := &metrics{
 		counters:   make(map[string]*counterMetric, len(config.Gauges)),
 		gauges:     make(map[string]*gaugeMetric, len(config.Counters)),
 		histograms: make(map[string]*histogramMetric, len(config.Histograms)),
 	}
 	for name, cfg := range config.Gauges {
+		help, ok := metricsHelp.gauges[name]
+		if !ok {
+			logger.Error(errUnknownMetricName, "name", name, "kind", "gauge")
+			continue
+		}
+
 		g := prometheus.V2.NewGaugeVec(prometheus.GaugeVecOpts{
 			GaugeOpts: prometheus.GaugeOpts{
 				Subsystem: githubScaleSetSubsystem,
 				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
-				Help:      metricsHelp[name],
+				Help:      help,
 			},
 			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
 		})
@@ -190,11 +211,16 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry) *me
 	}
 
 	for name, cfg := range config.Counters {
+		help, ok := metricsHelp.counters[name]
+		if !ok {
+			logger.Error(errUnknownMetricName, "name", name, "kind", "counter")
+			continue
+		}
 		c := prometheus.V2.NewCounterVec(prometheus.CounterVecOpts{
 			CounterOpts: prometheus.CounterOpts{
 				Subsystem: githubScaleSetSubsystem,
 				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
-				Help:      metricsHelp[name],
+				Help:      help,
 			},
 			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
 		})
@@ -206,6 +232,12 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry) *me
 	}
 
 	for name, cfg := range config.Histograms {
+		help, ok := metricsHelp.histograms[name]
+		if !ok {
+			logger.Error(errUnknownMetricName, "name", name, "kind", "histogram")
+			continue
+		}
+
 		buckets := defaultRuntimeBuckets
 		if len(cfg.Buckets) > 0 {
 			buckets = cfg.Buckets
@@ -214,11 +246,12 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry) *me
 			HistogramOpts: prometheus.HistogramOpts{
 				Subsystem: githubScaleSetSubsystem,
 				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
-				Help:      metricsHelp[name],
+				Help:      help,
 				Buckets:   buckets,
 			},
 			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
 		})
+		cfg.Buckets = buckets
 		reg.MustRegister(h)
 		metrics.histograms[name] = &histogramMetric{
 			histogram: h,
