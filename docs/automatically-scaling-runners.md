@@ -391,6 +391,14 @@ Then create this resource on your cluster with the following command:
 kubectl apply -n actions-runner-system -f arc-webhook-server.yaml
 ```
 
+To verify that Actions Runner Webhook Server pod is running properly and responding, run the following commands:
+
+```bash
+$ nc -zv your.domain.com 443 # or your actual exposed port
+$ curl https://your.domain.com/actions-runner-controller-github-webhook-server
+webhook server is running
+```
+
 **Configuring GitHub for sending webhooks for our newly created webhook server:**
 
 After this step your webhook server should be ready to start receiving webhooks from GitHub.
