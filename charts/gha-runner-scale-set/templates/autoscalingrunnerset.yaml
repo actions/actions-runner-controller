@@ -106,9 +106,14 @@ spec:
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
 
-  {{- with .Values.listenerTemplate}}
+  {{- with .Values.listenerTemplate }}
   listenerTemplate:
     {{- toYaml . | nindent 4}}
+  {{- end }}
+
+  {{- with .Values.listenerMetrics }}
+  listenerMetrics:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 
   template:

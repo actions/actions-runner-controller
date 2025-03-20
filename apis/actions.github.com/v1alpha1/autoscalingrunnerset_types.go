@@ -75,6 +75,9 @@ type AutoscalingRunnerSetSpec struct {
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
+	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
+
+	// +optional
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
 
 	// +optional
@@ -230,6 +233,29 @@ type ProxyServerConfig struct {
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
+}
+
+// MetricsConfig holds configuration parameters for each metric type
+type MetricsConfig struct {
+	Counters   map[string]*CounterMetric   `json:"counters"`
+	Gauges     map[string]*GaugeMetric     `json:"gauges"`
+	Histograms map[string]*HistogramMetric `json:"histograms"`
+}
+
+// CounterMetric holds configuration of a single metric of type Counter
+type CounterMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// GaugeMetric holds configuration of a single metric of type Gauge
+type GaugeMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// HistogramMetric holds configuration of a single metric of type Histogram
+type HistogramMetric struct {
+	Labels  []string  `json:"labels"`
+	Buckets []float64 `json:"buckets,omitempty"`
 }
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet

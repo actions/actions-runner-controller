@@ -62,6 +62,9 @@ type AutoscalingListenerSpec struct {
 	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +optional
+	Metrics *MetricsConfig `json:"metrics,omitempty"`
+
+	// +optional
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
