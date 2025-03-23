@@ -1044,12 +1044,12 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		// overridden
 		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
 			gid := d.DockerGID
-			// We default to gid 121 for Ubuntu 22.04 images
+			// We default to gid 121 for Ubuntu 22.04 and 24.04 images
 			// See below for more details
 			// - https://github.com/actions/actions-runner-controller/issues/2490#issuecomment-1501561923
 			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-20.04.dockerfile#L14
 			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-22.04.dockerfile#L12
-			if strings.Contains(runnerContainer.Image, "22.04") {
+			if strings.Contains(runnerContainer.Image, "22.04") || strings.Contains(runnerContainer.Image, "24.04") {
 				gid = "121"
 			} else if strings.Contains(runnerContainer.Image, "20.04") {
 				gid = "1001"
