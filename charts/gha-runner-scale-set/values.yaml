@@ -119,6 +119,13 @@ githubConfigSecret:
 #     - name: side-car
 #       image: example-sidecar
 
+## listenerMetrics are configurable metrics applied to the listener.
+## In order to avoid helm merging these fields, we left the metrics commented out.
+## When configuring metrics, please uncomment the listenerMetrics object below.
+## You can modify the configuration to remove the label or specify custom buckets for histogram.
+##
+## If the buckets field is not specified, the default buckets will be applied. Default buckets are
+## provided here for documentation purposes
 # listenerMetrics:
 #   counters:
 #     gha_started_jobs_total:
