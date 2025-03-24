@@ -186,6 +186,15 @@ func NewExporter(config ExporterConfig) ServerExporter {
 var errUnknownMetricName = errors.New("unknown metric name")
 
 func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, logger logr.Logger) *metrics {
+	logger.Info(
+		"Registering metrics",
+		"gauges",
+		config.Gauges,
+		"counters",
+		config.Counters,
+		"histograms",
+		config.Histograms,
+	)
 	metrics := &metrics{
 		counters:   make(map[string]*counterMetric, len(config.Counters)),
 		gauges:     make(map[string]*gaugeMetric, len(config.Gauges)),
