@@ -142,10 +142,6 @@ spec:
                           - labels
                         type: object
                       type: object
-                  required:
-                    - counters
-                    - gauges
-                    - histograms
                   type: object
                 listenerTemplate:
                   description: PodTemplateSpec describes the data a pod should have when created from a template

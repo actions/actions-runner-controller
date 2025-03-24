@@ -237,9 +237,12 @@ type ProxyServerConfig struct {
 
 // MetricsConfig holds configuration parameters for each metric type
 type MetricsConfig struct {
-	Counters   map[string]*CounterMetric   `json:"counters"`
-	Gauges     map[string]*GaugeMetric     `json:"gauges"`
-	Histograms map[string]*HistogramMetric `json:"histograms"`
+	// +optional
+	Counters map[string]*CounterMetric `json:"counters,omitempty"`
+	// +optional
+	Gauges map[string]*GaugeMetric `json:"gauges,omitempty"`
+	// +optional
+	Histograms map[string]*HistogramMetric `json:"histograms,omitempty"`
 }
 
 // CounterMetric holds configuration of a single metric of type Counter

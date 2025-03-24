@@ -162,10 +162,6 @@ spec:
                           - labels
                         type: object
                       type: object
-                  required:
-                    - counters
-                    - gauges
-                    - histograms
                   type: object
                 minRunners:
                   description: Required

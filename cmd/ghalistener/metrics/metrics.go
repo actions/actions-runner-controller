@@ -25,7 +25,10 @@ const (
 	labelKeyJobResult               = "job_result"
 )
 
-const githubScaleSetSubsystem = "gha"
+const (
+	githubScaleSetSubsystem       = "gha"
+	githubScaleSetSubsystemPrefix = "gha_"
+)
 
 // Names of all metrics available on the listener
 const (
@@ -198,7 +201,7 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 		g := prometheus.V2.NewGaugeVec(prometheus.GaugeVecOpts{
 			GaugeOpts: prometheus.GaugeOpts{
 				Subsystem: githubScaleSetSubsystem,
-				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystemPrefix),
 				Help:      help,
 			},
 			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
@@ -219,7 +222,7 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 		c := prometheus.V2.NewCounterVec(prometheus.CounterVecOpts{
 			CounterOpts: prometheus.CounterOpts{
 				Subsystem: githubScaleSetSubsystem,
-				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystemPrefix),
 				Help:      help,
 			},
 			VariableLabels: prometheus.UnconstrainedLabels(cfg.Labels),
@@ -245,7 +248,7 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 		h := prometheus.V2.NewHistogramVec(prometheus.HistogramVecOpts{
 			HistogramOpts: prometheus.HistogramOpts{
 				Subsystem: githubScaleSetSubsystem,
-				Name:      strings.TrimPrefix(name, githubScaleSetSubsystem),
+				Name:      strings.TrimPrefix(name, githubScaleSetSubsystemPrefix),
 				Help:      help,
 				Buckets:   buckets,
 			},
