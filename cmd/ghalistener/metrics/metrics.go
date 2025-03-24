@@ -187,8 +187,8 @@ var errUnknownMetricName = errors.New("unknown metric name")
 
 func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, logger logr.Logger) *metrics {
 	metrics := &metrics{
-		counters:   make(map[string]*counterMetric, len(config.Gauges)),
-		gauges:     make(map[string]*gaugeMetric, len(config.Counters)),
+		counters:   make(map[string]*counterMetric, len(config.Counters)),
+		gauges:     make(map[string]*gaugeMetric, len(config.Gauges)),
 		histograms: make(map[string]*histogramMetric, len(config.Histograms)),
 	}
 	for name, cfg := range config.Gauges {
