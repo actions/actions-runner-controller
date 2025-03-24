@@ -56,7 +56,7 @@ jobs:
           chmod 755 kube-score
 
       - name: Kube-score generated manifests
-        run:
+        run: |
           helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
           --ignore-test pod-networkpolicy
           --ignore-test deployment-has-poddisruptionbudget
