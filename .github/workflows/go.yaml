@@ -48,6 +48,7 @@ jobs:
           go-version-file: "go.mod"
           cache: false
       - name: golangci-lint
+        # https://github.com/golangci/golangci-lint-action/releases/tag/v6.5.2
         uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
         with:
           only-new-issues: true

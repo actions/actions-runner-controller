@@ -45,6 +45,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2.0
         uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
@@ -63,6 +64,7 @@ jobs:
           python-version: "3.11"
 
       - name: Set up chart-testing
+        # https://github.com/helm/chart-testing-action/releases/tag/v2.7.0
         uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b
 
       - name: Run chart-testing (list-changed)
@@ -79,6 +81,7 @@ jobs:
 
       - name: Create kind cluster
         if: steps.list-changed.outputs.changed == 'true'
+        # https://github.com/helm/kind-action/releases/tag/v1.12.0
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist
@@ -145,6 +148,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
+        # https://github.com/peter-murray/workflow-application-token-action/releases/tag/v3.0.0
         uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}

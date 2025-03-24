@@ -59,6 +59,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
+        # https://github.com/peter-murray/workflow-application-token-action/releases/tag/v3.0.0
         uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
@@ -93,6 +94,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Login to GitHub Container Registry
+        # https://github.com/docker/login-action/releases/tag/v3.4.0
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
           registry: ghcr.io
@@ -110,15 +112,18 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
+        # https://github.com/docker/setup-qemu-action/releases/tag/v3.6.0
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
 
       - name: Set up Docker Buildx
+        # https://github.com/docker/setup-buildx-action/releases/tag/v3.10.0
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2
         with:
           version: latest
 
       # Unstable builds - run at your own risk
       - name: Build and Push
+        # https://github.com/docker/build-push-action/releases/tag/v6.15.0
         uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4
         with:
           context: .

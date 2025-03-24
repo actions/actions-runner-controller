@@ -59,6 +59,7 @@ jobs:
   setup-ruby-test:
     runs-on: ["self-hosted", "Linux"]
     steps:
+      # https://github.com/ruby/setup-ruby/releases/tag/v1.227.0
       - uses: ruby/setup-ruby@1a615958ad9d422dd932dc1d5823942ee002799f
         with:
           ruby-version: 3.0

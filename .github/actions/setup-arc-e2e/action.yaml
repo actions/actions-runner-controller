@@ -36,6 +36,7 @@ runs:
         driver-opts: image=moby/buildkit:v0.10.6
 
     - name: Build controller image
+      # https://github.com/docker/build-push-action/releases/tag/v6.15.0
       uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4
       with:
         file: Dockerfile
@@ -56,9 +57,9 @@ runs:
 
     - name: Get configure token
       id: config-token
+      # https://github.com/peter-murray/workflow-application-token-action/releases/tag/v3.0.0
       uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
       with:
         application_id: ${{ inputs.app-id }}
         application_private_key: ${{ inputs.app-pk }}
         organization: ${{ inputs.target-org}}
-

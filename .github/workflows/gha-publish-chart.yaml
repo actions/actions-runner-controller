@@ -72,6 +72,7 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
+        # https://github.com/docker/setup-qemu-action/releases/tag/v3.6.0
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
 
       - name: Set up Docker Buildx
@@ -84,6 +85,7 @@ jobs:
           driver-opts: image=moby/buildkit:v0.10.6
 
       - name: Login to GitHub Container Registry
+        # https://github.com/docker/login-action/releases/tag/v3.4.0
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
           registry: ghcr.io
@@ -91,6 +93,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push controller image
+        # https://github.com/docker/build-push-action/releases/tag/v6.15.0
         uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4
         with:
           file: Dockerfile
@@ -140,7 +143,7 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2.0
         uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
@@ -188,7 +191,7 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
+        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2.0
         uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
         with:
           version: ${{ env.HELM_VERSION }}
