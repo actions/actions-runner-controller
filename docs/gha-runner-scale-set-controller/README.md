@@ -43,6 +43,30 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.11.0
+
+1. Add events role permission to leader_election_role [#3988](https://github.com/actions/actions-runner-controller/pull/3988)
+1. Bump github.com/golang-jwt/jwt/v4 from 4.5.1 to 4.5.2 [#3984](https://github.com/actions/actions-runner-controller/pull/3984)
+1. Create configurable metrics [#3975](https://github.com/actions/actions-runner-controller/pull/3975)
+1. Wrap errors in controller helper methods and swap logic in cleanups [#3960](https://github.com/actions/actions-runner-controller/pull/3960)
+1. Rename log from target/actual to build/autoscalingRunnerSet version [#3957](https://github.com/actions/actions-runner-controller/pull/3957)
+1. Update all dependencies, conforming to the new controller-runtime API [#3949](https://github.com/actions/actions-runner-controller/pull/3949)
+1. Clean up as much as possible in a single pass for the EphemeralRunner reconciler [#3941](https://github.com/actions/actions-runner-controller/pull/3941)
+1. Remove old githubrunnerscalesetlistener, remove warning and fix config bug [#3937](https://github.com/actions/actions-runner-controller/pull/3937)
+1. Include custom annotations and labels to all resources created by gha-runner-scale-set chart [#3934](https://github.com/actions/actions-runner-controller/pull/3934)
+1. Use Ready from the pod conditions when setting it to the EphemeralRunner [#3891](https://github.com/actions/actions-runner-controller/pull/3891)
+1. Fix template tests and add go test on gha-validate-chart [#3886](https://github.com/actions/actions-runner-controller/pull/3886)
+1. Update dependabot config to group packages (& include actions eco) [#3880](https://github.com/actions/actions-runner-controller/pull/3880)
+1. cmd/ghalistener/config: export Validate [#3870](https://github.com/actions/actions-runner-controller/pull/3870)
+1. AutoscalingRunnerSet env: not Rendering correctly [#3826](https://github.com/actions/actions-runner-controller/pull/3826)
+1. Clarify syntax for githubConfigSecret [#3812](https://github.com/actions/actions-runner-controller/pull/3812)
+1. Trim volume and container helpers in gha-runner-scale-set [#3807](https://github.com/actions/actions-runner-controller/pull/3807)
+1. Drop verbose flag from runner scale set init-dind-externals copy [#3805](https://github.com/actions/actions-runner-controller/pull/3805)
+1. Use gha-runner-scale-set-controller.chart instead of .Chart.Version [#3729](https://github.com/actions/actions-runner-controller/pull/3729)
+1. metrics cardinality for ghalistener [#3671](https://github.com/actions/actions-runner-controller/pull/3671)
+1. Sanitize labels ending in hyphen, underscore, and dot [#3664](https://github.com/actions/actions-runner-controller/pull/3664)
+1. chore: Added OwnerReferences during resource creation for EphemeralRunnerSet, EphemeralRunner, and EphemeralRunnerPod [#3575](https://github.com/actions/actions-runner-controller/pull/3575)
+
 ### 0.10.1
 
 1. Fix helm chart bug related to `runnerMaxConcurrentReconciles` [#3858](https://github.com/actions/actions-runner-controller/pull/3858)
