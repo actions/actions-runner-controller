@@ -63,6 +63,11 @@ githubConfigSecret:
 ## name of the runner scale set to create.  Defaults to the helm release name
 # runnerScaleSetName: ""
 
+## Override the fullname of the gha-runner-scale-set
+## This is useful for deploying multiple runner scale sets in the same namespace
+## with the same scale set name but different GitHub configuration URLs.
+fullnameOverride: ""
+
 ## A self-signed CA certificate for communication with the GitHub server can be
 ## provided using a config map key selector. If `runnerMountPath` is set, for
 ## each runner pod ARC will:
