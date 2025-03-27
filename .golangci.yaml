@@ -1,8 +1,8 @@
 run:
-  timeout: 3m
+  timeout: 5m
 output:
   formats:
-    - format: github-actions
+    - format: colored-line-number
       path: stdout
 linters-settings:
   errcheck:

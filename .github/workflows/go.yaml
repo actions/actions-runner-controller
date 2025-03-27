@@ -4,16 +4,16 @@ on:
     branches:
       - master
     paths:
-      - '.github/workflows/go.yaml'
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
+      - ".github/workflows/go.yaml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
   pull_request:
     paths:
-      - '.github/workflows/go.yaml'
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
+      - ".github/workflows/go.yaml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: false
       - name: fmt
         run: go fmt ./...
@@ -45,13 +45,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: false
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # https://github.com/golangci/golangci-lint-action/releases/tag/v6.5.2
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
         with:
           only-new-issues: true
-          version: v1.55.2
+          version: v1.64.8
 
   generate:
     runs-on: ubuntu-latest
@@ -59,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: false
       - name: Generate
         run: make generate
@@ -72,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
       - run: make manifests
       - name: Check diff
         run: git diff --exit-code

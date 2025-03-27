@@ -8,8 +8,8 @@ env:
 
 jobs:
   run-step-in-container-test:
-    runs-on: ['self-hosted', 'Linux']
-    container: 
+    runs-on: ["self-hosted", "Linux"]
+    container:
       image: alpine
     steps:
       - name: Test we are working in the container
@@ -21,7 +21,7 @@ jobs:
               exit 1
           fi
   setup-python-test:
-    runs-on: ['self-hosted', 'Linux']
+    runs-on: ["self-hosted", "Linux"]
     steps:
       - name: Print native Python environment
         run: |
@@ -41,12 +41,12 @@ jobs:
             echo "Python version detected : $(python --version 2>&1)"
           fi
   setup-node-test:
-    runs-on: ['self-hosted', 'Linux']
+    runs-on: ["self-hosted", "Linux"]
     steps:
       - uses: actions/setup-node@v2
         with:
-          node-version: '12'
-      - name: Test actions/setup-node works 
+          node-version: "12"
+      - name: Test actions/setup-node works
         run: |
           VERSION=$(node --version | cut -c 2- | cut -d '.' -f1)
           if [[ $VERSION != '12' ]]; then
@@ -57,13 +57,14 @@ jobs:
             echo "Node version detected : $(node --version 2>&1)"
           fi
   setup-ruby-test:
-    runs-on: ['self-hosted', 'Linux']
+    runs-on: ["self-hosted", "Linux"]
     steps:
-      - uses: ruby/setup-ruby@v1
+      # https://github.com/ruby/setup-ruby/releases/tag/v1.227.0
+      - uses: ruby/setup-ruby@1a615958ad9d422dd932dc1d5823942ee002799f
         with:
           ruby-version: 3.0
           bundler-cache: true
-      - name: Test ruby/setup-ruby works 
+      - name: Test ruby/setup-ruby works
         run: |
           VERSION=$(ruby --version | cut -d ' ' -f2 | cut -d '.' -f1-2)
           if [[ $VERSION != '3.0' ]]; then
@@ -74,8 +75,8 @@ jobs:
               echo "Ruby version detected : $(ruby --version 2>&1)"
           fi
   python-shell-test:
-    runs-on: ['self-hosted', 'Linux']
-    steps:      
+    runs-on: ["self-hosted", "Linux"]
+    steps:
       - name: Test Python shell works
         run: |
           import os
