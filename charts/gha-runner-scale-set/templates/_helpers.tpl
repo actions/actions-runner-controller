@@ -96,11 +96,12 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+image: {{ .Values.template.spec.dind.image }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+  - --log-level={{ .Values.template.spec.dind.logLevel }}
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
