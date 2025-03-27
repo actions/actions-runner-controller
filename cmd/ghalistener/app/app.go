@@ -23,7 +23,7 @@ type App struct {
 	// initialized fields
 	listener Listener
 	worker   Worker
-	metrics  metrics.ServerPublisher
+	metrics  metrics.ServerExporter
 }
 
 //go:generate mockery --name Listener --output ./mocks --outpkg mocks --case underscore
@@ -69,6 +69,8 @@ func New(config config.Config) (*App, error) {
 			Repository:        ghConfig.Repository,
 			ServerAddr:        config.MetricsAddr,
 			ServerEndpoint:    config.MetricsEndpoint,
+			Logger:            app.logger.WithName("metrics exporter"),
+			Metrics:           *config.Metrics,
 		})
 	}
 

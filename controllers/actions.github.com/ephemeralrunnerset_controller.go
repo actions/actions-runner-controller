@@ -56,11 +56,11 @@ type EphemeralRunnerSetReconciler struct {
 	ResourceBuilder
 }
 
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/finalizers,verbs=update;patch
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -275,7 +275,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 	proxySecret.Name = proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)
 
 	if err := r.Delete(ctx, proxySecret); err != nil && !kerrors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete proxy secret: %v", err)
+		return fmt.Errorf("failed to delete proxy secret: %w", err)
 	}
 
 	log.Info("Deleted proxy secret")
@@ -287,7 +287,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
 	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
 	if err != nil {
-		return false, fmt.Errorf("failed to list child ephemeral runners: %v", err)
+		return false, fmt.Errorf("failed to list child ephemeral runners: %w", err)
 	}
 
 	log.Info("Actual Ephemeral runner counts", "count", len(ephemeralRunnerList.Items))
@@ -441,7 +441,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 	}
 	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunnerSet)
 	if err != nil {
-		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %v", err)
+		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
 	}
 	var errs []error
 	deletedCount := 0

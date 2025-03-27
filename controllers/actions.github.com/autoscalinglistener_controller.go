@@ -284,15 +284,14 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		if listenerPod.ObjectMeta.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener pod")
 			if err := r.Delete(ctx, listenerPod); err != nil {
-				return false, fmt.Errorf("failed to delete listener pod: %v", err)
+				return false, fmt.Errorf("failed to delete listener pod: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener pods: %v", err)
-
-	default: // NOT FOUND
+	case kerrors.IsNotFound(err):
 		_ = r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
+	default:
+		return false, fmt.Errorf("failed to get listener pods: %w", err)
 	}
 	logger.Info("Listener pod is deleted")
 
@@ -303,12 +302,12 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		if secret.ObjectMeta.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener config secret")
 			if err := r.Delete(ctx, &secret); err != nil {
-				return false, fmt.Errorf("failed to delete listener config secret: %v", err)
+				return false, fmt.Errorf("failed to delete listener config secret: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener config secret: %v", err)
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener config secret: %w", err)
 	}
 
 	if autoscalingListener.Spec.Proxy != nil {
@@ -320,12 +319,12 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 			if proxySecret.ObjectMeta.DeletionTimestamp.IsZero() {
 				logger.Info("Deleting the listener proxy secret")
 				if err := r.Delete(ctx, proxySecret); err != nil {
-					return false, fmt.Errorf("failed to delete listener proxy secret: %v", err)
+					return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
 				}
 			}
 			return false, nil
-		case err != nil && !kerrors.IsNotFound(err):
-			return false, fmt.Errorf("failed to get listener proxy secret: %v", err)
+		case !kerrors.IsNotFound(err):
+			return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 		}
 		logger.Info("Listener proxy secret is deleted")
 	}
@@ -337,12 +336,12 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		if listenerRoleBinding.ObjectMeta.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener role binding")
 			if err := r.Delete(ctx, listenerRoleBinding); err != nil {
-				return false, fmt.Errorf("failed to delete listener role binding: %v", err)
+				return false, fmt.Errorf("failed to delete listener role binding: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener role binding: %v", err)
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener role binding: %w", err)
 	}
 	logger.Info("Listener role binding is deleted")
 
@@ -353,12 +352,12 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		if listenerRole.ObjectMeta.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener role")
 			if err := r.Delete(ctx, listenerRole); err != nil {
-				return false, fmt.Errorf("failed to delete listener role: %v", err)
+				return false, fmt.Errorf("failed to delete listener role: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener role: %v", err)
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener role: %w", err)
 	}
 	logger.Info("Listener role is deleted")
 
@@ -370,12 +369,12 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		if listenerSa.ObjectMeta.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener service account")
 			if err := r.Delete(ctx, listenerSa); err != nil {
-				return false, fmt.Errorf("failed to delete listener service account: %v", err)
+				return false, fmt.Errorf("failed to delete listener service account: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener service account: %v", err)
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener service account: %w", err)
 	}
 	logger.Info("Listener service account is deleted")
 
@@ -447,7 +446,7 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		var err error
 		cert, err = r.certificate(ctx, autoscalingRunnerSet, autoscalingListener)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %v", err)
+			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %w", err)
 		}
 	}
 

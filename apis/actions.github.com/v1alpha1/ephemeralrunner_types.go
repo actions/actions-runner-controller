@@ -21,8 +21,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// EphemeralRunnerContainerName is the name of the runner container.
+// It represents the name of the container running the self-hosted runner image.
+const EphemeralRunnerContainerName = "runner"
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.runnerId",name=RunnerId,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
@@ -46,11 +50,25 @@ func (er *EphemeralRunner) IsDone() bool {
 	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
 }
 
+func (er *EphemeralRunner) HasContainerHookConfigured() bool {
+	for i := range er.Spec.Spec.Containers {
+		if er.Spec.Spec.Containers[i].Name != EphemeralRunnerContainerName {
+			continue
+		}
+
+		for _, env := range er.Spec.Spec.Containers[i].Env {
+			if env.Name == "ACTIONS_RUNNER_CONTAINER_HOOKS" {
+				return true
+			}
+		}
+
+		return false
+	}
+	return false
+}
+
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// +required
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
@@ -69,15 +87,11 @@ type EphemeralRunnerSpec struct {
 	// +optional
 	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
 
-	// +required
 	corev1.PodTemplateSpec `json:",inline"`
 }
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
 type EphemeralRunnerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Turns true only if the runner is online.
 	// +optional
 	Ready bool `json:"ready"`
@@ -123,7 +137,7 @@ type EphemeralRunnerStatus struct {
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // EphemeralRunnerList contains a list of EphemeralRunner
 type EphemeralRunnerList struct {

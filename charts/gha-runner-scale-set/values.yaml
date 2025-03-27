@@ -195,8 +195,8 @@ template:
           limits:
             cpu: "4"
             memory: 8Gi
-          request: 
-            cpu: "2"  
+          request:
+            cpu: "2"
             memory: 4Gi
 
 ## Optional controller service account that needs to have required Role and RoleBinding

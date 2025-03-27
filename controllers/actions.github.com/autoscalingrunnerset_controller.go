@@ -154,15 +154,15 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion] != build.Version {
 		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
 			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
-				"targetVersion", build.Version,
-				"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+				"buildVersion", build.Version,
+				"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 			)
 			return ctrl.Result{}, nil
 		}
 
 		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
-			"targetVersion", build.Version,
-			"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+			"buildVersion", build.Version,
+			"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		)
 		return ctrl.Result{}, nil
 	}
@@ -335,12 +335,12 @@ func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, au
 		if listener.ObjectMeta.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener")
 			if err := r.Delete(ctx, &listener); err != nil {
-				return false, fmt.Errorf("failed to delete listener: %v", err)
+				return false, fmt.Errorf("failed to delete listener: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener: %v", err)
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener: %w", err)
 	}
 
 	logger.Info("Listener is deleted")
@@ -351,7 +351,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 	logger.Info("Cleaning up ephemeral runner sets")
 	runnerSets, err := r.listEphemeralRunnerSets(ctx, autoscalingRunnerSet)
 	if err != nil {
-		return false, fmt.Errorf("failed to list ephemeral runner sets: %v", err)
+		return false, fmt.Errorf("failed to list ephemeral runner sets: %w", err)
 	}
 	if runnerSets.empty() {
 		logger.Info("All ephemeral runner sets are deleted")
@@ -360,7 +360,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 
 	logger.Info("Deleting all ephemeral runner sets", "count", runnerSets.count())
 	if err := r.deleteEphemeralRunnerSets(ctx, runnerSets.all(), logger); err != nil {
-		return false, fmt.Errorf("failed to delete ephemeral runner sets: %v", err)
+		return false, fmt.Errorf("failed to delete ephemeral runner sets: %w", err)
 	}
 	return false, nil
 }
@@ -375,7 +375,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 		}
 		logger.Info("Deleting ephemeral runner set", "name", rs.Name)
 		if err := r.Delete(ctx, rs); err != nil {
-			return fmt.Errorf("failed to delete EphemeralRunnerSet resource: %v", err)
+			return fmt.Errorf("failed to delete EphemeralRunnerSet resource: %w", err)
 		}
 		logger.Info("Deleted ephemeral runner set", "name", rs.Name)
 	}
@@ -670,7 +670,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*EphemeralRunnerSets, error) {
 	list := new(v1alpha1.EphemeralRunnerSetList)
 	if err := r.List(ctx, list, client.InNamespace(autoscalingRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: autoscalingRunnerSet.Name}); err != nil {
-		return nil, fmt.Errorf("failed to list ephemeral runner sets: %v", err)
+		return nil, fmt.Errorf("failed to list ephemeral runner sets: %w", err)
 	}
 
 	return &EphemeralRunnerSets{list: list}, nil
@@ -814,7 +814,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 		}
 		c.logger.Info("Removed finalizer from container mode kubernetes role binding", "name", roleBindingName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
+	case !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch kubernetes mode role binding: %w", err)
 		return
 	default:
@@ -856,11 +856,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 		}
 		c.logger.Info("Removed finalizer from container mode kubernetes role")
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch kubernetes mode role: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Container mode kubernetes role has already been deleted", "name", roleName)
 		return
 	default:
-		c.logger.Info("Container mode kubernetes role has already been deleted", "name", roleName)
+		c.err = fmt.Errorf("failed to fetch kubernetes mode role: %w", err)
 		return
 	}
 }
@@ -899,11 +899,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 		}
 		c.logger.Info("Removed finalizer from container mode kubernetes service account")
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch kubernetes mode service account: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Container mode kubernetes service account has already been deleted", "name", serviceAccountName)
 		return
 	default:
-		c.logger.Info("Container mode kubernetes service account has already been deleted", "name", serviceAccountName)
+		c.err = fmt.Errorf("failed to fetch kubernetes mode service account: %w", err)
 		return
 	}
 }
@@ -942,11 +942,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 		}
 		c.logger.Info("Removed finalizer from no permission service account", "name", serviceAccountName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch service account: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("No permission service account has already been deleted", "name", serviceAccountName)
 		return
 	default:
-		c.logger.Info("No permission service account has already been deleted", "name", serviceAccountName)
+		c.err = fmt.Errorf("failed to fetch service account: %w", err)
 		return
 	}
 }
@@ -985,11 +985,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 		}
 		c.logger.Info("Removed finalizer from GitHub secret", "name", githubSecretName)
 		return
-	case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
-		c.err = fmt.Errorf("failed to fetch GitHub secret: %w", err)
+	case kerrors.IsNotFound(err) || kerrors.IsForbidden(err):
+		c.logger.Info("GitHub secret has already been deleted", "name", githubSecretName)
 		return
 	default:
-		c.logger.Info("GitHub secret has already been deleted", "name", githubSecretName)
+		c.err = fmt.Errorf("failed to fetch GitHub secret: %w", err)
 		return
 	}
 }
@@ -1028,11 +1028,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 		}
 		c.logger.Info("Removed finalizer from manager role binding", "name", managerRoleBindingName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch manager role binding: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Manager role binding has already been deleted", "name", managerRoleBindingName)
 		return
 	default:
-		c.logger.Info("Manager role binding has already been deleted", "name", managerRoleBindingName)
+		c.err = fmt.Errorf("failed to fetch manager role binding: %w", err)
 		return
 	}
 }
@@ -1071,11 +1071,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 		}
 		c.logger.Info("Removed finalizer from manager role", "name", managerRoleName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch manager role: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Manager role has already been deleted", "name", managerRoleName)
 		return
 	default:
-		c.logger.Info("Manager role has already been deleted", "name", managerRoleName)
+		c.err = fmt.Errorf("failed to fetch manager role: %w", err)
 		return
 	}
 }
