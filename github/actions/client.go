@@ -1056,17 +1056,15 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		rErr := &GitHubAPIError{
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &GitHubAPIError{
 			StatusCode: resp.StatusCode,
 			RequestID:  resp.Header.Get(HeaderGitHubRequestID),
-			Err:        fmt.Errorf("failed to get access token for GitHub App auth: %v", resp.Status),
+			Err:        fmt.Errorf("failed to get access token for GitHub App auth: (%v) %s", resp.Status, string(body)),
 		}
-		msg, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, rErr
-		}
-		rErr.Err = fmt.Errorf("%w: %s", rErr.Err, msg)
-		return nil, rErr
 	}
 
 	// Format: https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
