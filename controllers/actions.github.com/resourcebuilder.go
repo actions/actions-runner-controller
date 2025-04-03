@@ -130,6 +130,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
+			Metrics:                       autoscalingRunnerSet.Spec.ListenerMetrics,
 			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
 		},
 	}
@@ -203,6 +204,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		LogFormat:                   scaleSetListenerLogFormat,
 		MetricsAddr:                 metricsAddr,
 		MetricsEndpoint:             metricsEndpoint,
+		Metrics:                     autoscalingListener.Spec.Metrics,
 	}
 
 	var buf bytes.Buffer
