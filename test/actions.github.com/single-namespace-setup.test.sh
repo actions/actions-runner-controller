@@ -12,7 +12,7 @@ SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
-ARC_NAMESPACE="arc-systems"
+ARC_NAMESPACE="${SCALE_SET_NAMESPACE}"
 
 function install_arc() {
     echo "Creating namespace ${ARC_NAMESPACE}"
@@ -24,6 +24,7 @@ function install_arc() {
         --create-namespace \
         --set image.repository="${IMAGE_NAME}" \
         --set image.tag="${IMAGE_TAG}" \
+        --set flags.watchSingleNamespace="${ARC_NAMESPACE}"
         ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
         --debug
 

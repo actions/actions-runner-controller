@@ -10,7 +10,7 @@ source "${DIR}/helper.sh"
 
 SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-workflow.yaml"
+WORKFLOW_FILE="arc-test-dind-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
@@ -40,6 +40,7 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
+        --set containerMode.type="dind" \
         ${ROOT_DIR}/charts/gha-runner-scale-set \
         --version="${VERSION}" \
         --debug
