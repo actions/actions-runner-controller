@@ -89,14 +89,22 @@ image: {{ $val.image }}
 command: ["cp"]
 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
-  - name: dind-externals
+  - name: -externals
     mountPath: /home/runner/tmpDir
   {{- end }}
 {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+
+{{- $dindImage := "docker:dind" -}}
+{{- range $i, $val := .Values.template.spec.containers }}
+  {{- if eq $val.name "dind" }}
+    {{- $dindImage = $val.image }}
+  {{- end }}
+{{- end }}
+
+image: {{ $dindImage }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
