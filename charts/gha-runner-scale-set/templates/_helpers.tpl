@@ -99,7 +99,7 @@ volumeMounts:
 
 {{- $dindImage := "docker:dind" -}}
 {{- range $i, $val := .Values.template.spec.containers }}
-  {{- if eq $val.name "dind" }}
+  {{- if and (eq $val.name "dind") (hasKey $val "image") }}
     {{- $dindImage = $val.image }}
   {{- end }}
 {{- end }}
