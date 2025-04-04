@@ -15,21 +15,21 @@ export IMAGE_VERSION="${IMAGE_VERSION:-${VERSION}}"
 function build_image() {
     echo "Building ARC image ${IMAGE_NAME}:${IMAGE_VERSION}"
 
-    cd ${ROOT_DIR}
+    cd "${ROOT_DIR}" || exit 1
 
 	export DOCKER_CLI_EXPERIMENTAL=enabled
 	export DOCKER_BUILDKIT=1
-	docker buildx build --platform ${PLATFORMS} \
-		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
-		--build-arg VERSION=${VERSION} \
-		--build-arg COMMIT_SHA=${COMMIT_SHA} \
+	docker buildx build --platform "${PLATFORMS}" \
+		--build-arg RUNNER_VERSION="${RUNNER_VERSION}" \
+		--build-arg DOCKER_VERSION="${DOCKER_VERSION}" \
+		--build-arg VERSION="${VERSION}" \
+		--build-arg COMMIT_SHA="${COMMIT_SHA}" \
 		-t "${IMAGE_NAME}:${IMAGE_VERSION}" \
 		-f Dockerfile \
 		. --load
 
     echo "Created image ${IMAGE_NAME}:${IMAGE_VERSION}"
-    cd -
+    cd - || exit 1
 }
 
 function create_cluster() {
@@ -57,7 +57,7 @@ function wait_for_arc() {
     echo "Waiting for ARC to be ready"
     local count=0;
     while true; do
-        POD_NAME=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/name=gha-rs-controller -o name)
+        POD_NAME=$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller -o name)
         if [ -n "$POD_NAME" ]; then
             echo "Pod found: $POD_NAME"
             break
@@ -78,7 +78,7 @@ function wait_for_arc() {
 function wait_for_scale_set() {
     local count=0
     while true; do
-        POD_NAME=$(kubectl get pods -n ${NAMESPACE} -l actions.github.com/scale-set-name=${NAME} -o name)
+        POD_NAME=$(kubectl get pods -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}" -o name)
         if [ -n "$POD_NAME" ]; then
             echo "Pod found: ${POD_NAME}"
             break
@@ -92,8 +92,8 @@ function wait_for_scale_set() {
         sleep 1
         count=$((count+1))
     done
-    kubectl wait --timeout=30s --for=condition=ready pod -n ${NAMESPACE} -l actions.github.com/scale-set-name=${NAME}
-    kubectl get pod -n ${NAMESPACE}
+    kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
+    kubectl get pod -n "${NAMESPACE}"
 }
 
 function cleanup_scale_set() {
@@ -131,7 +131,7 @@ function run_workflow() {
 
     local queue_time="$(date -u +%FT%TZ)"
 
-    echo "Running workflow ${workflow_file}"
+    echo "Running workflow ${WORKFLOW_FILE}"
     gh workflow run -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" --ref main -f arc_name="${SCALE_SET_NAME}" || return 1
 
     echo "Waiting for run to start"

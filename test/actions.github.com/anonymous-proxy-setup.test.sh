@@ -10,7 +10,7 @@ source "${DIR}/helper.sh"
 
 SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-dind-workflow.yaml"
+WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
@@ -33,6 +33,14 @@ function install_arc() {
     fi
 }
 
+function start_squid_proxy() {
+    echo "Starting squid-proxy"
+    docker run -d \
+        --name squid \
+        --publish 3128:3128 \
+        huangtingluo/squid-proxy:latest
+}
+
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
     helm install "${SCALE_SET_NAME}" \
@@ -40,8 +48,9 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set containerMode.type="dind" \
-        ${ROOT_DIR}/charts/gha-runner-scale-set \
+        --set proxy.https.url="http://host.minikube.internal:3128" \
+        --set "proxy.noProxy[0]=10.96.0.1:443" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set" \
         --version="${VERSION}" \
         --debug
 
