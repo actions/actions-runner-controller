@@ -89,7 +89,7 @@ image: {{ $val.image }}
 command: ["cp"]
 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
-  - name: -externals
+  - name: dind-externals
     mountPath: /home/runner/tmpDir
   {{- end }}
 {{- end }}
