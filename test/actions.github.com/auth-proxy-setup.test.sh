@@ -8,13 +8,18 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="default-$(date +'%M%S')$((($RANDOM + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-dind-workflow.yaml"
+WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
 function install_arc() {
+    echo "Install openebs/dynamic-localpv-provisioner"
+    helm repo add openebs https://openebs.github.io/charts
+    helm repo update
+    helm install openebs openebs/openebs -n openebs --create-namespace
+
     echo "Creating namespace ${ARC_NAMESPACE}"
     kubectl create namespace "${SCALE_SET_NAMESPACE}"
 
@@ -33,6 +38,23 @@ function install_arc() {
     fi
 }
 
+function start_squid_proxy() {
+    echo "Starting squid-proxy"
+    docker run -d \
+        --name squid \
+        --publish 3128:3128 \
+        huangtingluo/squid-proxy:latest
+
+    echo "Creating scale set namespace"
+    kubectl create namespace "${SCALE_SET_NAMESPACE}"
+
+    echo "Creating squid proxy secret"
+    kubectl create secret generic proxy-auth \
+        --namespace=arc-runners \
+        --from-literal=username=github \
+        --from-literal=password='actions'
+}
+
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
     helm install "${SCALE_SET_NAME}" \
@@ -40,8 +62,10 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set containerMode.type="dind" \
-        ${ROOT_DIR}/charts/gha-runner-scale-set \
+        --set proxy.https.url="http://host.minikube.internal:3128" \
+        --set proxy.https.credentialSecretRef="proxy-auth" \
+        --set "proxy.noProxy[0]=10.96.0.1:443" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set" \
         --version="${VERSION}" \
         --debug
 
@@ -58,6 +82,7 @@ function main() {
     create_cluster
 
     install_arc
+    start_squid_proxy
     install_scale_set
 
     WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")

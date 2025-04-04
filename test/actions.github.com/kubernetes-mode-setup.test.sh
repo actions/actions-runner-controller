@@ -8,13 +8,18 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="default-$(date +'%M%S')$((($RANDOM + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-dind-workflow.yaml"
+WORKFLOW_FILE="arc-test-kubernetes-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
 function install_arc() {
+    echo "Install openebs/dynamic-localpv-provisioner"
+    helm repo add openebs https://openebs.github.io/charts
+    helm repo update
+    helm install openebs openebs/openebs -n openebs --create-namespace
+
     echo "Creating namespace ${ARC_NAMESPACE}"
     kubectl create namespace "${SCALE_SET_NAMESPACE}"
 
@@ -40,8 +45,11 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set containerMode.type="dind" \
-        ${ROOT_DIR}/charts/gha-runner-scale-set \
+        --set containerMode.type="kubernetes" \
+        --set containerMode.kubernetesModeWorkVolumeClaim.accessModes="{\"ReadWriteOnce\"}" \
+        --set containerMode.kubernetesModeWorkVolumeClaim.storageClassName="openebs-hostpath" \
+        --set containerMode.kubernetesModeWorkVolumeClaim.resources.requests.storage="1Gi" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set" \
         --version="${VERSION}" \
         --debug
 
