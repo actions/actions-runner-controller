@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
@@ -1365,7 +1366,7 @@ func applyWorkVolumeClaimTemplateToPod(pod *corev1.Pod, workVolumeClaimTemplate 
 	}
 	for i := range pod.Spec.Volumes {
 		if pod.Spec.Volumes[i].Name == "work" {
-			return fmt.Errorf("Work volume should not be specified in container mode kubernetes. workVolumeClaimTemplate field should be used instead.")
+			return fmt.Errorf("work volume should not be specified in container mode kubernetes. workVolumeClaimTemplate field should be used instead")
 		}
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, workVolumeClaimTemplate.V1Volume())

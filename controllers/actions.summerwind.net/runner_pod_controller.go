@@ -79,7 +79,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if len(envvars) == 0 {
-		return ctrl.Result{}, errors.New("Could not determine env vars for runner Pod")
+		return ctrl.Result{}, errors.New("could not determine env vars for runner Pod")
 	}
 
 	var enterprise, org, repo string
