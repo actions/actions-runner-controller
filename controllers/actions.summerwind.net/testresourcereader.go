@@ -16,7 +16,7 @@ type testResourceReader struct {
 }
 
 func (r *testResourceReader) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
-	nsName := types.NamespacedName{Namespace: key.Namespace, Name: key.Name}
+	nsName := types.NamespacedName(key)
 	ret, ok := r.objects[nsName]
 	if !ok {
 		return &kerrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonNotFound}}
