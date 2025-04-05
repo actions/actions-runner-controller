@@ -345,7 +345,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 	}
 
 	var runnerPodList corev1.PodList
-	if err := r.Client.List(ctx, &runnerPodList, client.InNamespace(hra.Namespace), client.MatchingLabels(map[string]string{
+	if err := r.List(ctx, &runnerPodList, client.InNamespace(hra.Namespace), client.MatchingLabels(map[string]string{
 		kindLabel: hra.Spec.ScaleTargetRef.Name,
 	})); err != nil {
 		return nil, err

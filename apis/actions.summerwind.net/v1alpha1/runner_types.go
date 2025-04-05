@@ -215,10 +215,10 @@ func (rs *RunnerSpec) validateRepository() error {
 		foundCount += 1
 	}
 	if foundCount == 0 {
-		return errors.New("Spec needs enterprise, organization or repository")
+		return errors.New("spec needs enterprise, organization or repository")
 	}
 	if foundCount > 1 {
-		return errors.New("Spec cannot have many fields defined enterprise, organization and repository")
+		return errors.New("spec cannot have many fields defined enterprise, organization and repository")
 	}
 
 	return nil

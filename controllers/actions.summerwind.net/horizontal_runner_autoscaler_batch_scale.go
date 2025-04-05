@@ -82,8 +82,8 @@ func (s *batchScaler) Add(st *ScaleTarget) {
 						break batch
 					case st := <-s.queue:
 						nsName := types.NamespacedName{
-							Namespace: st.HorizontalRunnerAutoscaler.Namespace,
-							Name:      st.HorizontalRunnerAutoscaler.Name,
+							Namespace: st.Namespace,
+							Name:      st.Name,
 						}
 						b, ok := batches[nsName]
 						if !ok {
@@ -208,7 +208,7 @@ func (s *batchScaler) planBatchScale(ctx context.Context, batch batchScaleOperat
 			//
 			// In other words, updating HRA.spec.scaleTriggers[].duration does not result in delaying capacity reservations expiration any longer
 			// than the "intended" duration, which is the duration of the trigger when the reservation was created.
-			duration := copy.Spec.CapacityReservations[i].ExpirationTime.Time.Sub(copy.Spec.CapacityReservations[i].EffectiveTime.Time)
+			duration := copy.Spec.CapacityReservations[i].ExpirationTime.Sub(copy.Spec.CapacityReservations[i].EffectiveTime.Time)
 			copy.Spec.CapacityReservations[i].EffectiveTime = metav1.Time{Time: now}
 			copy.Spec.CapacityReservations[i].ExpirationTime = metav1.Time{Time: now.Add(duration)}
 		}

@@ -83,7 +83,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Requested deletion does not need reconciled.
-	if !ephemeralRunnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(ephemeralRunnerSet, ephemeralRunnerSetFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -360,7 +360,7 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	// Track multiple errors at once and return the bundle.
 	errs := make([]error, 0)
 	for i := 0; i < count; i++ {
-		ephemeralRunner := r.ResourceBuilder.newEphemeralRunner(runnerSet)
+		ephemeralRunner := r.newEphemeralRunner(runnerSet)
 		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
 			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
 		}
@@ -641,7 +641,7 @@ func newEphemeralRunnerState(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) 
 		if err == nil && patchID > ephemeralRunnerState.latestPatchID {
 			ephemeralRunnerState.latestPatchID = patchID
 		}
-		if !r.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !r.DeletionTimestamp.IsZero() {
 			ephemeralRunnerState.deleting = append(ephemeralRunnerState.deleting, r)
 			continue
 		}

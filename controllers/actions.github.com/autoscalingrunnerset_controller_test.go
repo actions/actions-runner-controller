@@ -280,10 +280,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// This should trigger re-creation of EphemeralRunnerSet and Listener
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.PriorityClassName = "test-priority-class"
-			if patched.ObjectMeta.Annotations == nil {
-				patched.ObjectMeta.Annotations = make(map[string]string)
+			if patched.Annotations == nil {
+				patched.Annotations = make(map[string]string)
 			}
-			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "test-hash"
+			patched.Annotations[annotationKeyValuesHash] = "test-hash"
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 			autoscalingRunnerSet = patched.DeepCopy()
@@ -383,7 +383,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to get Listener")
 
 			patched = autoscalingRunnerSet.DeepCopy()
-			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "hash-changes"
+			patched.Annotations[annotationKeyValuesHash] = "hash-changes"
 			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
 
@@ -546,10 +546,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// Patch the AutoScalingRunnerSet image which should trigger
 			// the recreation of the Listener and EphemeralRunnerSet
 			patched := autoscalingRunnerSet.DeepCopy()
-			if patched.ObjectMeta.Annotations == nil {
-				patched.ObjectMeta.Annotations = make(map[string]string)
+			if patched.Annotations == nil {
+				patched.Annotations = make(map[string]string)
 			}
-			patched.ObjectMeta.Annotations[annotationKeyValuesHash] = "testgroup2"
+			patched.Annotations[annotationKeyValuesHash] = "testgroup2"
 			patched.Spec.Template.Spec = corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
@@ -875,7 +875,7 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
 
-			ars.ObjectMeta.Annotations = make(map[string]string)
+			ars.Annotations = make(map[string]string)
 			err = k8sClient.Update(ctx, ars)
 			Expect(err).NotTo(HaveOccurred(), "Update autoscaling runner set without annotation should be successful")
 

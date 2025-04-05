@@ -54,7 +54,7 @@ func TestAcquireJobs(t *testing.T) {
 			RunnerScaleSet:          &actions.RunnerScaleSet{Id: 1},
 			MessageQueueAccessToken: "abc",
 		}
-		var requestIDs []int64 = []int64{1}
+		var requestIDs = []int64{1}
 
 		retryMax := 1
 		actualRetry := 0
