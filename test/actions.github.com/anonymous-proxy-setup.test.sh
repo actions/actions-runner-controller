@@ -51,7 +51,7 @@ function install_scale_set() {
         --set proxy.https.url="http://host.minikube.internal:3128" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
         "${ROOT_DIR}/charts/gha-runner-scale-set" \
-        --version="${IMAGE_VERSION}" \
+        --version="${VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
