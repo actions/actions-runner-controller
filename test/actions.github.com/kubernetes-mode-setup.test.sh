@@ -50,7 +50,7 @@ function install_scale_set() {
         --set containerMode.kubernetesModeWorkVolumeClaim.storageClassName="openebs-hostpath" \
         --set containerMode.kubernetesModeWorkVolumeClaim.resources.requests.storage="1Gi" \
         "${ROOT_DIR}/charts/gha-runner-scale-set" \
-        --version="${IMAGE_VERSION}" \
+        --version="${VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
