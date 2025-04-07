@@ -52,6 +52,7 @@ function install_scale_set() {
 }
 
 function main() {
+    echo "[*] Running dind mode setup"
     local failed=()
 
     build_image

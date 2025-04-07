@@ -8,7 +8,7 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$((($RANDOM + 100) % 100 +  1))"
+SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
@@ -76,6 +76,7 @@ function install_scale_set() {
 }
 
 function main() {
+    echo "[*] Running auth proxy setup"
     local failed=()
 
     build_image

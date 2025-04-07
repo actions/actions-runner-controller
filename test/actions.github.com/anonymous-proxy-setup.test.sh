@@ -61,6 +61,7 @@ function install_scale_set() {
 }
 
 function main() {
+    echo "[*] Running anonymous proxy setup"
     local failed=()
 
     build_image

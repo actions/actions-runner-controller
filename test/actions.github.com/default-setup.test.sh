@@ -51,6 +51,7 @@ function install_scale_set() {
 }
 
 function main() {
+    echo "[*] Running default setup"
     local failed=()
 
     build_image
