@@ -41,8 +41,8 @@ function install_scale_set() {
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
         --set containerMode.type="dind" \
-        ${ROOT_DIR}/charts/gha-runner-scale-set \
-        --version="${VERSION}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --version="${IMAGE_VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then

@@ -9,26 +9,25 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 export TARGET_ORG="${TARGET_ORG:-actions-runner-controller}"
 export TARGET_REPO="${TARGET_REPO:-arc_e2e_test_dummy}"
 export IMAGE_NAME="${IMAGE_NAME:-arc-test-image}"
-export VERSION="${VERSION:-$(yq .version < "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")}"
-export IMAGE_VERSION="${IMAGE_VERSION:-${VERSION}}"
+export IMAGE_VERSION="${VERSION:-$(yq .version < "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")}"
+export IMAGE_TAG="${IMAGE_NAME}:${IMAGE_VERSION}"
+
+export PLATFORMS="linux/amd64"
+export COMMIT_SHA="$(git rev-parse HEAD)"
 
 function build_image() {
-    echo "Building ARC image ${IMAGE_NAME}:${IMAGE_VERSION}"
+    echo "Building ARC image ${IMAGE_TAG}"
 
     cd "${ROOT_DIR}" || exit 1
 
-	export DOCKER_CLI_EXPERIMENTAL=enabled
-	export DOCKER_BUILDKIT=1
 	docker buildx build --platform "${PLATFORMS}" \
-		--build-arg RUNNER_VERSION="${RUNNER_VERSION}" \
-		--build-arg DOCKER_VERSION="${DOCKER_VERSION}" \
-		--build-arg VERSION="${VERSION}" \
+		--build-arg VERSION="${IMAGE_VERSION}" \
 		--build-arg COMMIT_SHA="${COMMIT_SHA}" \
-		-t "${IMAGE_NAME}:${IMAGE_VERSION}" \
+		-t "${IMAGE_TAG}" \
 		-f Dockerfile \
 		. --load
 
-    echo "Created image ${IMAGE_NAME}:${IMAGE_VERSION}"
+    echo "Created image ${IMAGE_TAG}"
     cd - || exit 1
 }
 
@@ -40,7 +39,7 @@ function create_cluster() {
     minikube start
 
     echo "Loading image into minikube cluster"
-    minikube image load "${IMAGE_NAME}:${IMAGE_VERSION}"
+    minikube image load "${IMAGE_TAG}"
 }
 
 function delete_cluster() {
