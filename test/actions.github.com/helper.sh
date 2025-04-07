@@ -127,7 +127,7 @@ function print_results() {
 
 function run_workflow() {
     echo "Checking if the workflow file exists"
-    gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" &> /dev/null || return 1
+    gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" || return 1
 
     local queue_time="$(date -u +%FT%TZ)"
 
