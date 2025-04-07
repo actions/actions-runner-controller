@@ -60,6 +60,7 @@ function install_scale_set() {
 }
 
 function main() {
+    echo "[*] Running kubernetes mode setup"
     local failed=()
 
     build_image

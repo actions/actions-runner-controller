@@ -52,6 +52,7 @@ function install_scale_set() {
 }
 
 function main() {
+    echo "[*] Running single namespace setup"
     local failed=()
 
     build_image
