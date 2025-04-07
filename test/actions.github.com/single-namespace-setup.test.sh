@@ -25,7 +25,7 @@ function install_arc() {
         --set image.repository="${IMAGE_NAME}" \
         --set image.tag="${IMAGE_TAG}" \
         --set flags.watchSingleNamespace="${ARC_NAMESPACE}"
-        ${ROOT_DIR}/charts/gha-runner-scale-set-controller \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then
@@ -41,8 +41,8 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        ${ROOT_DIR}/charts/gha-runner-scale-set \
-        --version="${VERSION}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --version="${IMAGE_VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then

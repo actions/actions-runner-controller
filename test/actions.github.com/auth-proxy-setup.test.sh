@@ -66,7 +66,7 @@ function install_scale_set() {
         --set proxy.https.credentialSecretRef="proxy-auth" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
         "${ROOT_DIR}/charts/gha-runner-scale-set" \
-        --version="${VERSION}" \
+        --version="${IMAGE_VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
