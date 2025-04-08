@@ -8,7 +8,7 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="anonymous-proxy-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
@@ -38,7 +38,7 @@ function start_squid_proxy() {
     docker run -d \
         --name squid \
         --publish 3128:3128 \
-        huangtingluo/squid-proxy:latest
+        ubuntu/squid:latest
 }
 
 function install_scale_set() {
@@ -68,6 +68,7 @@ function main() {
     create_cluster
 
     install_arc
+    start_squid_proxy
     install_scale_set
 
     WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
