@@ -73,7 +73,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !rd.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !rd.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
 
@@ -112,7 +112,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if newestSet == nil {
-		if err := r.Client.Create(ctx, desiredRS); err != nil {
+		if err := r.Create(ctx, desiredRS); err != nil {
 			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -138,7 +138,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if newestTemplateHash != desiredTemplateHash {
-		if err := r.Client.Create(ctx, desiredRS); err != nil {
+		if err := r.Create(ctx, desiredRS); err != nil {
 			log.Error(err, "Failed to create runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -159,7 +159,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// but we still need to update the existing replicaset with it.
 		// Otherwise selector-based runner query will never work on replicasets created before the controller v0.17.0
 		// See https://github.com/actions/actions-runner-controller/pull/355#discussion_r585379259
-		if err := r.Client.Update(ctx, updateSet); err != nil {
+		if err := r.Update(ctx, updateSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -195,7 +195,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		newestSet.Spec.Replicas = &newDesiredReplicas
 		newestSet.Spec.EffectiveTime = rd.Spec.EffectiveTime
 
-		if err := r.Client.Update(ctx, newestSet); err != nil {
+		if err := r.Update(ctx, newestSet); err != nil {
 			log.Error(err, "Failed to update runnerreplicaset resource")
 
 			return ctrl.Result{}, err
@@ -257,7 +257,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				updated := rs.DeepCopy()
 				zero := 0
 				updated.Spec.Replicas = &zero
-				if err := r.Client.Update(ctx, updated); err != nil {
+				if err := r.Update(ctx, updated); err != nil {
 					rslog.Error(err, "Failed to scale runnerreplicaset to zero")
 
 					return ctrl.Result{}, err
@@ -268,7 +268,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				continue
 			}
 
-			if err := r.Client.Delete(ctx, &rs); err != nil {
+			if err := r.Delete(ctx, &rs); err != nil {
 				rslog.Error(err, "Failed to delete runnerreplicaset resource")
 
 				return ctrl.Result{}, err
@@ -445,10 +445,10 @@ func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []str
 	templateHash := ComputeHash(&newRSTemplate)
 
 	// Add template hash label to selector.
-	newRSTemplate.ObjectMeta.Labels = CloneAndAddLabel(newRSTemplate.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
+	newRSTemplate.Labels = CloneAndAddLabel(newRSTemplate.Labels, LabelKeyRunnerTemplateHash, templateHash)
 
 	// This label selector is used by default when rd.Spec.Selector is empty.
-	newRSTemplate.ObjectMeta.Labels = CloneAndAddLabel(newRSTemplate.ObjectMeta.Labels, LabelKeyRunnerDeploymentName, rd.Name)
+	newRSTemplate.Labels = CloneAndAddLabel(newRSTemplate.Labels, LabelKeyRunnerDeploymentName, rd.Name)
 
 	selector := getSelector(rd)
 
@@ -457,9 +457,9 @@ func newRunnerReplicaSet(rd *v1alpha1.RunnerDeployment, commonRunnerLabels []str
 	rs := v1alpha1.RunnerReplicaSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: rd.ObjectMeta.Name + "-",
-			Namespace:    rd.ObjectMeta.Namespace,
-			Labels:       newRSTemplate.ObjectMeta.Labels,
+			GenerateName: rd.Name + "-",
+			Namespace:    rd.Namespace,
+			Labels:       newRSTemplate.Labels,
 		},
 		Spec: v1alpha1.RunnerReplicaSetSpec{
 			Replicas:      rd.Spec.Replicas,

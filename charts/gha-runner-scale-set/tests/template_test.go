@@ -1178,7 +1178,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 				}
 			}
 			require.NotNil(t, volume)
-			assert.Equal(t, "certs-configmap", volume.ConfigMap.LocalObjectReference.Name)
+			assert.Equal(t, "certs-configmap", volume.ConfigMap.Name)
 			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Key)
 			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Path)
 
@@ -1238,7 +1238,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 				}
 			}
 			require.NotNil(t, volume)
-			assert.Equal(t, "certs-configmap", volume.ConfigMap.LocalObjectReference.Name)
+			assert.Equal(t, "certs-configmap", volume.ConfigMap.Name)
 			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Key)
 			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Path)
 
@@ -1298,7 +1298,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 				}
 			}
 			require.NotNil(t, volume)
-			assert.Equal(t, "certs-configmap", volume.ConfigMap.LocalObjectReference.Name)
+			assert.Equal(t, "certs-configmap", volume.ConfigMap.Name)
 			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Key)
 			assert.Equal(t, "cert.pem", volume.ConfigMap.Items[0].Path)
 

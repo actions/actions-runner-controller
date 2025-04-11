@@ -29,7 +29,7 @@ func newGithubClient(server *httptest.Server) *github.Client {
 	if err != nil {
 		panic(err)
 	}
-	client.Client.BaseURL = baseURL
+	client.BaseURL = baseURL
 
 	return client
 }

@@ -23,7 +23,7 @@ const (
 func syncVolumes(ctx context.Context, c client.Client, log logr.Logger, ns string, runnerSet *v1alpha1.RunnerSet, statefulsets []appsv1.StatefulSet) (*ctrl.Result, error) {
 	log = log.WithValues("ns", ns)
 
-	for _, t := range runnerSet.Spec.StatefulSetSpec.VolumeClaimTemplates {
+	for _, t := range runnerSet.Spec.VolumeClaimTemplates {
 		for _, sts := range statefulsets {
 			pvcName := fmt.Sprintf("%s-%s-0", t.Name, sts.Name)
 

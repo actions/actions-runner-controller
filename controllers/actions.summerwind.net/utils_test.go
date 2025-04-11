@@ -64,22 +64,22 @@ func Test_workVolumeClaimTemplateVolumeV1VolumeTransformation(t *testing.T) {
 		t.Errorf("want name %q, got %q\n", want.Name, got.Name)
 	}
 
-	if got.VolumeSource.Ephemeral == nil {
+	if got.Ephemeral == nil {
 		t.Fatal("work volume claim template should transform itself into Ephemeral volume source\n")
 	}
 
-	if got.VolumeSource.Ephemeral.VolumeClaimTemplate == nil {
+	if got.Ephemeral.VolumeClaimTemplate == nil {
 		t.Fatal("work volume claim template should have ephemeral volume claim template set\n")
 	}
 
-	gotClassName := *got.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.StorageClassName
-	wantClassName := *want.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.StorageClassName
+	gotClassName := *got.Ephemeral.VolumeClaimTemplate.Spec.StorageClassName
+	wantClassName := *want.Ephemeral.VolumeClaimTemplate.Spec.StorageClassName
 	if gotClassName != wantClassName {
 		t.Errorf("expected storage class name %q, got %q\n", wantClassName, gotClassName)
 	}
 
-	gotAccessModes := got.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
-	wantAccessModes := want.VolumeSource.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
+	gotAccessModes := got.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
+	wantAccessModes := want.Ephemeral.VolumeClaimTemplate.Spec.AccessModes
 	if len(gotAccessModes) != len(wantAccessModes) {
 		t.Fatalf("access modes lengths missmatch: got %v, expected %v\n", gotAccessModes, wantAccessModes)
 	}

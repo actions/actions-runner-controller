@@ -70,7 +70,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !ephemeralRunner.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !ephemeralRunner.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -319,7 +319,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
 	switch {
 	case err == nil:
-		if pod.ObjectMeta.DeletionTimestamp.IsZero() {
+		if pod.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the runner pod")
 			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete pod: %w", err)
@@ -339,7 +339,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret)
 	switch {
 	case err == nil:
-		if secret.ObjectMeta.DeletionTimestamp.IsZero() {
+		if secret.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the jitconfig secret")
 			if err := r.Delete(ctx, secret); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete secret: %w", err)
@@ -393,7 +393,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 	var errs []error
 	for i := range runnerLinkedPodList.Items {
 		linkedPod := &runnerLinkedPodList.Items[i]
-		if !linkedPod.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !linkedPod.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -409,7 +409,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	runnerLinkedLabels := client.MatchingLabels(
 		map[string]string{
-			"runner-pod": ephemeralRunner.ObjectMeta.Name,
+			"runner-pod": ephemeralRunner.Name,
 		},
 	)
 	var runnerLinkedSecretList corev1.SecretList
@@ -427,7 +427,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	var errs []error
 	for i := range runnerLinkedSecretList.Items {
 		s := &runnerLinkedSecretList.Items[i]
-		if !s.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !s.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -474,7 +474,7 @@ func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemera
 // deletePodAsFailed is responsible for deleting the pod and updating the .Status.Failures for tracking failure count.
 // It should not be responsible for setting the status to Failed.
 func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
-	if pod.ObjectMeta.DeletionTimestamp.IsZero() {
+	if pod.DeletionTimestamp.IsZero() {
 		log.Info("Deleting the ephemeral runner pod", "podId", pod.UID)
 		if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete pod with status failed: %w", err)
@@ -640,7 +640,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.ResourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
+	newPod := r.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
@@ -665,7 +665,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	log.Info("Creating new secret for ephemeral runner")
-	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
+	jitSecret := r.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
 		return &ctrl.Result{}, fmt.Errorf("failed to set controller reference: %w", err)

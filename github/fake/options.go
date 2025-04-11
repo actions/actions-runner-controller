@@ -12,7 +12,7 @@ type Option func(*ServerConfig)
 
 func WithListRepositoryWorkflowRunsResponse(status int, body, queued, in_progress string) Option {
 	return func(c *ServerConfig) {
-		c.FixedResponses.ListRepositoryWorkflowRuns = &Handler{
+		c.ListRepositoryWorkflowRuns = &Handler{
 			Status: status,
 			Body:   body,
 			Statuses: map[string]string{
@@ -25,7 +25,7 @@ func WithListRepositoryWorkflowRunsResponse(status int, body, queued, in_progres
 
 func WithListWorkflowJobsResponse(status int, bodies map[int]string) Option {
 	return func(c *ServerConfig) {
-		c.FixedResponses.ListWorkflowJobs = &MapHandler{
+		c.ListWorkflowJobs = &MapHandler{
 			Status: status,
 			Bodies: bodies,
 		}
@@ -34,7 +34,7 @@ func WithListWorkflowJobsResponse(status int, bodies map[int]string) Option {
 
 func WithListRunnersResponse(status int, body string) Option {
 	return func(c *ServerConfig) {
-		c.FixedResponses.ListRunners = &ListRunnersHandler{
+		c.ListRunners = &ListRunnersHandler{
 			Status: status,
 			Body:   body,
 		}

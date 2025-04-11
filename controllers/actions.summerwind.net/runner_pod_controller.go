@@ -79,7 +79,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if len(envvars) == 0 {
-		return ctrl.Result{}, errors.New("Could not determine env vars for runner Pod")
+		return ctrl.Result{}, errors.New("could not determine env vars for runner Pod")
 	}
 
 	var enterprise, org, repo string
@@ -103,8 +103,8 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	if runnerPod.ObjectMeta.DeletionTimestamp.IsZero() {
-		finalizers, added := addFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
+	if runnerPod.DeletionTimestamp.IsZero() {
+		finalizers, added := addFinalizer(runnerPod.Finalizers, runnerPodFinalizerName)
 
 		var cleanupFinalizersAdded bool
 		if isContainerMode {
@@ -113,7 +113,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		if added || cleanupFinalizersAdded {
 			newRunner := runnerPod.DeepCopy()
-			newRunner.ObjectMeta.Finalizers = finalizers
+			newRunner.Finalizers = finalizers
 
 			if err := r.Patch(ctx, newRunner, client.MergeFrom(&runnerPod)); err != nil {
 				log.Error(err, "Failed to update runner")
@@ -142,7 +142,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 		}
 
-		if finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerLinkedResourcesFinalizerName); removed {
+		if finalizers, removed := removeFinalizer(runnerPod.Finalizers, runnerLinkedResourcesFinalizerName); removed {
 			if err := r.cleanupRunnerLinkedPods(ctx, &runnerPod, log); err != nil {
 				log.Info("Runner-linked pods clean up that has failed due to an error. If this persists, please manually remove the runner-linked pods to unblock ARC", "err", err.Error())
 				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
@@ -152,7 +152,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 			}
 			patchedPod := runnerPod.DeepCopy()
-			patchedPod.ObjectMeta.Finalizers = finalizers
+			patchedPod.Finalizers = finalizers
 
 			if err := r.Patch(ctx, patchedPod, client.MergeFrom(&runnerPod)); err != nil {
 				log.Error(err, "Failed to update runner for finalizer linked resources removal")
@@ -163,7 +163,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			runnerPod = *patchedPod
 		}
 
-		finalizers, removed := removeFinalizer(runnerPod.ObjectMeta.Finalizers, runnerPodFinalizerName)
+		finalizers, removed := removeFinalizer(runnerPod.Finalizers, runnerPodFinalizerName)
 
 		if removed {
 			// In a standard scenario, the upstream controller, like runnerset-controller, ensures this runner to be gracefully stopped before the deletion timestamp is set.
@@ -175,7 +175,7 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 
 			patchedPod := updatedPod.DeepCopy()
-			patchedPod.ObjectMeta.Finalizers = finalizers
+			patchedPod.Finalizers = finalizers
 
 			// We commit the removal of the finalizer so that Kuberenetes notices it and delete the pod resource from the cluster.
 			if err := r.Patch(ctx, patchedPod, client.MergeFrom(&runnerPod)); err != nil {
@@ -284,7 +284,7 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *
 	var runnerLinkedPodList corev1.PodList
 	if err := r.List(ctx, &runnerLinkedPodList, client.InNamespace(pod.Namespace), client.MatchingLabels(
 		map[string]string{
-			"runner-pod": pod.ObjectMeta.Name,
+			"runner-pod": pod.Name,
 		},
 	)); err != nil {
 		return fmt.Errorf("failed to list runner-linked pods: %w", err)
@@ -295,7 +295,7 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *
 		errs []error
 	)
 	for _, p := range runnerLinkedPodList.Items {
-		if !p.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !p.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -307,7 +307,7 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedPods(ctx context.Context, pod *
 				if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
 					return
 				}
-				errs = append(errs, fmt.Errorf("delete pod %q error: %v", p.ObjectMeta.Name, err))
+				errs = append(errs, fmt.Errorf("delete pod %q error: %v", p.Name, err))
 			}
 		}()
 	}
@@ -330,7 +330,7 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, po
 	var runnerLinkedSecretList corev1.SecretList
 	if err := r.List(ctx, &runnerLinkedSecretList, client.InNamespace(pod.Namespace), client.MatchingLabels(
 		map[string]string{
-			"runner-pod": pod.ObjectMeta.Name,
+			"runner-pod": pod.Name,
 		},
 	)); err != nil {
 		return fmt.Errorf("failed to list runner-linked secrets: %w", err)
@@ -341,7 +341,7 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, po
 		errs []error
 	)
 	for _, s := range runnerLinkedSecretList.Items {
-		if !s.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !s.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -353,7 +353,7 @@ func (r *RunnerPodReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, po
 				if kerrors.IsNotFound(err) || kerrors.IsGone(err) {
 					return
 				}
-				errs = append(errs, fmt.Errorf("delete secret %q error: %v", s.ObjectMeta.Name, err))
+				errs = append(errs, fmt.Errorf("delete secret %q error: %v", s.Name, err))
 			}
 		}()
 	}
