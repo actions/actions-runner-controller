@@ -5,22 +5,23 @@ on:
 
 env:
   IRSA_ROLE_ARN:
-  ASSUME_ROLE_ARN: 
-  AWS_REGION: 
+  ASSUME_ROLE_ARN:
+  AWS_REGION:
 
 jobs:
   assume-role-in-runner-test:
-    runs-on: ['self-hosted', 'Linux']
+    runs-on: ["self-hosted", "Linux"]
     steps:
       - name: Test aws-actions/configure-aws-credentials Action
-        uses: aws-actions/configure-aws-credentials@v1
+        # https://github.com/aws-actions/configure-aws-credentials/releases/tag/v4.1.0
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.ASSUME_ROLE_ARN }}
           role-duration-seconds: 900
   assume-role-in-container-test:
-    runs-on: ['self-hosted', 'Linux']
-    container: 
+    runs-on: ["self-hosted", "Linux"]
+    container:
       image: amazon/aws-cli
       env:
         AWS_WEB_IDENTITY_TOKEN_FILE: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
@@ -29,7 +30,8 @@ jobs:
         - /var/run/secrets/eks.amazonaws.com/serviceaccount/token:/var/run/secrets/eks.amazonaws.com/serviceaccount/token
     steps:
       - name: Test aws-actions/configure-aws-credentials Action in container
-        uses: aws-actions/configure-aws-credentials@v1
+        # https://github.com/aws-actions/configure-aws-credentials/releases/tag/v4.1.0
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.ASSUME_ROLE_ARN }}
