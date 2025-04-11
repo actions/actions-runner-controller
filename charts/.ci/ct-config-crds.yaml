@@ -1,0 +1,7 @@
+# This file defines the config for "ct" (chart tester) used by the helm linting GitHub workflow
+lint-conf: charts/.ci/lint-config.yaml
+chart-repos:
+  - jetstack=https://charts.jetstack.io
+check-version-increment: false # Disable checking that the chart version has been bumped
+charts:
+  - charts/actions-runner-controller-crds

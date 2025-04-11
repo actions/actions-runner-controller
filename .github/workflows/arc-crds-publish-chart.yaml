@@ -1,0 +1,73 @@
+name: (crds) Publish Helm Charts
+
+# Revert to https://github.com/actions-runner-controller/releases#releases
+# for details on why we use this approach
+on:
+  push:
+    branches:
+    - master
+    paths:
+    - 'charts/**'
+    - '.github/workflows/arc-crds-publish-chart.yaml'
+    - '!charts/actions-runner-controller/**'
+    - '!charts/gha-runner-scale-set-controller/**'
+    - '!charts/gha-runner-scale-set/**'
+    - '!**.md'
+
+env:
+  HELM_VERSION: v3.8.0
+
+permissions:
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  publish-helm-chart-actions-runner-controller-crds:
+    if: ${{ inputs.publish_actions_runner_controller_crds_chart == true }}
+    name: Publish Helm chart for actions-runner-controller-crds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          # If inputs.ref is empty, it'll resolve to the default branch
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve parameters
+        id: resolve_parameters
+        run: |
+          resolvedRef="${{ inputs.ref }}"
+          if [ -z "$resolvedRef" ]
+          then
+            resolvedRef="${{ github.ref }}"
+          fi
+          echo "INFO: Resolving short SHA for $resolvedRef"
+          echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
+          echo "INFO: Normalizing repository name (lowercase)"
+          echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Set up Helm
+        # Using https://github.com/Azure/setup-helm/releases/tag/v3.5
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Publish new helm chart for gha-runner-scale-set-controller
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+          ACTIONS_RUNNER_CONTROLLER_CRDS_CHART_VERSION_TAG=$(cat charts/actions-runner-controller-crds/Chart.yaml | grep version: | cut -d " " -f 2)
+          echo "ACTIONS_RUNNER_CONTROLLER_CRDS_CHART_VERSION_TAG=${ACTIONS_RUNNER_CONTROLLER_CRDS_CHART_VERSION_TAG}" >> $GITHUB_ENV
+          helm package charts/actions-runner-controller-crds/ --version="${ACTIONS_RUNNER_CONTROLLER_CRDS_CHART_VERSION_TAG}"
+          helm push gha-runner-scale-set-controller-"${ACTIONS_RUNNER_CONTROLLER_CRDS_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
+
+      - name: Job summary
+        run: |
+          echo "New helm chart for actions-runner-controller-crds published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- gha-runner-scale-set-controller Chart version: ${{ env.ACTIONS_RUNNER_CONTROLLER_CRDS_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
