@@ -260,6 +260,19 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 				return ctrl.Result{}, err
 			}
+
+			// delete the listener config secret as well, so it gets recreated when the listener pod is recreated, with any new data if it exists
+			var configSecret corev1.Secret
+			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &configSecret)
+			switch {
+			case err == nil:
+				if configSecret.ObjectMeta.DeletionTimestamp.IsZero() {
+					log.Info("Deleting the listener config secret")
+					if err := r.Delete(ctx, &configSecret); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to delete listener config secret: %w", err)
+					}
+				}
+			}
 		}
 		return ctrl.Result{}, nil
 	case cs.State.Running != nil:
