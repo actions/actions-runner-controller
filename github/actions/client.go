@@ -673,7 +673,7 @@ func (c *Client) CreateMessageSession(ctx context.Context, runnerScaleSetId int,
 
 	requestData, err := json.Marshal(newSession)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal new session: %w", err)
+		return nil, fmt.Errorf("failed to marshal new session: %w", err)
 	}
 
 	createdSession := &RunnerScaleSetSession{}
