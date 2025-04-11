@@ -101,8 +101,7 @@ func TestCreateMessageSession(t *testing.T) {
 			err,
 		)
 
-		gotErr := err.(*actions.ActionsError)
-		assert.Equal(t, want, gotErr)
+		assert.Equal(t, want, errorTypeForComparison)
 	})
 
 	t.Run("CreateMessageSession call is retried the correct amount of times", func(t *testing.T) {
