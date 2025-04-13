@@ -1,0 +1,18 @@
+name: actions-runner-controller
+id: ari:cloud:compass:630bb765-afa4-4c7b-93f8-a40925b25929:component/973a5e36-3928-4b46-afee-0910ab5551f9/e49fbf03-f836-4a2e-920f-918629c86786
+description: Kubernetes controller for GitHub Actions self-hosted runners
+configVersion: 1
+typeId: CLOUD_RESOURCE
+ownerId: ari:cloud:identity::team/og-4a4512fa-fa74-4bd5-b54e-0609beaa9a30
+fields:
+  tier: 4
+links:
+  - name: null
+    type: REPOSITORY
+    url: https://github.com/prosperllc/actions-runner-controller
+relationships:
+  DEPENDS_ON: []
+labels:
+  - language:go
+  - source:github
+customFields: null
