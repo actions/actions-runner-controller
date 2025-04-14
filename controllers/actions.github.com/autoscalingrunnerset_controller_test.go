@@ -538,9 +538,9 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Failed to eventually figure out github secret data update")
 
-			updatedListener := new(v1alpha1.AutoscalingListener)
 			Eventually(
 				func() error {
+					updatedListener := new(v1alpha1.AutoscalingListener)
 					err := k8sClient.Get(
 						ctx,
 						client.ObjectKey{
