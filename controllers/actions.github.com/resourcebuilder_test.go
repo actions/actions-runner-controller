@@ -59,7 +59,24 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
 
-	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	githubSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"github_token": []byte("github_token"),
+		},
+	}
+
+	listener, err := b.newAutoScalingListener(
+		&autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		githubSecret,
+		autoscalingRunnerSet.Namespace,
+		"test:latest",
+		nil,
+	)
 	require.NoError(t, err)
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
@@ -120,6 +137,16 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 	organization := strings.Repeat("b", 64)
 	repository := strings.Repeat("c", 64)
 
+	githubSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"github_token": []byte("github_token"),
+		},
+	}
+
 	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scale-set",
@@ -151,7 +178,14 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], trimLabelVauleSuffix))
 		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], trimLabelVauleSuffix))
 
-		listener, err := b.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+		listener, err := b.newAutoScalingListener(
+			autoscalingRunnerSet,
+			ephemeralRunnerSet,
+			githubSecret,
+			autoscalingRunnerSet.Namespace,
+			"test:latest",
+			nil,
+		)
 		require.NoError(t, err)
 		assert.Len(t, listener.Labels[LabelKeyGitHubEnterprise], 0)
 		assert.Len(t, listener.Labels[LabelKeyGitHubOrganization], 63)
@@ -174,7 +208,14 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubOrganization], 0)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubRepository], 0)
 
-		listener, err := b.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+		listener, err := b.newAutoScalingListener(
+			autoscalingRunnerSet,
+			ephemeralRunnerSet,
+			githubSecret,
+			autoscalingRunnerSet.Namespace,
+			"test:latest",
+			nil,
+		)
 		require.NoError(t, err)
 		assert.Len(t, listener.Labels[LabelKeyGitHubEnterprise], 63)
 		assert.True(t, strings.HasSuffix(ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], trimLabelVauleSuffix))

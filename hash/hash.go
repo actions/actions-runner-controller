@@ -49,3 +49,22 @@ func ComputeTemplateHash(template interface{}) string {
 
 	return rand.SafeEncodeString(fmt.Sprint(hasher.Sum32()))
 }
+
+func ComputeCombinedObjectsHash(first any, others ...any) string {
+	hasher := fnv.New32a()
+
+	hasher.Reset()
+
+	printer := spew.ConfigState{
+		Indent:         " ",
+		SortKeys:       true,
+		DisableMethods: true,
+		SpewKeys:       true,
+	}
+
+	for _, obj := range append([]any{first}, others...) {
+		printer.Fprintf(hasher, "%#v", obj)
+	}
+
+	return rand.SafeEncodeString(fmt.Sprint(hasher.Sum32()))
+}

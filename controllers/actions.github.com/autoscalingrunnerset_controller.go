@@ -246,7 +246,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
 	listenerValuesHashChanged := listener.Annotations[annotationKeyValuesHash] != autoscalingRunnerSet.Annotations[annotationKeyValuesHash]
-	listenerSpecHashChanged := listener.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()
+	listenerSpecHashChanged := listener.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash(secret)
 	if listenerFound && (listenerValuesHashChanged || listenerSpecHashChanged) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
@@ -297,7 +297,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 		log.Info("Creating a new AutoscalingListener for the runner set", "ephemeralRunnerSetName", latestRunnerSet.Name)
-		return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
+		return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, secret, log)
 	}
 
 	// Update the status of autoscaling runner set.
@@ -643,7 +643,13 @@ func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Co
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (ctrl.Result, error) {
+func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(
+	ctx context.Context,
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+	ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet,
+	githubSecret *corev1.Secret,
+	log logr.Logger,
+) (ctrl.Result, error) {
 	var imagePullSecrets []corev1.LocalObjectReference
 	for _, imagePullSecret := range r.DefaultRunnerScaleSetListenerImagePullSecrets {
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
@@ -651,7 +657,14 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		})
 	}
 
-	autoscalingListener, err := r.ResourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
+	autoscalingListener, err := r.ResourceBuilder.newAutoScalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		githubSecret,
+		r.ControllerNamespace,
+		r.DefaultRunnerScaleSetListenerImage,
+		imagePullSecrets,
+	)
 	if err != nil {
 		log.Error(err, "Could not create AutoscalingListener spec")
 		return ctrl.Result{}, err

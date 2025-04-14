@@ -476,6 +476,101 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
 		})
+
+		It("should re-create the listener when the github secret changes", func() {
+			// Wait till the listener is created
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			actionsClient, err := controller.actionsClientFor(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to get actions client")
+
+			listenerCreationTimestamp := listener.ObjectMeta.CreationTimestamp
+			listenerHash := listener.ObjectMeta.Annotations[annotationKeyRunnerSpecHash]
+
+			githubSecret := new(corev1.Secret)
+			Eventually(
+				func() error {
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      configSecret.ObjectMeta.Name,
+							Namespace: configSecret.ObjectMeta.Namespace,
+						},
+						githubSecret,
+					)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Failed to fetch the github secret")
+
+			githubSecret.Data["update"] = []byte("update")
+			err = k8sClient.Update(ctx, githubSecret)
+			Expect(err).NotTo(HaveOccurred(), "failed to update the github secret")
+
+			updatedGitHubSecret := new(corev1.Secret)
+			Eventually(
+				func() error {
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      configSecret.ObjectMeta.Name,
+							Namespace: configSecret.ObjectMeta.Namespace,
+						},
+						updatedGitHubSecret,
+					)
+					if err != nil {
+						return err
+					}
+
+					if _, ok := updatedGitHubSecret.Data["update"]; !ok {
+						return fmt.Errorf("secret update not yet present")
+					}
+					return nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Failed to eventually figure out github secret data update")
+
+			updatedListener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerName(autoscalingRunnerSet),
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						listener,
+					)
+					if err != nil {
+						return err
+					}
+
+					if updatedListener.CreationTimestamp == listenerCreationTimestamp {
+						return fmt.Errorf("creation timestamp not updated yet")
+					}
+					if updatedListener.Annotations[annotationKeyRunnerSpecHash] == listenerHash {
+						return fmt.Errorf("hash not updated yet")
+					}
+
+					return nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be re-created")
+
+			actionsClientAfterUpdate, err := controller.actionsClientFor(ctx, autoscalingRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to get actions client")
+
+			Expect(actionsClientAfterUpdate.(*fake.FakeClient).ID).NotTo(BeEquivalentTo(actionsClient.(*fake.FakeClient).ID), "expected new client to be used")
+		})
 	})
 
 	Context("When updating an AutoscalingRunnerSet with running or pending jobs", func() {
