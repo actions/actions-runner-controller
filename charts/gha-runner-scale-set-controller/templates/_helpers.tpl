@@ -7,6 +7,17 @@ Expand the name of the chart.
 gha-rs-controller
 {{- end }}
 
+{{/*
+Allow overriding the namespace for the resources.
+*/}}
+{{- define "gha-runner-scale-set-controller.namespace" -}}
+{{- if .Values.namespaceOverride }}
+  {{- .Values.namespaceOverride }}
+{{- else }}
+  {{- .Release.Namespace }}
+{{- end }}
+{{- end }}
+
 {{- define "gha-runner-scale-set-controller.name" -}}
 {{- default (include "gha-base-name" .) .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
@@ -57,7 +68,7 @@ Selector labels
 */}}
 {{- define "gha-runner-scale-set-controller.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "gha-runner-scale-set-controller.name" . }}
-app.kubernetes.io/namespace: {{ .Release.Namespace }}
+app.kubernetes.io/namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 

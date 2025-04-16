@@ -31,16 +31,16 @@ import (
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
-//+kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
@@ -73,6 +73,9 @@ type AutoscalingRunnerSetSpec struct {
 
 	// Required
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+
+	// +optional
+	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
 
 	// +optional
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
@@ -232,6 +235,32 @@ type ProxyServerConfig struct {
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
 }
 
+// MetricsConfig holds configuration parameters for each metric type
+type MetricsConfig struct {
+	// +optional
+	Counters map[string]*CounterMetric `json:"counters,omitempty"`
+	// +optional
+	Gauges map[string]*GaugeMetric `json:"gauges,omitempty"`
+	// +optional
+	Histograms map[string]*HistogramMetric `json:"histograms,omitempty"`
+}
+
+// CounterMetric holds configuration of a single metric of type Counter
+type CounterMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// GaugeMetric holds configuration of a single metric of type Gauge
+type GaugeMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// HistogramMetric holds configuration of a single metric of type Histogram
+type HistogramMetric struct {
+	Labels  []string  `json:"labels"`
+	Buckets []float64 `json:"buckets,omitempty"`
+}
+
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
@@ -242,7 +271,7 @@ type AutoscalingRunnerSetStatus struct {
 
 	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
 
-	//+optional
+	// +optional
 	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
 	// +optional
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
@@ -278,7 +307,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	return hash.ComputeTemplateHash(&spec)
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // AutoscalingRunnerSetList contains a list of AutoscalingRunnerSet
 type AutoscalingRunnerSetList struct {

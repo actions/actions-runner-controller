@@ -26,7 +26,6 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
-	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,10 +37,6 @@ import (
 )
 
 const (
-	// EphemeralRunnerContainerName is the name of the runner container.
-	// It represents the name of the container running the self-hosted runner image.
-	EphemeralRunnerContainerName = "runner"
-
 	ephemeralRunnerFinalizerName        = "ephemeralrunner.actions.github.com/finalizer"
 	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/runner-registration-finalizer"
 )
@@ -81,42 +76,40 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
-			switch ephemeralRunner.Status.Phase {
-			case corev1.PodSucceeded:
-				// deleted by the runner set, we can just remove finalizer without API calls
-				err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-					controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
-				})
-				if err != nil {
-					log.Error(err, "Failed to update ephemeral runner without runner registration finalizer")
-					return ctrl.Result{}, err
-				}
-				log.Info("Successfully removed runner registration finalizer")
-				return ctrl.Result{}, nil
-			default:
-				return r.cleanupRunnerFromService(ctx, ephemeralRunner, log)
+			log.Info("Trying to clean up runner from the service")
+			ok, err := r.cleanupRunnerFromService(ctx, ephemeralRunner, log)
+			if err != nil {
+				log.Error(err, "Failed to clean up runner from service")
+				return ctrl.Result{}, err
 			}
+			if !ok {
+				log.Info("Runner is not finished yet, retrying in 30s")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
+
+			log.Info("Runner is cleaned up from the service, removing finalizer")
+			if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
+				controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
+			}); err != nil {
+				return ctrl.Result{}, err
+			}
+			log.Info("Removed finalizer from ephemeral runner")
 		}
 
 		log.Info("Finalizing ephemeral runner")
-		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
+		err := r.cleanupResources(ctx, ephemeralRunner, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up ephemeral runner owned resources")
 			return ctrl.Result{}, err
 		}
-		if !done {
-			log.Info("Waiting for ephemeral runner owned resources to be deleted")
-			return ctrl.Result{Requeue: true}, nil
-		}
 
-		done, err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
-		if err != nil {
-			log.Error(err, "Failed to clean up container hooks resources")
-			return ctrl.Result{}, err
-		}
-		if !done {
-			log.Info("Waiting for container hooks resources to be deleted")
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		if ephemeralRunner.HasContainerHookConfigured() {
+			log.Info("Runner has container hook configured, cleaning up container hook resources")
+			err = r.cleanupContainerHooksResources(ctx, ephemeralRunner, log)
+			if err != nil {
+				log.Error(err, "Failed to clean up container hooks resources")
+				return ctrl.Result{}, err
+			}
 		}
 
 		log.Info("Removing finalizer")
@@ -134,15 +127,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if ephemeralRunner.IsDone() {
 		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
-		done, err := r.cleanupResources(ctx, ephemeralRunner, log)
+		err := r.cleanupResources(ctx, ephemeralRunner, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up ephemeral runner owned resources")
 			return ctrl.Result{}, err
 		}
-		if !done {
-			log.Info("Waiting for ephemeral runner owned resources to be deleted")
-			return ctrl.Result{Requeue: true}, nil
-		}
+
 		// Stop reconciling on this object.
 		// The EphemeralRunnerSet is responsible for cleaning it up.
 		log.Info("EphemeralRunner has already finished. Stopping reconciliation and waiting for EphemeralRunnerSet to clean it up", "phase", ephemeralRunner.Status.Phase)
@@ -306,52 +296,43 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 }
 
-func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
+func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ok bool, err error) {
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
 		actionsError := &actions.ActionsError{}
 		if !errors.As(err, &actionsError) {
-			log.Error(err, "Failed to clean up runner from the service (not an ActionsError)")
-			return ctrl.Result{}, err
+			return false, err
 		}
 
 		if actionsError.StatusCode == http.StatusBadRequest && actionsError.IsException("JobStillRunningException") {
-			log.Info("Runner is still running the job. Re-queue in 30 seconds")
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-
+			return false, nil
 		}
 
-		log.Error(err, "Failed clean up runner from the service")
-		return ctrl.Result{}, err
+		return false, err
 	}
 
-	log.Info("Successfully removed runner registration from service")
-	if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
-	}); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	log.Info("Successfully removed runner registration finalizer")
-	return ctrl.Result{}, nil
+	return true, nil
 }
 
-func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (deleted bool, err error) {
+func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Cleaning up the runner pod")
 	pod := new(corev1.Pod)
-	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
+	err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
 	switch {
 	case err == nil:
 		if pod.ObjectMeta.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the runner pod")
 			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
-				return false, fmt.Errorf("failed to delete pod: %v", err)
+				return fmt.Errorf("failed to delete pod: %w", err)
 			}
+			log.Info("Deleted the runner pod")
+		} else {
+			log.Info("Pod contains deletion timestamp")
 		}
-		return false, nil
-	case !kerrors.IsNotFound(err):
-		return false, err
+	case kerrors.IsNotFound(err):
+		log.Info("Runner pod is deleted")
+	default:
+		return err
 	}
-	log.Info("Pod is deleted")
 
 	log.Info("Cleaning up the runner jitconfig secret")
 	secret := new(corev1.Secret)
@@ -361,53 +342,50 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 		if secret.ObjectMeta.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the jitconfig secret")
 			if err := r.Delete(ctx, secret); err != nil && !kerrors.IsNotFound(err) {
-				return false, fmt.Errorf("failed to delete secret: %v", err)
+				return fmt.Errorf("failed to delete secret: %w", err)
 			}
+			log.Info("Deleted jitconfig secret")
+		} else {
+			log.Info("Secret contains deletion timestamp")
 		}
-		return false, nil
-	case !kerrors.IsNotFound(err):
-		return false, err
+	case kerrors.IsNotFound(err):
+		log.Info("Runner jitconfig secret is deleted")
+	default:
+		return err
 	}
-	log.Info("Secret is deleted")
 
-	return true, nil
+	return nil
 }
 
-func (r *EphemeralRunnerReconciler) cleanupContainerHooksResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (done bool, err error) {
+func (r *EphemeralRunnerReconciler) cleanupContainerHooksResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Cleaning up runner linked pods")
-	done, err = r.cleanupRunnerLinkedPods(ctx, ephemeralRunner, log)
-	if err != nil {
-		return false, fmt.Errorf("failed to clean up runner linked pods: %v", err)
-	}
-
-	if !done {
-		return false, nil
+	var errs []error
+	if err := r.cleanupRunnerLinkedPods(ctx, ephemeralRunner, log); err != nil {
+		errs = append(errs, err)
 	}
 
 	log.Info("Cleaning up runner linked secrets")
-	done, err = r.cleanupRunnerLinkedSecrets(ctx, ephemeralRunner, log)
-	if err != nil {
-		return false, err
+	if err := r.cleanupRunnerLinkedSecrets(ctx, ephemeralRunner, log); err != nil {
+		errs = append(errs, err)
 	}
 
-	return done, nil
+	return errors.Join(errs...)
 }
 
-func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (done bool, err error) {
+func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	runnerLinedLabels := client.MatchingLabels(
 		map[string]string{
 			"runner-pod": ephemeralRunner.Name,
 		},
 	)
 	var runnerLinkedPodList corev1.PodList
-	err = r.List(ctx, &runnerLinkedPodList, client.InNamespace(ephemeralRunner.Namespace), runnerLinedLabels)
-	if err != nil {
-		return false, fmt.Errorf("failed to list runner-linked pods: %v", err)
+	if err := r.List(ctx, &runnerLinkedPodList, client.InNamespace(ephemeralRunner.Namespace), runnerLinedLabels); err != nil {
+		return fmt.Errorf("failed to list runner-linked pods: %w", err)
 	}
 
 	if len(runnerLinkedPodList.Items) == 0 {
 		log.Info("Runner-linked pods are deleted")
-		return true, nil
+		return nil
 	}
 
 	log.Info("Deleting container hooks runner-linked pods", "count", len(runnerLinkedPodList.Items))
@@ -421,28 +399,27 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 
 		log.Info("Deleting container hooks runner-linked pod", "name", linkedPod.Name)
 		if err := r.Delete(ctx, linkedPod); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, fmt.Errorf("failed to delete runner linked pod %q: %v", linkedPod.Name, err))
+			errs = append(errs, fmt.Errorf("failed to delete runner linked pod %q: %w", linkedPod.Name, err))
 		}
 	}
 
-	return false, multierr.Combine(errs...)
+	return errors.Join(errs...)
 }
 
-func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (done bool, err error) {
+func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	runnerLinkedLabels := client.MatchingLabels(
 		map[string]string{
 			"runner-pod": ephemeralRunner.ObjectMeta.Name,
 		},
 	)
 	var runnerLinkedSecretList corev1.SecretList
-	err = r.List(ctx, &runnerLinkedSecretList, client.InNamespace(ephemeralRunner.Namespace), runnerLinkedLabels)
-	if err != nil {
-		return false, fmt.Errorf("failed to list runner-linked secrets: %w", err)
+	if err := r.List(ctx, &runnerLinkedSecretList, client.InNamespace(ephemeralRunner.Namespace), runnerLinkedLabels); err != nil {
+		return fmt.Errorf("failed to list runner-linked secrets: %w", err)
 	}
 
 	if len(runnerLinkedSecretList.Items) == 0 {
 		log.Info("Runner-linked secrets are deleted")
-		return true, nil
+		return nil
 	}
 
 	log.Info("Deleting container hooks runner-linked secrets", "count", len(runnerLinkedSecretList.Items))
@@ -456,11 +433,11 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 
 		log.Info("Deleting container hooks runner-linked secret", "name", s.Name)
 		if err := r.Delete(ctx, s); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, fmt.Errorf("failed to delete runner linked secret %q: %v", s.Name, err))
+			errs = append(errs, fmt.Errorf("failed to delete runner linked secret %q: %w", s.Name, err))
 		}
 	}
 
-	return false, multierr.Combine(errs...)
+	return errors.Join(errs...)
 }
 
 func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
@@ -470,12 +447,12 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 		obj.Status.Reason = reason
 		obj.Status.Message = errMessage
 	}); err != nil {
-		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %v", err)
+		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
 
 	log.Info("Removing the runner from the service")
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
-		return fmt.Errorf("failed to remove the runner from service: %v", err)
+		return fmt.Errorf("failed to remove the runner from service: %w", err)
 	}
 
 	log.Info("EphemeralRunner is marked as Failed and deleted from the service")
@@ -487,7 +464,7 @@ func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemera
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = corev1.PodSucceeded
 	}); err != nil {
-		return fmt.Errorf("failed to update ephemeral runner with status finished: %v", err)
+		return fmt.Errorf("failed to update ephemeral runner with status finished: %w", err)
 	}
 
 	log.Info("EphemeralRunner status is marked as Finished")
@@ -500,7 +477,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	if pod.ObjectMeta.DeletionTimestamp.IsZero() {
 		log.Info("Deleting the ephemeral runner pod", "podId", pod.UID)
 		if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete pod with status failed: %v", err)
+			return fmt.Errorf("failed to delete pod with status failed: %w", err)
 		}
 	}
 
@@ -514,7 +491,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 		obj.Status.Reason = pod.Status.Reason
 		obj.Status.Message = pod.Status.Message
 	}); err != nil {
-		return fmt.Errorf("failed to update ephemeral runner status: failed attempts: %v", err)
+		return fmt.Errorf("failed to update ephemeral runner status: failed attempts: %w", err)
 	}
 
 	log.Info("EphemeralRunner pod is deleted and status is updated with failure count")
@@ -528,7 +505,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	log.Info("Creating ephemeral runner JIT config")
 	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner)
 	if err != nil {
-		return &ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %w", err)
 	}
 
 	jitSettings := &actions.RunnerScaleSetJitRunnerSetting{
@@ -536,7 +513,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	}
 
 	for i := range ephemeralRunner.Spec.Spec.Containers {
-		if ephemeralRunner.Spec.Spec.Containers[i].Name == EphemeralRunnerContainerName &&
+		if ephemeralRunner.Spec.Spec.Containers[i].Name == v1alpha1.EphemeralRunnerContainerName &&
 			ephemeralRunner.Spec.Spec.Containers[i].WorkingDir != "" {
 			jitSettings.WorkFolder = ephemeralRunner.Spec.Spec.Containers[i].WorkingDir
 		}
@@ -546,12 +523,12 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 	if err != nil {
 		actionsError := &actions.ActionsError{}
 		if !errors.As(err, &actionsError) {
-			return &ctrl.Result{}, fmt.Errorf("failed to generate JIT config with generic error: %v", err)
+			return &ctrl.Result{}, fmt.Errorf("failed to generate JIT config with generic error: %w", err)
 		}
 
 		if actionsError.StatusCode != http.StatusConflict ||
 			!actionsError.IsException("AgentExistsException") {
-			return &ctrl.Result{}, fmt.Errorf("failed to generate JIT config with Actions service error: %v", err)
+			return &ctrl.Result{}, fmt.Errorf("failed to generate JIT config with Actions service error: %w", err)
 		}
 
 		// If the runner with the name we want already exists it means:
@@ -564,7 +541,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		log.Info("Getting runner jit config failed with conflict error, trying to get the runner by name", "runnerName", ephemeralRunner.Name)
 		existingRunner, err := actionsClient.GetRunnerByName(ctx, ephemeralRunner.Name)
 		if err != nil {
-			return &ctrl.Result{}, fmt.Errorf("failed to get runner by name: %v", err)
+			return &ctrl.Result{}, fmt.Errorf("failed to get runner by name: %w", err)
 		}
 
 		if existingRunner == nil {
@@ -577,7 +554,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 			log.Info("Removing the runner with the same name")
 			err := actionsClient.RemoveRunner(ctx, int64(existingRunner.Id))
 			if err != nil {
-				return &ctrl.Result{}, fmt.Errorf("failed to remove runner from the service: %v", err)
+				return &ctrl.Result{}, fmt.Errorf("failed to remove runner from the service: %w", err)
 			}
 
 			log.Info("Removed the runner with the same name, re-queuing the reconciliation")
@@ -586,7 +563,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 
 		// TODO: Do we want to mark the ephemeral runner as failed, and let EphemeralRunnerSet to clean it up, so we can recover from this situation?
 		// The situation is that the EphemeralRunner's name is already used by something else to register a runner, and we can't take the control back.
-		return &ctrl.Result{}, fmt.Errorf("runner with the same name but doesn't belong to this RunnerScaleSet: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("runner with the same name but doesn't belong to this RunnerScaleSet: %w", err)
 	}
 	log.Info("Created ephemeral runner JIT config", "runnerId", jitConfig.Runner.Id)
 
@@ -597,7 +574,7 @@ func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Con
 		obj.Status.RunnerJITConfig = jitConfig.EncodedJITConfig
 	})
 	if err != nil {
-		return &ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %w", err)
 	}
 
 	// We want to continue without a requeue for faster pod creation.
@@ -691,12 +668,12 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
-		return &ctrl.Result{}, fmt.Errorf("failed to set controller reference: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	log.Info("Created new secret spec for ephemeral runner")
 	if err := r.Create(ctx, jitSecret); err != nil {
-		return &ctrl.Result{}, fmt.Errorf("failed to create jit secret: %v", err)
+		return &ctrl.Result{}, fmt.Errorf("failed to create jit secret: %w", err)
 	}
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
@@ -712,22 +689,41 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return nil
 	}
-	if ephemeralRunner.Status.Phase == pod.Status.Phase {
+
+	var ready bool
+	var lastTransitionTime time.Time
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.LastTransitionTime.After(lastTransitionTime) {
+			ready = condition.Status == corev1.ConditionTrue
+			lastTransitionTime = condition.LastTransitionTime.Time
+		}
+	}
+
+	phaseChanged := ephemeralRunner.Status.Phase != pod.Status.Phase
+	readyChanged := ready != ephemeralRunner.Status.Ready
+
+	if !phaseChanged && !readyChanged {
 		return nil
 	}
 
-	log.Info("Updating ephemeral runner status with pod phase", "statusPhase", pod.Status.Phase, "statusReason", pod.Status.Reason, "statusMessage", pod.Status.Message)
+	log.Info(
+		"Updating ephemeral runner status",
+		"statusPhase", pod.Status.Phase,
+		"statusReason", pod.Status.Reason,
+		"statusMessage", pod.Status.Message,
+		"ready", ready,
+	)
 	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = pod.Status.Phase
-		obj.Status.Ready = obj.Status.Ready || (pod.Status.Phase == corev1.PodRunning)
+		obj.Status.Ready = ready
 		obj.Status.Reason = pod.Status.Reason
 		obj.Status.Message = pod.Status.Message
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update runner status for Phase/Reason/Message: %v", err)
+		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
 
-	log.Info("Updated ephemeral runner status with pod phase")
+	log.Info("Updated ephemeral runner status")
 	return nil
 }
 
@@ -816,7 +812,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 
 		if actionsError.StatusCode != http.StatusNotFound ||
 			!actionsError.IsException("AgentNotFoundException") {
-			return false, fmt.Errorf("failed to check if runner exists in GitHub service: %v", err)
+			return false, fmt.Errorf("failed to check if runner exists in GitHub service: %w", err)
 		}
 
 		log.Info("Runner does not exist in GitHub service", "runnerId", runner.Status.RunnerId)
@@ -830,7 +826,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	client, err := r.actionsClientFor(ctx, ephemeralRunner)
 	if err != nil {
-		return fmt.Errorf("failed to get actions client for runner: %v", err)
+		return fmt.Errorf("failed to get actions client for runner: %w", err)
 	}
 
 	log.Info("Removing runner from the service", "runnerId", ephemeralRunner.Status.RunnerId)
@@ -857,7 +853,7 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
 	for i := range pod.Status.ContainerStatuses {
 		cs := &pod.Status.ContainerStatuses[i]
-		if cs.Name == EphemeralRunnerContainerName {
+		if cs.Name == v1alpha1.EphemeralRunnerContainerName {
 			return cs
 		}
 	}

@@ -140,7 +140,7 @@ func TestClient_Identifier(t *testing.T) {
 		chain, err := actions.NewClient(
 			configURL,
 			defaultCreds,
-			actions.WithRootCAs(poolFromCert(t, filepath.Join("testdata", "intermediate.pem"))),
+			actions.WithRootCAs(poolFromCert(t, filepath.Join("testdata", "intermediate.crt"))),
 		)
 		require.NoError(t, err)
 
