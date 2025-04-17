@@ -503,13 +503,13 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getManagedRunnerGroup
 		switch kind {
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
-			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+			if err := autoscaler.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
 				return groups, err
 			}
 			o, e, g = rs.Spec.Organization, rs.Spec.Enterprise, rs.Spec.Group
 		case "RunnerDeployment", "":
 			var rd v1alpha1.RunnerDeployment
-			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+			if err := autoscaler.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
 				return groups, err
 			}
 			o, e, g = rd.Spec.Template.Spec.Organization, rd.Spec.Template.Spec.Enterprise, rd.Spec.Template.Spec.Group
@@ -562,7 +562,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleTarget(ctx
 
 HRA:
 	for _, hra := range hras {
-		if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !hra.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -603,7 +603,7 @@ HRA:
 		case "RunnerSet":
 			var rs v1alpha1.RunnerSet
 
-			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+			if err := autoscaler.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
 				return nil, err
 			}
 
@@ -634,7 +634,7 @@ HRA:
 		case "RunnerDeployment", "":
 			var rd v1alpha1.RunnerDeployment
 
-			if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+			if err := autoscaler.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
 				return nil, err
 			}
 
@@ -676,7 +676,7 @@ func getValidCapacityReservations(autoscaler *v1alpha1.HorizontalRunnerAutoscale
 	now := time.Now()
 
 	for _, reservation := range autoscaler.Spec.CapacityReservations {
-		if reservation.ExpirationTime.Time.After(now) {
+		if reservation.ExpirationTime.After(now) {
 			capacityReservations = append(capacityReservations, reservation)
 		}
 	}
@@ -713,7 +713,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) indexer(rawObj client
 	switch hra.Spec.ScaleTargetRef.Kind {
 	case "", "RunnerDeployment":
 		var rd v1alpha1.RunnerDeployment
-		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
+		if err := autoscaler.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rd); err != nil {
 			autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerDeployment not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
 			return nil
 		}
@@ -740,7 +740,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) indexer(rawObj client
 		return keys
 	case "RunnerSet":
 		var rs v1alpha1.RunnerSet
-		if err := autoscaler.Client.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
+		if err := autoscaler.Get(context.Background(), types.NamespacedName{Namespace: hra.Namespace, Name: hra.Spec.ScaleTargetRef.Name}, &rs); err != nil {
 			autoscaler.Log.V(1).Info(fmt.Sprintf("RunnerSet not found with scale target ref name %s for hra %s", hra.Spec.ScaleTargetRef.Name, hra.Name))
 			return nil
 		}

@@ -598,9 +598,9 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 		}
 
 		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
-		e.Env.Kubeconfig = e.Kind.Kubeconfig()
+		e.Kubeconfig = e.Kind.Kubeconfig()
 	} else {
-		e.Env.Kubeconfig = e.remoteKubeconfig
+		e.Kubeconfig = e.remoteKubeconfig
 
 		// Kind automatically installs https://github.com/rancher/local-path-provisioner for PVs.
 		// But assuming the remote cluster isn't a kind Kubernetes cluster,

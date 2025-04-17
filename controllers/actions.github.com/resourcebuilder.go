@@ -543,8 +543,8 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: autoscalingRunnerSet.ObjectMeta.Name + "-",
-			Namespace:    autoscalingRunnerSet.ObjectMeta.Namespace,
+			GenerateName: autoscalingRunnerSet.Name + "-",
+			Namespace:    autoscalingRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  newAnnotations,
 			OwnerReferences: []metav1.OwnerReference{
@@ -617,18 +617,18 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	labels := map[string]string{}
 	annotations := map[string]string{}
 
-	for k, v := range runner.ObjectMeta.Labels {
+	for k, v := range runner.Labels {
 		labels[k] = v
 	}
-	for k, v := range runner.Spec.PodTemplateSpec.Labels {
+	for k, v := range runner.Spec.Labels {
 		labels[k] = v
 	}
 	labels["actions-ephemeral-runner"] = string(corev1.ConditionTrue)
 
-	for k, v := range runner.ObjectMeta.Annotations {
+	for k, v := range runner.Annotations {
 		annotations[k] = v
 	}
-	for k, v := range runner.Spec.PodTemplateSpec.Annotations {
+	for k, v := range runner.Spec.Annotations {
 		annotations[k] = v
 	}
 
@@ -640,8 +640,8 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	)
 
 	objectMeta := metav1.ObjectMeta{
-		Name:        runner.ObjectMeta.Name,
-		Namespace:   runner.ObjectMeta.Namespace,
+		Name:        runner.Name,
+		Namespace:   runner.Namespace,
 		Labels:      labels,
 		Annotations: annotations,
 		OwnerReferences: []metav1.OwnerReference{
@@ -657,10 +657,10 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	}
 
 	newPod.ObjectMeta = objectMeta
-	newPod.Spec = runner.Spec.PodTemplateSpec.Spec
-	newPod.Spec.Containers = make([]corev1.Container, 0, len(runner.Spec.PodTemplateSpec.Spec.Containers))
+	newPod.Spec = runner.Spec.Spec
+	newPod.Spec.Containers = make([]corev1.Container, 0, len(runner.Spec.Spec.Containers))
 
-	for _, c := range runner.Spec.PodTemplateSpec.Spec.Containers {
+	for _, c := range runner.Spec.Spec.Containers {
 		if c.Name == v1alpha1.EphemeralRunnerContainerName {
 			c.Env = append(
 				c.Env,

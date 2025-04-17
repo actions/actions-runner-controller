@@ -287,7 +287,7 @@ func (e *exporter) ListenAndServe(ctx context.Context) error {
 }
 
 func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float64) {
-	m, ok := e.metrics.gauges[name]
+	m, ok := e.gauges[name]
 	if !ok {
 		return
 	}
@@ -299,7 +299,7 @@ func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float6
 }
 
 func (e *exporter) incCounter(name string, allLabels prometheus.Labels) {
-	m, ok := e.metrics.counters[name]
+	m, ok := e.counters[name]
 	if !ok {
 		return
 	}
@@ -311,7 +311,7 @@ func (e *exporter) incCounter(name string, allLabels prometheus.Labels) {
 }
 
 func (e *exporter) observeHistogram(name string, allLabels prometheus.Labels, val float64) {
-	m, ok := e.metrics.histograms[name]
+	m, ok := e.histograms[name]
 	if !ok {
 		return
 	}
@@ -339,7 +339,7 @@ func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
 
-	startupDuration := msg.JobMessageBase.RunnerAssignTime.Unix() - msg.JobMessageBase.ScaleSetAssignTime.Unix()
+	startupDuration := msg.RunnerAssignTime.Unix() - msg.ScaleSetAssignTime.Unix()
 	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
 }
 
@@ -347,7 +347,7 @@ func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
 	l := e.completedJobLabels(msg)
 	e.incCounter(MetricCompletedJobsTotal, l)
 
-	executionDuration := msg.JobMessageBase.FinishTime.Unix() - msg.JobMessageBase.RunnerAssignTime.Unix()
+	executionDuration := msg.FinishTime.Unix() - msg.RunnerAssignTime.Unix()
 	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(executionDuration))
 }
 
