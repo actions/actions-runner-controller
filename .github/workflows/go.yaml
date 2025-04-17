@@ -49,7 +49,7 @@ jobs:
           cache: false
       - name: golangci-lint
         # https://github.com/golangci/golangci-lint-action/releases/tag/v6.5.2
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
+        uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd
         with:
           only-new-issues: true
           version: v1.64.8
