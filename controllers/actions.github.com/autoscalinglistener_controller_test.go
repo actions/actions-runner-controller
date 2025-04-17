@@ -104,7 +104,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	})
 
 	Context("When creating a new AutoScalingListener", func() {
-		It("It should create/add all required resources for a new AutoScalingListener (finalizer, secret, service account, role, rolebinding, pod)", func() {
+		It("It should create/add all required resources for a new AutoScalingListener (finalizer, service account, role, rolebinding, config, pod)", func() {
 			config := new(corev1.Secret)
 			Eventually(
 				func() error {
@@ -133,19 +133,6 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				},
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
-
-			// Check if secret is created
-			mirrorSecret := new(corev1.Secret)
-			Eventually(
-				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerSecretMirrorName(autoscalingListener), Namespace: autoscalingListener.Namespace}, mirrorSecret)
-					if err != nil {
-						return "", err
-					}
-					return string(mirrorSecret.Data["github_token"]), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerTestGitHubToken), "Mirror secret should be created")
 
 			// Check if service account is created
 			serviceAccount := new(corev1.ServiceAccount)
@@ -187,6 +174,22 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				},
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(scaleSetListenerRoleName(autoscalingListener)), "Rolebinding should be created")
+
+			listenerConfig := new(corev1.Secret)
+			Eventually(
+				func() error {
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerConfigName(autoscalingListener),
+							Namespace: autoscalingListener.Namespace,
+						},
+						listenerConfig,
+					)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Listener config should be created")
 
 			// Check if pod is created
 			pod := new(corev1.Pod)
@@ -396,75 +399,6 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be re-created")
-		})
-
-		It("It should update mirror secrets to match secret used by AutoScalingRunnerSet", func() {
-			// Waiting for the pod is created
-			pod := new(corev1.Pod)
-			Eventually(
-				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					if err != nil {
-						return "", err
-					}
-
-					return pod.Name, nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
-
-			// Update the secret
-			updatedSecret := configSecret.DeepCopy()
-			updatedSecret.Data["github_token"] = []byte(autoscalingListenerTestGitHubToken + "_updated")
-			err := k8sClient.Update(ctx, updatedSecret)
-			Expect(err).NotTo(HaveOccurred(), "failed to update test secret")
-
-			updatedPod := pod.DeepCopy()
-			// Ignore status running and consult the container state
-			updatedPod.Status.Phase = corev1.PodRunning
-			updatedPod.Status.ContainerStatuses = []corev1.ContainerStatus{
-				{
-					Name: autoscalingListenerContainerName,
-					State: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{
-							ExitCode: 1,
-						},
-					},
-				},
-			}
-			err = k8sClient.Status().Update(ctx, updatedPod)
-			Expect(err).NotTo(HaveOccurred(), "failed to update test pod to failed")
-
-			// Check if mirror secret is updated with right data
-			mirrorSecret := new(corev1.Secret)
-			Eventually(
-				func() (map[string][]byte, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerSecretMirrorName(autoscalingListener), Namespace: autoscalingListener.Namespace}, mirrorSecret)
-					if err != nil {
-						return nil, err
-					}
-
-					return mirrorSecret.Data, nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(updatedSecret.Data), "Mirror secret should be updated")
-
-			// Check if we re-created a new pod
-			Eventually(
-				func() error {
-					latestPod := new(corev1.Pod)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, latestPod)
-					if err != nil {
-						return err
-					}
-					if latestPod.UID == pod.UID {
-						return fmt.Errorf("Pod should be recreated")
-					}
-
-					return nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(Succeed(), "Pod should be recreated")
 		})
 	})
 })
