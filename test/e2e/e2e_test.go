@@ -1181,7 +1181,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				steps = append(steps,
 					testing.Step{
 						Name: "Set up Docker Buildx",
-						Uses: "docker/setup-buildx-action@v1",
+						Uses: "docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2",
 						With: setupBuildXActionWith,
 					},
 					testing.Step{
@@ -1193,7 +1193,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 						Run: "docker run --rm test1",
 					},
 					testing.Step{
-						Uses: "addnab/docker-run-action@v3",
+						Uses: "addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185",
 						With: &testing.With{
 							Image: "test1",
 							Run:   "hello",
@@ -1234,7 +1234,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 
 		steps = append(steps,
 			testing.Step{
-				Uses: "azure/setup-kubectl@v1",
+				Uses: "azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f",
 				With: &testing.With{
 					Version: "v1.24.0",
 				},
