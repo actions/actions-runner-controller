@@ -78,7 +78,13 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
+func (b *ResourceBuilder) newAutoScalingListener(
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+	ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet,
+	githubSecret *corev1.Secret,
+	namespace, image string,
+	imagePullSecrets []corev1.LocalObjectReference,
+) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
 		return nil, err
@@ -102,7 +108,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 	})
 
 	annotations := map[string]string{
-		annotationKeyRunnerSpecHash: autoscalingRunnerSet.ListenerSpecHash(),
+		annotationKeyRunnerSpecHash: autoscalingRunnerSet.ListenerSpecHash(githubSecret),
 		annotationKeyValuesHash:     autoscalingRunnerSet.Annotations[annotationKeyValuesHash],
 	}
 

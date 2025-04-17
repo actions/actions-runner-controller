@@ -123,6 +123,7 @@ var defaultRunnerScaleSetJitRunnerConfig = &actions.RunnerScaleSetJitRunnerConfi
 
 // FakeClient implements actions service
 type FakeClient struct {
+	id                      uuid.UUID
 	getRunnerScaleSetResult struct {
 		*actions.RunnerScaleSet
 		err error
@@ -191,12 +192,18 @@ type FakeClient struct {
 }
 
 func NewFakeClient(options ...Option) actions.ActionsService {
-	f := &FakeClient{}
+	f := &FakeClient{
+		id: uuid.New(),
+	}
 	f.applyDefaults()
 	for _, opt := range options {
 		opt(f)
 	}
 	return f
+}
+
+func (f *FakeClient) ID() uuid.UUID {
+	return f.id
 }
 
 func (f *FakeClient) applyDefaults() {
