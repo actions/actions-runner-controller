@@ -1,6 +1,6 @@
 version: "2"
 run:
-  timeout: 3m
+  timeout: 5m
 linters:
   settings:
     errcheck:
