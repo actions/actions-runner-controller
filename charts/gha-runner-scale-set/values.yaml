@@ -274,6 +274,7 @@ githubConfigSecret:
 template:
   ## template.spec will be modified if you change the container mode
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
+  ## You can control automatically injected dind settings from the dind section
   ## template:
   ##   spec:
   ##     initContainers:
@@ -352,9 +353,13 @@ template:
   ##                   storage: 1Gi
   spec:
     containers:
-      - name: runner
-        image: ghcr.io/actions/actions-runner:latest
-        command: ["/home/runner/run.sh"]
+    - name: runner
+      image: ghcr.io/actions/actions-runner:latest
+      command: [ "/home/runner/run.sh" ]
+
+dind:
+  volumeMounts: []
+
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.

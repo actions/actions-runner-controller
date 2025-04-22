@@ -113,6 +113,11 @@ volumeMounts:
     mountPath: /var/run
   - name: dind-externals
     mountPath: /home/runner/externals
+  {{- with $.Values.dind.volumeMounts }}
+      {{- range $i, $volMount := . }}
+  - {{ $volMount | toYaml | nindent 4 | trim }}
+      {{- end }}
+  {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
