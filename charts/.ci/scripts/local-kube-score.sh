@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 for chart in `ls charts`;
 do
 helm template --values charts/$chart/ci/ci-values.yaml charts/$chart | kube-score score - \

@@ -62,7 +62,7 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !rs.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !rs.DeletionTimestamp.IsZero() {
 		// RunnerReplicaSet cannot be gracefuly removed.
 		// That means any runner that is running a job can be prematurely terminated.
 		// To gracefully remove a RunnerReplicaSet, scale it down to zero first, observe RunnerReplicaSet's status replicas,
@@ -70,14 +70,14 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	if rs.ObjectMeta.Labels == nil {
-		rs.ObjectMeta.Labels = map[string]string{}
+	if rs.Labels == nil {
+		rs.Labels = map[string]string{}
 	}
 
 	// Template hash is usually set by the upstream controller(RunnerDeplloyment controller) on authoring
 	// RunerReplicaset resource, but it may be missing when the user directly created RunnerReplicaSet.
 	// As a template hash is required by by the runner replica management, we dynamically add it here without ever persisting it.
-	if rs.ObjectMeta.Labels[LabelKeyRunnerTemplateHash] == "" {
+	if rs.Labels[LabelKeyRunnerTemplateHash] == "" {
 		template := rs.Spec.DeepCopy()
 		template.Replicas = nil
 		template.EffectiveTime = nil
@@ -85,8 +85,8 @@ func (r *RunnerReplicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		log.Info("Using auto-generated template hash", "value", templateHash)
 
-		rs.ObjectMeta.Labels = CloneAndAddLabel(rs.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
-		rs.Spec.Template.ObjectMeta.Labels = CloneAndAddLabel(rs.Spec.Template.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
+		rs.Labels = CloneAndAddLabel(rs.Labels, LabelKeyRunnerTemplateHash, templateHash)
+		rs.Spec.Template.Labels = CloneAndAddLabel(rs.Spec.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
 	}
 
 	selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
@@ -169,8 +169,8 @@ func (r *RunnerReplicaSetReconciler) newRunner(rs v1alpha1.RunnerReplicaSet) (v1
 	// the "runner template hash" label to the template.meta which is necessary to make this controller work correctly
 	objectMeta := rs.Spec.Template.ObjectMeta.DeepCopy()
 
-	objectMeta.GenerateName = rs.ObjectMeta.Name + "-"
-	objectMeta.Namespace = rs.ObjectMeta.Namespace
+	objectMeta.GenerateName = rs.Name + "-"
+	objectMeta.Namespace = rs.Namespace
 	if objectMeta.Annotations == nil {
 		objectMeta.Annotations = map[string]string{}
 	}
