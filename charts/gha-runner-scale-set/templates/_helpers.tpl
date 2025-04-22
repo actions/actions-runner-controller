@@ -101,6 +101,11 @@ args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+  {{- if .Values.dind.extraArgs -}}
+  {{- range $i, $arg := .Values.dind.extraArgs }}
+  - {{ $arg }}
+  {{- end }}
+  {{- end }}
 env:
   - name: DOCKER_GROUP_GID
     value: "123"

@@ -358,7 +358,11 @@ template:
       command: [ "/home/runner/run.sh" ]
 
 dind:
+  # You can add extra volume mounts, i.e. to control docker configuration
   volumeMounts: []
+  # You can add extra arg like `--mtu=1450`
+  # see https://github.com/actions/actions-runner-controller/discussions/2993#discussioncomment-11538669
+  extraArgs: []
 
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
