@@ -728,20 +728,20 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraInitContainers(t *testin
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 3, "InitContainers should be 3")
-	assert.Equal(t, "kube-init", ars.Spec.Template.Spec.InitContainers[1].Name, "InitContainers[1] Name should be kube-init")
-	assert.Equal(t, "runner-image:latest", ars.Spec.Template.Spec.InitContainers[1].Image, "InitContainers[1] Image should be runner-image:latest")
-	assert.Equal(t, "sudo", ars.Spec.Template.Spec.InitContainers[1].Command[0], "InitContainers[1] Command[0] should be sudo")
-	assert.Equal(t, "chown", ars.Spec.Template.Spec.InitContainers[1].Command[1], "InitContainers[1] Command[1] should be chown")
-	assert.Equal(t, "-R", ars.Spec.Template.Spec.InitContainers[1].Command[2], "InitContainers[1] Command[2] should be -R")
-	assert.Equal(t, "1001:123", ars.Spec.Template.Spec.InitContainers[1].Command[3], "InitContainers[1] Command[3] should be 1001:123")
-	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[1].Command[4], "InitContainers[1] Command[4] should be /home/runner/_work")
-	assert.Equal(t, "work", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[0].Name, "InitContainers[1] VolumeMounts[0] Name should be work")
-	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[0].MountPath, "InitContainers[1] VolumeMounts[0] MountPath should be /home/runner/_work")
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 4, "InitContainers should be 4")
+	assert.Equal(t, "kube-init", ars.Spec.Template.Spec.InitContainers[2].Name, "InitContainers[1] Name should be kube-init")
+	assert.Equal(t, "runner-image:latest", ars.Spec.Template.Spec.InitContainers[2].Image, "InitContainers[1] Image should be runner-image:latest")
+	assert.Equal(t, "sudo", ars.Spec.Template.Spec.InitContainers[2].Command[0], "InitContainers[1] Command[0] should be sudo")
+	assert.Equal(t, "chown", ars.Spec.Template.Spec.InitContainers[2].Command[1], "InitContainers[1] Command[1] should be chown")
+	assert.Equal(t, "-R", ars.Spec.Template.Spec.InitContainers[2].Command[2], "InitContainers[1] Command[2] should be -R")
+	assert.Equal(t, "1001:123", ars.Spec.Template.Spec.InitContainers[2].Command[3], "InitContainers[1] Command[3] should be 1001:123")
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[2].Command[4], "InitContainers[1] Command[4] should be /home/runner/_work")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.InitContainers[2].VolumeMounts[0].Name, "InitContainers[1] VolumeMounts[0] Name should be work")
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[2].VolumeMounts[0].MountPath, "InitContainers[1] VolumeMounts[0] MountPath should be /home/runner/_work")
 
-	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[2].Name, "InitContainers[2] Name should be ls")
-	assert.Equal(t, "ubuntu:latest", ars.Spec.Template.Spec.InitContainers[2].Image, "InitContainers[2] Image should be ubuntu:latest")
-	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[2].Command[0], "InitContainers[2] Command[0] should be ls")
+	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[3].Name, "InitContainers[2] Name should be ls")
+	assert.Equal(t, "ubuntu:latest", ars.Spec.Template.Spec.InitContainers[3].Image, "InitContainers[2] Image should be ubuntu:latest")
+	assert.Equal(t, "ls", ars.Spec.Template.Spec.InitContainers[3].Command[0], "InitContainers[2] Command[0] should be ls")
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_DinD_ExtraVolumes(t *testing.T) {
@@ -860,13 +860,26 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 
 	assert.NotNil(t, ars.Spec.Template.Spec, "Template.Spec should not be nil")
 
-	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 1, "Template.Spec should have 1 init container")
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 2, "Template.Spec should have 2 init container")
 	assert.Equal(t, "init-dind-externals", ars.Spec.Template.Spec.InitContainers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.InitContainers[0].Image)
 	assert.Equal(t, "cp", ars.Spec.Template.Spec.InitContainers[0].Command[0])
 	assert.Equal(t, "-r /home/runner/externals/. /home/runner/tmpDir/", strings.Join(ars.Spec.Template.Spec.InitContainers[0].Args, " "))
 
-	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "Template.Spec should have 2 container")
+	assert.Equal(t, "dind", ars.Spec.Template.Spec.InitContainers[1].Name)
+	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.InitContainers[1].Image)
+	assert.True(t, *ars.Spec.Template.Spec.InitContainers[1].SecurityContext.Privileged)
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-sock, work and externals")
+	assert.Equal(t, "work", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[0].Name)
+	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[0].MountPath)
+
+	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[1].Name)
+	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[1].MountPath)
+
+	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[2].Name)
+	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.InitContainers[1].VolumeMounts[2].MountPath)
+
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "Template.Spec should have 1 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
 	assert.Len(t, ars.Spec.Template.Spec.Containers[0].Env, 2, "The runner container should have 2 env vars, DOCKER_HOST and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS")
@@ -882,19 +895,6 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 
 	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name)
 	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath)
-
-	assert.Equal(t, "dind", ars.Spec.Template.Spec.Containers[1].Name)
-	assert.Equal(t, "docker:dind", ars.Spec.Template.Spec.Containers[1].Image)
-	assert.True(t, *ars.Spec.Template.Spec.Containers[1].SecurityContext.Privileged)
-	assert.Len(t, ars.Spec.Template.Spec.Containers[1].VolumeMounts, 3, "The dind container should have 3 volume mounts, dind-sock, work and externals")
-	assert.Equal(t, "work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name)
-	assert.Equal(t, "/home/runner/_work", ars.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath)
-
-	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name)
-	assert.Equal(t, "/var/run", ars.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath)
-
-	assert.Equal(t, "dind-externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].Name)
-	assert.Equal(t, "/home/runner/externals", ars.Spec.Template.Spec.Containers[1].VolumeMounts[2].MountPath)
 
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 3, "Volumes should be 3")
 	assert.Equal(t, "dind-sock", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be dind-sock")
@@ -1826,7 +1826,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 
-	assert.Len(t, ars.Spec.Template.Spec.Containers, 2, "There should be 2 containers")
+	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "There should be 1 containers")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name, "Container name should be runner")
 	assert.Equal(t, "250m", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu().String(), "CPU Limit should be set")
 	assert.Equal(t, "64Mi", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String(), "Memory Limit should be set")
