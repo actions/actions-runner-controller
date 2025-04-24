@@ -23,7 +23,7 @@ type multiClient struct {
 }
 
 type GitHubAppAuth struct {
-	AppID             int64
+	AppID             string
 	AppInstallationID int64
 	AppPrivateKey     string
 }
@@ -124,16 +124,11 @@ func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, 
 		return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
 	}
 
-	parsedAppID, err := strconv.ParseInt(appID, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
 	parsedAppInstallationID, err := strconv.ParseInt(appInstallationID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	auth.AppCreds = &GitHubAppAuth{AppID: parsedAppID, AppInstallationID: parsedAppInstallationID, AppPrivateKey: appPrivateKey}
+	auth.AppCreds = &GitHubAppAuth{AppID: appID, AppInstallationID: parsedAppInstallationID, AppPrivateKey: appPrivateKey}
 	return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
 }
