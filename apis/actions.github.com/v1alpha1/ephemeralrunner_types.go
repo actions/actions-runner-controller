@@ -119,7 +119,7 @@ type EphemeralRunnerStatus struct {
 	RunnerJITConfig string `json:"runnerJITConfig,omitempty"`
 
 	// +optional
-	Failures map[string]bool `json:"failures,omitempty"`
+	Failures map[string]metav1.Time `json:"failures,omitempty"`
 
 	// +optional
 	JobRequestId int64 `json:"jobRequestId,omitempty"`
@@ -135,6 +135,20 @@ type EphemeralRunnerStatus struct {
 
 	// +optional
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
+}
+
+func (s *EphemeralRunnerStatus) LastFailure() metav1.Time {
+	var maxTime metav1.Time
+	if len(s.Failures) == 0 {
+		return maxTime
+	}
+
+	for _, ts := range s.Failures {
+		if ts.Time.After(maxTime.Time) {
+			maxTime = ts
+		}
+	}
+	return maxTime
 }
 
 // +kubebuilder:object:root=true

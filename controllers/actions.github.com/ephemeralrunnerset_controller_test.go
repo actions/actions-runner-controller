@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -34,6 +36,10 @@ const (
 	ephemeralRunnerSetTestInterval    = time.Millisecond * 250
 	ephemeralRunnerSetTestGitHubToken = "gh_token"
 )
+
+func TestPrecomputedConstants(t *testing.T) {
+	require.Equal(t, len(failedRunnerBackoff), maxFailures)
+}
 
 var _ = Describe("Test EphemeralRunnerSet controller", func() {
 	var ctx context.Context
