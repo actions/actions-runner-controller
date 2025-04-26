@@ -20,7 +20,7 @@ KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
 KUBE_RBAC_PROXY_VERSION ?= v0.11.0
-SHELLCHECK_VERSION ?= 0.8.0
+SHELLCHECK_VERSION ?= 0.10.0
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:generateEmbeddedObjectMeta=true,allowDangerousTypes=true"
@@ -68,7 +68,7 @@ endif
 all: manager
 
 lint:
-	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v1.57.2 golangci-lint run
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.1.2 golangci-lint run
 
 GO_TEST_ARGS ?= -short
 
@@ -204,7 +204,7 @@ generate: controller-gen
 
 # Run shellcheck on runner scripts
 shellcheck: shellcheck-install
-	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh hack/*.sh
+	$(TOOLS_PATH)/shellcheck --shell bash --source-path runner runner/*.sh runner/update-status hack/*.sh
 
 docker-buildx:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\

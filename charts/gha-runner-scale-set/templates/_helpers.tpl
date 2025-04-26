@@ -108,6 +108,9 @@ env:
     value: "1"
 securityContext:
   privileged: true
+{{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
+restartPolicy: Always
+{{- end }}
 volumeMounts:
   - name: work
     mountPath: /home/runner/_work
