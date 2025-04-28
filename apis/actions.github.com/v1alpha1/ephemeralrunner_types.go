@@ -144,7 +144,7 @@ func (s *EphemeralRunnerStatus) LastFailure() metav1.Time {
 	}
 
 	for _, ts := range s.Failures {
-		if ts.Time.After(maxTime.Time) {
+		if ts.After(maxTime.Time) {
 			maxTime = ts
 		}
 	}

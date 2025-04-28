@@ -38,7 +38,7 @@ const (
 )
 
 func TestPrecomputedConstants(t *testing.T) {
-	require.Equal(t, len(failedRunnerBackoff), maxFailures)
+	require.Equal(t, len(failedRunnerBackoff), maxFailures+1)
 }
 
 var _ = Describe("Test EphemeralRunnerSet controller", func() {
