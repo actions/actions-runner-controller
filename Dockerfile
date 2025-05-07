@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.24.0 as builder
+FROM --platform=$BUILDPLATFORM golang:1.24.0 AS builder
 
 WORKDIR /workspace
 
@@ -30,7 +30,7 @@ ARG TARGETPLATFORM TARGETOS TARGETARCH TARGETVARIANT VERSION=dev COMMIT_SHA=dev
 # to avoid https://github.com/moby/buildkit/issues/2334
 # We can use docker layer cache so the build is fast enogh anyway
 # We also use per-platform GOCACHE for the same reason.
-ENV GOCACHE /build/${TARGETPLATFORM}/root/.cache/go-build
+ENV GOCACHE="/build/${TARGETPLATFORM}/root/.cache/go-build"
 
 # Build
 RUN --mount=target=. \
