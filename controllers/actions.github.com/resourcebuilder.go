@@ -429,7 +429,7 @@ func mergeListenerContainer(base, from *corev1.Container) {
 func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerServiceAccountName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
 			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
@@ -444,7 +444,7 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 	rulesHash := hash.ComputeTemplateHash(&rules)
 	newRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerRoleName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
@@ -478,7 +478,7 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 
 	newRoleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerRoleName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
@@ -501,7 +501,7 @@ func (b *ResourceBuilder) newScaleSetListenerSecretMirror(autoscalingListener *v
 
 	newListenerSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerSecretMirrorName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
 			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
@@ -706,35 +706,11 @@ func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListene
 }
 
 func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	namespaceHash := hash.FNVHashString(autoscalingRunnerSet.Namespace)
+	namespaceHash := hash.FNVHashString(fmt.Sprintf("%s/%s/%s", autoscalingRunnerSet.Namespace, autoscalingRunnerSet.Spec.GitHubConfigUrl, autoscalingRunnerSet.Spec.RunnerGroup))
 	if len(namespaceHash) > 8 {
 		namespaceHash = namespaceHash[:8]
 	}
 	return fmt.Sprintf("%v-%v-listener", autoscalingRunnerSet.Name, namespaceHash)
-}
-
-func scaleSetListenerServiceAccountName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
-}
-
-func scaleSetListenerRoleName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
-}
-
-func scaleSetListenerSecretMirrorName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
 }
 
 func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) string {
