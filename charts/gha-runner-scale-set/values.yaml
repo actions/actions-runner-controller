@@ -302,6 +302,8 @@ template:
   ##         - --host=unix:///var/run/docker.sock
   ##         - --group=$(DOCKER_GROUP_GID)
   ##       env:
+  ##         - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+  ##           value: "15"
   ##         - name: DOCKER_GROUP_GID
   ##           value: "123"
   ##       securityContext:
