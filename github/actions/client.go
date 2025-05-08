@@ -1212,7 +1212,7 @@ func createJWTForGitHubApp(appAuth *GitHubAppAuth) (string, error) {
 	claims := &jwt.RegisteredClaims{
 		IssuedAt:  jwt.NewNumericDate(issuedAt),
 		ExpiresAt: jwt.NewNumericDate(expiresAt),
-		Issuer:    strconv.FormatInt(appAuth.AppID, 10),
+		Issuer:    appAuth.AppID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

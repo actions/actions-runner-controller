@@ -18,7 +18,7 @@ import (
 
 type Config struct {
 	ConfigureUrl                string                  `json:"configure_url"`
-	AppID                       int64                   `json:"app_id"`
+	AppID                       string                  `json:"app_id"`
 	AppInstallationID           int64                   `json:"app_installation_id"`
 	AppPrivateKey               string                  `json:"app_private_key"`
 	Token                       string                  `json:"token"`
@@ -62,26 +62,26 @@ func (c *Config) Validate() error {
 	}
 
 	if len(c.EphemeralRunnerSetNamespace) == 0 || len(c.EphemeralRunnerSetName) == 0 {
-		return fmt.Errorf("EphemeralRunnerSetNamespace '%s' or EphemeralRunnerSetName '%s' is missing", c.EphemeralRunnerSetNamespace, c.EphemeralRunnerSetName)
+		return fmt.Errorf("EphemeralRunnerSetNamespace %q or EphemeralRunnerSetName %q is missing", c.EphemeralRunnerSetNamespace, c.EphemeralRunnerSetName)
 	}
 
 	if c.RunnerScaleSetId == 0 {
-		return fmt.Errorf("RunnerScaleSetId '%d' is missing", c.RunnerScaleSetId)
+		return fmt.Errorf(`RunnerScaleSetId "%d" is missing`, c.RunnerScaleSetId)
 	}
 
 	if c.MaxRunners < c.MinRunners {
-		return fmt.Errorf("MinRunners '%d' cannot be greater than MaxRunners '%d'", c.MinRunners, c.MaxRunners)
+		return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
 	}
 
 	hasToken := len(c.Token) > 0
-	hasPrivateKeyConfig := c.AppID > 0 && c.AppPrivateKey != ""
+	hasPrivateKeyConfig := len(c.AppID) > 0 && c.AppPrivateKey != ""
 
 	if !hasToken && !hasPrivateKeyConfig {
-		return fmt.Errorf("GitHub auth credential is missing, token length: '%d', appId: '%d', installationId: '%d', private key length: '%d", len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
+		return fmt.Errorf(`GitHub auth credential is missing, token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
 	}
 
 	if hasToken && hasPrivateKeyConfig {
-		return fmt.Errorf("only one GitHub auth method supported at a time. Have both PAT and App auth: token length: '%d', appId: '%d', installationId: '%d', private key length: '%d", len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
+		return fmt.Errorf(`only one GitHub auth method supported at a time. Have both PAT and App auth: token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
 	}
 
 	return nil

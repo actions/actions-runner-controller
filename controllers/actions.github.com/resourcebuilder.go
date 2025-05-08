@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net"
 	"strconv"
@@ -169,15 +170,6 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		metricsEndpoint = metricsConfig.endpoint
 	}
 
-	var appID int64
-	if id, ok := secret.Data["github_app_id"]; ok {
-		var err error
-		appID, err = strconv.ParseInt(string(id), 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert github_app_id to int: %v", err)
-		}
-	}
-
 	var appInstallationID int64
 	if id, ok := secret.Data["github_app_installation_id"]; ok {
 		var err error
@@ -189,7 +181,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 
 	config := listenerconfig.Config{
 		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigUrl,
-		AppID:                       appID,
+		AppID:                       string(secret.Data["github_app_id"]),
 		AppInstallationID:           appInstallationID,
 		AppPrivateKey:               string(secret.Data["github_app_private_key"]),
 		Token:                       string(secret.Data["github_token"]),
@@ -205,6 +197,10 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		MetricsAddr:                 metricsAddr,
 		MetricsEndpoint:             metricsEndpoint,
 		Metrics:                     autoscalingListener.Spec.Metrics,
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid listener config: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -278,9 +274,7 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 	}
 
 	labels := make(map[string]string, len(autoscalingListener.Labels))
-	for key, val := range autoscalingListener.Labels {
-		labels[key] = val
-	}
+	maps.Copy(labels, autoscalingListener.Labels)
 
 	newRunnerScaleSetListenerPod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
