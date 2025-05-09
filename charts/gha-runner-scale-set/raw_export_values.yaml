@@ -1,0 +1,23 @@
+containerMode:
+  type: dind
+controllerServiceAccount:
+  name: prosper-runner-controller-gha-rs-controller
+  namespace: prosper-gha-runners
+githubConfigSecret: pre-defined-secret
+githubConfigUrl: https://github.com/prosperllc
+maxRunners: 30
+minRunners: 5
+template:
+  spec:
+    containers:
+    - command:
+      - /home/runner/run.sh
+      image: us-docker.pkg.dev/prosper-prod-registry/images/action-runner:2.323.1
+      name: runner
+      resources:
+        limits:
+          cpu: "4"
+          memory: 8Gi
+        request:
+          cpu: "2"
+          memory: 4Gi
