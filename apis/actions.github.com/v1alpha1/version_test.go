@@ -44,6 +44,11 @@ func TestIsVersionAllowed(t *testing.T) {
 			buildVersion:    "0.11.0",
 			want:            true,
 		},
+		"arbitrary version match": {
+			resourceVersion: "abc",
+			buildVersion:    "abc",
+			want:            true,
+		},
 	}
 
 	for name, tc := range tt {

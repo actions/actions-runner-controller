@@ -1,7 +1,7 @@
 package v1alpha1
 
 func IsVersionAllowed(resourceVersion, buildVersion string) bool {
-	if buildVersion == "dev" {
+	if buildVersion == "dev" || resourceVersion == buildVersion {
 		return true
 	}
 
