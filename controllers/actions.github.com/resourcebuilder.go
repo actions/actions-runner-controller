@@ -706,7 +706,7 @@ func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListene
 }
 
 func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	namespaceHash := hash.FNVHashString(fmt.Sprintf("%s/%s/%s", autoscalingRunnerSet.Namespace, autoscalingRunnerSet.Spec.GitHubConfigUrl, autoscalingRunnerSet.Spec.RunnerGroup))
+	namespaceHash := hash.FNVHashString(autoscalingRunnerSet.Namespace)
 	if len(namespaceHash) > 8 {
 		namespaceHash = namespaceHash[:8]
 	}
