@@ -25,7 +25,7 @@ func parseSemver(v string) (p semver, ok bool) {
 	if v == "" {
 		return
 	}
-	p.major, v, ok = parseInt(v[:])
+	p.major, v, ok = parseInt(v)
 	if !ok {
 		return p, false
 	}
