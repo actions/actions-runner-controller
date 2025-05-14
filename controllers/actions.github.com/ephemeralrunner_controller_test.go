@@ -30,7 +30,7 @@ import (
 
 const (
 	ephemeralRunnerTimeout  = time.Second * 20
-	ephemeralRunnerInterval = time.Millisecond * 250
+	ephemeralRunnerInterval = time.Millisecond * 10
 	runnerImage             = "ghcr.io/actions/actions-runner:latest"
 )
 
@@ -528,44 +528,26 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(""))
 		})
 
-		It("It should not re-create pod indefinitely", func() {
+		It("It should eventually delete ephemeral runner after consecutive failures", func() {
 			updated := new(v1alpha1.EphemeralRunner)
-			pod := new(corev1.Pod)
 			Eventually(
-				func() (bool, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
-					if err != nil {
-						return false, err
-					}
-
-					err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
-					if err != nil {
-						if kerrors.IsNotFound(err) && len(updated.Status.Failures) > 5 {
-							return true, nil
-						}
-
-						return false, err
-					}
-
-					pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
-						Name: v1alpha1.EphemeralRunnerContainerName,
-						State: corev1.ContainerState{
-							Terminated: &corev1.ContainerStateTerminated{
-								ExitCode: 1,
-							},
-						},
-					})
-					err = k8sClient.Status().Update(ctx, pod)
-					Expect(err).To(BeNil(), "Failed to update pod status")
-					return false, fmt.Errorf("pod haven't failed for 5 times.")
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(true), "we should stop creating pod after 5 failures")
+			).Should(Succeed(), "failed to get ephemeral runner")
 
-			// In case we still have pod created due to controller-runtime cache delay, mark the container as exited
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
-			if err == nil {
+			failEphemeralRunnerPod := func() *corev1.Pod {
+				pod := new(corev1.Pod)
+				Eventually(
+					func() error {
+						return k8sClient.Get(ctx, client.ObjectKey{Name: updated.Name, Namespace: updated.Namespace}, pod)
+					},
+					ephemeralRunnerTimeout,
+					ephemeralRunnerInterval,
+				).Should(Succeed(), "failed to get ephemeral runner pod")
+
 				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 					Name: v1alpha1.EphemeralRunnerContainerName,
 					State: corev1.ContainerState{
@@ -576,25 +558,70 @@ var _ = Describe("EphemeralRunner", func() {
 				})
 				err := k8sClient.Status().Update(ctx, pod)
 				Expect(err).To(BeNil(), "Failed to update pod status")
+
+				return pod
 			}
 
-			// EphemeralRunner should failed with reason TooManyPodFailures
-			Eventually(func() (string, error) {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
-				if err != nil {
-					return "", err
-				}
-				return updated.Status.Reason, nil
-			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo("TooManyPodFailures"), "Reason should be TooManyPodFailures")
+			for i := range 5 {
+				pod := failEphemeralRunnerPod()
 
-			// EphemeralRunner should not have any pod
-			Eventually(func() (bool, error) {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
-				if err == nil {
-					return false, nil
-				}
-				return kerrors.IsNotFound(err), nil
-			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
+				Eventually(
+					func() (int, error) {
+						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+						if err != nil {
+							return 0, err
+						}
+						return len(updated.Status.Failures), nil
+					},
+					ephemeralRunnerTimeout,
+					ephemeralRunnerInterval,
+				).Should(BeEquivalentTo(i + 1))
+
+				Eventually(
+					func() error {
+						nextPod := new(corev1.Pod)
+						err := k8sClient.Get(ctx, client.ObjectKey{Name: pod.Name, Namespace: pod.Namespace}, nextPod)
+						if err != nil {
+							return err
+						}
+						if nextPod.UID != pod.UID {
+							return nil
+						}
+						return fmt.Errorf("pod not recreated")
+					},
+				).WithTimeout(20*time.Second).WithPolling(10*time.Millisecond).Should(Succeed(), "pod should be recreated")
+
+				Eventually(
+					func() (bool, error) {
+						pod := new(corev1.Pod)
+						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+						if err != nil {
+							return false, err
+						}
+						for _, cs := range pod.Status.ContainerStatuses {
+							if cs.Name == v1alpha1.EphemeralRunnerContainerName {
+								return cs.State.Terminated == nil, nil
+							}
+						}
+
+						return true, nil
+					},
+				).WithTimeout(20*time.Second).WithPolling(10*time.Millisecond).Should(BeEquivalentTo(true), "pod should be terminated")
+			}
+
+			failEphemeralRunnerPod()
+
+			Eventually(
+				func() (bool, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+					if kerrors.IsNotFound(err) {
+						return true, nil
+					}
+					return false, err
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "Ephemeral runner should eventually be deleted")
 		})
 
 		It("It should re-create pod on eviction", func() {
