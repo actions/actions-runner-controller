@@ -22,6 +22,7 @@ package v1alpha1
 
 import (
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -459,9 +460,9 @@ func (in *EphemeralRunnerStatus) DeepCopyInto(out *EphemeralRunnerStatus) {
 	*out = *in
 	if in.Failures != nil {
 		in, out := &in.Failures, &out.Failures
-		*out = make(map[string]bool, len(*in))
+		*out = make(map[string]metav1.Time, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 }
