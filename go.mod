@@ -1,6 +1,7 @@
 module github.com/actions/actions-runner-controller
 
-go 1.24.0
+go 1.24.3
+
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.14.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
