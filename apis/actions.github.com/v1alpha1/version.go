@@ -1,7 +1,9 @@
 package v1alpha1
 
+import "strings"
+
 func IsVersionAllowed(resourceVersion, buildVersion string) bool {
-	if buildVersion == "dev" || resourceVersion == buildVersion {
+	if buildVersion == "dev" || resourceVersion == buildVersion || strings.HasPrefix(buildVersion, "canary-") {
 		return true
 	}
 
