@@ -74,7 +74,7 @@ func metricLabels(extras ...string) []string {
 }
 
 var (
-	commonLabels                          = []string{"runs_on", "job_name", "organization", "repository", "repository_full_name", "owner", "workflow_name", "head_branch"}
+	commonLabels                          = []string{"runs_on", "job_name", "organization", "repository", "repository_full_name", "owner", "workflow_name", "head_branch", "runner_name"}
 	githubWorkflowJobQueueDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "github_workflow_job_queue_duration_seconds",
