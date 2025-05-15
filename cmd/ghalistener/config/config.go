@@ -17,7 +17,8 @@ import (
 )
 
 type Config struct {
-	ConfigureUrl                string                  `json:"configure_url"`
+	ConfigureUrl string `json:"configure_url"`
+	// AppID can be an ID of the app or the client ID
 	AppID                       string                  `json:"app_id"`
 	AppInstallationID           int64                   `json:"app_installation_id"`
 	AppPrivateKey               string                  `json:"app_private_key"`

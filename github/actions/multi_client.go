@@ -23,6 +23,7 @@ type multiClient struct {
 }
 
 type GitHubAppAuth struct {
+	// AppID is the ID or the Client ID of the application
 	AppID             string
 	AppInstallationID int64
 	AppPrivateKey     string
