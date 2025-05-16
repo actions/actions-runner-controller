@@ -36,8 +36,8 @@ var (
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion               = "2.323.0"
-	RunnerContainerHooksVersion = "0.6.2"
+	RunnerVersion               = "2.324.0"
+	RunnerContainerHooksVersion = "0.7.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -1106,7 +1106,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.24.0",
+						GoVersion: "1.24.3",
 					},
 				},
 			)
