@@ -32,12 +32,16 @@ func (c *Config) Validate() error {
 	if c.ClientID == "" {
 		return errors.New("client_id is not set")
 	}
-	if _, err := url.Parse(c.URL); err != nil {
+	if _, err := url.ParseRequestURI(c.URL); err != nil {
 		return fmt.Errorf("failed to parse url: %v", err)
 	}
 
-	if c.CertPath != "" {
+	if c.CertPath == "" {
 		return errors.New("cert path must be provided")
+	}
+
+	if _, err := os.Stat(c.CertPath); err != nil {
+		return fmt.Errorf("cert path %q does not exist: %v", c.CertPath, err)
 	}
 
 	if err := c.Proxy.Validate(); err != nil {

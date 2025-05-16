@@ -2,6 +2,7 @@ package azurekeyvault
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/proxyconfig"
@@ -98,16 +99,6 @@ func TestValidate_valid(t *testing.T) {
 	clientID := "clientID"
 	url := "https://example.com"
 
-	cp, err := os.CreateTemp("", "")
-	require.NoError(t, err)
-	err = cp.Close()
-	require.NoError(t, err)
-	certPath := cp.Name()
-
-	t.Cleanup(func() {
-		os.Remove(certPath)
-	})
-
 	proxy := &proxyconfig.ProxyConfig{
 		HTTP: &proxyconfig.ProxyServerConfig{
 			URL:      "http://httpconfig.com",
@@ -124,15 +115,10 @@ func TestValidate_valid(t *testing.T) {
 		},
 	}
 
+	certPath, err := filepath.Abs("testdata/server.crt")
+	require.NoError(t, err)
+
 	tt := map[string]*Config{
-		"with jwt": {
-			TenantID:     tenantID,
-			ClientID:     clientID,
-			URL:          url,
-			CertPath:     "",
-			CertPassword: "",
-			Proxy:        proxy,
-		},
 		"with cert": {
 			TenantID:     tenantID,
 			ClientID:     clientID,

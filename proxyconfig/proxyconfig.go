@@ -21,19 +21,23 @@ func (pc *ProxyConfig) Validate() error {
 	}
 
 	if pc.HTTP != nil {
-		_, err := url.Parse(pc.HTTP.URL)
+		_, err := url.ParseRequestURI(pc.HTTP.URL)
 		if err != nil {
 			return fmt.Errorf("proxy http set with invalid url: %v", err)
 		}
 	}
 	if pc.HTTPS != nil {
-		_, err := url.Parse(pc.HTTPS.URL)
+		_, err := url.ParseRequestURI(pc.HTTPS.URL)
 		if err != nil {
 			return fmt.Errorf("proxy https set with invalid url: %v", err)
 		}
 	}
 
-	// TODO: maybe validate noproxy?
+	for _, u := range pc.NoProxy {
+		if _, err := url.ParseRequestURI(u); err != nil {
+			return fmt.Errorf("proxy no_proxy set with invalid url: %v", err)
+		}
+	}
 	return nil
 }
 
