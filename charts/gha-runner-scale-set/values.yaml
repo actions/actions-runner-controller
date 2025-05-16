@@ -17,6 +17,7 @@ githubConfigSecret:
 ## (Variation B) When using a GitHub App, the syntax is as follows:
 # githubConfigSecret:
 #   # NOTE: IDs MUST be strings, use quotes
+#   # The github_app_id can be an app_id or the client_id
 #   github_app_id: ""
 #   github_app_installation_id: ""
 #   github_app_private_key: |
