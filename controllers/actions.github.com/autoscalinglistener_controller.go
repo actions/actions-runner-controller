@@ -137,27 +137,6 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// Create a mirror secret in the same namespace as the AutoscalingListener
-	mirrorSecret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: autoscalingListener.Name}, mirrorSecret); err != nil {
-		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to get listener secret mirror", "namespace", autoscalingListener.Namespace, "name", autoscalingListener.Name)
-			return ctrl.Result{}, err
-		}
-
-		// Create a mirror secret for the listener pod in the Controller namespace for listener pod to use
-		log.Info("Creating a mirror listener secret for the listener pod")
-		return r.createSecretsForListener(ctx, autoscalingListener, secret, log)
-	}
-
-	// make sure the mirror secret is up to date
-	mirrorSecretDataHash := mirrorSecret.Labels["secret-data-hash"]
-	secretDataHash := hash.ComputeTemplateHash(secret.Data)
-	if mirrorSecretDataHash != secretDataHash {
-		log.Info("Updating mirror listener secret for the listener pod", "mirrorSecretDataHash", mirrorSecretDataHash, "secretDataHash", secretDataHash)
-		return r.updateSecretsForListener(ctx, secret, mirrorSecret, log)
-	}
-
 	// Make sure the runner scale set listener service account is created for the listener pod in the controller namespace
 	serviceAccount := new(corev1.ServiceAccount)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: autoscalingListener.Name}, serviceAccount); err != nil {
@@ -239,7 +218,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		// Create a listener pod in the controller namespace
 		log.Info("Creating a listener pod")
-		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, mirrorSecret, log)
+		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, secret, log)
 	}
 
 	cs := listenerContainerStatus(listenerPod)
@@ -486,7 +465,7 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	newPod, err := r.newScaleSetListenerPod(autoscalingListener, &podConfig, serviceAccount, secret, metricsConfig, envs...)
+	newPod, err := r.newScaleSetListenerPod(autoscalingListener, &podConfig, serviceAccount, metricsConfig, envs...)
 	if err != nil {
 		logger.Error(err, "Failed to build listener pod")
 		return ctrl.Result{}, err

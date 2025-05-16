@@ -285,6 +285,22 @@ func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
 	return hash.ComputeTemplateHash(&spec)
 }
 
+func (ars *AutoscalingRunnerSet) GitHubConfigSecret() string {
+	return ars.Spec.GitHubConfigSecret
+}
+
+func (ars *AutoscalingRunnerSet) GitHubConfigUrl() string {
+	return ars.Spec.GitHubConfigUrl
+}
+
+func (ars *AutoscalingRunnerSet) Proxy() *ProxyConfig {
+	return ars.Spec.Proxy
+}
+
+func (ars *AutoscalingRunnerSet) GitHubServerTLS() *GitHubServerTLSConfig {
+	return ars.Spec.GitHubServerTLS
+}
+
 func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	type runnerSetSpec struct {
 		GitHubConfigUrl    string

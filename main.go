@@ -32,6 +32,7 @@ import (
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -274,9 +275,29 @@ func main() {
 			log.WithName("actions-clients"),
 		)
 
+		vaults, err := vault.InitAll("CONTROLLER_MANAGER_")
+		if err != nil {
+			log.Error(err, "unable to read vaults")
+			os.Exit(1)
+		}
+
+		var poolOptions []actionsgithubcom.ActionsClientPoolOption
+		for name, vault := range vaults {
+			poolOptions = append(poolOptions, actionsgithubcom.WithVault(name, vault))
+		}
+
+		clientPool := actionsgithubcom.NewActionsClientPool(
+			mgr.GetClient(),
+			actionsMultiClient,
+			poolOptions...,
+		)
+
 		rb := actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
+			ActionsClientPool:               clientPool,
 		}
+
+		log.Info("Resource builder initializing")
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
@@ -297,7 +318,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
@@ -308,7 +328,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {

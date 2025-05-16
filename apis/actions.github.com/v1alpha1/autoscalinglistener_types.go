@@ -86,8 +86,23 @@ type AutoscalingListener struct {
 	Status AutoscalingListenerStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+func (l *AutoscalingListener) GitHubConfigSecret() string {
+	return l.Spec.GitHubConfigSecret
+}
 
+func (l *AutoscalingListener) GitHubConfigUrl() string {
+	return l.Spec.GitHubConfigUrl
+}
+
+func (l *AutoscalingListener) Proxy() *ProxyConfig {
+	return l.Spec.Proxy
+}
+
+func (l *AutoscalingListener) GitHubServerTLS() *GitHubServerTLSConfig {
+	return l.Spec.GitHubServerTLS
+}
+
+// +kubebuilder:object:root=true
 // AutoscalingListenerList contains a list of AutoscalingListener
 type AutoscalingListenerList struct {
 	metav1.TypeMeta `json:",inline"`

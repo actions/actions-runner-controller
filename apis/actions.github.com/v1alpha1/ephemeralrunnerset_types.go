@@ -60,9 +60,24 @@ type EphemeralRunnerSet struct {
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+func (ers *EphemeralRunnerSet) GitHubConfigSecret() string {
+	return ers.Spec.EphemeralRunnerSpec.GitHubConfigSecret
+}
+
+func (ers *EphemeralRunnerSet) GitHubConfigUrl() string {
+	return ers.Spec.EphemeralRunnerSpec.GitHubConfigUrl
+}
+
+func (ers *EphemeralRunnerSet) Proxy() *ProxyConfig {
+	return ers.Spec.EphemeralRunnerSpec.Proxy
+}
+
+func (ers *EphemeralRunnerSet) GitHubServerTLS() *GitHubServerTLSConfig {
+	return ers.Spec.EphemeralRunnerSpec.GitHubServerTLS
+}
 
 // EphemeralRunnerSetList contains a list of EphemeralRunnerSet
+// +kubebuilder:object:root=true
 type EphemeralRunnerSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

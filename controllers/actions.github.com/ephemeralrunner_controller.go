@@ -45,9 +45,8 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	ActionsClient actions.MultiClient
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 	ResourceBuilder
 }
 
@@ -529,7 +528,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner)
+	actionsClient, err := r.ActionsClientPool.Get(ctx, ephemeralRunner)
 	if err != nil {
 		return &ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %w", err)
 	}
@@ -753,77 +752,10 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	return nil
 }
 
-func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) (actions.ActionsService, error) {
-	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: runner.Spec.GitHubConfigSecret}, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret: %w", err)
-	}
-
-	opts, err := r.actionsClientOptionsFor(ctx, runner)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get actions client options: %w", err)
-	}
-
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		runner.Spec.GitHubConfigUrl,
-		runner.Namespace,
-		secret.Data,
-		opts...,
-	)
-}
-
-func (r *EphemeralRunnerReconciler) actionsClientOptionsFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) ([]actions.ClientOption, error) {
-	var opts []actions.ClientOption
-	if runner.Spec.Proxy != nil {
-		proxyFunc, err := runner.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
-			var secret corev1.Secret
-			err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: s}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
-			}
-
-			return &secret, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get proxy func: %w", err)
-		}
-
-		opts = append(opts, actions.WithProxy(proxyFunc))
-	}
-
-	tlsConfig := runner.Spec.GitHubServerTLS
-	if tlsConfig != nil {
-		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
-			var configmap corev1.ConfigMap
-			err := r.Get(
-				ctx,
-				types.NamespacedName{
-					Namespace: runner.Namespace,
-					Name:      name,
-				},
-				&configmap,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
-			}
-
-			return []byte(configmap.Data[key]), nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tls config: %w", err)
-		}
-
-		opts = append(opts, actions.WithRootCAs(pool))
-	}
-
-	return opts, nil
-}
-
 // runnerRegisteredWithService checks if the runner is still registered with the service
 // Returns found=false and err=nil if ephemeral runner does not exist in GitHub service and should be deleted
 func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (found bool, err error) {
-	actionsClient, err := r.actionsClientFor(ctx, runner)
+	actionsClient, err := r.ActionsClientPool.Get(ctx, runner)
 	if err != nil {
 		return false, fmt.Errorf("failed to get Actions client for ScaleSet: %w", err)
 	}
@@ -850,7 +782,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 }
 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	client, err := r.actionsClientFor(ctx, ephemeralRunner)
+	client, err := r.ActionsClientPool.Get(ctx, ephemeralRunner)
 	if err != nil {
 		return fmt.Errorf("failed to get actions client for runner: %w", err)
 	}
