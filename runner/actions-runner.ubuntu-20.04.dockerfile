@@ -68,7 +68,10 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
     && chmod +x /usr/bin/dumb-init
 
-ENV RUNNER_ASSETS_DIR=/runnertmp
+# Set this to /home/runner for compatibility with v1 runners
+ARG RUNNER_ASSETS_DIR=/runnertmp
+ENV RUNNER_ASSETS_DIR=$RUNNER_ASSETS_DIR
+ARG EXTERNALS_DIR_NAME=externalstmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x64 ; fi \
     && mkdir -p "$RUNNER_ASSETS_DIR" \
@@ -77,7 +80,7 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && tar xzf ./runner.tar.gz \
     && rm runner.tar.gz \
     && ./bin/installdependencies.sh \
-    && mv ./externals ./externalstmp \
+    && if [ "${EXTERNALS_DIR_NAME}" != externals ]; then mv ./externals ./${EXTERNALS_DIR_NAME}; fi \
     # libyaml-dev is required for ruby/setup-ruby action.
     # It is installed after installdependencies.sh and before removing /var/lib/apt/lists
     # to avoid rerunning apt-update on its own.
