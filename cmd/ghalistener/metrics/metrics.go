@@ -152,13 +152,145 @@ type ExporterConfig struct {
 	ServerAddr        string
 	ServerEndpoint    string
 	Logger            logr.Logger
-	Metrics           v1alpha1.MetricsConfig
+	Metrics           *v1alpha1.MetricsConfig
+}
+
+func (e *ExporterConfig) defaults() {
+	if e.ServerAddr == "" {
+		e.Metrics = nil
+		return
+	}
+	if e.Metrics != nil {
+		return
+	}
+
+	e.Metrics = &v1alpha1.MetricsConfig{
+		Counters: map[string]*v1alpha1.CounterMetric{
+			MetricStartedJobsTotal: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyJobName,
+					labelKeyEventName,
+				},
+			},
+			MetricCompletedJobsTotal: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyJobName,
+					labelKeyEventName,
+					labelKeyJobResult,
+				},
+			},
+		},
+		Gauges: map[string]*v1alpha1.GaugeMetric{
+			MetricAssignedJobs: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricRunningJobs: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricRegisteredRunners: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricBusyRunners: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricMinRunners: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricMaxRunners: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricDesiredRunners: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+			MetricIdleRunners: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyRunnerScaleSetName,
+					labelKeyRunnerScaleSetNamespace,
+				},
+			},
+		},
+		Histograms: map[string]*v1alpha1.HistogramMetric{
+			MetricJobStartupDurationSeconds: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyJobName,
+					labelKeyEventName,
+				},
+				Buckets: defaultRuntimeBuckets,
+			},
+			MetricJobExecutionDurationSeconds: {
+				Labels: []string{
+					labelKeyEnterprise,
+					labelKeyOrganization,
+					labelKeyRepository,
+					labelKeyJobName,
+					labelKeyEventName,
+					labelKeyJobResult,
+				},
+				Buckets: defaultRuntimeBuckets,
+			},
+		},
+	}
 }
 
 func NewExporter(config ExporterConfig) ServerExporter {
+	config.defaults()
 	reg := prometheus.NewRegistry()
 
-	metrics := installMetrics(config.Metrics, reg, config.Logger)
+	metrics := installMetrics(*config.Metrics, reg, config.Logger)
 
 	mux := http.NewServeMux()
 	mux.Handle(

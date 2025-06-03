@@ -61,7 +61,7 @@ func New(config config.Config) (*App, error) {
 	}
 
 	if config.MetricsAddr != "" {
-		exporterConfig := metrics.ExporterConfig{
+		app.metrics = metrics.NewExporter(metrics.ExporterConfig{
 			ScaleSetName:      config.EphemeralRunnerSetName,
 			ScaleSetNamespace: config.EphemeralRunnerSetNamespace,
 			Enterprise:        ghConfig.Enterprise,
@@ -69,14 +69,9 @@ func New(config config.Config) (*App, error) {
 			Repository:        ghConfig.Repository,
 			ServerAddr:        config.MetricsAddr,
 			ServerEndpoint:    config.MetricsEndpoint,
+			Metrics:           config.Metrics,
 			Logger:            app.logger.WithName("metrics exporter"),
-		}
-
-		if config.Metrics != nil {
-			exporterConfig.Metrics = *config.Metrics
-		}
-
-		app.metrics = metrics.NewExporter(exporterConfig)
+		})
 	}
 
 	worker, err := worker.New(
