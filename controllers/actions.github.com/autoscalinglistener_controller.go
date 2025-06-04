@@ -271,7 +271,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 					return ctrl.Result{}, fmt.Errorf("failed to delete listener config secret: %w", err)
 				}
 			case !kerrors.IsNotFound(err):
-			     return ctrl.Result{}, fmt.Errorf("failed to get the listener config secret: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to get the listener config secret: %w", err)
 			}
 		}
 		return ctrl.Result{}, nil
