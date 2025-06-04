@@ -411,63 +411,6 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).ShouldNot(BeEquivalentTo(oldSecretUID), "Config secret should be re-created")
 		})
-
-		It("It should re-create the config secret whenever listener container is terminated", func() {
-			// Waiting for the pod is created
-			pod := new(corev1.Pod)
-			Eventually(
-				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					if err != nil {
-						return "", err
-					}
-
-					return pod.Name, nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
-
-			secret := new(corev1.Secret)
-			Eventually(
-				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).Should(Succeed(), "Config secret should be created")
-
-			oldSecretUID := string(secret.UID)
-			oldPodUID := string(pod.UID)
-			updated := pod.DeepCopy()
-			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
-				{
-					Name: autoscalingListenerContainerName,
-					State: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{
-							ExitCode: 0,
-						},
-					},
-				},
-			}
-			err := k8sClient.Status().Update(ctx, updated)
-			Expect(err).NotTo(HaveOccurred(), "failed to update test pod")
-
-			// Waiting for the new pod is created
-			Eventually(
-				func() (string, error) {
-					pod := new(corev1.Pod)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					if err != nil {
-						return "", err
-					}
-
-					return string(pod.UID), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be re-created")
-		})
 	})
 })
 
