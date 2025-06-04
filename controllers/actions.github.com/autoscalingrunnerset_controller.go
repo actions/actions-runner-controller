@@ -399,7 +399,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		autoscalingRunnerSet.Spec.RunnerScaleSetName = autoscalingRunnerSet.Name
 	}
 	if err != nil {
-		logger.Error(err, "Failed to initialize Actions service client for creating a new runner scale set")
+		logger.Error(err, "Failed to initialize Actions service client for creating a new runner scale set", "error", err.Error())
 		return ctrl.Result{}, err
 	}
 

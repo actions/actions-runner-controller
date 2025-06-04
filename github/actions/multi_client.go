@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
@@ -52,7 +53,7 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 	m.logger.Info("retrieve actions client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
 	if err := appConfig.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to validate app config: %w", err)
 	}
 
 	var creds ActionsAuth
@@ -74,7 +75,7 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 		}, options...)...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to instantiate new client: %w", err)
 	}
 
 	m.mu.Lock()

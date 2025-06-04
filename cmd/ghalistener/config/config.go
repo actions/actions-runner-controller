@@ -109,15 +109,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
 	}
 
-	hasToken := len(c.Token) > 0
-	hasPrivateKeyConfig := len(c.AppID) > 0 && c.AppPrivateKey != ""
-
-	if !hasToken && !hasPrivateKeyConfig {
-		return fmt.Errorf(`GitHub auth credential is missing, token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
-	}
-
-	if hasToken && hasPrivateKeyConfig {
-		return fmt.Errorf(`only one GitHub auth method supported at a time. Have both PAT and App auth: token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
+	if err := c.AppConfig.Validate(); err != nil {
+		return fmt.Errorf("AppConfig validation failed: %w", err)
 	}
 
 	return nil
