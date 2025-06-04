@@ -109,22 +109,22 @@ func TestNewExporter(t *testing.T) {
 		reg := prometheus.NewRegistry()
 		wantMetrics := installMetrics(defaultMetrics, reg, config.Logger)
 
-		assert.Equal(t, len(wantMetrics.counters), len(exporter.metrics.counters))
+		assert.Equal(t, len(wantMetrics.counters), len(exporter.counters))
 		for k, v := range wantMetrics.counters {
-			assert.Contains(t, exporter.metrics.counters, k)
-			assert.Equal(t, v.config, exporter.metrics.counters[k].config)
+			assert.Contains(t, exporter.counters, k)
+			assert.Equal(t, v.config, exporter.counters[k].config)
 		}
 
-		assert.Equal(t, len(wantMetrics.gauges), len(exporter.metrics.gauges))
+		assert.Equal(t, len(wantMetrics.gauges), len(exporter.gauges))
 		for k, v := range wantMetrics.gauges {
-			assert.Contains(t, exporter.metrics.gauges, k)
-			assert.Equal(t, v.config, exporter.metrics.gauges[k].config)
+			assert.Contains(t, exporter.gauges, k)
+			assert.Equal(t, v.config, exporter.gauges[k].config)
 		}
 
-		assert.Equal(t, len(wantMetrics.histograms), len(exporter.metrics.histograms))
+		assert.Equal(t, len(wantMetrics.histograms), len(exporter.histograms))
 		for k, v := range wantMetrics.histograms {
-			assert.Contains(t, exporter.metrics.histograms, k)
-			assert.Equal(t, v.config, exporter.metrics.histograms[k].config)
+			assert.Contains(t, exporter.histograms, k)
+			assert.Equal(t, v.config, exporter.histograms[k].config)
 		}
 
 		require.NotNil(t, exporter.srv)
@@ -151,22 +151,22 @@ func TestNewExporter(t *testing.T) {
 		reg := prometheus.NewRegistry()
 		wantMetrics := installMetrics(defaultMetrics, reg, config.Logger)
 
-		assert.Equal(t, len(wantMetrics.counters), len(exporter.metrics.counters))
+		assert.Equal(t, len(wantMetrics.counters), len(exporter.counters))
 		for k, v := range wantMetrics.counters {
-			assert.Contains(t, exporter.metrics.counters, k)
-			assert.Equal(t, v.config, exporter.metrics.counters[k].config)
+			assert.Contains(t, exporter.counters, k)
+			assert.Equal(t, v.config, exporter.counters[k].config)
 		}
 
-		assert.Equal(t, len(wantMetrics.gauges), len(exporter.metrics.gauges))
+		assert.Equal(t, len(wantMetrics.gauges), len(exporter.gauges))
 		for k, v := range wantMetrics.gauges {
-			assert.Contains(t, exporter.metrics.gauges, k)
-			assert.Equal(t, v.config, exporter.metrics.gauges[k].config)
+			assert.Contains(t, exporter.gauges, k)
+			assert.Equal(t, v.config, exporter.gauges[k].config)
 		}
 
-		assert.Equal(t, len(wantMetrics.histograms), len(exporter.metrics.histograms))
+		assert.Equal(t, len(wantMetrics.histograms), len(exporter.histograms))
 		for k, v := range wantMetrics.histograms {
-			assert.Contains(t, exporter.metrics.histograms, k)
-			assert.Equal(t, v.config, exporter.metrics.histograms[k].config)
+			assert.Contains(t, exporter.histograms, k)
+			assert.Equal(t, v.config, exporter.histograms[k].config)
 		}
 
 		require.NotNil(t, exporter.srv)
@@ -212,22 +212,22 @@ func TestNewExporter(t *testing.T) {
 		reg := prometheus.NewRegistry()
 		wantMetrics := installMetrics(metricsConfig, reg, config.Logger)
 
-		assert.Equal(t, len(wantMetrics.counters), len(exporter.metrics.counters))
+		assert.Equal(t, len(wantMetrics.counters), len(exporter.counters))
 		for k, v := range wantMetrics.counters {
-			assert.Contains(t, exporter.metrics.counters, k)
-			assert.Equal(t, v.config, exporter.metrics.counters[k].config)
+			assert.Contains(t, exporter.counters, k)
+			assert.Equal(t, v.config, exporter.counters[k].config)
 		}
 
-		assert.Equal(t, len(wantMetrics.gauges), len(exporter.metrics.gauges))
+		assert.Equal(t, len(wantMetrics.gauges), len(exporter.gauges))
 		for k, v := range wantMetrics.gauges {
-			assert.Contains(t, exporter.metrics.gauges, k)
-			assert.Equal(t, v.config, exporter.metrics.gauges[k].config)
+			assert.Contains(t, exporter.gauges, k)
+			assert.Equal(t, v.config, exporter.gauges[k].config)
 		}
 
-		assert.Equal(t, len(wantMetrics.histograms), len(exporter.metrics.histograms))
+		assert.Equal(t, len(wantMetrics.histograms), len(exporter.histograms))
 		for k, v := range wantMetrics.histograms {
-			assert.Contains(t, exporter.metrics.histograms, k)
-			assert.Equal(t, v.config, exporter.metrics.histograms[k].config)
+			assert.Contains(t, exporter.histograms, k)
+			assert.Equal(t, v.config, exporter.histograms[k].config)
 		}
 
 		require.NotNil(t, exporter.srv)
