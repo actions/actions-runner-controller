@@ -127,7 +127,7 @@ func NewServer(opts ...Option) *httptest.Server {
 		},
 
 		// For ListRunners
-		"/repos/test/valid/actions/runners": config.FixedResponses.ListRunners,
+		"/repos/test/valid/actions/runners": config.ListRunners,
 		"/repos/test/invalid/actions/runners": &Handler{
 			Status: http.StatusNoContent,
 			Body:   "",
@@ -204,10 +204,10 @@ func NewServer(opts ...Option) *httptest.Server {
 		},
 
 		// For auto-scaling based on the number of queued(pending) workflow runs
-		"/repos/test/valid/actions/runs": config.FixedResponses.ListRepositoryWorkflowRuns,
+		"/repos/test/valid/actions/runs": config.ListRepositoryWorkflowRuns,
 
 		// For auto-scaling based on the number of queued(pending) workflow jobs
-		"/repos/test/valid/actions/runs/": config.FixedResponses.ListWorkflowJobs,
+		"/repos/test/valid/actions/runs/": config.ListWorkflowJobs,
 	}
 
 	mux := http.NewServeMux()

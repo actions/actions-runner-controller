@@ -28,6 +28,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -50,6 +51,19 @@ type EphemeralRunnerReconciler struct {
 	ResourceBuilder
 }
 
+// precompute backoff durations for failed ephemeral runners
+// the len(failedRunnerBackoff) must be equal to maxFailures + 1
+var failedRunnerBackoff = []time.Duration{
+	0,
+	5 * time.Second,
+	10 * time.Second,
+	20 * time.Second,
+	40 * time.Second,
+	80 * time.Second,
+}
+
+const maxFailures = 5
+
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -70,7 +84,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !ephemeralRunner.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !ephemeralRunner.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -173,6 +187,29 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
+	if len(ephemeralRunner.Status.Failures) > maxFailures {
+		log.Info(fmt.Sprintf("EphemeralRunner has failed more than %d times. Deleting ephemeral runner so it can be re-created", maxFailures))
+		if err := r.Delete(ctx, ephemeralRunner); err != nil {
+			log.Error(fmt.Errorf("failed to delete ephemeral runner after %d failures: %w", maxFailures, err), "Failed to delete ephemeral runner")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	now := metav1.Now()
+	lastFailure := ephemeralRunner.Status.LastFailure()
+	backoffDuration := failedRunnerBackoff[len(ephemeralRunner.Status.Failures)]
+	nextReconciliation := lastFailure.Add(backoffDuration)
+	if !lastFailure.IsZero() && now.Before(&metav1.Time{Time: nextReconciliation}) {
+		log.Info("Backing off the next reconciliation due to failure",
+			"lastFailure", lastFailure,
+			"nextReconciliation", nextReconciliation,
+			"requeueAfter", nextReconciliation.Sub(now.Time),
+		)
+		return ctrl.Result{RequeueAfter: now.Sub(nextReconciliation)}, nil
+	}
+
 	secret := new(corev1.Secret)
 	if err := r.Get(ctx, req.NamespacedName, secret); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -196,39 +233,28 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	pod := new(corev1.Pod)
 	if err := r.Get(ctx, req.NamespacedName, pod); err != nil {
-		switch {
-		case !kerrors.IsNotFound(err):
+		if !kerrors.IsNotFound(err) {
 			log.Error(err, "Failed to fetch the pod")
 			return ctrl.Result{}, err
+		}
 
-		case len(ephemeralRunner.Status.Failures) > 5:
-			log.Info("EphemeralRunner has failed more than 5 times. Marking it as failed")
-			errMessage := fmt.Sprintf("Pod has failed to start more than 5 times: %s", pod.Status.Message)
-			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonTooManyPodFailures, log); err != nil {
+		// Pod was not found. Create if the pod has never been created
+		log.Info("Creating new EphemeralRunner pod.")
+		result, err := r.createPod(ctx, ephemeralRunner, secret, log)
+		switch {
+		case err == nil:
+			return result, nil
+		case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
+			log.Error(err, "Failed to create a pod due to unrecoverable failure")
+			errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
+			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
 				log.Error(err, "Failed to set ephemeral runner to phase Failed")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
-
 		default:
-			// Pod was not found. Create if the pod has never been created
-			log.Info("Creating new EphemeralRunner pod.")
-			result, err := r.createPod(ctx, ephemeralRunner, secret, log)
-			switch {
-			case err == nil:
-				return result, nil
-			case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
-				log.Error(err, "Failed to create a pod due to unrecoverable failure")
-				errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
-				if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
-					log.Error(err, "Failed to set ephemeral runner to phase Failed")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, nil
-			default:
-				log.Error(err, "Failed to create the pod")
-				return ctrl.Result{}, err
-			}
+			log.Error(err, "Failed to create the pod")
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -319,7 +345,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
 	switch {
 	case err == nil:
-		if pod.ObjectMeta.DeletionTimestamp.IsZero() {
+		if pod.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the runner pod")
 			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete pod: %w", err)
@@ -339,7 +365,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret)
 	switch {
 	case err == nil:
-		if secret.ObjectMeta.DeletionTimestamp.IsZero() {
+		if secret.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the jitconfig secret")
 			if err := r.Delete(ctx, secret); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete secret: %w", err)
@@ -393,7 +419,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 	var errs []error
 	for i := range runnerLinkedPodList.Items {
 		linkedPod := &runnerLinkedPodList.Items[i]
-		if !linkedPod.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !linkedPod.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -409,7 +435,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	runnerLinkedLabels := client.MatchingLabels(
 		map[string]string{
-			"runner-pod": ephemeralRunner.ObjectMeta.Name,
+			"runner-pod": ephemeralRunner.Name,
 		},
 	)
 	var runnerLinkedSecretList corev1.SecretList
@@ -427,7 +453,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	var errs []error
 	for i := range runnerLinkedSecretList.Items {
 		s := &runnerLinkedSecretList.Items[i]
-		if !s.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !s.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -474,7 +500,7 @@ func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemera
 // deletePodAsFailed is responsible for deleting the pod and updating the .Status.Failures for tracking failure count.
 // It should not be responsible for setting the status to Failed.
 func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
-	if pod.ObjectMeta.DeletionTimestamp.IsZero() {
+	if pod.DeletionTimestamp.IsZero() {
 		log.Info("Deleting the ephemeral runner pod", "podId", pod.UID)
 		if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete pod with status failed: %w", err)
@@ -484,9 +510,9 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	log.Info("Updating ephemeral runner status to track the failure count")
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		if obj.Status.Failures == nil {
-			obj.Status.Failures = make(map[string]bool)
+			obj.Status.Failures = make(map[string]metav1.Time)
 		}
-		obj.Status.Failures[string(pod.UID)] = true
+		obj.Status.Failures[string(pod.UID)] = metav1.Now()
 		obj.Status.Ready = false
 		obj.Status.Reason = pod.Status.Reason
 		obj.Status.Message = pod.Status.Message
@@ -640,7 +666,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.ResourceBuilder.newEphemeralRunnerPod(ctx, runner, secret, envs...)
+	newPod := r.newEphemeralRunnerPod(ctx, runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
@@ -665,7 +691,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	log.Info("Creating new secret for ephemeral runner")
-	jitSecret := r.ResourceBuilder.newEphemeralRunnerJitSecret(runner)
+	jitSecret := r.newEphemeralRunnerJitSecret(runner)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
 		return &ctrl.Result{}, fmt.Errorf("failed to set controller reference: %w", err)

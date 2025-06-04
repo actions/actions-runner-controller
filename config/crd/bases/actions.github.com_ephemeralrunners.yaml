@@ -7794,7 +7794,8 @@ spec:
               properties:
                 failures:
                   additionalProperties:
-                    type: boolean
+                    format: date-time
+                    type: string
                   type: object
                 jobDisplayName:
                   type: string
