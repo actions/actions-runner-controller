@@ -265,13 +265,13 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			var configSecret corev1.Secret
 			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &configSecret)
 			switch {
-			case err == nil:
-				if configSecret.ObjectMeta.DeletionTimestamp.IsZero() {
-					log.Info("Deleting the listener config secret")
-					if err := r.Delete(ctx, &configSecret); err != nil {
-						return ctrl.Result{}, fmt.Errorf("failed to delete listener config secret: %w", err)
-					}
+			case err == nil && configSecret.ObjectMeta.DeletionTimestamp.IsZero():
+				log.Info("Deleting the listener config secret")
+				if err := r.Delete(ctx, &configSecret); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to delete listener config secret: %w", err)
 				}
+			case !kerrors.IsNotFound(err):
+			     return ctrl.Result{}, fmt.Errorf("failed to get the listener config secret: %w", err)
 			}
 		}
 		return ctrl.Result{}, nil
