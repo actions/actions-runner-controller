@@ -155,134 +155,137 @@ type ExporterConfig struct {
 	Metrics           *v1alpha1.MetricsConfig
 }
 
+var defaultMetrics = v1alpha1.MetricsConfig{
+	Counters: map[string]*v1alpha1.CounterMetric{
+		MetricStartedJobsTotal: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+			},
+		},
+		MetricCompletedJobsTotal: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+				labelKeyJobResult,
+			},
+		},
+	},
+	Gauges: map[string]*v1alpha1.GaugeMetric{
+		MetricAssignedJobs: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricRunningJobs: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricRegisteredRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricBusyRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricMinRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricMaxRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricDesiredRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricIdleRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+	},
+	Histograms: map[string]*v1alpha1.HistogramMetric{
+		MetricJobStartupDurationSeconds: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+			},
+			Buckets: defaultRuntimeBuckets,
+		},
+		MetricJobExecutionDurationSeconds: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+				labelKeyJobResult,
+			},
+			Buckets: defaultRuntimeBuckets,
+		},
+	},
+}
+
 func (e *ExporterConfig) defaults() {
 	if e.ServerAddr == "" {
-		e.Metrics = nil
-		return
+		e.ServerAddr = ":8080"
 	}
-	if e.Metrics != nil {
-		return
+	if e.ServerEndpoint == "" {
+		e.ServerEndpoint = "/metrics"
 	}
-
-	e.Metrics = &v1alpha1.MetricsConfig{
-		Counters: map[string]*v1alpha1.CounterMetric{
-			MetricStartedJobsTotal: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyJobName,
-					labelKeyEventName,
-				},
-			},
-			MetricCompletedJobsTotal: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyJobName,
-					labelKeyEventName,
-					labelKeyJobResult,
-				},
-			},
-		},
-		Gauges: map[string]*v1alpha1.GaugeMetric{
-			MetricAssignedJobs: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricRunningJobs: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricRegisteredRunners: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricBusyRunners: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricMinRunners: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricMaxRunners: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricDesiredRunners: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-			MetricIdleRunners: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyRunnerScaleSetName,
-					labelKeyRunnerScaleSetNamespace,
-				},
-			},
-		},
-		Histograms: map[string]*v1alpha1.HistogramMetric{
-			MetricJobStartupDurationSeconds: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyJobName,
-					labelKeyEventName,
-				},
-				Buckets: defaultRuntimeBuckets,
-			},
-			MetricJobExecutionDurationSeconds: {
-				Labels: []string{
-					labelKeyEnterprise,
-					labelKeyOrganization,
-					labelKeyRepository,
-					labelKeyJobName,
-					labelKeyEventName,
-					labelKeyJobResult,
-				},
-				Buckets: defaultRuntimeBuckets,
-			},
-		},
+	if e.Metrics == nil {
+		defaultMetrics := defaultMetrics
+		e.Metrics = &defaultMetrics
 	}
 }
 
