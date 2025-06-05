@@ -495,25 +495,6 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 	return newRoleBinding
 }
 
-func (b *ResourceBuilder) newScaleSetListenerSecretMirror(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret) *corev1.Secret {
-	dataHash := hash.ComputeTemplateHash(&secret.Data)
-
-	newListenerSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      autoscalingListener.Name,
-			Namespace: autoscalingListener.Namespace,
-			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
-				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
-				"secret-data-hash":              dataHash,
-			}),
-		},
-		Data: secret.DeepCopy().Data,
-	}
-
-	return newListenerSecret
-}
-
 func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*v1alpha1.EphemeralRunnerSet, error) {
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {

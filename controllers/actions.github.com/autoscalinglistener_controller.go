@@ -529,23 +529,6 @@ func (r *AutoscalingListenerReconciler) certificate(ctx context.Context, autosca
 	return certificate, nil
 }
 
-func (r *AutoscalingListenerReconciler) createSecretsForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {
-	newListenerSecret := r.newScaleSetListenerSecretMirror(autoscalingListener, secret)
-
-	if err := ctrl.SetControllerReference(autoscalingListener, newListenerSecret, r.Scheme); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("Creating listener secret", "namespace", newListenerSecret.Namespace, "name", newListenerSecret.Name)
-	if err := r.Create(ctx, newListenerSecret); err != nil {
-		logger.Error(err, "Unable to create listener secret", "namespace", newListenerSecret.Namespace, "name", newListenerSecret.Name)
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("Created listener secret", "namespace", newListenerSecret.Namespace, "name", newListenerSecret.Name)
-	return ctrl.Result{Requeue: true}, nil
-}
-
 func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
 	data, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
 		var secret corev1.Secret
@@ -582,22 +565,6 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 
 	logger.Info("Created listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
 
-	return ctrl.Result{Requeue: true}, nil
-}
-
-func (r *AutoscalingListenerReconciler) updateSecretsForListener(ctx context.Context, secret *corev1.Secret, mirrorSecret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {
-	dataHash := hash.ComputeTemplateHash(secret.Data)
-	updatedMirrorSecret := mirrorSecret.DeepCopy()
-	updatedMirrorSecret.Labels["secret-data-hash"] = dataHash
-	updatedMirrorSecret.Data = secret.Data
-
-	logger.Info("Updating listener mirror secret", "namespace", updatedMirrorSecret.Namespace, "name", updatedMirrorSecret.Name, "hash", dataHash)
-	if err := r.Update(ctx, updatedMirrorSecret); err != nil {
-		logger.Error(err, "Unable to update listener mirror secret", "namespace", updatedMirrorSecret.Namespace, "name", updatedMirrorSecret.Name)
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("Updated listener mirror secret", "namespace", updatedMirrorSecret.Namespace, "name", updatedMirrorSecret.Name, "hash", dataHash)
 	return ctrl.Result{Requeue: true}, nil
 }
 

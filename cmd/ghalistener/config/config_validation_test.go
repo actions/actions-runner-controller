@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
@@ -89,7 +88,7 @@ func TestConfigValidationOnlyOneTypeOfCredentials(t *testing.T) {
 		RunnerScaleSetId:            1,
 	}
 	err := config.Validate()
-	expectedError := fmt.Sprintf(`AppConfig validation failed: both PAT and GitHub App credentials provided. should only provide one`)
+	expectedError := "AppConfig validation failed: both PAT and GitHub App credentials provided. should only provide one"
 	assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 }
 
