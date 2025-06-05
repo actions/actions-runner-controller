@@ -33,7 +33,7 @@ func TestConfigValidationMissingToken(t *testing.T) {
 		RunnerScaleSetId:            1,
 	}
 	err := config.Validate()
-	expectedError := fmt.Sprintf("AppConfig validation failed: missing app config")
+	expectedError := "AppConfig validation failed: missing app config"
 	assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 }
 
