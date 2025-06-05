@@ -53,7 +53,7 @@ func TestConfigValidationAppKey(t *testing.T) {
 			RunnerScaleSetId:            1,
 		}
 		err := config.Validate()
-		expectedError := fmt.Sprintf(`GitHub auth credential is missing, token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(config.Token), config.AppID, config.AppInstallationID, len(config.AppPrivateKey))
+		expectedError := "AppConfig validation failed: no credentials provided: either a PAT or GitHub App credentials should be provided"
 		assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 	})
 
@@ -70,7 +70,7 @@ func TestConfigValidationAppKey(t *testing.T) {
 			RunnerScaleSetId:            1,
 		}
 		err := config.Validate()
-		expectedError := fmt.Sprintf(`GitHub auth credential is missing, token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(config.Token), config.AppID, config.AppInstallationID, len(config.AppPrivateKey))
+		expectedError := "AppConfig validation failed: no credentials provided: either a PAT or GitHub App credentials should be provide"
 		assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 	})
 }
@@ -89,7 +89,7 @@ func TestConfigValidationOnlyOneTypeOfCredentials(t *testing.T) {
 		RunnerScaleSetId:            1,
 	}
 	err := config.Validate()
-	expectedError := fmt.Sprintf(`only one GitHub auth method supported at a time. Have both PAT and App auth: token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(config.Token), config.AppID, config.AppInstallationID, len(config.AppPrivateKey))
+	expectedError := fmt.Sprintf(`AppConfig validation failed: both PAT and GitHub App credentials provided. should only provide one`)
 	assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 }
 
@@ -166,6 +166,6 @@ func TestConfigValidationWithVaultConfig(t *testing.T) {
 			VaultLookupKey:              "",
 		}
 		err := config.Validate()
-		assert.ErrorContains(t, err, `vault type set to "invalid_vault_type", but lookup key is empty`, "Expected error for vault type without lookup key")
+		assert.ErrorContains(t, err, `VaultLookupKey is required when VaultType is set to "azure_key_vault"`, "Expected error for vault type without lookup key")
 	})
 }

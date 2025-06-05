@@ -112,8 +112,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
 	}
 
-	if c.VaultType != "" && c.VaultLookupKey == "" {
-		return fmt.Errorf("VaultLookupKey is required when VaultType is set to %q", c.VaultType)
+	if c.VaultType != "" {
+		if err := c.VaultType.Validate(); err != nil {
+			return fmt.Errorf("VaultType validation failed: %w", err)
+		}
+		if c.VaultLookupKey == "" {
+			return fmt.Errorf("VaultLookupKey is required when VaultType is set to %q", c.VaultType)
+		}
 	}
 
 	if c.VaultType == "" && c.VaultLookupKey == "" {
