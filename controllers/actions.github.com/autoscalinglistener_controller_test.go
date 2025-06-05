@@ -339,7 +339,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
 		})
 
-		It("It should re-create pod whenever listener container is terminated", func() {
+		It("It should re-create pod and config secret whenever listener container is terminated", func() {
 			// Waiting for the pod is created
 			pod := new(corev1.Pod)
 			Eventually(
@@ -355,7 +355,18 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
+			secret := new(corev1.Secret)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Config secret should be created")
+
 			oldPodUID := string(pod.UID)
+			oldSecretUID := string(secret.UID)
+
 			updated := pod.DeepCopy()
 			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
 				{
@@ -384,6 +395,21 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be re-created")
+
+			// Check if config secret is re-created
+			Eventually(
+				func() (string, error) {
+					secret := new(corev1.Secret)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
+					if err != nil {
+						return "", err
+					}
+
+					return string(secret.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldSecretUID), "Config secret should be re-created")
 		})
 	})
 })
