@@ -528,7 +528,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
-	actionsClient, err := r.SecretResolver.GetActionsService(ctx, ephemeralRunner)
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
 	if err != nil {
 		return &ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %w", err)
 	}
@@ -755,7 +755,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 // runnerRegisteredWithService checks if the runner is still registered with the service
 // Returns found=false and err=nil if ephemeral runner does not exist in GitHub service and should be deleted
 func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (found bool, err error) {
-	actionsClient, err := r.SecretResolver.GetActionsService(ctx, runner)
+	actionsClient, err := r.GetActionsService(ctx, runner)
 	if err != nil {
 		return false, fmt.Errorf("failed to get Actions client for ScaleSet: %w", err)
 	}
@@ -782,7 +782,7 @@ func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Conte
 }
 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	client, err := r.SecretResolver.GetActionsService(ctx, ephemeralRunner)
+	client, err := r.GetActionsService(ctx, ephemeralRunner)
 	if err != nil {
 		return fmt.Errorf("failed to get actions client for runner: %w", err)
 	}
