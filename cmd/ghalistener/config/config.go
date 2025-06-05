@@ -116,7 +116,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("VaultLookupKey is required when VaultType is set to %q", c.VaultType)
 	}
 
-	if c.VaultType != "" && c.VaultLookupKey == "" {
+	if c.VaultType == "" && c.VaultLookupKey == "" {
 		if err := c.AppConfig.Validate(); err != nil {
 			return fmt.Errorf("AppConfig validation failed: %w", err)
 		}

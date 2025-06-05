@@ -33,7 +33,7 @@ func TestConfigValidationMissingToken(t *testing.T) {
 		RunnerScaleSetId:            1,
 	}
 	err := config.Validate()
-	expectedError := fmt.Sprintf(`GitHub auth credential is missing, token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(config.Token), config.AppID, config.AppInstallationID, len(config.AppPrivateKey))
+	expectedError := fmt.Sprintf("AppConfig validation failed: missing app config")
 	assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 }
 

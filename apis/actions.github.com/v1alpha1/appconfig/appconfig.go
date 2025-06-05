@@ -32,6 +32,9 @@ func (c *AppConfig) tidy() *AppConfig {
 }
 
 func (c *AppConfig) Validate() error {
+	if c == nil {
+		return fmt.Errorf("missing app config")
+	}
 	hasToken := len(c.Token) > 0
 	hasGitHubAppAuth := c.hasGitHubAppAuth()
 	if hasToken && hasGitHubAppAuth {

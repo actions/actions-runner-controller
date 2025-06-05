@@ -15,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+	"github.com/actions/actions-runner-controller/github/actions/fake"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,10 +44,17 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -426,10 +434,17 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -699,11 +714,17 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		ctx = context.Background()
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
 
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -896,10 +917,17 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -992,6 +1020,12 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		cert, err := os.ReadFile(filepath.Join(
 			"../../",
 			"github",
@@ -1013,9 +1047,10 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")

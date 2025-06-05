@@ -37,17 +37,17 @@ func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient,
 		panic("k8sClient must not be nil")
 	}
 
-	pool := &SecretResolver{
+	secretResolver := &SecretResolver{
 		k8sClient:      k8sClient,
 		multiClient:    multiClient,
 		vaultResolvers: make(map[vault.VaultType]resolver),
 	}
 
 	for _, opt := range opts {
-		opt(pool)
+		opt(secretResolver)
 	}
 
-	return pool
+	return secretResolver
 }
 
 type ActionsGitHubObject interface {
@@ -162,12 +162,12 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 	)
 }
 
-func (p *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, error) {
+func (sr *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, error) {
 	ty, ok := obj.GetAnnotations()[AnnotationKeyGitHubVaultType]
 	if !ok {
 		return &k8sResolver{
 			namespace: obj.GetNamespace(),
-			client:    p.k8sClient,
+			client:    sr.k8sClient,
 		}, nil
 	}
 
@@ -176,7 +176,7 @@ func (p *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, e
 		return nil, fmt.Errorf("invalid vault type %q: %v", ty, err)
 	}
 
-	vault, ok := p.vaultResolvers[vaultType]
+	vault, ok := sr.vaultResolvers[vaultType]
 	if !ok {
 		return nil, fmt.Errorf("unknown vault resolver %q", ty)
 	}
