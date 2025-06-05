@@ -245,7 +245,7 @@ type result struct {
 // can't have .Revision.
 // Now, imagine that you are to add 2 runner replicas on scale up.
 // We create one resource object per a replica that ends up calling 2 client.Create calls.
-// If we were reusing client.Object to be passed to client.Create calls, only the first call suceeeds.
+// If we were reusing client.Object to be passed to client.Create calls, only the first call suceeds.
 // The second call fails due to the first call mutated the client.Object to have .Revision.
 // Passing a factory function of client.Object and creating a brand-new client.Object per a client.Create call resolves this issue,
 // allowing us to create two or more replicas in one reconcilation loop without being rejected by K8s.
