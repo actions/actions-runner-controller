@@ -20,10 +20,13 @@ import (
 )
 
 type Config struct {
-	ConfigureUrl   string `json:"configure_url"`
-	VaultType      string `json:"vault_type"`
-	VaultLookupKey string `json:"vault_lookup_key"`
-	appconfig.AppConfig
+	ConfigureUrl   string          `json:"configure_url"`
+	VaultType      vault.VaultType `json:"vault_type"`
+	VaultLookupKey string          `json:"vault_lookup_key"`
+	// AppConfig contains the GitHub App configuration.
+	// It is initially set to nil if VaultType is set.
+	// Otherwise, it is populated with the GitHub App credentials from the GitHub secret.
+	*appconfig.AppConfig
 	EphemeralRunnerSetNamespace string                  `json:"ephemeral_runner_set_namespace"`
 	EphemeralRunnerSetName      string                  `json:"ephemeral_runner_set_name"`
 	MaxRunners                  int                     `json:"max_runners"`
@@ -82,7 +85,7 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read app config from string: %v", err)
 	}
 
-	config.AppConfig = *appConfig
+	config.AppConfig = appConfig
 
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
@@ -109,8 +112,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
 	}
 
-	if err := c.AppConfig.Validate(); err != nil {
-		return fmt.Errorf("AppConfig validation failed: %w", err)
+	if c.VaultType != "" && c.VaultLookupKey == "" {
+		return fmt.Errorf("VaultLookupKey is required when VaultType is set to %q", c.VaultType)
+	}
+
+	if c.VaultType != "" && c.VaultLookupKey == "" {
+		if err := c.AppConfig.Validate(); err != nil {
+			return fmt.Errorf("AppConfig validation failed: %w", err)
+		}
 	}
 
 	return nil

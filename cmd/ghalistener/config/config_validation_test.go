@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
+	"github.com/actions/actions-runner-controller/vault"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +17,7 @@ func TestConfigValidationMinMax(t *testing.T) {
 		RunnerScaleSetId:            1,
 		MinRunners:                  5,
 		MaxRunners:                  2,
-		AppConfig: appconfig.AppConfig{
+		AppConfig: &appconfig.AppConfig{
 			Token: "token",
 		},
 	}
@@ -42,7 +43,7 @@ func TestConfigValidationAppKey(t *testing.T) {
 	t.Run("app id integer", func(t *testing.T) {
 		t.Parallel()
 		config := &Config{
-			AppConfig: appconfig.AppConfig{
+			AppConfig: &appconfig.AppConfig{
 				AppID:             "1",
 				AppInstallationID: 10,
 			},
@@ -59,7 +60,7 @@ func TestConfigValidationAppKey(t *testing.T) {
 	t.Run("app id as client id", func(t *testing.T) {
 		t.Parallel()
 		config := &Config{
-			AppConfig: appconfig.AppConfig{
+			AppConfig: &appconfig.AppConfig{
 				AppID:             "Iv23f8doAlphaNumer1c",
 				AppInstallationID: 10,
 			},
@@ -76,7 +77,7 @@ func TestConfigValidationAppKey(t *testing.T) {
 
 func TestConfigValidationOnlyOneTypeOfCredentials(t *testing.T) {
 	config := &Config{
-		AppConfig: appconfig.AppConfig{
+		AppConfig: &appconfig.AppConfig{
 			AppID:             "1",
 			AppInstallationID: 10,
 			AppPrivateKey:     "asdf",
@@ -100,7 +101,7 @@ func TestConfigValidation(t *testing.T) {
 		RunnerScaleSetId:            1,
 		MinRunners:                  1,
 		MaxRunners:                  5,
-		AppConfig: appconfig.AppConfig{
+		AppConfig: &appconfig.AppConfig{
 			Token: "asdf",
 		},
 	}
@@ -120,4 +121,51 @@ func TestConfigValidationConfigUrl(t *testing.T) {
 	err := config.Validate()
 
 	assert.ErrorContains(t, err, "GitHubConfigUrl is not provided", "Expected error about missing ConfigureUrl")
+}
+
+func TestConfigValidationWithVaultConfig(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		config := &Config{
+			ConfigureUrl:                "https://github.com/actions",
+			EphemeralRunnerSetNamespace: "namespace",
+			EphemeralRunnerSetName:      "deployment",
+			RunnerScaleSetId:            1,
+			MinRunners:                  1,
+			MaxRunners:                  5,
+			VaultType:                   vault.VaultTypeAzureKeyVault,
+			VaultLookupKey:              "testkey",
+		}
+		err := config.Validate()
+		assert.NoError(t, err, "Expected no error for valid vault type")
+	})
+
+	t.Run("invalid vault type", func(t *testing.T) {
+		config := &Config{
+			ConfigureUrl:                "https://github.com/actions",
+			EphemeralRunnerSetNamespace: "namespace",
+			EphemeralRunnerSetName:      "deployment",
+			RunnerScaleSetId:            1,
+			MinRunners:                  1,
+			MaxRunners:                  5,
+			VaultType:                   vault.VaultType("invalid_vault_type"),
+			VaultLookupKey:              "testkey",
+		}
+		err := config.Validate()
+		assert.ErrorContains(t, err, `unknown vault type: "invalid_vault_type"`, "Expected error for invalid vault type")
+	})
+
+	t.Run("vault type set without lookup key", func(t *testing.T) {
+		config := &Config{
+			ConfigureUrl:                "https://github.com/actions",
+			EphemeralRunnerSetNamespace: "namespace",
+			EphemeralRunnerSetName:      "deployment",
+			RunnerScaleSetId:            1,
+			MinRunners:                  1,
+			MaxRunners:                  5,
+			VaultType:                   vault.VaultTypeAzureKeyVault,
+			VaultLookupKey:              "",
+		}
+		err := config.Validate()
+		assert.ErrorContains(t, err, `vault type set to "invalid_vault_type", but lookup key is empty`, "Expected error for vault type without lookup key")
+	})
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +74,7 @@ func SetListenerEntrypoint(entrypoint string) {
 
 type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
-	*ActionsClientPool
+	*SecretResolver
 }
 
 // boolPtr returns a pointer to a bool value
@@ -166,7 +167,7 @@ func (lm *listenerMetricsServerConfig) containerPort() (corev1.ContainerPort, er
 	}, nil
 }
 
-func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
+func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, appConfig *appconfig.AppConfig, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
 	var (
 		metricsAddr     = ""
 		metricsEndpoint = ""
@@ -193,13 +194,13 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	}
 
 	if ty, ok := autoscalingListener.Annotations[AnnotationKeyGitHubVaultType]; !ok {
-		appConfig, err := appconfig.FromSecret(secret)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse appconfig from secret: %v", err)
-		}
-		config.AppConfig = *appConfig
+		config.AppConfig = appConfig
 	} else {
-		config.VaultType = ty
+		vaultType := vault.VaultType(ty)
+		if err := vaultType.Validate(); err != nil {
+			return nil, fmt.Errorf("vault type validation error: %w", err)
+		}
+		config.VaultType = vaultType
 		config.VaultLookupKey = autoscalingListener.Spec.GitHubConfigSecret
 	}
 

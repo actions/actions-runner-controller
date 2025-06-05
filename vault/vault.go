@@ -14,10 +14,27 @@ type Vault interface {
 	GetSecret(ctx context.Context, name string) (string, error)
 }
 
+// VaultType represents the type of vault that can be used in the application.
+// It is used to identify which vault integration should be used to resolve secrets.
+type VaultType string
+
 // VaultType is the type of vault supported
 const (
-	VaultTypeAzureKeyVault = "azure_key_vault"
+	VaultTypeAzureKeyVault VaultType = "azure_key_vault"
 )
+
+func (t VaultType) String() string {
+	return string(t)
+}
+
+func (t VaultType) Validate() error {
+	switch t {
+	case VaultTypeAzureKeyVault:
+		return nil
+	default:
+		return fmt.Errorf("unknown vault type: %q", t)
+	}
+}
 
 // Compile-time checks
 var _ Vault = (*azurekeyvault.AzureKeyVault)(nil)
@@ -31,10 +48,10 @@ var _ Vault = (*azurekeyvault.AzureKeyVault)(nil)
 //
 // For example, listener has prefix "LISTENER_", has "AZURE_KEY_VAULT_" configured,
 // and should read the vault URL. The environment variable will be "LISTENER_AZURE_KEY_VAULT_URL".
-func InitAll(prefix string) (map[string]Vault, error) {
+func InitAll(prefix string) (map[VaultType]Vault, error) {
 	envs := os.Environ()
 
-	result := make(map[string]Vault)
+	result := make(map[VaultType]Vault)
 	for _, env := range envs {
 		if strings.HasPrefix(env, prefix+"AZURE_KEY_VAULT_") {
 			akv, err := azurekeyvault.FromEnv(prefix + "AZURE_KEY_VAULT_")

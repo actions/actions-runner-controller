@@ -18,29 +18,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type ActionsClientPool struct {
+type SecretResolver struct {
 	k8sClient      client.Client
-	vaultResolvers map[string]resolver
+	vaultResolvers map[vault.VaultType]resolver
 	multiClient    actions.MultiClient
 }
 
-type ActionsClientPoolOption func(*ActionsClientPool)
+type SecretResolverOption func(*SecretResolver)
 
-func WithVault(ty string, vault vault.Vault) ActionsClientPoolOption {
-	return func(pool *ActionsClientPool) {
+func WithVault(ty vault.VaultType, vault vault.Vault) SecretResolverOption {
+	return func(pool *SecretResolver) {
 		pool.vaultResolvers[ty] = &vaultResolver{vault}
 	}
 }
 
-func NewActionsClientPool(k8sClient client.Client, multiClient actions.MultiClient, opts ...ActionsClientPoolOption) *ActionsClientPool {
+func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient, opts ...SecretResolverOption) *SecretResolver {
 	if k8sClient == nil {
 		panic("k8sClient must not be nil")
 	}
 
-	pool := &ActionsClientPool{
+	pool := &SecretResolver{
 		k8sClient:      k8sClient,
 		multiClient:    multiClient,
-		vaultResolvers: make(map[string]resolver),
+		vaultResolvers: make(map[vault.VaultType]resolver),
 	}
 
 	for _, opt := range opts {
@@ -58,8 +58,22 @@ type ActionsGitHubObject interface {
 	GitHubServerTLS() *v1alpha1.GitHubServerTLSConfig
 }
 
-func (p *ActionsClientPool) Get(ctx context.Context, obj ActionsGitHubObject) (actions.ActionsService, error) {
-	resolver, err := p.resolverForObject(obj)
+func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj ActionsGitHubObject) (*appconfig.AppConfig, error) {
+	resolver, err := sr.resolverForObject(obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
+	}
+
+	appConfig, err := resolver.appConfig(ctx, obj.GitHubConfigSecret())
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve app config: %v", err)
+	}
+
+	return appConfig, nil
+}
+
+func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitHubObject) (actions.ActionsService, error) {
+	resolver, err := sr.resolverForObject(obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
 	}
@@ -118,7 +132,7 @@ func (p *ActionsClientPool) Get(ctx context.Context, obj ActionsGitHubObject) (a
 	if tlsConfig != nil {
 		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
 			var configmap corev1.ConfigMap
-			err := p.k8sClient.Get(
+			err := sr.k8sClient.Get(
 				ctx,
 				types.NamespacedName{
 					Namespace: obj.GetNamespace(),
@@ -139,7 +153,7 @@ func (p *ActionsClientPool) Get(ctx context.Context, obj ActionsGitHubObject) (a
 		clientOptions = append(clientOptions, actions.WithRootCAs(pool))
 	}
 
-	return p.multiClient.GetClientFor(
+	return sr.multiClient.GetClientFor(
 		ctx,
 		obj.GitHubConfigUrl(),
 		appConfig,
@@ -148,7 +162,7 @@ func (p *ActionsClientPool) Get(ctx context.Context, obj ActionsGitHubObject) (a
 	)
 }
 
-func (p *ActionsClientPool) resolverForObject(obj ActionsGitHubObject) (resolver, error) {
+func (p *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, error) {
 	ty, ok := obj.GetAnnotations()[AnnotationKeyGitHubVaultType]
 	if !ok {
 		return &k8sResolver{
@@ -157,7 +171,12 @@ func (p *ActionsClientPool) resolverForObject(obj ActionsGitHubObject) (resolver
 		}, nil
 	}
 
-	vault, ok := p.vaultResolvers[ty]
+	vaultType := vault.VaultType(ty)
+	if err := vaultType.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid vault type %q: %v", ty, err)
+	}
+
+	vault, ok := p.vaultResolvers[vaultType]
 	if !ok {
 		return nil, fmt.Errorf("unknown vault resolver %q", ty)
 	}

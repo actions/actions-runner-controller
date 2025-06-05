@@ -281,20 +281,20 @@ func main() {
 			os.Exit(1)
 		}
 
-		var poolOptions []actionsgithubcom.ActionsClientPoolOption
+		var secretResolverOptions []actionsgithubcom.SecretResolverOption
 		for name, vault := range vaults {
-			poolOptions = append(poolOptions, actionsgithubcom.WithVault(name, vault))
+			secretResolverOptions = append(secretResolverOptions, actionsgithubcom.WithVault(name, vault))
 		}
 
-		clientPool := actionsgithubcom.NewActionsClientPool(
+		secretResolver := actionsgithubcom.NewSecretResolver(
 			mgr.GetClient(),
 			actionsMultiClient,
-			poolOptions...,
+			secretResolverOptions...,
 		)
 
 		rb := actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
-			ActionsClientPool:               clientPool,
+			SecretResolver:                  secretResolver,
 		}
 
 		log.Info("Resource builder initializing")

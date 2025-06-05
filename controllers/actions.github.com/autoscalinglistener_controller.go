@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/github/actions"
 	hash "github.com/actions/actions-runner-controller/hash"
@@ -128,12 +129,16 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// Check if the GitHub config secret exists
-	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: autoscalingListener.Spec.GitHubConfigSecret}, secret); err != nil {
-		log.Error(err, "Failed to find GitHub config secret.",
-			"namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-			"name", autoscalingListener.Spec.GitHubConfigSecret)
+	appConfig, err := r.GetAppConfig(ctx, &autoscalingRunnerSet)
+	if err != nil {
+		log.Error(
+			err,
+			"Failed to get app config for AutoscalingRunnerSet.",
+			"namespace",
+			autoscalingRunnerSet.Namespace,
+			"name",
+			autoscalingRunnerSet.GitHubConfigSecret,
+		)
 		return ctrl.Result{}, err
 	}
 
@@ -218,7 +223,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		// Create a listener pod in the controller namespace
 		log.Info("Creating a listener pod")
-		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, secret, log)
+		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, appConfig, log)
 	}
 
 	cs := listenerContainerStatus(listenerPod)
@@ -377,7 +382,7 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, logger logr.Logger) (ctrl.Result, error) {
+func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, appConfig *appconfig.AppConfig, logger logr.Logger) (ctrl.Result, error) {
 	var envs []corev1.EnvVar
 	if autoscalingListener.Spec.Proxy != nil {
 		httpURL := corev1.EnvVar{
@@ -446,7 +451,7 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 
 		logger.Info("Creating listener config secret")
 
-		podConfig, err := r.newScaleSetListenerConfig(autoscalingListener, secret, metricsConfig, cert)
+		podConfig, err := r.newScaleSetListenerConfig(autoscalingListener, appConfig, metricsConfig, cert)
 		if err != nil {
 			logger.Error(err, "Failed to build listener config secret")
 			return ctrl.Result{}, err

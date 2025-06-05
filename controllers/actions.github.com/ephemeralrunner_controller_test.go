@@ -111,7 +111,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientPool: &ActionsClientPool{
+					SecretResolver: &SecretResolver{
 						k8sClient:   mgr.GetClient(),
 						multiClient: fake.NewMultiClient(),
 					},
@@ -795,7 +795,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientPool: &ActionsClientPool{
+					SecretResolver: &SecretResolver{
 						k8sClient: mgr.GetClient(),
 						multiClient: fake.NewMultiClient(
 							fake.WithDefaultClient(
@@ -875,7 +875,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientPool: &ActionsClientPool{
+					SecretResolver: &SecretResolver{
 						k8sClient:   mgr.GetClient(),
 						multiClient: fake.NewMultiClient(),
 					},
@@ -890,7 +890,7 @@ var _ = Describe("EphemeralRunner", func() {
 		It("uses an actions client with proxy transport", func() {
 			// Use an actual client
 			controller.ResourceBuilder = ResourceBuilder{
-				ActionsClientPool: &ActionsClientPool{
+				SecretResolver: &SecretResolver{
 					k8sClient:   mgr.GetClient(),
 					multiClient: actions.NewMultiClient(logr.Discard()),
 				},
@@ -1049,7 +1049,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					ActionsClientPool: &ActionsClientPool{
+					SecretResolver: &SecretResolver{
 						k8sClient:   mgr.GetClient(),
 						multiClient: fake.NewMultiClient(),
 					},
@@ -1085,7 +1085,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			// Use an actual client
 			controller.ResourceBuilder = ResourceBuilder{
-				ActionsClientPool: &ActionsClientPool{
+				SecretResolver: &SecretResolver{
 					k8sClient:   mgr.GetClient(),
 					multiClient: actions.NewMultiClient(logr.Discard()),
 				},

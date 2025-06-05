@@ -58,7 +58,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientPool: &ActionsClientPool{
+				SecretResolver: &SecretResolver{
 					k8sClient:   mgr.GetClient(),
 					multiClient: fake.NewMultiClient(),
 				},
@@ -1113,7 +1113,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientPool: &ActionsClientPool{
+				SecretResolver: &SecretResolver{
 					k8sClient:   mgr.GetClient(),
 					multiClient: actions.NewMultiClient(logr.Discard()),
 				},
@@ -1417,7 +1417,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				ActionsClientPool: &ActionsClientPool{
+				SecretResolver: &SecretResolver{
 					k8sClient:   mgr.GetClient(),
 					multiClient: actions.NewMultiClient(logr.Discard()),
 				},
