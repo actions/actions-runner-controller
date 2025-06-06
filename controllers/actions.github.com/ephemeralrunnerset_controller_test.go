@@ -1460,7 +1460,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
-					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{

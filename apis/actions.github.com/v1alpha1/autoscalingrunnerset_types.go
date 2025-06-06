@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/actions/actions-runner-controller/hash"
+	"github.com/actions/actions-runner-controller/vault"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,7 +70,13 @@ type AutoscalingRunnerSetSpec struct {
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	VaultServerTLS *TLSConfig `json:"vaultServerTLS,omitempty"`
+
+	// +optional
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	// Required
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
@@ -89,12 +96,12 @@ type AutoscalingRunnerSetSpec struct {
 	MinRunners *int `json:"minRunners,omitempty"`
 }
 
-type GitHubServerTLSConfig struct {
+type TLSConfig struct {
 	// Required
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
 }
 
-func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
+func (c *TLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
 	if c.CertificateFrom == nil {
 		return nil, fmt.Errorf("certificateFrom not specified")
 	}
@@ -235,6 +242,26 @@ type ProxyServerConfig struct {
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
 }
 
+type VaultConfig struct {
+	// +optional
+	Type vault.VaultType `json:"type,omitempty"`
+	// +optional
+	AzureKeyVault *AzureKeyVaultConfig `json:"azureKeyVault,omitempty"`
+	// +optional
+	Proxy *ProxyConfig `json:"proxy,omitempty"`
+}
+
+type AzureKeyVaultConfig struct {
+	// +required
+	URL string `json:"url,omitempty"`
+	// +required
+	TenantID string `json:"tenantId,omitempty"`
+	// +required
+	ClientID string `json:"clientId,omitempty"`
+	// +required
+	CertificatePath string `json:"certificatePath,omitempty"`
+}
+
 // MetricsConfig holds configuration parameters for each metric type
 type MetricsConfig struct {
 	// +optional
@@ -293,11 +320,15 @@ func (ars *AutoscalingRunnerSet) GitHubConfigUrl() string {
 	return ars.Spec.GitHubConfigUrl
 }
 
+func (ars *AutoscalingRunnerSet) VaultConfig() *VaultConfig {
+	return ars.Spec.VaultConfig
+}
+
 func (ars *AutoscalingRunnerSet) Proxy() *ProxyConfig {
 	return ars.Spec.Proxy
 }
 
-func (ars *AutoscalingRunnerSet) GitHubServerTLS() *GitHubServerTLSConfig {
+func (ars *AutoscalingRunnerSet) GitHubServerTLS() *TLSConfig {
 	return ars.Spec.GitHubServerTLS
 }
 
@@ -308,7 +339,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 		RunnerGroup        string
 		RunnerScaleSetName string
 		Proxy              *ProxyConfig
-		GitHubServerTLS    *GitHubServerTLSConfig
+		GitHubServerTLS    *TLSConfig
 		Template           corev1.PodTemplateSpec
 	}
 	spec := &runnerSetSpec{

@@ -79,8 +79,12 @@ func (er *EphemeralRunner) Proxy() *ProxyConfig {
 	return er.Spec.Proxy
 }
 
-func (er *EphemeralRunner) GitHubServerTLS() *GitHubServerTLSConfig {
+func (er *EphemeralRunner) GitHubServerTLS() *TLSConfig {
 	return er.Spec.GitHubServerTLS
+}
+
+func (ars *EphemeralRunner) VaultConfig() *VaultConfig {
+	return ars.Spec.VaultConfig
 }
 
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
@@ -101,7 +105,10 @@ type EphemeralRunnerSpec struct {
 	ProxySecretRef string `json:"proxySecretRef,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	corev1.PodTemplateSpec `json:",inline"`
 }

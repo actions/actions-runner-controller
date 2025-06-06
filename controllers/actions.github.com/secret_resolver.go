@@ -12,6 +12,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/vault"
+	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,18 +20,11 @@ import (
 )
 
 type SecretResolver struct {
-	k8sClient      client.Client
-	vaultResolvers map[vault.VaultType]resolver
-	multiClient    actions.MultiClient
+	k8sClient   client.Client
+	multiClient actions.MultiClient
 }
 
 type SecretResolverOption func(*SecretResolver)
-
-func WithVault(ty vault.VaultType, vault vault.Vault) SecretResolverOption {
-	return func(pool *SecretResolver) {
-		pool.vaultResolvers[ty] = &vaultResolver{vault}
-	}
-}
 
 func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient, opts ...SecretResolverOption) *SecretResolver {
 	if k8sClient == nil {
@@ -38,9 +32,8 @@ func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient,
 	}
 
 	secretResolver := &SecretResolver{
-		k8sClient:      k8sClient,
-		multiClient:    multiClient,
-		vaultResolvers: make(map[vault.VaultType]resolver),
+		k8sClient:   k8sClient,
+		multiClient: multiClient,
 	}
 
 	for _, opt := range opts {
@@ -55,7 +48,8 @@ type ActionsGitHubObject interface {
 	GitHubConfigUrl() string
 	GitHubConfigSecret() string
 	Proxy() *v1alpha1.ProxyConfig
-	GitHubServerTLS() *v1alpha1.GitHubServerTLSConfig
+	GitHubServerTLS() *v1alpha1.TLSConfig
+	VaultConfig() *v1alpha1.VaultConfig
 }
 
 func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj ActionsGitHubObject) (*appconfig.AppConfig, error) {
@@ -163,25 +157,32 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 }
 
 func (sr *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, error) {
-	ty, ok := obj.GetAnnotations()[AnnotationKeyGitHubVaultType]
-	if !ok {
+	vaultConfig := obj.VaultConfig()
+	if vaultConfig == nil || vaultConfig.Type == "" {
 		return &k8sResolver{
 			namespace: obj.GetNamespace(),
 			client:    sr.k8sClient,
 		}, nil
 	}
 
-	vaultType := vault.VaultType(ty)
-	if err := vaultType.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid vault type %q: %v", ty, err)
-	}
+	switch vaultConfig.Type {
+	case vault.VaultTypeAzureKeyVault:
+		akv, err := azurekeyvault.New(azurekeyvault.Config{
+			TenantID:        vaultConfig.AzureKeyVault.TenantID,
+			ClientID:        vaultConfig.AzureKeyVault.ClientID,
+			URL:             vaultConfig.AzureKeyVault.URL,
+			CertificatePath: vaultConfig.AzureKeyVault.CertificatePath,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Azure Key Vault client: %v", err)
+		}
+		return &vaultResolver{
+			vault: akv,
+		}, nil
 
-	vault, ok := sr.vaultResolvers[vaultType]
-	if !ok {
-		return nil, fmt.Errorf("unknown vault resolver %q", ty)
+	default:
+		return nil, fmt.Errorf("unknown vault type %q", vaultConfig.Type)
 	}
-
-	return vault, nil
 }
 
 type resolver interface {

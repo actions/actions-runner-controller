@@ -72,8 +72,12 @@ func (ers *EphemeralRunnerSet) Proxy() *ProxyConfig {
 	return ers.Spec.EphemeralRunnerSpec.Proxy
 }
 
-func (ers *EphemeralRunnerSet) GitHubServerTLS() *GitHubServerTLSConfig {
+func (ers *EphemeralRunnerSet) GitHubServerTLS() *TLSConfig {
 	return ers.Spec.EphemeralRunnerSpec.GitHubServerTLS
+}
+
+func (ars *EphemeralRunnerSet) VaultConfig() *VaultConfig {
+	return ars.Spec.EphemeralRunnerSpec.VaultConfig
 }
 
 // EphemeralRunnerSetList contains a list of EphemeralRunnerSet

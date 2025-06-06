@@ -1093,7 +1093,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
-			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.GitHubServerTLSConfig{
+			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{

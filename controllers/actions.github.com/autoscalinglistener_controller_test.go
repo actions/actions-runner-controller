@@ -1065,7 +1065,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
-				GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -1101,7 +1101,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 			Spec: v1alpha1.AutoscalingListenerSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
-				GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{

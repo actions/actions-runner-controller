@@ -59,7 +59,10 @@ type AutoscalingListenerSpec struct {
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	// +optional
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
@@ -98,7 +101,7 @@ func (l *AutoscalingListener) Proxy() *ProxyConfig {
 	return l.Spec.Proxy
 }
 
-func (l *AutoscalingListener) GitHubServerTLS() *GitHubServerTLSConfig {
+func (l *AutoscalingListener) GitHubServerTLS() *TLSConfig {
 	return l.Spec.GitHubServerTLS
 }
 

@@ -88,6 +88,27 @@ githubConfigSecret:
 #       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
+# keyVault:
+  # Available values: "azure_key_vault"
+  # type: ""
+  # Configuration related to azure key vault
+  # azure_key_vault:
+  #   url: ""
+  #   client_id: ""
+  #   tenant_id: ""
+  #   certificate_path: ""
+    # proxy:
+    #   http:
+    #     url: http://proxy.com:1234
+    #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+    #   https:
+    #     url: http://proxy.com:1234
+    #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+    #   noProxy:
+    #     - example.com
+    #     - example.org
+
+
 ## Container mode is an object that provides out-of-box configuration
 ## for dind and kubernetes mode. Template will be modified as documented under the
 ## template object.

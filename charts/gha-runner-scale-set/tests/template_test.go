@@ -1158,7 +1158,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1218,7 +1218,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1278,7 +1278,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1338,7 +1338,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1394,7 +1394,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1450,7 +1450,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{

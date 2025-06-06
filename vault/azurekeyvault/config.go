@@ -17,12 +17,11 @@ import (
 
 // AzureKeyVault is a struct that holds the Azure Key Vault client.
 type Config struct {
-	TenantID     string                   `json:"tenant_id"`
-	ClientID     string                   `json:"client_id"`
-	URL          string                   `json:"url"`
-	CertPath     string                   `json:"cert_path"`
-	CertPassword string                   `json:"cert_password"` // optional
-	Proxy        *proxyconfig.ProxyConfig `json:"proxy,omitempty"`
+	TenantID        string                   `json:"tenant_id"`
+	ClientID        string                   `json:"client_id"`
+	URL             string                   `json:"url"`
+	CertificatePath string                   `json:"certificate_path"`
+	Proxy           *proxyconfig.ProxyConfig `json:"proxy,omitempty"`
 }
 
 func (c *Config) Validate() error {
@@ -36,12 +35,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("failed to parse url: %v", err)
 	}
 
-	if c.CertPath == "" {
+	if c.CertificatePath == "" {
 		return errors.New("cert path must be provided")
 	}
 
-	if _, err := os.Stat(c.CertPath); err != nil {
-		return fmt.Errorf("cert path %q does not exist: %v", c.CertPath, err)
+	if _, err := os.Stat(c.CertificatePath); err != nil {
+		return fmt.Errorf("cert path %q does not exist: %v", c.CertificatePath, err)
 	}
 
 	if err := c.Proxy.Validate(); err != nil {
@@ -57,12 +56,12 @@ func (c *Config) Client() (*azsecrets.Client, error) {
 }
 
 func (c *Config) certClient() (*azsecrets.Client, error) {
-	data, err := os.ReadFile(c.CertPath)
+	data, err := os.ReadFile(c.CertificatePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read cert file from path %q: %v", c.CertPath, err)
+		return nil, fmt.Errorf("failed to read cert file from path %q: %v", c.CertificatePath, err)
 	}
 
-	certs, key, err := azidentity.ParseCertificates(data, []byte(c.CertPassword))
+	certs, key, err := azidentity.ParseCertificates(data, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse certificates: %w", err)
 	}

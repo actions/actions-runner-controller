@@ -32,7 +32,6 @@ import (
 	"github.com/actions/actions-runner-controller/github"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
-	"github.com/actions/actions-runner-controller/vault"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -275,21 +274,9 @@ func main() {
 			log.WithName("actions-clients"),
 		)
 
-		vaults, err := vault.InitAll("CONTROLLER_MANAGER_")
-		if err != nil {
-			log.Error(err, "unable to read vaults")
-			os.Exit(1)
-		}
-
-		var secretResolverOptions []actionsgithubcom.SecretResolverOption
-		for name, vault := range vaults {
-			secretResolverOptions = append(secretResolverOptions, actionsgithubcom.WithVault(name, vault))
-		}
-
 		secretResolver := actionsgithubcom.NewSecretResolver(
 			mgr.GetClient(),
 			actionsMultiClient,
-			secretResolverOptions...,
 		)
 
 		rb := actionsgithubcom.ResourceBuilder{

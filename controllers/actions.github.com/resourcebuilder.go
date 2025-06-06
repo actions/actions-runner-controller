@@ -18,7 +18,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
-	"github.com/actions/actions-runner-controller/vault"
+	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -110,10 +110,6 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		annotationKeyValuesHash:     autoscalingRunnerSet.Annotations[annotationKeyValuesHash],
 	}
 
-	if v, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubVaultType]; ok {
-		annotations[AnnotationKeyGitHubVaultType] = v
-	}
-
 	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
@@ -128,6 +124,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
 			GitHubConfigSecret:            autoscalingRunnerSet.Spec.GitHubConfigSecret,
+			VaultConfig:                   autoscalingRunnerSet.VaultConfig(),
 			RunnerScaleSetId:              runnerScaleSetId,
 			AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 			AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
@@ -193,15 +190,18 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		Metrics:                     autoscalingListener.Spec.Metrics,
 	}
 
-	if ty, ok := autoscalingListener.Annotations[AnnotationKeyGitHubVaultType]; !ok {
+	vault := autoscalingListener.Spec.VaultConfig
+	if vault == nil {
 		config.AppConfig = appConfig
 	} else {
-		vaultType := vault.VaultType(ty)
-		if err := vaultType.Validate(); err != nil {
-			return nil, fmt.Errorf("vault type validation error: %w", err)
-		}
-		config.VaultType = vaultType
+		config.VaultType = vault.Type
 		config.VaultLookupKey = autoscalingListener.Spec.GitHubConfigSecret
+		config.AzureKeyVaultConfig = &azurekeyvault.Config{
+			TenantID:        vault.AzureKeyVault.TenantID,
+			ClientID:        vault.AzureKeyVault.ClientID,
+			URL:             vault.AzureKeyVault.URL,
+			CertificatePath: vault.AzureKeyVault.CertificatePath,
+		}
 	}
 
 	if err := config.Validate(); err != nil {
@@ -520,10 +520,6 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		annotationKeyRunnerSpecHash:           runnerSpecHash,
 	}
 
-	if v, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubVaultType]; ok {
-		newAnnotations[AnnotationKeyGitHubVaultType] = v
-	}
-
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
@@ -551,6 +547,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 				Proxy:              autoscalingRunnerSet.Spec.Proxy,
 				GitHubServerTLS:    autoscalingRunnerSet.Spec.GitHubServerTLS,
 				PodTemplateSpec:    autoscalingRunnerSet.Spec.Template,
+				VaultConfig:        autoscalingRunnerSet.VaultConfig(),
 			},
 		},
 	}

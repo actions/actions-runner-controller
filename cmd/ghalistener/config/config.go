@@ -15,6 +15,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/actions/actions-runner-controller/vault"
+	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"github.com/go-logr/logr"
 	"golang.org/x/net/http/httpproxy"
 )
@@ -23,6 +24,8 @@ type Config struct {
 	ConfigureUrl   string          `json:"configure_url"`
 	VaultType      vault.VaultType `json:"vault_type"`
 	VaultLookupKey string          `json:"vault_lookup_key"`
+	// If the VaultType is set to "azure_key_vault", this field must be populated.
+	AzureKeyVaultConfig *azurekeyvault.Config `json:"azure_key_vault,omitempty"`
 	// AppConfig contains the GitHub App configuration.
 	// It is initially set to nil if VaultType is set.
 	// Otherwise, it is populated with the GitHub App credentials from the GitHub secret.
@@ -53,31 +56,28 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
 
-	if config.VaultType == "" {
+	var vault vault.Vault
+	switch config.VaultType {
+	case "":
 		if err := config.Validate(); err != nil {
 			return nil, fmt.Errorf("failed to validate configuration: %v", err)
 		}
 
 		return &config, nil
-	}
+	case "azure_key_vault":
+		akv, err := azurekeyvault.New(*config.AzureKeyVaultConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Azure Key Vault client: %w", err)
+		}
 
-	if config.VaultLookupKey == "" {
-		panic(fmt.Errorf("vault type set to %q, but lookup key is empty", config.VaultType))
-	}
-
-	vaults, err := vault.InitAll("LISTENER_")
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize vaults: %v", err)
-	}
-
-	vault, ok := vaults[config.VaultType]
-	if !ok {
-		return nil, fmt.Errorf("vault %q is not initialized", config.VaultType)
+		vault = akv
+	default:
+		return nil, fmt.Errorf("unsupported vault type: %s", config.VaultType)
 	}
 
 	appConfigRaw, err := vault.GetSecret(ctx, config.VaultLookupKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get app config from vault: %w", err)
 	}
 
 	appConfig, err := appconfig.FromString(appConfigRaw)
