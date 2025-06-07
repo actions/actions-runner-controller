@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/github/actions/testserver"
@@ -53,7 +54,9 @@ func TestCustomerServerRootCA(t *testing.T) {
 	config := config.Config{
 		ConfigureUrl: server.ConfigURLForOrg("myorg"),
 		ServerRootCA: certsString,
-		Token:        "token",
+		AppConfig: &appconfig.AppConfig{
+			Token: "token",
+		},
 	}
 
 	client, err := config.ActionsClient(logr.Discard())
@@ -80,7 +83,9 @@ func TestProxySettings(t *testing.T) {
 
 		config := config.Config{
 			ConfigureUrl: "https://github.com/org/repo",
-			Token:        "token",
+			AppConfig: &appconfig.AppConfig{
+				Token: "token",
+			},
 		}
 
 		client, err := config.ActionsClient(logr.Discard())
@@ -110,7 +115,9 @@ func TestProxySettings(t *testing.T) {
 
 		config := config.Config{
 			ConfigureUrl: "https://github.com/org/repo",
-			Token:        "token",
+			AppConfig: &appconfig.AppConfig{
+				Token: "token",
+			},
 		}
 
 		client, err := config.ActionsClient(logr.Discard(), actions.WithRetryMax(0))
@@ -145,7 +152,9 @@ func TestProxySettings(t *testing.T) {
 
 		config := config.Config{
 			ConfigureUrl: "https://github.com/org/repo",
-			Token:        "token",
+			AppConfig: &appconfig.AppConfig{
+				Token: "token",
+			},
 		}
 
 		client, err := config.ActionsClient(logr.Discard())

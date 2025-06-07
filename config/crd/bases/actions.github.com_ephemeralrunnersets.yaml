@@ -7778,6 +7778,53 @@ spec:
                       required:
                         - containers
                       type: object
+                    vaultConfig:
+                      properties:
+                        azureKeyVault:
+                          properties:
+                            certificatePath:
+                              type: string
+                            clientId:
+                              type: string
+                            tenantId:
+                              type: string
+                            url:
+                              type: string
+                          required:
+                            - certificatePath
+                            - clientId
+                            - tenantId
+                            - url
+                          type: object
+                        proxy:
+                          properties:
+                            http:
+                              properties:
+                                credentialSecretRef:
+                                  type: string
+                                url:
+                                  description: Required
+                                  type: string
+                              type: object
+                            https:
+                              properties:
+                                credentialSecretRef:
+                                  type: string
+                                url:
+                                  description: Required
+                                  type: string
+                              type: object
+                            noProxy:
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        type:
+                          description: |-
+                            VaultType represents the type of vault that can be used in the application.
+                            It is used to identify which vault integration should be used to resolve secrets.
+                          type: string
+                      type: object
                   required:
                     - githubConfigSecret
                     - githubConfigUrl

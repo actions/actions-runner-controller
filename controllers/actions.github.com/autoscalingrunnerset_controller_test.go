@@ -70,7 +70,12 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-			ActionsClient:                      fake.NewMultiClient(),
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
+				},
+			},
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -677,33 +682,40 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+			multiClient := fake.NewMultiClient(
+				fake.WithDefaultClient(
+					fake.NewFakeClient(
+						fake.WithUpdateRunnerScaleSet(
+							&actions.RunnerScaleSet{
+								Id:                 1,
+								Name:               "testset_update",
+								RunnerGroupId:      1,
+								RunnerGroupName:    "testgroup",
+								Labels:             []actions.Label{{Type: "test", Name: "test"}},
+								RunnerSetting:      actions.RunnerSetting{},
+								CreatedOn:          time.Now(),
+								RunnerJitConfigUrl: "test.test.test",
+								Statistics:         nil,
+							},
+							nil,
+						),
+					),
+					nil,
+				),
+			)
+
 			controller := &AutoscalingRunnerSetReconciler{
 				Client:                             mgr.GetClient(),
 				Scheme:                             mgr.GetScheme(),
 				Log:                                logf.Log,
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-				ActionsClient: fake.NewMultiClient(
-					fake.WithDefaultClient(
-						fake.NewFakeClient(
-							fake.WithUpdateRunnerScaleSet(
-								&actions.RunnerScaleSet{
-									Id:                 1,
-									Name:               "testset_update",
-									RunnerGroupId:      1,
-									RunnerGroupName:    "testgroup",
-									Labels:             []actions.Label{{Type: "test", Name: "test"}},
-									RunnerSetting:      actions.RunnerSetting{},
-									CreatedOn:          time.Now(),
-									RunnerJitConfigUrl: "test.test.test",
-									Statistics:         nil,
-								},
-								nil,
-							),
-						),
-						nil,
-					),
-				),
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   k8sClient,
+						multiClient: multiClient,
+					},
+				},
 			}
 			err := controller.SetupWithManager(mgr)
 			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -818,7 +830,12 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 				Log:                                logf.Log,
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-				ActionsClient:                      fake.NewMultiClient(),
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   k8sClient,
+						multiClient: fake.NewMultiClient(),
+					},
+				},
 			}
 			err := controller.SetupWithManager(mgr)
 			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -937,14 +954,19 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 			ctx = context.Background()
 			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
-
+			multiClient := actions.NewMultiClient(logr.Discard())
 			controller = &AutoscalingRunnerSetReconciler{
 				Client:                             mgr.GetClient(),
 				Scheme:                             mgr.GetScheme(),
 				Log:                                logf.Log,
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-				ActionsClient:                      actions.NewMultiClient(logr.Discard()),
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   k8sClient,
+						multiClient: multiClient,
+					},
+				},
 			}
 
 			err := controller.SetupWithManager(mgr)
@@ -1127,7 +1149,12 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				Log:                                logf.Log,
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-				ActionsClient:                      fake.NewMultiClient(),
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   k8sClient,
+						multiClient: fake.NewMultiClient(),
+					},
+				},
 			}
 			err = controller.SetupWithManager(mgr)
 			Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1136,7 +1163,10 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 		})
 
 		It("should be able to make requests to a server using root CAs", func() {
-			controller.ActionsClient = actions.NewMultiClient(logr.Discard())
+			controller.SecretResolver = &SecretResolver{
+				k8sClient:   k8sClient,
+				multiClient: actions.NewMultiClient(logr.Discard()),
+			}
 
 			certsFolder := filepath.Join(
 				"../../",
@@ -1171,7 +1201,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
-					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{
@@ -1224,7 +1254,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{
@@ -1288,7 +1318,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
 					GitHubConfigUrl:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{
@@ -1361,7 +1391,12 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-			ActionsClient:                      fake.NewMultiClient(),
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
+				},
+			},
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1519,7 +1554,12 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-			ActionsClient:                      fake.NewMultiClient(),
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
+				},
+			},
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1727,7 +1767,12 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
-			ActionsClient:                      fake.NewMultiClient(),
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   k8sClient,
+					multiClient: fake.NewMultiClient(),
+				},
+			},
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")

@@ -3,15 +3,14 @@ package actions
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/go-logr/logr"
 )
 
 type MultiClient interface {
-	GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string, options ...ClientOption) (ActionsService, error)
-	GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData, options ...ClientOption) (ActionsService, error)
+	GetClientFor(ctx context.Context, githubConfigURL string, appConfig *appconfig.AppConfig, namespace string, options ...ClientOption) (ActionsService, error)
 }
 
 type multiClient struct {
@@ -50,15 +49,22 @@ func NewMultiClient(logger logr.Logger) MultiClient {
 	}
 }
 
-func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds ActionsAuth, namespace string, options ...ClientOption) (ActionsService, error) {
+func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, appConfig *appconfig.AppConfig, namespace string, options ...ClientOption) (ActionsService, error) {
 	m.logger.Info("retrieve actions client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
-	if creds.Token == "" && creds.AppCreds == nil {
-		return nil, fmt.Errorf("no credentials provided. either a PAT or GitHub App credentials should be provided")
+	if err := appConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate app config: %w", err)
 	}
 
-	if creds.Token != "" && creds.AppCreds != nil {
-		return nil, fmt.Errorf("both PAT and GitHub App credentials provided. should only provide one")
+	var creds ActionsAuth
+	if len(appConfig.Token) > 0 {
+		creds.Token = appConfig.Token
+	} else {
+		creds.AppCreds = &GitHubAppAuth{
+			AppID:             appConfig.AppID,
+			AppInstallationID: appConfig.AppInstallationID,
+			AppPrivateKey:     appConfig.AppPrivateKey,
+		}
 	}
 
 	client, err := NewClient(
@@ -69,7 +75,7 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 		}, options...)...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to instantiate new client: %w", err)
 	}
 
 	m.mu.Lock()
@@ -93,43 +99,4 @@ func (m *multiClient) GetClientFor(ctx context.Context, githubConfigURL string, 
 	m.logger.Info("successfully created new client", "githubConfigURL", githubConfigURL, "namespace", namespace)
 
 	return client, nil
-}
-
-type KubernetesSecretData map[string][]byte
-
-func (m *multiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData KubernetesSecretData, options ...ClientOption) (ActionsService, error) {
-	if len(secretData) == 0 {
-		return nil, fmt.Errorf("must provide secret data with either PAT or GitHub App Auth")
-	}
-
-	token := string(secretData["github_token"])
-	hasToken := len(token) > 0
-
-	appID := string(secretData["github_app_id"])
-	appInstallationID := string(secretData["github_app_installation_id"])
-	appPrivateKey := string(secretData["github_app_private_key"])
-	hasGitHubAppAuth := len(appID) > 0 && len(appInstallationID) > 0 && len(appPrivateKey) > 0
-
-	if hasToken && hasGitHubAppAuth {
-		return nil, fmt.Errorf("must provide secret with only PAT or GitHub App Auth to avoid ambiguity in client behavior")
-	}
-
-	if !hasToken && !hasGitHubAppAuth {
-		return nil, fmt.Errorf("neither PAT nor GitHub App Auth credentials provided in secret")
-	}
-
-	auth := ActionsAuth{}
-
-	if hasToken {
-		auth.Token = token
-		return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
-	}
-
-	parsedAppInstallationID, err := strconv.ParseInt(appInstallationID, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	auth.AppCreds = &GitHubAppAuth{AppID: appID, AppInstallationID: parsedAppInstallationID, AppPrivateKey: appPrivateKey}
-	return m.GetClientFor(ctx, githubConfigURL, auth, namespace, options...)
 }
