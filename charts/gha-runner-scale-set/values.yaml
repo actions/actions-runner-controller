@@ -108,7 +108,6 @@ githubConfigSecret:
     #     - example.com
     #     - example.org
 
-
 ## Container mode is an object that provides out-of-box configuration
 ## for dind and kubernetes mode. Template will be modified as documented under the
 ## template object.
