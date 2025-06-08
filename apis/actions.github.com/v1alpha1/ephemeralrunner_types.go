@@ -75,7 +75,7 @@ func (er *EphemeralRunner) GitHubConfigUrl() string {
 	return er.Spec.GitHubConfigUrl
 }
 
-func (er *EphemeralRunner) Proxy() *ProxyConfig {
+func (er *EphemeralRunner) GitHubProxy() *ProxyConfig {
 	return er.Spec.Proxy
 }
 
@@ -83,8 +83,15 @@ func (er *EphemeralRunner) GitHubServerTLS() *TLSConfig {
 	return er.Spec.GitHubServerTLS
 }
 
-func (ars *EphemeralRunner) VaultConfig() *VaultConfig {
-	return ars.Spec.VaultConfig
+func (er *EphemeralRunner) VaultConfig() *VaultConfig {
+	return er.Spec.VaultConfig
+}
+
+func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
+	if er.Spec.VaultConfig != nil {
+		return er.Spec.VaultConfig.Proxy
+	}
+	return nil
 }
 
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner

@@ -149,7 +149,7 @@ type ProxyConfig struct {
 	NoProxy []string `json:"noProxy,omitempty"`
 }
 
-func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
+func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
 	config := &httpproxy.Config{
 		NoProxy: strings.Join(c.NoProxy, ","),
 	}
@@ -208,7 +208,7 @@ func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 }
 
 func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, error)) (map[string][]byte, error) {
-	config, err := c.toHTTPProxyConfig(secretFetcher)
+	config, err := c.ToHTTPProxyConfig(secretFetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, e
 }
 
 func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
-	config, err := c.toHTTPProxyConfig(secretFetcher)
+	config, err := c.ToHTTPProxyConfig(secretFetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -320,16 +320,23 @@ func (ars *AutoscalingRunnerSet) GitHubConfigUrl() string {
 	return ars.Spec.GitHubConfigUrl
 }
 
-func (ars *AutoscalingRunnerSet) VaultConfig() *VaultConfig {
-	return ars.Spec.VaultConfig
-}
-
-func (ars *AutoscalingRunnerSet) Proxy() *ProxyConfig {
+func (ars *AutoscalingRunnerSet) GitHubProxy() *ProxyConfig {
 	return ars.Spec.Proxy
 }
 
 func (ars *AutoscalingRunnerSet) GitHubServerTLS() *TLSConfig {
 	return ars.Spec.GitHubServerTLS
+}
+
+func (ars *AutoscalingRunnerSet) VaultConfig() *VaultConfig {
+	return ars.Spec.VaultConfig
+}
+
+func (ars *AutoscalingRunnerSet) VaultProxy() *ProxyConfig {
+	if ars.Spec.VaultConfig != nil {
+		return ars.Spec.VaultConfig.Proxy
+	}
+	return nil
 }
 
 func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {

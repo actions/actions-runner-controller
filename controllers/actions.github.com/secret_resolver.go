@@ -47,13 +47,14 @@ type ActionsGitHubObject interface {
 	client.Object
 	GitHubConfigUrl() string
 	GitHubConfigSecret() string
-	Proxy() *v1alpha1.ProxyConfig
+	GitHubProxy() *v1alpha1.ProxyConfig
 	GitHubServerTLS() *v1alpha1.TLSConfig
 	VaultConfig() *v1alpha1.VaultConfig
+	VaultProxy() *v1alpha1.ProxyConfig
 }
 
 func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj ActionsGitHubObject) (*appconfig.AppConfig, error) {
-	resolver, err := sr.resolverForObject(obj)
+	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
 	}
@@ -67,7 +68,7 @@ func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj ActionsGitHubObj
 }
 
 func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitHubObject) (actions.ActionsService, error) {
-	resolver, err := sr.resolverForObject(obj)
+	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
 	}
@@ -78,7 +79,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 	}
 
 	var clientOptions []actions.ClientOption
-	if proxy := obj.Proxy(); proxy != nil {
+	if proxy := obj.GitHubProxy(); proxy != nil {
 		config := &httpproxy.Config{
 			NoProxy: strings.Join(proxy.NoProxy, ","),
 		}
@@ -156,13 +157,29 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 	)
 }
 
-func (sr *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, error) {
+func (sr *SecretResolver) resolverForObject(ctx context.Context, obj ActionsGitHubObject) (resolver, error) {
 	vaultConfig := obj.VaultConfig()
 	if vaultConfig == nil || vaultConfig.Type == "" {
 		return &k8sResolver{
 			namespace: obj.GetNamespace(),
 			client:    sr.k8sClient,
 		}, nil
+	}
+
+	var proxy *httpproxy.Config
+	if vaultProxy := obj.VaultProxy(); vaultProxy != nil {
+		p, err := vaultProxy.ToHTTPProxyConfig(func(s string) (*corev1.Secret, error) {
+			var secret corev1.Secret
+			err := sr.k8sClient.Get(ctx, types.NamespacedName{Name: s, Namespace: obj.GetNamespace()}, &secret)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+			}
+			return &secret, nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create proxy config: %v", err)
+		}
+		proxy = p
 	}
 
 	switch vaultConfig.Type {
@@ -172,6 +189,7 @@ func (sr *SecretResolver) resolverForObject(obj ActionsGitHubObject) (resolver, 
 			ClientID:        vaultConfig.AzureKeyVault.ClientID,
 			URL:             vaultConfig.AzureKeyVault.URL,
 			CertificatePath: vaultConfig.AzureKeyVault.CertificatePath,
+			Proxy:           proxy,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Azure Key Vault client: %v", err)

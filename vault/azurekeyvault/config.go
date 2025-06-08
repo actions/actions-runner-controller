@@ -11,17 +11,17 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
-	"github.com/actions/actions-runner-controller/proxyconfig"
 	"github.com/hashicorp/go-retryablehttp"
+	"golang.org/x/net/http/httpproxy"
 )
 
 // AzureKeyVault is a struct that holds the Azure Key Vault client.
 type Config struct {
-	TenantID        string                   `json:"tenant_id"`
-	ClientID        string                   `json:"client_id"`
-	URL             string                   `json:"url"`
-	CertificatePath string                   `json:"certificate_path"`
-	Proxy           *proxyconfig.ProxyConfig `json:"proxy,omitempty"`
+	TenantID        string            `json:"tenant_id"`
+	ClientID        string            `json:"client_id"`
+	URL             string            `json:"url"`
+	CertificatePath string            `json:"certificate_path"`
+	Proxy           *httpproxy.Config `json:"proxy,omitempty"`
 }
 
 func (c *Config) Validate() error {
@@ -43,8 +43,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("cert path %q does not exist: %v", c.CertificatePath, err)
 	}
 
-	if err := c.Proxy.Validate(); err != nil {
-		return fmt.Errorf("proxy validation failed: %v", err)
+	if c.Proxy != nil {
+		if c.Proxy.HTTPProxy == "" && c.Proxy.HTTPSProxy == "" && c.Proxy.NoProxy == "" {
+			return errors.New("proxy configuration is empty, at least one proxy must be set")
+		}
 	}
 
 	return nil
@@ -109,12 +111,8 @@ func (c *Config) httpClient() (*http.Client, error) {
 		return nil, fmt.Errorf("failed to get http transport")
 	}
 	if c.Proxy != nil {
-		pc, err := c.Proxy.ProxyConfig()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create proxy config: %v", err)
-		}
 		transport.Proxy = func(req *http.Request) (*url.URL, error) {
-			return pc.ProxyFunc()(req.URL)
+			return c.Proxy.ProxyFunc()(req.URL)
 		}
 	}
 

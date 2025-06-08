@@ -68,7 +68,7 @@ func (ers *EphemeralRunnerSet) GitHubConfigUrl() string {
 	return ers.Spec.EphemeralRunnerSpec.GitHubConfigUrl
 }
 
-func (ers *EphemeralRunnerSet) Proxy() *ProxyConfig {
+func (ers *EphemeralRunnerSet) GitHubProxy() *ProxyConfig {
 	return ers.Spec.EphemeralRunnerSpec.Proxy
 }
 
@@ -76,8 +76,15 @@ func (ers *EphemeralRunnerSet) GitHubServerTLS() *TLSConfig {
 	return ers.Spec.EphemeralRunnerSpec.GitHubServerTLS
 }
 
-func (ars *EphemeralRunnerSet) VaultConfig() *VaultConfig {
-	return ars.Spec.EphemeralRunnerSpec.VaultConfig
+func (ers *EphemeralRunnerSet) VaultConfig() *VaultConfig {
+	return ers.Spec.EphemeralRunnerSpec.VaultConfig
+}
+
+func (ers *EphemeralRunnerSet) VaultProxy() *ProxyConfig {
+	if ers.Spec.EphemeralRunnerSpec.VaultConfig != nil {
+		return ers.Spec.EphemeralRunnerSpec.VaultConfig.Proxy
+	}
+	return nil
 }
 
 // EphemeralRunnerSetList contains a list of EphemeralRunnerSet
