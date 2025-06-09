@@ -142,7 +142,7 @@ func TestAppConfigFromString_valid(t *testing.T) {
 			bytes, err := json.Marshal(cfg)
 			require.NoError(t, err)
 
-			got, err := FromString(string(bytes))
+			got, err := FromJSONString(string(bytes))
 			require.NoError(t, err)
 
 			want := cfg.tidy()

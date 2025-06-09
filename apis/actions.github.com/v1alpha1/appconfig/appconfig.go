@@ -75,7 +75,7 @@ func FromSecret(secret *corev1.Secret) (*AppConfig, error) {
 	return cfg.tidy(), nil
 }
 
-func FromString(v string) (*AppConfig, error) {
+func FromJSONString(v string) (*AppConfig, error) {
 	var appConfig AppConfig
 	if err := json.NewDecoder(bytes.NewBufferString(v)).Decode(&appConfig); err != nil {
 		return nil, err

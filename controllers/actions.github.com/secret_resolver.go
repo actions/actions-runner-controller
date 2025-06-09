@@ -257,7 +257,7 @@ func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.A
 		return nil, fmt.Errorf("failed to resolve secret: %v", err)
 	}
 
-	return appconfig.FromString(val)
+	return appconfig.FromJSONString(val)
 }
 
 func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.Userinfo, error) {

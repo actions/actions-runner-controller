@@ -73,9 +73,6 @@ type AutoscalingRunnerSetSpec struct {
 	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +optional
-	VaultServerTLS *TLSConfig `json:"vaultServerTLS,omitempty"`
-
-	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	// Required

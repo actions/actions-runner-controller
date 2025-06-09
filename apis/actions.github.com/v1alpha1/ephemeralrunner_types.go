@@ -102,6 +102,9 @@ type EphemeralRunnerSpec struct {
 	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
+	// +optional
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
 	// +required
 	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
 
@@ -110,9 +113,6 @@ type EphemeralRunnerSpec struct {
 
 	// +optional
 	ProxySecretRef string `json:"proxySecretRef,omitempty"`
-
-	// +optional
-	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`

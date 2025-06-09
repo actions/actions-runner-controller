@@ -80,7 +80,7 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to get app config from vault: %w", err)
 	}
 
-	appConfig, err := appconfig.FromString(appConfigRaw)
+	appConfig, err := appconfig.FromJSONString(appConfigRaw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read app config from string: %v", err)
 	}
