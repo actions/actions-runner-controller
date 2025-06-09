@@ -36,9 +36,15 @@ function install_arc() {
 function start_squid_proxy() {
     echo "Starting squid-proxy"
     docker run -d \
+        --rm \
         --name squid \
         --publish 3128:3128 \
         ubuntu/squid:latest
+}
+
+function stop_squid_proxy() {
+    echo "Stopping squid-proxy"
+    docker stop squid
 }
 
 function install_scale_set() {
@@ -78,6 +84,7 @@ function main() {
     NAMESPACE="${ARC_NAMESPACE}" log_arc || failed+=("log_arc")
 
     delete_cluster
+    stop_squid_proxy
 
     print_results "${failed[@]}"
 }

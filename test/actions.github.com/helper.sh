@@ -41,6 +41,9 @@ function create_cluster() {
 
     echo "Loading image into minikube cluster"
     minikube image load "${IMAGE}"
+
+    echo "Loading runner image into minikube cluster"
+    minikube image load "ghcr.io/actions/actions-runner:latest"
 }
 
 function delete_cluster() {
