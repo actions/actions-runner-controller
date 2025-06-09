@@ -46,7 +46,7 @@ function start_squid_proxy() {
         huangtingluo/squid-proxy:latest
 
     echo "Creating scale set namespace"
-    kubectl create namespace "${SCALE_SET_NAMESPACE}"
+    kubectl create namespace "${SCALE_SET_NAMESPACE}" || true
 
     echo "Creating squid proxy secret"
     kubectl create secret generic proxy-auth \
