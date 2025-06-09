@@ -137,7 +137,7 @@ etFcaQuTHEZyRhhJ4BU=
 -----END PRIVATE KEY-----`
 
 	auth := &GitHubAppAuth{
-		AppID:         123,
+		AppID:         "123",
 		AppPrivateKey: key,
 	}
 	jwt, err := createJWTForGitHubApp(auth)

@@ -90,7 +90,7 @@ var _ owner = (*ownerStatefulSet)(nil)
 func (s *ownerStatefulSet) pods(ctx context.Context, c client.Client) ([]corev1.Pod, error) {
 	var podList corev1.PodList
 
-	if err := c.List(ctx, &podList, client.MatchingLabels(s.StatefulSet.Spec.Template.ObjectMeta.Labels)); err != nil {
+	if err := c.List(ctx, &podList, client.MatchingLabels(s.StatefulSet.Spec.Template.Labels)); err != nil {
 		s.Log.Error(err, "Failed to list pods managed by statefulset")
 		return nil, err
 	}

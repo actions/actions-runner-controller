@@ -99,7 +99,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !autoscalingRunnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !autoscalingRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -151,7 +151,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion] != build.Version {
+	if !v1alpha1.IsVersionAllowed(autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], build.Version) {
 		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
 			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
 				"buildVersion", build.Version,
@@ -332,7 +332,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, au
 	err = r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, &listener)
 	switch {
 	case err == nil:
-		if listener.ObjectMeta.DeletionTimestamp.IsZero() {
+		if listener.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener")
 			if err := r.Delete(ctx, &listener); err != nil {
 				return false, fmt.Errorf("failed to delete listener: %w", err)
@@ -369,7 +369,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 	for i := range oldRunnerSets {
 		rs := &oldRunnerSets[i]
 		// already deleted but contains finalizer so it still exists
-		if !rs.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !rs.DeletionTimestamp.IsZero() {
 			logger.Info("Skip ephemeral runner set since it is already marked for deletion", "name", rs.Name)
 			continue
 		}
@@ -622,7 +622,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 }
 
 func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
-	desiredRunnerSet, err := r.ResourceBuilder.newEphemeralRunnerSet(autoscalingRunnerSet)
+	desiredRunnerSet, err := r.newEphemeralRunnerSet(autoscalingRunnerSet)
 	if err != nil {
 		log.Error(err, "Could not create EphemeralRunnerSet")
 		return ctrl.Result{}, err
@@ -651,7 +651,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		})
 	}
 
-	autoscalingListener, err := r.ResourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
+	autoscalingListener, err := r.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
 	if err != nil {
 		log.Error(err, "Could not create AutoscalingListener spec")
 		return ctrl.Result{}, err
