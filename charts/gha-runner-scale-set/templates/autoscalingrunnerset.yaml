@@ -69,6 +69,9 @@ spec:
   {{- if and .Values.keyVault .Values.keyVault.type }}
   vaultConfig:
     type: {{ .Values.keyVault.type }}
+    {{- if .Values.keyVault.proxy }}
+    proxy: {{- toYaml .Values.keyVault.proxy | nindent 6 }}
+    {{- end }}
     {{- if eq .Values.keyVault.type "azure_key_vault" }}
     azureKeyVault:
       url: {{ .Values.keyVault.azureKeyVault.url }}
@@ -76,9 +79,6 @@ spec:
       clientId: {{ .Values.keyVault.azureKeyVault.clientId }}
       certificatePath: {{ .Values.keyVault.azureKeyVault.certificatePath }}
       secretKey: {{ .Values.keyVault.azureKeyVault.secretKey }}
-      {{- if .Values.keyVault.azureKeyVault.proxy }}
-      proxy: {{- toYaml .Values.keyVault.azureKeyVault.proxy | nindent 6 }}
-      {{- end }}
     {{- else }}
     {{- fail "Unsupported vaultConfig type: " .Values.vaultConfig.type }}
     {{- end }}
