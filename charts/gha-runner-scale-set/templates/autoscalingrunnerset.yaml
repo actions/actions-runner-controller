@@ -80,7 +80,7 @@ spec:
       certificatePath: {{ .Values.keyVault.azureKeyVault.certificatePath }}
       secretKey: {{ .Values.keyVault.azureKeyVault.secretKey }}
     {{- else }}
-    {{- fail "Unsupported vaultConfig type: " .Values.vaultConfig.type }}
+    {{- fail "Unsupported keyVault type: " .Values.keyVault.type }}
     {{- end }}
   {{- end }}
 

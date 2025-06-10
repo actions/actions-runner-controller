@@ -69,7 +69,7 @@ func TestConfigValidationAppKey(t *testing.T) {
 			RunnerScaleSetId:            1,
 		}
 		err := config.Validate()
-		expectedError := "AppConfig validation failed: no credentials provided: either a PAT or GitHub App credentials should be provide"
+		expectedError := "AppConfig validation failed: no credentials provided: either a PAT or GitHub App credentials should be provided"
 		assert.ErrorContains(t, err, expectedError, "Expected error about missing auth")
 	})
 }

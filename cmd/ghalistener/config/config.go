@@ -91,7 +91,11 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
-	return &config, ctx.Err()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	return &config, nil
 }
 
 // Validate checks the configuration for errors.
