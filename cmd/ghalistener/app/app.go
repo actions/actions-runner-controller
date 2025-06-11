@@ -69,8 +69,8 @@ func New(config config.Config) (*App, error) {
 			Repository:        ghConfig.Repository,
 			ServerAddr:        config.MetricsAddr,
 			ServerEndpoint:    config.MetricsEndpoint,
+			Metrics:           config.Metrics,
 			Logger:            app.logger.WithName("metrics exporter"),
-			Metrics:           *config.Metrics,
 		})
 	}
 
