@@ -286,18 +286,6 @@ template:
   ##       volumeMounts:
   ##         - name: dind-externals
   ##           mountPath: /home/runner/tmpDir
-  ##     containers:
-  ##     - name: runner
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["/home/runner/run.sh"]
-  ##       env:
-  ##         - name: DOCKER_HOST
-  ##           value: unix:///var/run/docker.sock
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##         - name: dind-sock
-  ##           mountPath: /var/run
   ##     - name: dind
   ##       image: docker:dind
   ##       args:
@@ -309,13 +297,29 @@ template:
   ##           value: "123"
   ##       securityContext:
   ##         privileged: true
+  ##       restartPolicy: Always
+  ##       startupProbe:
+  ##         exec:
+  ##           command:
+  ##             - docker
+  ##             - info
+  ##           initialDelaySeconds: 0
+  ##           failureThreshold: 24
+  ##           periodSeconds: 5
+  ##     containers:
+  ##     - name: runner
+  ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["/home/runner/run.sh"]
+  ##       env:
+  ##         - name: DOCKER_HOST
+  ##           value: unix:///var/run/docker.sock
+  ##         - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+  ##           value: "120"
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
   ##         - name: dind-sock
   ##           mountPath: /var/run
-  ##         - name: dind-externals
-  ##           mountPath: /home/runner/externals
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}
