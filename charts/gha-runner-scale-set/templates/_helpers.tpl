@@ -108,6 +108,14 @@ securityContext:
   privileged: true
 {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
 restartPolicy: Always
+startupProbe:
+  exec:
+    command:
+      - docker
+      - info
+    initialDelaySeconds: 0
+    failureThreshold: 24
+    periodSeconds: 5
 {{- end }}
 volumeMounts:
   - name: work
