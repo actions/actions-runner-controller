@@ -82,12 +82,7 @@ func TestLabelPropagation(t *testing.T) {
 			Name: "test",
 		},
 	}
-	listenerSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
-		},
-	}
-	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, listenerSecret, nil)
+	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
 

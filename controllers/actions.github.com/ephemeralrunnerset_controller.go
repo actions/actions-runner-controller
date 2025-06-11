@@ -331,7 +331,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, nil
 	}
 
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
 	if err != nil {
 		return false, err
 	}
@@ -439,7 +439,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
 		return nil
 	}
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
 	if err != nil {
 		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
 	}
@@ -500,73 +500,6 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 
 	log.Info("Deleted ephemeral runner", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
 	return true, nil
-}
-
-func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) (actions.ActionsService, error) {
-	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret: %w", err)
-	}
-
-	opts, err := r.actionsClientOptionsFor(ctx, rs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get actions client options: %w", err)
-	}
-
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl,
-		rs.Namespace,
-		secret.Data,
-		opts...,
-	)
-}
-
-func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) ([]actions.ClientOption, error) {
-	var opts []actions.ClientOption
-	if rs.Spec.EphemeralRunnerSpec.Proxy != nil {
-		proxyFunc, err := rs.Spec.EphemeralRunnerSpec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
-			var secret corev1.Secret
-			err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: s}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
-			}
-
-			return &secret, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get proxy func: %w", err)
-		}
-
-		opts = append(opts, actions.WithProxy(proxyFunc))
-	}
-
-	tlsConfig := rs.Spec.EphemeralRunnerSpec.GitHubServerTLS
-	if tlsConfig != nil {
-		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
-			var configmap corev1.ConfigMap
-			err := r.Get(
-				ctx,
-				types.NamespacedName{
-					Namespace: rs.Namespace,
-					Name:      name,
-				},
-				&configmap,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
-			}
-
-			return []byte(configmap.Data[key]), nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tls config: %w", err)
-		}
-
-		opts = append(opts, actions.WithRootCAs(pool))
-	}
-
-	return opts, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

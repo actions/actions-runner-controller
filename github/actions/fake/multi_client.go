@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/github/actions"
 )
 
@@ -34,10 +35,6 @@ func NewMultiClient(opts ...MultiClientOption) actions.MultiClient {
 	return f
 }
 
-func (f *fakeMultiClient) GetClientFor(ctx context.Context, githubConfigURL string, creds actions.ActionsAuth, namespace string, options ...actions.ClientOption) (actions.ActionsService, error) {
-	return f.defaultClient, f.defaultErr
-}
-
-func (f *fakeMultiClient) GetClientFromSecret(ctx context.Context, githubConfigURL, namespace string, secretData actions.KubernetesSecretData, options ...actions.ClientOption) (actions.ActionsService, error) {
+func (f *fakeMultiClient) GetClientFor(ctx context.Context, githubConfigURL string, appConfig *appconfig.AppConfig, namespace string, options ...actions.ClientOption) (actions.ActionsService, error) {
 	return f.defaultClient, f.defaultErr
 }

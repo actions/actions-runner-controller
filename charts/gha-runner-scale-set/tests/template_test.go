@@ -1158,7 +1158,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1218,7 +1218,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1278,7 +1278,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1338,7 +1338,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1394,7 +1394,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1450,7 +1450,7 @@ func TestTemplateRenderedWithTLS(t *testing.T) {
 			ars := render(t, options)
 
 			require.NotNil(t, ars.Spec.GitHubServerTLS)
-			expected := &v1alpha1.GitHubServerTLSConfig{
+			expected := &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -2467,4 +2467,44 @@ func TestNamespaceOverride(t *testing.T) {
 			assert.Equal(t, namespaceOverride, renderedObject.Metadata.Namespace)
 		})
 	}
+}
+
+func TestAutoscalingRunnerSetCustomAnnotationsAndLabelsApplied(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                              "https://github.com/actions",
+			"githubConfigSecret.github_token":                              "gh_token12345",
+			"controllerServiceAccount.name":                                "arc",
+			"controllerServiceAccount.namespace":                           "arc-system",
+			"annotations.actions\\.github\\.com/vault":                     "azure_key_vault",
+			"annotations.actions\\.github\\.com/cleanup-manager-role-name": "not-propagated",
+			"labels.custom":                                                "custom",
+			"labels.app\\.kubernetes\\.io/component":                       "not-propagated",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	vault := autoscalingRunnerSet.Annotations["actions.github.com/vault"]
+	assert.Equal(t, "azure_key_vault", vault)
+
+	custom := autoscalingRunnerSet.Labels["custom"]
+	assert.Equal(t, "custom", custom)
+
+	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Annotations["actions.github.com/cleanup-manager-role-name"])
+	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Labels["app.kubernetes.io/component"])
 }

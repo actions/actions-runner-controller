@@ -67,6 +67,33 @@ func (er *EphemeralRunner) HasContainerHookConfigured() bool {
 	return false
 }
 
+func (er *EphemeralRunner) GitHubConfigSecret() string {
+	return er.Spec.GitHubConfigSecret
+}
+
+func (er *EphemeralRunner) GitHubConfigUrl() string {
+	return er.Spec.GitHubConfigUrl
+}
+
+func (er *EphemeralRunner) GitHubProxy() *ProxyConfig {
+	return er.Spec.Proxy
+}
+
+func (er *EphemeralRunner) GitHubServerTLS() *TLSConfig {
+	return er.Spec.GitHubServerTLS
+}
+
+func (er *EphemeralRunner) VaultConfig() *VaultConfig {
+	return er.Spec.VaultConfig
+}
+
+func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
+	if er.Spec.VaultConfig != nil {
+		return er.Spec.VaultConfig.Proxy
+	}
+	return nil
+}
+
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
 	// +required
@@ -74,6 +101,9 @@ type EphemeralRunnerSpec struct {
 
 	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
+
+	// +optional
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +required
 	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
@@ -85,7 +115,7 @@ type EphemeralRunnerSpec struct {
 	ProxySecretRef string `json:"proxySecretRef,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	corev1.PodTemplateSpec `json:",inline"`
 }

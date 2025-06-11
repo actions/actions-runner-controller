@@ -17,7 +17,7 @@ import (
 
 func TestGitHubServerTLSConfig_ToCertPool(t *testing.T) {
 	t.Run("returns an error if CertificateFrom not specified", func(t *testing.T) {
-		c := &v1alpha1.GitHubServerTLSConfig{
+		c := &v1alpha1.TLSConfig{
 			CertificateFrom: nil,
 		}
 
@@ -29,7 +29,7 @@ func TestGitHubServerTLSConfig_ToCertPool(t *testing.T) {
 	})
 
 	t.Run("returns an error if CertificateFrom.ConfigMapKeyRef not specified", func(t *testing.T) {
-		c := &v1alpha1.GitHubServerTLSConfig{
+		c := &v1alpha1.TLSConfig{
 			CertificateFrom: &v1alpha1.TLSCertificateSource{},
 		}
 
@@ -41,7 +41,7 @@ func TestGitHubServerTLSConfig_ToCertPool(t *testing.T) {
 	})
 
 	t.Run("returns a valid cert pool with correct configuration", func(t *testing.T) {
-		c := &v1alpha1.GitHubServerTLSConfig{
+		c := &v1alpha1.TLSConfig{
 			CertificateFrom: &v1alpha1.TLSCertificateSource{
 				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
 					LocalObjectReference: v1.LocalObjectReference{

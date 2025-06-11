@@ -45,6 +45,7 @@ metadata:
     {{- if and (ne $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
     actions.github.com/cleanup-no-permission-service-account-name: {{ include "gha-runner-scale-set.noPermissionServiceAccountName" . }}
     {{- end }}
+
 spec:
   githubConfigUrl: {{ required ".Values.githubConfigUrl is required" (trimSuffix "/" .Values.githubConfigUrl) }}
   githubConfigSecret: {{ include "gha-runner-scale-set.githubsecret" . }}
@@ -62,6 +63,24 @@ spec:
       configMapKeyRef:
         name: {{ .configMapKeyRef.name }}
         key: {{ .configMapKeyRef.key }}
+    {{- end }}
+  {{- end }}
+
+  {{- if and .Values.keyVault .Values.keyVault.type }}
+  vaultConfig:
+    type: {{ .Values.keyVault.type }}
+    {{- if .Values.keyVault.proxy }}
+    proxy: {{- toYaml .Values.keyVault.proxy | nindent 6 }}
+    {{- end }}
+    {{- if eq .Values.keyVault.type "azure_key_vault" }}
+    azureKeyVault:
+      url: {{ .Values.keyVault.azureKeyVault.url }}
+      tenantId: {{ .Values.keyVault.azureKeyVault.tenantId }}
+      clientId: {{ .Values.keyVault.azureKeyVault.clientId }}
+      certificatePath: {{ .Values.keyVault.azureKeyVault.certificatePath }}
+      secretKey: {{ .Values.keyVault.azureKeyVault.secretKey }}
+    {{- else }}
+    {{- fail "Unsupported keyVault type: " .Values.keyVault.type }}
     {{- end }}
   {{- end }}
 
