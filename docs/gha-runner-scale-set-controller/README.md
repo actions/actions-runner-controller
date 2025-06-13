@@ -48,7 +48,7 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 1. Allow use of client id as an app id [#4057](https://github.com/actions/actions-runner-controller/pull/4057)
 1. Relax version requirements to allow patch version mismatch [#4080](https://github.com/actions/actions-runner-controller/pull/4080)
 1. Refactor resource naming removing unnecessary calculations [#4076](https://github.com/actions/actions-runner-controller/pull/4076)
-1. Fix busy runners metric [#4016](https://github.com/actions/actuions-runner-controller/pull/4016)
+1. Fix busy runners metric [#4016](https://github.com/actions/actions-runner-controller/pull/4016)
 1. Include more context to errors raised by github/actions client [#4032](https://github.com/actions/actions-runner-controller/pull/4032)
 1. Revised dashboard [#4022](https://github.com/actions/actions-runner-controller/pull/4022)
 1. feat(helm): move dind to sidecar [#3842](https://github.com/actions/actions-runner-controller/pull/3842)
