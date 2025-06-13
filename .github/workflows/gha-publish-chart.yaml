@@ -103,8 +103,6 @@ jobs:
           tags: |
             ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:${{ inputs.release_tag_name }}
             ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:${{ inputs.release_tag_name }}-${{ steps.resolve_parameters.outputs.short_sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Job summary
         run: |
