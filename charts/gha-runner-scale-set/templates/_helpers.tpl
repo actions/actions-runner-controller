@@ -113,9 +113,9 @@ startupProbe:
     command:
       - docker
       - info
-    initialDelaySeconds: 0
-    failureThreshold: 24
-    periodSeconds: 5
+  initialDelaySeconds: 0
+  failureThreshold: 24
+  periodSeconds: 5
 {{- end }}
 volumeMounts:
   - name: work
