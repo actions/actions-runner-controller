@@ -166,11 +166,11 @@ spec:
       initContainers:
         {{- if eq $containerMode.type "dind" }}
       - name: init-dind-externals
-        {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
-        {{- end }}
-        {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
+          {{- include "gha-runner-scale-set.dind-init-container" . | nindent 8 }}
+          {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
       - name: dind
-        {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
+          {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
+          {{- end }}
         {{- end }}
         {{- with .Values.template.spec.initContainers }}
       {{- toYaml . | nindent 6 }}

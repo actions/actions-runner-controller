@@ -326,9 +326,16 @@ template:
   ##           command:
   ##             - docker
   ##             - info
-##           initialDelaySeconds: 0
-##           failureThreshold: 24
-##           periodSeconds: 5
+  ##         initialDelaySeconds: 0
+  ##         failureThreshold: 24
+  ##         periodSeconds: 5
+  ##       volumeMounts:
+  ##         - name: work
+  ##           mountPath: /home/runner/_work
+  ##         - name: dind-sock
+  ##           mountPath: /var/run
+  ##         - name: dind-externals
+  ##           mountPath: /home/runner/externals
   ##     containers:
   ##     - name: runner
   ##       image: ghcr.io/actions/actions-runner:latest
