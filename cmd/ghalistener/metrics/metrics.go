@@ -468,7 +468,7 @@ func (e *exporter) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
 	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
 	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))
-	e.setGauge(MetricBusyRunners, e.scaleSetLabels, float64(float64(stats.TotalBusyRunners)))
+	e.setGauge(MetricBusyRunners, e.scaleSetLabels, float64(stats.TotalBusyRunners))
 	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 
