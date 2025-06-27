@@ -43,6 +43,14 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.12.1
+
+1. Fix indentation of startupProbe attributes in dind sidecar [#4126](https://github.com/actions/actions-runner-controller/pull/4126)
+1. Remove duplicate float64 call [#4139](https://github.com/actions/actions-runner-controller/pull/4139)
+1. Fix dind sidecar template [#4128](https://github.com/actions/actions-runner-controller/pull/4128)
+1. Remove check if runner exists after exit code 0 [#4142](https://github.com/actions/actions-runner-controller/pull/4142)
+1. Explicitly requeue during backoff ephemeral runner [#4152](https://github.com/actions/actions-runner-controller/pull/4152)
+
 ### 0.12.0
 
 1. Allow use of client id as an app id [#4057](https://github.com/actions/actions-runner-controller/pull/4057)
