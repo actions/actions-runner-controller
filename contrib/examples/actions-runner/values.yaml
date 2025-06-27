@@ -1,3 +1,5 @@
+labels: {}
+
 image:
   repository: summerwind/actions-runner
   tag: v2.290.1-ubuntu-20.04
