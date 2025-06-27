@@ -675,53 +675,6 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
-		It("It should re-create pod on exit status 0, but runner exists within the service", func() {
-			pod := new(corev1.Pod)
-			Eventually(
-				func() (bool, error) {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
-						return false, err
-					}
-					return true, nil
-				},
-				ephemeralRunnerTimeout,
-				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(true))
-
-			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
-				Name: v1alpha1.EphemeralRunnerContainerName,
-				State: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{
-						ExitCode: 0,
-					},
-				},
-			})
-			err := k8sClient.Status().Update(ctx, pod)
-			Expect(err).To(BeNil(), "failed to update pod status")
-
-			updated := new(v1alpha1.EphemeralRunner)
-			Eventually(func() (bool, error) {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
-				if err != nil {
-					return false, err
-				}
-				return len(updated.Status.Failures) == 1, nil
-			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
-
-			// should re-create after failure
-			Eventually(
-				func() (bool, error) {
-					pod := new(corev1.Pod)
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
-						return false, err
-					}
-					return true, nil
-				},
-				ephemeralRunnerTimeout,
-				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(true))
-		})
-
 		It("It should not set the phase to succeeded without pod termination status", func() {
 			pod := new(corev1.Pod)
 			Eventually(

@@ -293,28 +293,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, nil
 
-	default:
-		// pod succeeded. We double-check with the service if the runner exists.
-		// The reason is that image can potentially finish with status 0, but not pick up the job.
-		existsInService, err := r.runnerRegisteredWithService(ctx, ephemeralRunner.DeepCopy(), log)
-		if err != nil {
-			log.Error(err, "Failed to check if runner is registered with the service")
-			return ctrl.Result{}, err
-		}
-		if !existsInService {
-			// the runner does not exist in the service, so it must be done
-			log.Info("Ephemeral runner has finished since it does not exist in the service anymore")
-			if err := r.markAsFinished(ctx, ephemeralRunner, log); err != nil {
-				log.Error(err, "Failed to mark ephemeral runner as finished")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-
-		// The runner still exists. This can happen if the pod exited with 0 but fails to start
-		log.Info("Ephemeral runner pod has finished, but the runner still exists in the service. Deleting the pod to restart it.")
-		if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
-			log.Error(err, "failed to delete a pod that still exists in the service")
+	default: // succeeded
+		log.Info("Ephemeral runner has finished successfully")
+		if err := r.markAsFinished(ctx, ephemeralRunner, log); err != nil {
+			log.Error(err, "Failed to mark ephemeral runner as finished")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -750,35 +732,6 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 
 	log.Info("Updated ephemeral runner status")
 	return nil
-}
-
-// runnerRegisteredWithService checks if the runner is still registered with the service
-// Returns found=false and err=nil if ephemeral runner does not exist in GitHub service and should be deleted
-func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (found bool, err error) {
-	actionsClient, err := r.GetActionsService(ctx, runner)
-	if err != nil {
-		return false, fmt.Errorf("failed to get Actions client for ScaleSet: %w", err)
-	}
-
-	log.Info("Checking if runner exists in GitHub service", "runnerId", runner.Status.RunnerId)
-	_, err = actionsClient.GetRunner(ctx, int64(runner.Status.RunnerId))
-	if err != nil {
-		actionsError := &actions.ActionsError{}
-		if !errors.As(err, &actionsError) {
-			return false, err
-		}
-
-		if actionsError.StatusCode != http.StatusNotFound ||
-			!actionsError.IsException("AgentNotFoundException") {
-			return false, fmt.Errorf("failed to check if runner exists in GitHub service: %w", err)
-		}
-
-		log.Info("Runner does not exist in GitHub service", "runnerId", runner.Status.RunnerId)
-		return false, nil
-	}
-
-	log.Info("Runner exists in GitHub service", "runnerId", runner.Status.RunnerId)
-	return true, nil
 }
 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
