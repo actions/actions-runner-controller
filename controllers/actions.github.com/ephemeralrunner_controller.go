@@ -201,12 +201,16 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	backoffDuration := failedRunnerBackoff[len(ephemeralRunner.Status.Failures)]
 	nextReconciliation := lastFailure.Add(backoffDuration)
 	if !lastFailure.IsZero() && now.Before(&metav1.Time{Time: nextReconciliation}) {
+		requeueAfter := nextReconciliation.Sub(now.Time)
 		log.Info("Backing off the next reconciliation due to failure",
 			"lastFailure", lastFailure,
 			"nextReconciliation", nextReconciliation,
-			"requeueAfter", nextReconciliation.Sub(now.Time),
+			"requeueAfter", requeueAfter,
 		)
-		return ctrl.Result{RequeueAfter: now.Sub(nextReconciliation)}, nil
+		return ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: requeueAfter,
+		}, nil
 	}
 
 	secret := new(corev1.Secret)
