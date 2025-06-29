@@ -154,13 +154,148 @@ type ExporterConfig struct {
 	ServerAddr        string
 	ServerEndpoint    string
 	Logger            logr.Logger
-	Metrics           v1alpha1.MetricsConfig
+	Metrics           *v1alpha1.MetricsConfig
+}
+
+var defaultMetrics = v1alpha1.MetricsConfig{
+	Counters: map[string]*v1alpha1.CounterMetric{
+		MetricStartedJobsTotal: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+			},
+		},
+		MetricCompletedJobsTotal: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+				labelKeyJobResult,
+			},
+		},
+	},
+	Gauges: map[string]*v1alpha1.GaugeMetric{
+		MetricAssignedJobs: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricRunningJobs: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricRegisteredRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricBusyRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricMinRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricMaxRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricDesiredRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricIdleRunners: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+	},
+	Histograms: map[string]*v1alpha1.HistogramMetric{
+		MetricJobStartupDurationSeconds: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+			},
+			Buckets: defaultRuntimeBuckets,
+		},
+		MetricJobExecutionDurationSeconds: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+				labelKeyJobResult,
+			},
+			Buckets: defaultRuntimeBuckets,
+		},
+	},
+}
+
+func (e *ExporterConfig) defaults() {
+	if e.ServerAddr == "" {
+		e.ServerAddr = ":8080"
+	}
+	if e.ServerEndpoint == "" {
+		e.ServerEndpoint = "/metrics"
+	}
+	if e.Metrics == nil {
+		defaultMetrics := defaultMetrics
+		e.Metrics = &defaultMetrics
+	}
 }
 
 func NewExporter(config ExporterConfig) ServerExporter {
+	config.defaults()
 	reg := prometheus.NewRegistry()
 
-	metrics := installMetrics(config.Metrics, reg, config.Logger)
+	metrics := installMetrics(*config.Metrics, reg, config.Logger)
 
 	mux := http.NewServeMux()
 	mux.Handle(
@@ -333,7 +468,7 @@ func (e *exporter) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
 	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
 	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))
-	e.setGauge(MetricBusyRunners, e.scaleSetLabels, float64(float64(stats.TotalBusyRunners)))
+	e.setGauge(MetricBusyRunners, e.scaleSetLabels, float64(stats.TotalBusyRunners))
 	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 

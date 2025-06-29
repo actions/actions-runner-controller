@@ -130,7 +130,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 			jobs, resp, err := ghc.Actions.ListWorkflowJobs(context.TODO(), user, repoName, runID, &opt)
 			if err != nil {
 				r.Log.Error(err, "Error listing workflow jobs")
-				return //err
+				return // err
 			}
 			allJobs = append(allJobs, jobs.Jobs...)
 			if resp.NextPage == 0 {

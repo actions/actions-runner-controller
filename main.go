@@ -274,9 +274,17 @@ func main() {
 			log.WithName("actions-clients"),
 		)
 
+		secretResolver := actionsgithubcom.NewSecretResolver(
+			mgr.GetClient(),
+			actionsMultiClient,
+		)
+
 		rb := actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
+			SecretResolver:                  secretResolver,
 		}
+
+		log.Info("Resource builder initializing")
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
@@ -297,7 +305,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
@@ -308,7 +315,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {

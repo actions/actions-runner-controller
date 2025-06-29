@@ -93,8 +93,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push controller image
-        # https://github.com/docker/build-push-action/releases/tag/v6.15.0
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4
+        # https://github.com/docker/build-push-action/releases/tag/v6.18.0
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
@@ -103,8 +103,6 @@ jobs:
           tags: |
             ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:${{ inputs.release_tag_name }}
             ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/gha-runner-scale-set-controller:${{ inputs.release_tag_name }}-${{ steps.resolve_parameters.outputs.short_sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Job summary
         run: |

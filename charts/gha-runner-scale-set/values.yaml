@@ -6,7 +6,7 @@ githubConfigUrl: ""
 ## You can choose to supply:
 ##   A) a PAT token,
 ##   B) a GitHub App, or
-##   C) a pre-defined Kubernetes secret.
+##   C) a pre-defined secret.
 ## The syntax for each of these variations is documented below.
 ## (Variation A) When using a PAT token, the syntax is as follows:
 githubConfigSecret:
@@ -28,8 +28,11 @@ githubConfigSecret:
 #      .
 #      private key line N
 #
-## (Variation C) When using a pre-defined Kubernetes secret in the same namespace that the gha-runner-scale-set is going to deploy,
-## the syntax is as follows:
+## (Variation C) When using a pre-defined secret.
+## The secret can be pulled either directly from Kubernetes, or from the vault, depending on configuration.
+## Kubernetes secret in the same namespace that the gha-runner-scale-set is going to deploy.
+## On the other hand, if the vault is configured, secret name will be used to fetch the app configuration.
+## The syntax is as follows:
 # githubConfigSecret: pre-defined-secret
 ## Notes on using pre-defined Kubernetes secrets:
 ##   You need to make sure your predefined secret has all the required secret data set properly.
@@ -84,6 +87,26 @@ githubConfigSecret:
 #       name: config-map-name
 #       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
+
+# keyVault:
+  # Available values: "azure_key_vault"
+  # type: ""
+  # Configuration related to azure key vault
+  # azure_key_vault:
+  #   url: ""
+  #   client_id: ""
+  #   tenant_id: ""
+  #   certificate_path: ""
+    # proxy:
+    #   http:
+    #     url: http://proxy.com:1234
+    #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+    #   https:
+    #     url: http://proxy.com:1234
+    #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+    #   noProxy:
+    #     - example.com
+    #     - example.org
 
 ## Container mode is an object that provides out-of-box configuration
 ## for dind and kubernetes mode. Template will be modified as documented under the
@@ -286,18 +309,6 @@ template:
   ##       volumeMounts:
   ##         - name: dind-externals
   ##           mountPath: /home/runner/tmpDir
-  ##     containers:
-  ##     - name: runner
-  ##       image: ghcr.io/actions/actions-runner:latest
-  ##       command: ["/home/runner/run.sh"]
-  ##       env:
-  ##         - name: DOCKER_HOST
-  ##           value: unix:///var/run/docker.sock
-  ##       volumeMounts:
-  ##         - name: work
-  ##           mountPath: /home/runner/_work
-  ##         - name: dind-sock
-  ##           mountPath: /var/run
   ##     - name: dind
   ##       image: docker:dind
   ##       args:
@@ -309,6 +320,15 @@ template:
   ##           value: "123"
   ##       securityContext:
   ##         privileged: true
+  ##       restartPolicy: Always
+  ##       startupProbe:
+  ##         exec:
+  ##           command:
+  ##             - docker
+  ##             - info
+  ##         initialDelaySeconds: 0
+  ##         failureThreshold: 24
+  ##         periodSeconds: 5
   ##       volumeMounts:
   ##         - name: work
   ##           mountPath: /home/runner/_work
@@ -316,6 +336,20 @@ template:
   ##           mountPath: /var/run
   ##         - name: dind-externals
   ##           mountPath: /home/runner/externals
+  ##     containers:
+  ##     - name: runner
+  ##       image: ghcr.io/actions/actions-runner:latest
+  ##       command: ["/home/runner/run.sh"]
+  ##       env:
+  ##         - name: DOCKER_HOST
+  ##           value: unix:///var/run/docker.sock
+  ##         - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+  ##           value: "120"
+  ##       volumeMounts:
+  ##         - name: work
+  ##           mountPath: /home/runner/_work
+  ##         - name: dind-sock
+  ##           mountPath: /var/run
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}

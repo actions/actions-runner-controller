@@ -45,9 +45,8 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	ActionsClient actions.MultiClient
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 	ResourceBuilder
 }
 
@@ -202,12 +201,16 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	backoffDuration := failedRunnerBackoff[len(ephemeralRunner.Status.Failures)]
 	nextReconciliation := lastFailure.Add(backoffDuration)
 	if !lastFailure.IsZero() && now.Before(&metav1.Time{Time: nextReconciliation}) {
+		requeueAfter := nextReconciliation.Sub(now.Time)
 		log.Info("Backing off the next reconciliation due to failure",
 			"lastFailure", lastFailure,
 			"nextReconciliation", nextReconciliation,
-			"requeueAfter", nextReconciliation.Sub(now.Time),
+			"requeueAfter", requeueAfter,
 		)
-		return ctrl.Result{RequeueAfter: now.Sub(nextReconciliation)}, nil
+		return ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: requeueAfter,
+		}, nil
 	}
 
 	secret := new(corev1.Secret)
@@ -294,28 +297,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, nil
 
-	default:
-		// pod succeeded. We double-check with the service if the runner exists.
-		// The reason is that image can potentially finish with status 0, but not pick up the job.
-		existsInService, err := r.runnerRegisteredWithService(ctx, ephemeralRunner.DeepCopy(), log)
-		if err != nil {
-			log.Error(err, "Failed to check if runner is registered with the service")
-			return ctrl.Result{}, err
-		}
-		if !existsInService {
-			// the runner does not exist in the service, so it must be done
-			log.Info("Ephemeral runner has finished since it does not exist in the service anymore")
-			if err := r.markAsFinished(ctx, ephemeralRunner, log); err != nil {
-				log.Error(err, "Failed to mark ephemeral runner as finished")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-
-		// The runner still exists. This can happen if the pod exited with 0 but fails to start
-		log.Info("Ephemeral runner pod has finished, but the runner still exists in the service. Deleting the pod to restart it.")
-		if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
-			log.Error(err, "failed to delete a pod that still exists in the service")
+	default: // succeeded
+		log.Info("Ephemeral runner has finished successfully")
+		if err := r.markAsFinished(ctx, ephemeralRunner, log); err != nil {
+			log.Error(err, "Failed to mark ephemeral runner as finished")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -529,7 +514,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 func (r *EphemeralRunnerReconciler) updateStatusWithRunnerConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (*ctrl.Result, error) {
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunner)
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
 	if err != nil {
 		return &ctrl.Result{}, fmt.Errorf("failed to get actions client for generating JIT config: %w", err)
 	}
@@ -753,104 +738,8 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	return nil
 }
 
-func (r *EphemeralRunnerReconciler) actionsClientFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) (actions.ActionsService, error) {
-	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: runner.Spec.GitHubConfigSecret}, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret: %w", err)
-	}
-
-	opts, err := r.actionsClientOptionsFor(ctx, runner)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get actions client options: %w", err)
-	}
-
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		runner.Spec.GitHubConfigUrl,
-		runner.Namespace,
-		secret.Data,
-		opts...,
-	)
-}
-
-func (r *EphemeralRunnerReconciler) actionsClientOptionsFor(ctx context.Context, runner *v1alpha1.EphemeralRunner) ([]actions.ClientOption, error) {
-	var opts []actions.ClientOption
-	if runner.Spec.Proxy != nil {
-		proxyFunc, err := runner.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
-			var secret corev1.Secret
-			err := r.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: s}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
-			}
-
-			return &secret, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get proxy func: %w", err)
-		}
-
-		opts = append(opts, actions.WithProxy(proxyFunc))
-	}
-
-	tlsConfig := runner.Spec.GitHubServerTLS
-	if tlsConfig != nil {
-		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
-			var configmap corev1.ConfigMap
-			err := r.Get(
-				ctx,
-				types.NamespacedName{
-					Namespace: runner.Namespace,
-					Name:      name,
-				},
-				&configmap,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
-			}
-
-			return []byte(configmap.Data[key]), nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tls config: %w", err)
-		}
-
-		opts = append(opts, actions.WithRootCAs(pool))
-	}
-
-	return opts, nil
-}
-
-// runnerRegisteredWithService checks if the runner is still registered with the service
-// Returns found=false and err=nil if ephemeral runner does not exist in GitHub service and should be deleted
-func (r EphemeralRunnerReconciler) runnerRegisteredWithService(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (found bool, err error) {
-	actionsClient, err := r.actionsClientFor(ctx, runner)
-	if err != nil {
-		return false, fmt.Errorf("failed to get Actions client for ScaleSet: %w", err)
-	}
-
-	log.Info("Checking if runner exists in GitHub service", "runnerId", runner.Status.RunnerId)
-	_, err = actionsClient.GetRunner(ctx, int64(runner.Status.RunnerId))
-	if err != nil {
-		actionsError := &actions.ActionsError{}
-		if !errors.As(err, &actionsError) {
-			return false, err
-		}
-
-		if actionsError.StatusCode != http.StatusNotFound ||
-			!actionsError.IsException("AgentNotFoundException") {
-			return false, fmt.Errorf("failed to check if runner exists in GitHub service: %w", err)
-		}
-
-		log.Info("Runner does not exist in GitHub service", "runnerId", runner.Status.RunnerId)
-		return false, nil
-	}
-
-	log.Info("Runner exists in GitHub service", "runnerId", runner.Status.RunnerId)
-	return true, nil
-}
-
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	client, err := r.actionsClientFor(ctx, ephemeralRunner)
+	client, err := r.GetActionsService(ctx, ephemeralRunner)
 	if err != nil {
 		return fmt.Errorf("failed to get actions client for runner: %w", err)
 	}

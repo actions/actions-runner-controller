@@ -107,10 +107,15 @@ var _ = Describe("EphemeralRunner", func() {
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 			controller = &EphemeralRunnerReconciler{
-				Client:        mgr.GetClient(),
-				Scheme:        mgr.GetScheme(),
-				Log:           logf.Log,
-				ActionsClient: fake.NewMultiClient(),
+				Client: mgr.GetClient(),
+				Scheme: mgr.GetScheme(),
+				Log:    logf.Log,
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   mgr.GetClient(),
+						multiClient: fake.NewMultiClient(),
+					},
+				},
 			}
 
 			err := controller.SetupWithManager(mgr)
@@ -670,53 +675,6 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
-		It("It should re-create pod on exit status 0, but runner exists within the service", func() {
-			pod := new(corev1.Pod)
-			Eventually(
-				func() (bool, error) {
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
-						return false, err
-					}
-					return true, nil
-				},
-				ephemeralRunnerTimeout,
-				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(true))
-
-			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
-				Name: v1alpha1.EphemeralRunnerContainerName,
-				State: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{
-						ExitCode: 0,
-					},
-				},
-			})
-			err := k8sClient.Status().Update(ctx, pod)
-			Expect(err).To(BeNil(), "failed to update pod status")
-
-			updated := new(v1alpha1.EphemeralRunner)
-			Eventually(func() (bool, error) {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
-				if err != nil {
-					return false, err
-				}
-				return len(updated.Status.Failures) == 1, nil
-			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
-
-			// should re-create after failure
-			Eventually(
-				func() (bool, error) {
-					pod := new(corev1.Pod)
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
-						return false, err
-					}
-					return true, nil
-				},
-				ephemeralRunnerTimeout,
-				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(true))
-		})
-
 		It("It should not set the phase to succeeded without pod termination status", func() {
 			pod := new(corev1.Pod)
 			Eventually(
@@ -789,22 +747,27 @@ var _ = Describe("EphemeralRunner", func() {
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
-				ActionsClient: fake.NewMultiClient(
-					fake.WithDefaultClient(
-						fake.NewFakeClient(
-							fake.WithGetRunner(
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient: mgr.GetClient(),
+						multiClient: fake.NewMultiClient(
+							fake.WithDefaultClient(
+								fake.NewFakeClient(
+									fake.WithGetRunner(
+										nil,
+										&actions.ActionsError{
+											StatusCode: http.StatusNotFound,
+											Err: &actions.ActionsExceptionError{
+												ExceptionName: "AgentNotFoundException",
+											},
+										},
+									),
+								),
 								nil,
-								&actions.ActionsError{
-									StatusCode: http.StatusNotFound,
-									Err: &actions.ActionsExceptionError{
-										ExceptionName: "AgentNotFoundException",
-									},
-								},
 							),
 						),
-						nil,
-					),
-				),
+					},
+				},
 			}
 			err := controller.SetupWithManager(mgr)
 			Expect(err).To(BeNil(), "failed to setup controller")
@@ -861,10 +824,15 @@ var _ = Describe("EphemeralRunner", func() {
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoScalingNS.Name)
 
 			controller = &EphemeralRunnerReconciler{
-				Client:        mgr.GetClient(),
-				Scheme:        mgr.GetScheme(),
-				Log:           logf.Log,
-				ActionsClient: fake.NewMultiClient(),
+				Client: mgr.GetClient(),
+				Scheme: mgr.GetScheme(),
+				Log:    logf.Log,
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   mgr.GetClient(),
+						multiClient: fake.NewMultiClient(),
+					},
+				},
 			}
 			err := controller.SetupWithManager(mgr)
 			Expect(err).To(BeNil(), "failed to setup controller")
@@ -874,7 +842,12 @@ var _ = Describe("EphemeralRunner", func() {
 
 		It("uses an actions client with proxy transport", func() {
 			// Use an actual client
-			controller.ActionsClient = actions.NewMultiClient(logr.Discard())
+			controller.ResourceBuilder = ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   mgr.GetClient(),
+					multiClient: actions.NewMultiClient(logr.Discard()),
+				},
+			}
 
 			proxySuccessfulllyCalled := false
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1025,10 +998,15 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
 			controller = &EphemeralRunnerReconciler{
-				Client:        mgr.GetClient(),
-				Scheme:        mgr.GetScheme(),
-				Log:           logf.Log,
-				ActionsClient: fake.NewMultiClient(),
+				Client: mgr.GetClient(),
+				Scheme: mgr.GetScheme(),
+				Log:    logf.Log,
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &SecretResolver{
+						k8sClient:   mgr.GetClient(),
+						multiClient: fake.NewMultiClient(),
+					},
+				},
 			}
 
 			err = controller.SetupWithManager(mgr)
@@ -1059,11 +1037,16 @@ var _ = Describe("EphemeralRunner", func() {
 			server.StartTLS()
 
 			// Use an actual client
-			controller.ActionsClient = actions.NewMultiClient(logr.Discard())
+			controller.ResourceBuilder = ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   mgr.GetClient(),
+					multiClient: actions.NewMultiClient(logr.Discard()),
+				},
+			}
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
-			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.GitHubServerTLSConfig{
+			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{

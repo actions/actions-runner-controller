@@ -59,7 +59,10 @@ type AutoscalingListenerSpec struct {
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	// +optional
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
@@ -87,7 +90,6 @@ type AutoscalingListener struct {
 }
 
 // +kubebuilder:object:root=true
-
 // AutoscalingListenerList contains a list of AutoscalingListener
 type AutoscalingListenerList struct {
 	metav1.TypeMeta `json:",inline"`

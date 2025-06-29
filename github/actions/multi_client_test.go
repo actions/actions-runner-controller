@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,10 +24,13 @@ func TestMultiClientCaching(t *testing.T) {
 
 	defaultNamespace := "default"
 	defaultConfigURL := "https://github.com/org/repo"
-	defaultCreds := &ActionsAuth{
+	defaultCreds := &appconfig.AppConfig{
 		Token: "token",
 	}
-	client, err := NewClient(defaultConfigURL, defaultCreds)
+	defaultAuth := ActionsAuth{
+		Token: defaultCreds.Token,
+	}
+	client, err := NewClient(defaultConfigURL, &defaultAuth)
 	require.NoError(t, err)
 
 	multiClient.clients[ActionsClientKey{client.Identifier(), defaultNamespace}] = client
@@ -35,7 +39,7 @@ func TestMultiClientCaching(t *testing.T) {
 	cachedClient, err := multiClient.GetClientFor(
 		ctx,
 		defaultConfigURL,
-		*defaultCreds,
+		defaultCreds,
 		defaultNamespace,
 	)
 	require.NoError(t, err)
@@ -47,7 +51,7 @@ func TestMultiClientCaching(t *testing.T) {
 	newClient, err := multiClient.GetClientFor(
 		ctx,
 		defaultConfigURL,
-		*defaultCreds,
+		defaultCreds,
 		otherNamespace,
 	)
 	require.NoError(t, err)
@@ -63,7 +67,7 @@ func TestMultiClientOptions(t *testing.T) {
 	defaultConfigURL := "https://github.com/org/repo"
 
 	t.Run("GetClientFor", func(t *testing.T) {
-		defaultCreds := &ActionsAuth{
+		defaultCreds := &appconfig.AppConfig{
 			Token: "token",
 		}
 
@@ -71,32 +75,11 @@ func TestMultiClientOptions(t *testing.T) {
 		service, err := multiClient.GetClientFor(
 			ctx,
 			defaultConfigURL,
-			*defaultCreds,
+			defaultCreds,
 			defaultNamespace,
 		)
 		service.SetUserAgent(testUserAgent)
 
-		require.NoError(t, err)
-
-		client := service.(*Client)
-		req, err := client.NewGitHubAPIRequest(ctx, "GET", "/test", nil)
-		require.NoError(t, err)
-		assert.Equal(t, testUserAgent.String(), req.Header.Get("User-Agent"))
-	})
-
-	t.Run("GetClientFromSecret", func(t *testing.T) {
-		secret := map[string][]byte{
-			"github_token": []byte("token"),
-		}
-
-		multiClient := NewMultiClient(logger)
-		service, err := multiClient.GetClientFromSecret(
-			ctx,
-			defaultConfigURL,
-			defaultNamespace,
-			secret,
-		)
-		service.SetUserAgent(testUserAgent)
 		require.NoError(t, err)
 
 		client := service.(*Client)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -9,20 +10,26 @@ import (
 	"os"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault"
+	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"github.com/go-logr/logr"
 	"golang.org/x/net/http/httpproxy"
 )
 
 type Config struct {
-	ConfigureUrl string `json:"configure_url"`
-	// AppID can be an ID of the app or the client ID
-	AppID                       string                  `json:"app_id"`
-	AppInstallationID           int64                   `json:"app_installation_id"`
-	AppPrivateKey               string                  `json:"app_private_key"`
-	Token                       string                  `json:"token"`
+	ConfigureUrl   string          `json:"configure_url"`
+	VaultType      vault.VaultType `json:"vault_type"`
+	VaultLookupKey string          `json:"vault_lookup_key"`
+	// If the VaultType is set to "azure_key_vault", this field must be populated.
+	AzureKeyVaultConfig *azurekeyvault.Config `json:"azure_key_vault,omitempty"`
+	// AppConfig contains the GitHub App configuration.
+	// It is initially set to nil if VaultType is set.
+	// Otherwise, it is populated with the GitHub App credentials from the GitHub secret.
+	*appconfig.AppConfig
 	EphemeralRunnerSetNamespace string                  `json:"ephemeral_runner_set_namespace"`
 	EphemeralRunnerSetName      string                  `json:"ephemeral_runner_set_name"`
 	MaxRunners                  int                     `json:"max_runners"`
@@ -37,23 +44,58 @@ type Config struct {
 	Metrics                     *v1alpha1.MetricsConfig `json:"metrics"`
 }
 
-func Read(path string) (Config, error) {
-	f, err := os.Open(path)
+func Read(ctx context.Context, configPath string) (*Config, error) {
+	f, err := os.Open(configPath)
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 	defer f.Close()
 
 	var config Config
 	if err := json.NewDecoder(f).Decode(&config); err != nil {
-		return Config{}, fmt.Errorf("failed to decode config: %w", err)
+		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
+
+	var vault vault.Vault
+	switch config.VaultType {
+	case "":
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("failed to validate configuration: %v", err)
+		}
+
+		return &config, nil
+	case "azure_key_vault":
+		akv, err := azurekeyvault.New(*config.AzureKeyVaultConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Azure Key Vault client: %w", err)
+		}
+
+		vault = akv
+	default:
+		return nil, fmt.Errorf("unsupported vault type: %s", config.VaultType)
+	}
+
+	appConfigRaw, err := vault.GetSecret(ctx, config.VaultLookupKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get app config from vault: %w", err)
+	}
+
+	appConfig, err := appconfig.FromJSONString(appConfigRaw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read app config from string: %v", err)
+	}
+
+	config.AppConfig = appConfig
 
 	if err := config.Validate(); err != nil {
-		return Config{}, fmt.Errorf("failed to validate config: %w", err)
+		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
-	return config, nil
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	return &config, nil
 }
 
 // Validate checks the configuration for errors.
@@ -74,15 +116,19 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
 	}
 
-	hasToken := len(c.Token) > 0
-	hasPrivateKeyConfig := len(c.AppID) > 0 && c.AppPrivateKey != ""
-
-	if !hasToken && !hasPrivateKeyConfig {
-		return fmt.Errorf(`GitHub auth credential is missing, token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
+	if c.VaultType != "" {
+		if err := c.VaultType.Validate(); err != nil {
+			return fmt.Errorf("VaultType validation failed: %w", err)
+		}
+		if c.VaultLookupKey == "" {
+			return fmt.Errorf("VaultLookupKey is required when VaultType is set to %q", c.VaultType)
+		}
 	}
 
-	if hasToken && hasPrivateKeyConfig {
-		return fmt.Errorf(`only one GitHub auth method supported at a time. Have both PAT and App auth: token length: "%d", appId: %q, installationId: "%d", private key length: "%d"`, len(c.Token), c.AppID, c.AppInstallationID, len(c.AppPrivateKey))
+	if c.VaultType == "" && c.VaultLookupKey == "" {
+		if err := c.AppConfig.Validate(); err != nil {
+			return fmt.Errorf("AppConfig validation failed: %w", err)
+		}
 	}
 
 	return nil
