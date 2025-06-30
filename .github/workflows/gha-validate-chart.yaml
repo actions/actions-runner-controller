@@ -42,7 +42,7 @@ jobs:
 
       - name: Set up Helm
         # Using https://github.com/Azure/setup-helm/releases/tag/v4.2.0
-        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -69,7 +69,7 @@ jobs:
           ct lint --config charts/.ci/ct-config-gha.yaml
 
       - name: Set up docker buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
         if: steps.list-changed.outputs.changed == 'true'
         with:
           version: latest
