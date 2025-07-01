@@ -683,7 +683,8 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 
 	expectedArgs := []string{
 		"--auto-scaling-runner-set-only",
-		"--auto-scaler-image-pull-secrets=dockerhub,ghcr",
+		"--auto-scaler-image-pull-secrets=dockerhub",
+		"--auto-scaler-image-pull-secrets=ghcr",
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
@@ -1079,6 +1080,7 @@ func TestDeployment_excludeLabelPropagationPrefixes(t *testing.T) {
 	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=prefix.com/")
 	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=complete.io/label")
 }
+
 func TestNamespaceOverride(t *testing.T) {
 	t.Parallel()
 
