@@ -9304,11 +9304,11 @@ spec:
               properties:
                 availableReplicas:
                   description: |-
-                    AvailableReplicas is the number of runners that are created and Runnning.
+                    AvailableReplicas is the number of runners that are created and Running.
                     This is currently same as ReadyReplicas but perserved for future use.
                   type: integer
                 readyReplicas:
-                  description: ReadyReplicas is the number of runners that are created and Runnning.
+                  description: ReadyReplicas is the number of runners that are created and Running.
                   type: integer
                 replicas:
                   description: Replicas is the number of runners that are created and still being managed by this runner replica set.
