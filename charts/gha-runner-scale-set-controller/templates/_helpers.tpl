@@ -129,11 +129,3 @@ Create the name of the service account to use
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleBinding" -}}
 {{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
-
-{{- define "gha-runner-scale-set-controller.imagePullSecretsNames" -}}
-{{- $names := list }}
-{{- range $k, $v := . }}
-  {{- $names = append $names $v.name }}
-{{- end }}
-{{- $names | join ","}}
-{{- end }}
