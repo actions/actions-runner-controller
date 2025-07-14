@@ -6,7 +6,7 @@ endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
 COMMIT_SHA = $(shell git rev-parse HEAD)
-RUNNER_VERSION ?= 2.325.0
+RUNNER_VERSION ?= 2.326.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
