@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/actions/actions-runner-controller/hash"
+	"github.com/actions/actions-runner-controller/vault"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,16 +32,16 @@ import (
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
-//+kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-//+kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
@@ -69,10 +70,16 @@ type AutoscalingRunnerSetSpec struct {
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	// Required
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+
+	// +optional
+	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
 
 	// +optional
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
@@ -86,12 +93,12 @@ type AutoscalingRunnerSetSpec struct {
 	MinRunners *int `json:"minRunners,omitempty"`
 }
 
-type GitHubServerTLSConfig struct {
+type TLSConfig struct {
 	// Required
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
 }
 
-func (c *GitHubServerTLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
+func (c *TLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)) (*x509.CertPool, error) {
 	if c.CertificateFrom == nil {
 		return nil, fmt.Errorf("certificateFrom not specified")
 	}
@@ -139,7 +146,7 @@ type ProxyConfig struct {
 	NoProxy []string `json:"noProxy,omitempty"`
 }
 
-func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
+func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
 	config := &httpproxy.Config{
 		NoProxy: strings.Join(c.NoProxy, ","),
 	}
@@ -198,7 +205,7 @@ func (c *ProxyConfig) toHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 }
 
 func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, error)) (map[string][]byte, error) {
-	config, err := c.toHTTPProxyConfig(secretFetcher)
+	config, err := c.ToHTTPProxyConfig(secretFetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +219,7 @@ func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, e
 }
 
 func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
-	config, err := c.toHTTPProxyConfig(secretFetcher)
+	config, err := c.ToHTTPProxyConfig(secretFetcher)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +239,52 @@ type ProxyServerConfig struct {
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
 }
 
+type VaultConfig struct {
+	// +optional
+	Type vault.VaultType `json:"type,omitempty"`
+	// +optional
+	AzureKeyVault *AzureKeyVaultConfig `json:"azureKeyVault,omitempty"`
+	// +optional
+	Proxy *ProxyConfig `json:"proxy,omitempty"`
+}
+
+type AzureKeyVaultConfig struct {
+	// +required
+	URL string `json:"url,omitempty"`
+	// +required
+	TenantID string `json:"tenantId,omitempty"`
+	// +required
+	ClientID string `json:"clientId,omitempty"`
+	// +required
+	CertificatePath string `json:"certificatePath,omitempty"`
+}
+
+// MetricsConfig holds configuration parameters for each metric type
+type MetricsConfig struct {
+	// +optional
+	Counters map[string]*CounterMetric `json:"counters,omitempty"`
+	// +optional
+	Gauges map[string]*GaugeMetric `json:"gauges,omitempty"`
+	// +optional
+	Histograms map[string]*HistogramMetric `json:"histograms,omitempty"`
+}
+
+// CounterMetric holds configuration of a single metric of type Counter
+type CounterMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// GaugeMetric holds configuration of a single metric of type Gauge
+type GaugeMetric struct {
+	Labels []string `json:"labels"`
+}
+
+// HistogramMetric holds configuration of a single metric of type Histogram
+type HistogramMetric struct {
+	Labels  []string  `json:"labels"`
+	Buckets []float64 `json:"buckets,omitempty"`
+}
+
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
@@ -242,7 +295,7 @@ type AutoscalingRunnerSetStatus struct {
 
 	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
 
-	//+optional
+	// +optional
 	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
 	// +optional
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
@@ -256,6 +309,33 @@ func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
 	return hash.ComputeTemplateHash(&spec)
 }
 
+func (ars *AutoscalingRunnerSet) GitHubConfigSecret() string {
+	return ars.Spec.GitHubConfigSecret
+}
+
+func (ars *AutoscalingRunnerSet) GitHubConfigUrl() string {
+	return ars.Spec.GitHubConfigUrl
+}
+
+func (ars *AutoscalingRunnerSet) GitHubProxy() *ProxyConfig {
+	return ars.Spec.Proxy
+}
+
+func (ars *AutoscalingRunnerSet) GitHubServerTLS() *TLSConfig {
+	return ars.Spec.GitHubServerTLS
+}
+
+func (ars *AutoscalingRunnerSet) VaultConfig() *VaultConfig {
+	return ars.Spec.VaultConfig
+}
+
+func (ars *AutoscalingRunnerSet) VaultProxy() *ProxyConfig {
+	if ars.Spec.VaultConfig != nil {
+		return ars.Spec.VaultConfig.Proxy
+	}
+	return nil
+}
+
 func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	type runnerSetSpec struct {
 		GitHubConfigUrl    string
@@ -263,7 +343,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 		RunnerGroup        string
 		RunnerScaleSetName string
 		Proxy              *ProxyConfig
-		GitHubServerTLS    *GitHubServerTLSConfig
+		GitHubServerTLS    *TLSConfig
 		Template           corev1.PodTemplateSpec
 	}
 	spec := &runnerSetSpec{
@@ -278,7 +358,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	return hash.ComputeTemplateHash(&spec)
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // AutoscalingRunnerSetList contains a list of AutoscalingRunnerSet
 type AutoscalingRunnerSetList struct {

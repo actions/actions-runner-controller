@@ -77,7 +77,7 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	if !runnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !runnerSet.DeletionTimestamp.IsZero() {
 		r.GitHubClient.DeinitForRunnerSet(runnerSet)
 
 		return ctrl.Result{}, nil
@@ -191,11 +191,11 @@ func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1a
 	runnerSetWithOverrides.Labels = append(runnerSetWithOverrides.Labels, r.CommonRunnerLabels...)
 
 	template := corev1.Pod{
-		ObjectMeta: runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta,
-		Spec:       runnerSetWithOverrides.StatefulSetSpec.Template.Spec,
+		ObjectMeta: runnerSetWithOverrides.Template.ObjectMeta,
+		Spec:       runnerSetWithOverrides.Template.Spec,
 	}
 
-	if runnerSet.Spec.RunnerConfig.ContainerMode == "kubernetes" {
+	if runnerSet.Spec.ContainerMode == "kubernetes" {
 		found := false
 		for i := range template.Spec.Containers {
 			if template.Spec.Containers[i].Name == containerName {
@@ -208,7 +208,7 @@ func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1a
 			})
 		}
 
-		workDir := runnerSet.Spec.RunnerConfig.WorkDir
+		workDir := runnerSet.Spec.WorkDir
 		if workDir == "" {
 			workDir = "/runner/_work"
 		}
@@ -219,7 +219,7 @@ func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1a
 		template.Spec.ServiceAccountName = runnerSet.Spec.ServiceAccountName
 	}
 
-	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunnerSetName, runnerSet.Name)
+	template.Labels = CloneAndAddLabel(template.Labels, LabelKeyRunnerSetName, runnerSet.Name)
 
 	ghc, err := r.GitHubClient.InitForRunnerSet(ctx, runnerSet)
 	if err != nil {
@@ -228,38 +228,38 @@ func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1a
 
 	githubBaseURL := ghc.GithubBaseURL
 
-	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.RunnerConfig.ContainerMode, template, runnerSet.Spec.RunnerConfig, githubBaseURL, r.RunnerPodDefaults)
+	pod, err := newRunnerPodWithContainerMode(runnerSet.Spec.ContainerMode, template, runnerSet.Spec.RunnerConfig, githubBaseURL, r.RunnerPodDefaults)
 	if err != nil {
 		return nil, err
 	}
 
-	runnerSetWithOverrides.StatefulSetSpec.Template.ObjectMeta = pod.ObjectMeta
-	runnerSetWithOverrides.StatefulSetSpec.Template.Spec = pod.Spec
+	runnerSetWithOverrides.Template.ObjectMeta = pod.ObjectMeta
+	runnerSetWithOverrides.Template.Spec = pod.Spec
 	// NOTE: Seems like the only supported restart policy for statefulset is "Always"?
 	// I got errosr like the below when tried to use "OnFailure":
 	//   StatefulSet.apps \"example-runnersetpg9rx\" is invalid: [spec.template.metadata.labels: Invalid value: map[string]string{\"runner-template-hash\"
 	//   :\"85d7578bd6\", \"runnerset-name\":\"example-runnerset\"}: `selector` does not match template `labels`, spec.
 	//   template.spec.restartPolicy: Unsupported value: \"OnFailure\": supported values: \"Always\"]
-	runnerSetWithOverrides.StatefulSetSpec.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
+	runnerSetWithOverrides.Template.Spec.RestartPolicy = corev1.RestartPolicyAlways
 
 	templateHash := ComputeHash(pod.Spec)
 
 	// Add template hash label to selector.
-	runnerSetWithOverrides.Template.ObjectMeta.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash)
+	runnerSetWithOverrides.Template.Labels = CloneAndAddLabel(runnerSetWithOverrides.Template.Labels, LabelKeyRunnerTemplateHash, templateHash)
 
 	selector := getRunnerSetSelector(runnerSet)
 	selector = CloneSelectorAndAddLabel(selector, LabelKeyRunnerTemplateHash, templateHash)
 	selector = CloneSelectorAndAddLabel(selector, LabelKeyRunnerSetName, runnerSet.Name)
 	selector = CloneSelectorAndAddLabel(selector, LabelKeyPodMutation, LabelValuePodMutation)
 
-	runnerSetWithOverrides.StatefulSetSpec.Selector = selector
+	runnerSetWithOverrides.Selector = selector
 
 	rs := appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: runnerSet.ObjectMeta.Name + "-",
-			Namespace:    runnerSet.ObjectMeta.Namespace,
-			Labels:       CloneAndAddLabel(runnerSet.ObjectMeta.Labels, LabelKeyRunnerTemplateHash, templateHash),
+			GenerateName: runnerSet.Name + "-",
+			Namespace:    runnerSet.Namespace,
+			Labels:       CloneAndAddLabel(runnerSet.Labels, LabelKeyRunnerTemplateHash, templateHash),
 			Annotations: map[string]string{
 				SyncTimeAnnotationKey: time.Now().Format(time.RFC3339),
 			},

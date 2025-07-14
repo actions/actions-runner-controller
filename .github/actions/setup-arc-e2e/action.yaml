@@ -1,9 +1,9 @@
-name: 'Setup ARC E2E Test Action'
-description: 'Build controller image, create kind cluster, load the image, and exchange ARC configure token.'
+name: "Setup ARC E2E Test Action"
+description: "Build controller image, create kind cluster, load the image, and exchange ARC configure token."
 
 inputs:
   app-id:
-    description: 'GitHub App Id for exchange access token'
+    description: "GitHub App Id for exchange access token"
     required: true
   app-pk:
     description: "GitHub App private key for exchange access token"
@@ -20,30 +20,31 @@ inputs:
 
 outputs:
   token:
-    description: 'Token to use for configure ARC'
+    description: "Token to use for configure ARC"
     value: ${{steps.config-token.outputs.token}}
 
 runs:
   using: "composite"
   steps:
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2
       with:
-          # Pinning v0.9.1 for Buildx and BuildKit v0.10.6
-          # BuildKit v0.11 which has a bug causing intermittent 
-          # failures pushing images to GHCR
-          version: v0.9.1
-          driver-opts: image=moby/buildkit:v0.10.6
+        # Pinning v0.9.1 for Buildx and BuildKit v0.10.6
+        # BuildKit v0.11 which has a bug causing intermittent
+        # failures pushing images to GHCR
+        version: v0.9.1
+        driver-opts: image=moby/buildkit:v0.10.6
 
     - name: Build controller image
-      uses: docker/build-push-action@v5
+      # https://github.com/docker/build-push-action/releases/tag/v6.18.0
+      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
       with:
         file: Dockerfile
         platforms: linux/amd64
         load: true
         build-args: |
           DOCKER_IMAGE_NAME=${{inputs.image-name}}
-          VERSION=${{inputs.image-tag}} 
+          VERSION=${{inputs.image-tag}}
         tags: |
           ${{inputs.image-name}}:${{inputs.image-tag}}
         no-cache: true
@@ -56,6 +57,7 @@ runs:
 
     - name: Get configure token
       id: config-token
+      # https://github.com/peter-murray/workflow-application-token-action/releases/tag/v3.0.0
       uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
       with:
         application_id: ${{ inputs.app-id }}

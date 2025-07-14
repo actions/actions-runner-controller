@@ -99,7 +99,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !autoscalingRunnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !autoscalingRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -151,18 +151,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion] != build.Version {
+	if !v1alpha1.IsVersionAllowed(autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], build.Version) {
 		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
 			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
-				"targetVersion", build.Version,
-				"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+				"buildVersion", build.Version,
+				"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 			)
 			return ctrl.Result{}, nil
 		}
 
 		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
-			"targetVersion", build.Version,
-			"actualVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
+			"buildVersion", build.Version,
+			"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		)
 		return ctrl.Result{}, nil
 	}
@@ -205,14 +205,6 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if !ok || (len(autoscalingRunnerSet.Spec.RunnerScaleSetName) > 0 && !strings.EqualFold(currentRunnerScaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetName)) {
 		log.Info("AutoScalingRunnerSet runner scale set name changed. Updating the runner scale set.")
 		return r.updateRunnerScaleSetName(ctx, autoscalingRunnerSet, log)
-	}
-
-	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, secret); err != nil {
-		log.Error(err, "Failed to find GitHub config secret.",
-			"namespace", autoscalingRunnerSet.Namespace,
-			"name", autoscalingRunnerSet.Spec.GitHubConfigSecret)
-		return ctrl.Result{}, err
 	}
 
 	existingRunnerSets, err := r.listEphemeralRunnerSets(ctx, autoscalingRunnerSet)
@@ -332,15 +324,15 @@ func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, au
 	err = r.Get(ctx, client.ObjectKey{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, &listener)
 	switch {
 	case err == nil:
-		if listener.ObjectMeta.DeletionTimestamp.IsZero() {
+		if listener.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener")
 			if err := r.Delete(ctx, &listener); err != nil {
-				return false, fmt.Errorf("failed to delete listener: %v", err)
+				return false, fmt.Errorf("failed to delete listener: %w", err)
 			}
 		}
 		return false, nil
-	case err != nil && !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener: %v", err)
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener: %w", err)
 	}
 
 	logger.Info("Listener is deleted")
@@ -351,7 +343,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 	logger.Info("Cleaning up ephemeral runner sets")
 	runnerSets, err := r.listEphemeralRunnerSets(ctx, autoscalingRunnerSet)
 	if err != nil {
-		return false, fmt.Errorf("failed to list ephemeral runner sets: %v", err)
+		return false, fmt.Errorf("failed to list ephemeral runner sets: %w", err)
 	}
 	if runnerSets.empty() {
 		logger.Info("All ephemeral runner sets are deleted")
@@ -360,7 +352,7 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 
 	logger.Info("Deleting all ephemeral runner sets", "count", runnerSets.count())
 	if err := r.deleteEphemeralRunnerSets(ctx, runnerSets.all(), logger); err != nil {
-		return false, fmt.Errorf("failed to delete ephemeral runner sets: %v", err)
+		return false, fmt.Errorf("failed to delete ephemeral runner sets: %w", err)
 	}
 	return false, nil
 }
@@ -369,13 +361,13 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 	for i := range oldRunnerSets {
 		rs := &oldRunnerSets[i]
 		// already deleted but contains finalizer so it still exists
-		if !rs.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !rs.DeletionTimestamp.IsZero() {
 			logger.Info("Skip ephemeral runner set since it is already marked for deletion", "name", rs.Name)
 			continue
 		}
 		logger.Info("Deleting ephemeral runner set", "name", rs.Name)
 		if err := r.Delete(ctx, rs); err != nil {
-			return fmt.Errorf("failed to delete EphemeralRunnerSet resource: %v", err)
+			return fmt.Errorf("failed to delete EphemeralRunnerSet resource: %w", err)
 		}
 		logger.Info("Deleted ephemeral runner set", "name", rs.Name)
 	}
@@ -402,12 +394,12 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
 	logger.Info("Creating a new runner scale set")
-	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	if len(autoscalingRunnerSet.Spec.RunnerScaleSetName) == 0 {
 		autoscalingRunnerSet.Spec.RunnerScaleSetName = autoscalingRunnerSet.Name
 	}
 	if err != nil {
-		logger.Error(err, "Failed to initialize Actions service client for creating a new runner scale set")
+		logger.Error(err, "Failed to initialize Actions service client for creating a new runner scale set", "error", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -498,7 +490,7 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx con
 		return ctrl.Result{}, err
 	}
 
-	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	if err != nil {
 		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
 		return ctrl.Result{}, err
@@ -546,7 +538,7 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 		return ctrl.Result{}, nil
 	}
 
-	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	if err != nil {
 		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
 		return ctrl.Result{}, err
@@ -597,7 +589,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		return nil
 	}
 
-	actionsClient, err := r.actionsClientFor(ctx, autoscalingRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	if err != nil {
 		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
 		return err
@@ -622,7 +614,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 }
 
 func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
-	desiredRunnerSet, err := r.ResourceBuilder.newEphemeralRunnerSet(autoscalingRunnerSet)
+	desiredRunnerSet, err := r.newEphemeralRunnerSet(autoscalingRunnerSet)
 	if err != nil {
 		log.Error(err, "Could not create EphemeralRunnerSet")
 		return ctrl.Result{}, err
@@ -651,7 +643,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		})
 	}
 
-	autoscalingListener, err := r.ResourceBuilder.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
+	autoscalingListener, err := r.newAutoScalingListener(autoscalingRunnerSet, ephemeralRunnerSet, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
 	if err != nil {
 		log.Error(err, "Could not create AutoscalingListener spec")
 		return ctrl.Result{}, err
@@ -670,78 +662,10 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*EphemeralRunnerSets, error) {
 	list := new(v1alpha1.EphemeralRunnerSetList)
 	if err := r.List(ctx, list, client.InNamespace(autoscalingRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: autoscalingRunnerSet.Name}); err != nil {
-		return nil, fmt.Errorf("failed to list ephemeral runner sets: %v", err)
+		return nil, fmt.Errorf("failed to list ephemeral runner sets: %w", err)
 	}
 
 	return &EphemeralRunnerSets{list: list}, nil
-}
-
-func (r *AutoscalingRunnerSetReconciler) actionsClientFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (actions.ActionsService, error) {
-	var configSecret corev1.Secret
-	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: autoscalingRunnerSet.Spec.GitHubConfigSecret}, &configSecret); err != nil {
-		return nil, fmt.Errorf("failed to find GitHub config secret: %w", err)
-	}
-
-	opts, err := r.actionsClientOptionsFor(ctx, autoscalingRunnerSet)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get actions client options: %w", err)
-	}
-
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		autoscalingRunnerSet.Spec.GitHubConfigUrl,
-		autoscalingRunnerSet.Namespace,
-		configSecret.Data,
-		opts...,
-	)
-}
-
-func (r *AutoscalingRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) ([]actions.ClientOption, error) {
-	var options []actions.ClientOption
-
-	if autoscalingRunnerSet.Spec.Proxy != nil {
-		proxyFunc, err := autoscalingRunnerSet.Spec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
-			var secret corev1.Secret
-			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: s}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get proxy secret %s: %w", s, err)
-			}
-
-			return &secret, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get proxy func: %w", err)
-		}
-
-		options = append(options, actions.WithProxy(proxyFunc))
-	}
-
-	tlsConfig := autoscalingRunnerSet.Spec.GitHubServerTLS
-	if tlsConfig != nil {
-		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
-			var configmap corev1.ConfigMap
-			err := r.Get(
-				ctx,
-				types.NamespacedName{
-					Namespace: autoscalingRunnerSet.Namespace,
-					Name:      name,
-				},
-				&configmap,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
-			}
-
-			return []byte(configmap.Data[key]), nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tls config: %w", err)
-		}
-
-		options = append(options, actions.WithRootCAs(pool))
-	}
-
-	return options, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -814,7 +738,7 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 		}
 		c.logger.Info("Removed finalizer from container mode kubernetes role binding", "name", roleBindingName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
+	case !kerrors.IsNotFound(err):
 		c.err = fmt.Errorf("failed to fetch kubernetes mode role binding: %w", err)
 		return
 	default:
@@ -856,11 +780,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeRol
 		}
 		c.logger.Info("Removed finalizer from container mode kubernetes role")
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch kubernetes mode role: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Container mode kubernetes role has already been deleted", "name", roleName)
 		return
 	default:
-		c.logger.Info("Container mode kubernetes role has already been deleted", "name", roleName)
+		c.err = fmt.Errorf("failed to fetch kubernetes mode role: %w", err)
 		return
 	}
 }
@@ -899,11 +823,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeKubernetesModeSer
 		}
 		c.logger.Info("Removed finalizer from container mode kubernetes service account")
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch kubernetes mode service account: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Container mode kubernetes service account has already been deleted", "name", serviceAccountName)
 		return
 	default:
-		c.logger.Info("Container mode kubernetes service account has already been deleted", "name", serviceAccountName)
+		c.err = fmt.Errorf("failed to fetch kubernetes mode service account: %w", err)
 		return
 	}
 }
@@ -942,11 +866,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 		}
 		c.logger.Info("Removed finalizer from no permission service account", "name", serviceAccountName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch service account: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("No permission service account has already been deleted", "name", serviceAccountName)
 		return
 	default:
-		c.logger.Info("No permission service account has already been deleted", "name", serviceAccountName)
+		c.err = fmt.Errorf("failed to fetch service account: %w", err)
 		return
 	}
 }
@@ -985,11 +909,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeGitHubSecretFinal
 		}
 		c.logger.Info("Removed finalizer from GitHub secret", "name", githubSecretName)
 		return
-	case err != nil && !kerrors.IsNotFound(err) && !kerrors.IsForbidden(err):
-		c.err = fmt.Errorf("failed to fetch GitHub secret: %w", err)
+	case kerrors.IsNotFound(err) || kerrors.IsForbidden(err):
+		c.logger.Info("GitHub secret has already been deleted", "name", githubSecretName)
 		return
 	default:
-		c.logger.Info("GitHub secret has already been deleted", "name", githubSecretName)
+		c.err = fmt.Errorf("failed to fetch GitHub secret: %w", err)
 		return
 	}
 }
@@ -1028,11 +952,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 		}
 		c.logger.Info("Removed finalizer from manager role binding", "name", managerRoleBindingName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch manager role binding: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Manager role binding has already been deleted", "name", managerRoleBindingName)
 		return
 	default:
-		c.logger.Info("Manager role binding has already been deleted", "name", managerRoleBindingName)
+		c.err = fmt.Errorf("failed to fetch manager role binding: %w", err)
 		return
 	}
 }
@@ -1071,11 +995,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 		}
 		c.logger.Info("Removed finalizer from manager role", "name", managerRoleName)
 		return
-	case err != nil && !kerrors.IsNotFound(err):
-		c.err = fmt.Errorf("failed to fetch manager role: %w", err)
+	case kerrors.IsNotFound(err):
+		c.logger.Info("Manager role has already been deleted", "name", managerRoleName)
 		return
 	default:
-		c.logger.Info("Manager role has already been deleted", "name", managerRoleName)
+		c.err = fmt.Errorf("failed to fetch manager role: %w", err)
 		return
 	}
 }

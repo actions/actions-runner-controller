@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -272,16 +274,16 @@ func (c *Client) Identifier() string {
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client request failed: %w", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read the response body: %w", err)
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to close the response body: %w", err)
 	}
 
 	body = trimByteOrderMark(body)
@@ -293,7 +295,7 @@ func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, b
 	u := c.config.GitHubAPIURL(path)
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new GitHub API request: %w", err)
 	}
 
 	req.Header.Set("User-Agent", c.userAgent.String())
@@ -304,28 +306,27 @@ func (c *Client) NewGitHubAPIRequest(ctx context.Context, method, path string, b
 func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
 	err := c.updateTokenIfNeeded(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue update token if needed: %w", err)
 	}
 
 	parsedPath, err := url.Parse(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse path %q: %w", path, err)
 	}
 
 	urlString, err := url.JoinPath(c.ActionsServiceURL, parsedPath.Path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to join path (actions_service_url=%q, parsedPath=%q): %w", c.ActionsServiceURL, parsedPath.Path, err)
 	}
 
 	u, err := url.Parse(urlString)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse url string %q: %w", urlString, err)
 	}
 
 	q := u.Query()
-	for k, v := range parsedPath.Query() {
-		q[k] = v
-	}
+	maps.Copy(q, parsedPath.Query())
+
 	if q.Get("api-version") == "" {
 		q.Set("api-version", "6.0-preview")
 	}
@@ -333,7 +334,7 @@ func (c *Client) NewActionsServiceRequest(ctx context.Context, method, path stri
 
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -347,12 +348,12 @@ func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runne
 	path := fmt.Sprintf("/%s?runnerGroupId=%d&name=%s", scaleSetEndpoint, runnerGroupId, runnerScaleSetName)
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -385,12 +386,12 @@ func (c *Client) GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int
 	path := fmt.Sprintf("/%s/%d", scaleSetEndpoint, runnerScaleSetId)
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -412,12 +413,12 @@ func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (
 	path := fmt.Sprintf("/_apis/runtime/runnergroups/?groupName=%s", runnerGroup)
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -468,17 +469,17 @@ func (c *Client) GetRunnerGroupByName(ctx context.Context, runnerGroup string) (
 func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *RunnerScaleSet) (*RunnerScaleSet, error) {
 	body, err := json.Marshal(runnerScaleSet)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal runner scale set: %w", err)
 	}
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodPost, scaleSetEndpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -500,17 +501,17 @@ func (c *Client) UpdateRunnerScaleSet(ctx context.Context, runnerScaleSetId int,
 
 	body, err := json.Marshal(runnerScaleSet)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal runner scale set: %w", err)
 	}
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodPatch, path, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -532,12 +533,12 @@ func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int)
 	path := fmt.Sprintf("/%s/%d", scaleSetEndpoint, runnerScaleSetId)
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
@@ -551,7 +552,7 @@ func (c *Client) DeleteRunnerScaleSet(ctx context.Context, runnerScaleSetId int)
 func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*RunnerScaleSetMessage, error) {
 	u, err := url.Parse(messageQueueUrl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse message queue url: %w", err)
 	}
 
 	if lastMessageId > 0 {
@@ -566,7 +567,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new request with context: %w", err)
 	}
 
 	req.Header.Set("Accept", "application/json; api-version=6.0-preview")
@@ -576,7 +577,7 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusAccepted {
@@ -620,14 +621,14 @@ func (c *Client) GetMessage(ctx context.Context, messageQueueUrl, messageQueueAc
 func (c *Client) DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error {
 	u, err := url.Parse(messageQueueUrl)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse message queue url: %w", err)
 	}
 
 	u.Path = fmt.Sprintf("%s/%d", u.Path, messageId)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u.String(), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -636,7 +637,7 @@ func (c *Client) DeleteMessage(ctx context.Context, messageQueueUrl, messageQueu
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
@@ -672,14 +673,16 @@ func (c *Client) CreateMessageSession(ctx context.Context, runnerScaleSetId int,
 
 	requestData, err := json.Marshal(newSession)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal new session: %w", err)
 	}
 
 	createdSession := &RunnerScaleSetSession{}
 
-	err = c.doSessionRequest(ctx, http.MethodPost, path, bytes.NewBuffer(requestData), http.StatusOK, createdSession)
+	if err = c.doSessionRequest(ctx, http.MethodPost, path, bytes.NewBuffer(requestData), http.StatusOK, createdSession); err != nil {
+		return nil, fmt.Errorf("failed to do the session request: %w", err)
+	}
 
-	return createdSession, err
+	return createdSession, nil
 }
 
 func (c *Client) DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error {
@@ -690,19 +693,21 @@ func (c *Client) DeleteMessageSession(ctx context.Context, runnerScaleSetId int,
 func (c *Client) RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*RunnerScaleSetSession, error) {
 	path := fmt.Sprintf("/%s/%d/sessions/%s", scaleSetEndpoint, runnerScaleSetId, sessionId.String())
 	refreshedSession := &RunnerScaleSetSession{}
-	err := c.doSessionRequest(ctx, http.MethodPatch, path, nil, http.StatusOK, refreshedSession)
-	return refreshedSession, err
+	if err := c.doSessionRequest(ctx, http.MethodPatch, path, nil, http.StatusOK, refreshedSession); err != nil {
+		return nil, fmt.Errorf("failed to do the session request: %w", err)
+	}
+	return refreshedSession, nil
 }
 
 func (c *Client) doSessionRequest(ctx context.Context, method, path string, requestData io.Reader, expectedResponseStatusCode int, responseUnmarshalTarget any) error {
 	req, err := c.NewActionsServiceRequest(ctx, method, path, requestData)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode == expectedResponseStatusCode {
@@ -748,12 +753,12 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 
 	body, err := json.Marshal(requestIds)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal request ids: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -762,7 +767,7 @@ func (c *Client) AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQ
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -806,12 +811,12 @@ func (c *Client) GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusNoContent {
@@ -841,17 +846,17 @@ func (c *Client) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *
 
 	body, err := json.Marshal(jitRunnerSetting)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal runner settings: %w", err)
 	}
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodPost, path, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -874,12 +879,12 @@ func (c *Client) GetRunner(ctx context.Context, runnerId int64) (*RunnerReferenc
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -903,12 +908,12 @@ func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*Runne
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -944,12 +949,12 @@ func (c *Client) RemoveRunner(ctx context.Context, runnerId int64) error {
 
 	req, err := c.NewActionsServiceRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new actions service request: %w", err)
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to issue the request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusNoContent {
@@ -968,13 +973,13 @@ type registrationToken struct {
 func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationToken, error) {
 	path, err := createRegistrationTokenPath(c.config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create registration token path: %w", err)
 	}
 
 	var buf bytes.Buffer
 	req, err := c.NewGitHubAPIRequest(ctx, http.MethodPost, path, &buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new GitHub API request: %w", err)
 	}
 
 	bearerToken := ""
@@ -984,7 +989,7 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationT
 	} else {
 		accessToken, err := c.fetchAccessToken(ctx, c.config.ConfigURL.String(), c.creds.AppCreds)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to fetch access token: %w", err)
 		}
 
 		bearerToken = fmt.Sprintf("Bearer %v", accessToken.Token)
@@ -997,14 +1002,14 @@ func (c *Client) getRunnerRegistrationToken(ctx context.Context) (*registrationT
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to read the body: %w", err)
 		}
 		return nil, &GitHubAPIError{
 			StatusCode: resp.StatusCode,
@@ -1034,13 +1039,13 @@ type accessToken struct {
 func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, creds *GitHubAppAuth) (*accessToken, error) {
 	accessTokenJWT, err := createJWTForGitHubApp(creds)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create JWT for GitHub app: %w", err)
 	}
 
 	path := fmt.Sprintf("/app/installations/%v/access_tokens", creds.AppInstallationID)
 	req, err := c.NewGitHubAPIRequest(ctx, http.MethodPost, path, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new GitHub API request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/vnd.github+json")
@@ -1050,15 +1055,20 @@ func (c *Client) fetchAccessToken(ctx context.Context, gitHubConfigURL string, c
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to issue the request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
+		errMsg := fmt.Sprintf("failed to get access token for GitHub App auth (%v)", resp.Status)
+		if body, err := io.ReadAll(resp.Body); err == nil {
+			errMsg = fmt.Sprintf("%s: %s", errMsg, string(body))
+		}
+
 		return nil, &GitHubAPIError{
 			StatusCode: resp.StatusCode,
 			RequestID:  resp.Header.Get(HeaderGitHubRequestID),
-			Err:        fmt.Errorf("failed to get access token for GitHub App auth: %v", resp.Status),
+			Err:        errors.New(errMsg),
 		}
 	}
 
@@ -1095,12 +1105,12 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 	enc.SetEscapeHTML(false)
 
 	if err := enc.Encode(body); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to encode body: %w", err)
 	}
 
 	req, err := c.NewGitHubAPIRequest(ctx, http.MethodPost, path, buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create new GitHub API request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -1114,7 +1124,7 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		var err error
 		resp, err = c.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to issue the request: %w", err)
 		}
 		defer resp.Body.Close()
 
@@ -1139,15 +1149,30 @@ func (c *Client) getActionsServiceAdminConnection(ctx context.Context, rt *regis
 		}
 
 		retry++
-		if retry > 3 {
+		if retry > 5 {
 			return nil, fmt.Errorf("unable to register runner after 3 retries: %w", &GitHubAPIError{
 				StatusCode: resp.StatusCode,
 				RequestID:  resp.Header.Get(HeaderGitHubRequestID),
 				Err:        innerErr,
 			})
 		}
-		time.Sleep(time.Duration(500 * int(time.Millisecond) * (retry + 1)))
+		// Add exponential backoff + jitter to avoid thundering herd
+		// This will generate a backoff schedule:
+		// 1: 1s
+		// 2: 3s
+		// 3: 4s
+		// 4: 8s
+		// 5: 17s
+		baseDelay := 500 * time.Millisecond
+		jitter := time.Duration(rand.Intn(1000))
+		maxDelay := 20 * time.Second
+		delay := baseDelay*(1<<retry) + jitter
 
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+
+		time.Sleep(delay)
 	}
 
 	var actionsServiceAdminConnection *ActionsServiceAdminConnection
@@ -1192,14 +1217,14 @@ func createJWTForGitHubApp(appAuth *GitHubAppAuth) (string, error) {
 	claims := &jwt.RegisteredClaims{
 		IssuedAt:  jwt.NewNumericDate(issuedAt),
 		ExpiresAt: jwt.NewNumericDate(expiresAt),
-		Issuer:    strconv.FormatInt(appAuth.AppID, 10),
+		Issuer:    appAuth.AppID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 
 	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(appAuth.AppPrivateKey))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to parse RSA private key from PEM: %w", err)
 	}
 
 	return token.SignedString(privateKey)
