@@ -102,6 +102,9 @@ kind: Kustomization
 
 namespace: argocd
 
+generatorOptions:
+  disableNameSuffixHash: true
+
 configMapGenerator:
 - name: argocd-cm
   behavior: merge
