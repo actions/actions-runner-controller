@@ -126,22 +126,23 @@ metadata:
   name: argocd-cm
   namespace: argocd
 data:
-  # Add health check for legacy Runner
+  # Health check for legacy Runner
   resource.customizations.health.actions.summerwind.dev_Runner: |
     hs = {}
     if obj.status ~= nil then
-      if obj.status.ready == true and obj.status.phase == "Running" then
+      local phase = obj.status.phase
+      if obj.status.ready and phase == "Running" then
         hs.status = "Healthy"
         hs.message = "Runner is ready and running"
-      elseif obj.status.phase == "Pending" or obj.status.phase == "Created" then
+      elseif phase == "Pending" or phase == "Created" then
         hs.status = "Progressing"
         hs.message = "Runner is starting up"
-      elseif obj.status.phase == "Failed" then
+      elseif phase == "Failed" then
         hs.status = "Degraded"
         hs.message = obj.status.message or "Runner has failed"
       else
         hs.status = "Progressing"
-        hs.message = "Runner status: " .. (obj.status.phase or "Unknown")
+        hs.message = "Runner status: " .. (phase or "Unknown")
       end
     else
       hs.status = "Progressing"
@@ -149,31 +150,57 @@ data:
     end
     return hs
 
-  # Add health check for EphemeralRunner
+  # Health check for EphemeralRunner
   resource.customizations.health.actions.github.com_EphemeralRunner: |
     hs = {}
     if obj.status ~= nil then
-      if obj.status.phase == "Running" then
+      local phase = obj.status.phase
+      if phase == "Running" then
         hs.status = "Healthy"
         hs.message = "EphemeralRunner is running"
-      elseif obj.status.phase == "Pending" then
+      elseif phase == "Pending" then
         hs.status = "Progressing"
         hs.message = "EphemeralRunner is pending"
-      elseif obj.status.phase == "Failed" then
+      elseif phase == "Failed" then
         hs.status = "Degraded"
         hs.message = obj.status.message or "EphemeralRunner has failed"
-      elseif obj.status.phase == "Finished" then
+      elseif phase == "Finished" then
         hs.status = "Healthy"
         hs.message = "EphemeralRunner has finished"
       else
         hs.status = "Progressing"
-        hs.message = "EphemeralRunner status: " .. (obj.status.phase or "Unknown")
+        hs.message = "EphemeralRunner status: " .. (phase or "Unknown")
       end
     else
       hs.status = "Progressing"
       hs.message = "Waiting for EphemeralRunner status"
     end
     return hs
+
+  # Health check for actions.github.com/v1alpha1 AutoScalingRunnerSet
+  resource.customizations.health.actions.github.com_AutoScalingRunnerSet: |
+    hs = {}
+    if obj.status ~= nil then
+      local desired = obj.status.desiredReplicas or 0
+      local ready = obj.status.readyReplicas or 0
+      local current = obj.status.currentReplicas or 0
+
+      if desired > 0 and ready == desired then
+        hs.status = "Healthy"
+        hs.message = string.format("Ready runners: %d/%d", ready, desired)
+      elseif desired > 0 then
+        hs.status = "Progressing"
+        hs.message = string.format("Runners: %d/%d ready, %d current", ready, desired, current)
+      else
+        hs.status = "Progressing"
+        hs.message = "No desired replicas set"
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for AutoScalingRunnerSet status"
+    end
+    return hs
+
 ```
 
 ### Method 5: Helm Values
