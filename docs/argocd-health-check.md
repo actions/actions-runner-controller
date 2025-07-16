@@ -94,7 +94,9 @@ kubectl patch configmap argocd-cm -n argocd --type merge -p @config/argocd/ephem
 
 ### Method 4: Using Kustomize
 
-Create a kustomization.yaml file:
+#### Option A: Merge with existing ConfigMap
+
+If ArgoCD ConfigMap is managed by ArgoCD itself:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -113,9 +115,65 @@ configMapGenerator:
   - resource.customizations.health.actions.github.com_EphemeralRunner=config/argocd/ephemeralrunner-health.yaml
 ```
 
-Then apply with:
-```bash
-kubectl apply -k .
+#### Option B: Direct ConfigMap management
+
+If you manage `argocd-cm` as a file, add the health checks directly to your ConfigMap:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  # Add health check for legacy Runner
+  resource.customizations.health.actions.summerwind.dev_Runner: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.ready == true and obj.status.phase == "Running" then
+        hs.status = "Healthy"
+        hs.message = "Runner is ready and running"
+      elseif obj.status.phase == "Pending" or obj.status.phase == "Created" then
+        hs.status = "Progressing"
+        hs.message = "Runner is starting up"
+      elseif obj.status.phase == "Failed" then
+        hs.status = "Degraded"
+        hs.message = obj.status.message or "Runner has failed"
+      else
+        hs.status = "Progressing"
+        hs.message = "Runner status: " .. (obj.status.phase or "Unknown")
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for runner status"
+    end
+    return hs
+
+  # Add health check for EphemeralRunner
+  resource.customizations.health.actions.github.com_EphemeralRunner: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.phase == "Running" then
+        hs.status = "Healthy"
+        hs.message = "EphemeralRunner is running"
+      elseif obj.status.phase == "Pending" then
+        hs.status = "Progressing"
+        hs.message = "EphemeralRunner is pending"
+      elseif obj.status.phase == "Failed" then
+        hs.status = "Degraded"
+        hs.message = obj.status.message or "EphemeralRunner has failed"
+      elseif obj.status.phase == "Finished" then
+        hs.status = "Healthy"
+        hs.message = "EphemeralRunner has finished"
+      else
+        hs.status = "Progressing"
+        hs.message = "EphemeralRunner status: " .. (obj.status.phase or "Unknown")
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for EphemeralRunner status"
+    end
+    return hs
 ```
 
 ### Method 5: Helm Values
