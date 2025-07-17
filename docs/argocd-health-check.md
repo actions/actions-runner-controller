@@ -14,7 +14,6 @@ ArgoCD needs custom health check configurations to understand the status of Acti
 
 ```
 config/argocd/
-├── README.md                               # This file
 ├── argocd-cm.yaml                          # Complete health check configuration
 ├── health-check-runner.yaml                # Legacy Runner API health check
 ├── health-check-ephemeralrunner.yaml       # New Runner API health check
@@ -34,21 +33,21 @@ kubectl apply -f config/argocd/argocd-cm.yaml
 ### Method 2: Use Kustomize
 
 ```sh
-kubectl apply -k .
+kubectl apply -k config/argocd/
 ```
 
 ### Method 3: Apply Specific Health Checks
 
 ```sh
 # For legacy runners only
-kubectl apply -f health-check-runner.yaml
+kubectl apply -f config/argocd/health-check-runner.yaml
 
 # For new API runners
-kubectl apply -f health-check-ephemeralrunner.yaml
-kubectl apply -f health-check-autoscalingrunnerset.yaml
+kubectl apply -f config/argocd/health-check-ephemeralrunner.yaml
+kubectl apply -f config/argocd/health-check-autoscalingrunnerset.yaml
 
 # For pod monitoring
-kubectl apply -f health-check-pod.yaml
+kubectl apply -f config/argocd/health-check-pod.yaml
 ```
 
 ### Method 4: Edit ConfigMap Directly
@@ -66,7 +65,7 @@ Then add the health check configurations under the `data` section. You can copy 
 If you already have an ArgoCD ConfigMap:
 
 ```sh
-kubectl patch configmap argocd-cm -n argocd --type merge -p @config/argocd/ephemeralrunner-health.yaml
+kubectl patch configmap argocd-cm -n argocd --type merge -p @config/argocd/argocd-cm.yaml
 ```
 
 ### Method 6: Helm Values
@@ -129,11 +128,36 @@ kubectl get ephemeralrunners -o jsonpath='{.items[*].status.phase}'
 kubectl get autoscalingrunnersets -o jsonpath='{.items[*].status.currentReplicas}'
 ```
 
-## Health Status Mappings
+## What These Configurations Do
+
+### Runner Health Status in ArgoCD
+
+Once configured, ArgoCD will display runner health as follows:
+
+| Runner State      | ArgoCD Status   | Description                          |
+|-------------------|-----------------|--------------------------------------|
+| Running and Ready | **Healthy**     | Runner is online and processing jobs |
+| Starting up       | **Progressing** | Runner pod is initializing           |
+| Failed            | **Degraded**    | Runner encountered an error          |
+| Scaling           | **Progressing** | AutoScaler is adjusting runner count |
+
+### Pod Health Status in ArgoCD
+
+The enhanced configuration also monitors the health of Runner pods:
+
+| Pod State                         | ArgoCD Status   | Description                         |
+|-----------------------------------|-----------------|-------------------------------------|
+| Running with all containers ready | **Healthy**     | Pod is fully operational            |
+| Succeeded                         | **Healthy**     | Pod completed its task successfully |
+| Pending                           | **Progressing** | Pod is being scheduled or starting  |
+| Running but containers not ready  | **Progressing** | Pod is running but not fully ready  |
+| Failed                            | **Degraded**    | Pod or containers have failed       |
+| CrashLoopBackOff                  | **Degraded**    | Container is repeatedly crashing    |
+| ImagePullBackOff                  | **Degraded**    | Cannot pull container image         |
 
 ### Supported Resources
 
-The configurations support three resource types:
+The configurations support four resource types:
 
 1. **Runner** (actions.summerwind.dev/v1alpha1)
    - Legacy runner type
@@ -156,28 +180,6 @@ The configurations support three resource types:
    - Monitors container readiness and status
    - Detects common issues like CrashLoopBackOff and ImagePullBackOff
    - Only applies to pods with runner-specific labels
-
-### Runner States
-
-| Resource Type        | State               | ArgoCD Status | Description           |
-|----------------------|---------------------|---------------|-----------------------|
-| Runner               | Running + Ready     | Healthy       | Runner is operational |
-| Runner               | Running + Not Ready | Progressing   | Runner is starting    |
-| Runner               | Failed/Error        | Degraded      | Runner has failed     |
-| EphemeralRunner      | Running/Finished    | Healthy       | Runner completed job  |
-| EphemeralRunner      | Failed              | Degraded      | Runner failed         |
-| AutoScalingRunnerSet | Desired = Ready     | Healthy       | All runners ready     |
-| AutoScalingRunnerSet | Scaling             | Progressing   | Scaling in progress   |
-
-### Pod States
-
-| Pod Phase | Container Status | ArgoCD Status | Description           |
-|-----------|------------------|---------------|-----------------------|
-| Running   | All Ready        | Healthy       | Pod fully operational |
-| Succeeded | -                | Healthy       | Pod completed         |
-| Failed    | -                | Degraded      | Pod failed            |
-| Pending   | -                | Progressing   | Pod starting          |
-| Running   | Not Ready        | Progressing   | Containers starting   |
 
 ## Important Notes
 
