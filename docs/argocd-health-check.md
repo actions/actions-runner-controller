@@ -1,4 +1,4 @@
-# ArgoCD Health Check Configuration for Actions Runner Controller
+# ArgoCD Health Checks for Actions Runner Controller
 
 This document explains how to configure ArgoCD to properly monitor the health status of GitHub Actions Runner resources.
 
@@ -10,37 +10,126 @@ By default, ArgoCD doesn't understand the health status of custom resources like
 
 ArgoCD needs custom health check configurations to understand the status of Actions Runner Controller resources. This guide provides ready-to-use configurations that enable ArgoCD to correctly display the health status of your runners.
 
+## File Structure
+
+```
+config/argocd/
+├── README.md                               # This file
+├── argocd-cm.yaml                          # Complete health check configuration
+├── health-check-runner.yaml                # Legacy Runner API health check
+├── health-check-ephemeralrunner.yaml       # New Runner API health check
+├── health-check-autoscalingrunnerset.yaml  # AutoScalingRunnerSet health check
+├── health-check-pod.yaml                   # Pod health check for runners
+└── kustomization.yaml                      # Main kustomization file with usage examples
+```
+
 ## Quick Start
 
-Apply one of the following configurations based on your runner deployment type:
+### Method 1: Apply All Health Checks
 
-For New Runner API
-```bash
-kubectl apply -f config/argocd/ephemeralrunner-health.yaml
+```sh
+kubectl apply -f config/argocd/argocd-cm.yaml
 ```
 
-For Legacy Runner API
-```bash
-kubectl apply -f config/argocd/runner-health.yaml
+### Method 2: Use Kustomize
+
+```sh
+kubectl apply -k .
 ```
 
-After applying, restart ArgoCD server:
-```bash
-kubectl rollout restart deployment argocd-server -n argocd
+### Method 3: Apply Specific Health Checks
+
+```sh
+# For legacy runners only
+kubectl apply -f health-check-runner.yaml
+
+# For new API runners
+kubectl apply -f health-check-ephemeralrunner.yaml
+kubectl apply -f health-check-autoscalingrunnerset.yaml
+
+# For pod monitoring
+kubectl apply -f health-check-pod.yaml
 ```
 
-## What These Configurations Do
+### Method 4: Edit ConfigMap Directly
 
-### Runner Health Status in ArgoCD
+Add the health check configurations directly to the existing ArgoCD ConfigMap:
 
-Once configured, ArgoCD will display runner health as follows:
+```sh
+kubectl edit configmap argocd-cm -n argocd
+```
 
-| Runner State | ArgoCD Display | Description |
-|-------------|----------------|-------------|
-| Running and Ready | **Healthy** (Green) | Runner is online and processing jobs |
-| Starting up | **Progressing** (Yellow) | Runner pod is initializing |
-| Failed | **Degraded** (Red) | Runner encountered an error |
-| Scaling | **Progressing** (Yellow) | AutoScaler is adjusting runner count |
+Then add the health check configurations under the `data` section. You can copy the content from the provided YAML files, ensuring proper indentation.
+
+### Method 5: Patch Existing ConfigMap
+
+If you already have an ArgoCD ConfigMap:
+
+```sh
+kubectl patch configmap argocd-cm -n argocd --type merge -p @config/argocd/ephemeralrunner-health.yaml
+```
+
+### Method 6: Helm Values
+
+When installing ArgoCD via Helm, add to your values.yaml:
+
+```yaml
+server:
+  config:
+    # Copy the health check configurations from the YAML files
+    resource.customizations.health.actions.summerwind.dev_Runner: |
+      # ... (content from YAML file)
+```
+
+## Kustomize Usage
+
+The provided `kustomization.yaml` file includes three different usage patterns:
+
+### Option 1: Apply All Health Checks
+The default configuration applies all health checks at once using the complete `argocd-cm.yaml`.
+
+### Option 2: Selective Health Checks
+Uncomment specific patches in `kustomization.yaml` to apply only the health checks you need.
+
+### Option 3: ConfigMapGenerator
+Use the configMapGenerator approach when ArgoCD ConfigMap is managed by another system. This method merges health checks without replacing the existing ConfigMap.
+
+See `kustomization.yaml` for detailed examples and comments for each option.
+
+## Verifying the Configuration
+
+### Check ArgoCD UI
+
+1. Navigate to your application in ArgoCD UI
+2. Look for Runner resources
+3. Verify health status indicators show correct colors
+
+### Using ArgoCD CLI
+
+```sh
+# Refresh and check application status
+argocd app get <your-app-name> --refresh
+
+# Check specific resource health
+argocd app resources <your-app-name> --kind Runner
+```
+
+### Using kubectl
+
+Verify runner status that ArgoCD reads:
+
+```sh
+# Check runner status
+kubectl get runners -o jsonpath='{.items[*].status.phase}'
+
+# Check ephemeral runner status
+kubectl get ephemeralrunners -o jsonpath='{.items[*].status.phase}'
+
+# Check autoscaling runner set
+kubectl get autoscalingrunnersets -o jsonpath='{.items[*].status.currentReplicas}'
+```
+
+## Health Status Mappings
 
 ### Supported Resources
 
@@ -54,233 +143,81 @@ The configurations support three resource types:
    - New ephemeral runner type
    - Supports job-specific runners that terminate after use
    - Shows as healthy during job execution and after completion
+   - Enhanced status tracking including job IDs and runner IDs
 
 3. **AutoScalingRunnerSet** (actions.github.com/v1alpha1)
    - Manages groups of ephemeral runners
    - Shows current vs desired runner count
    - Healthy when scaled to target size
+   - Displays pending, running, and terminating runner counts
 
-## Installation Methods
+4. **Pod** (v1)
+   - Health checks for runner pods specifically
+   - Monitors container readiness and status
+   - Detects common issues like CrashLoopBackOff and ImagePullBackOff
+   - Only applies to pods with runner-specific labels
 
-### Method 1: Apply YAML Files
+### Runner States
 
-Use the provided configuration files:
+| Resource Type        | State               | ArgoCD Status | Description           |
+|----------------------|---------------------|---------------|-----------------------|
+| Runner               | Running + Ready     | Healthy       | Runner is operational |
+| Runner               | Running + Not Ready | Progressing   | Runner is starting    |
+| Runner               | Failed/Error        | Degraded      | Runner has failed     |
+| EphemeralRunner      | Running/Finished    | Healthy       | Runner completed job  |
+| EphemeralRunner      | Failed              | Degraded      | Runner failed         |
+| AutoScalingRunnerSet | Desired = Ready     | Healthy       | All runners ready     |
+| AutoScalingRunnerSet | Scaling             | Progressing   | Scaling in progress   |
 
-```bash
-# For ephemeral runners
-kubectl apply -f config/argocd/ephemeralrunner-health.yaml
+### Pod States
 
-# For legacy runners
-kubectl apply -f config/argocd/runner-health.yaml
+| Pod Phase | Container Status | ArgoCD Status | Description           |
+|-----------|------------------|---------------|-----------------------|
+| Running   | All Ready        | Healthy       | Pod fully operational |
+| Succeeded | -                | Healthy       | Pod completed         |
+| Failed    | -                | Degraded      | Pod failed            |
+| Pending   | -                | Progressing   | Pod starting          |
+| Running   | Not Ready        | Progressing   | Containers starting   |
+
+## Important Notes
+
+1. **Restart ArgoCD**: After applying health checks, restart ArgoCD server:
+```sh
+kubectl rollout restart deployment argocd-server -n argocd
 ```
 
-### Method 2: Edit ConfigMap Directly
+2. **Label Detection**: Pod health checks only apply to pods with runner-specific labels
 
-Add the health check configurations directly to the existing ArgoCD ConfigMap:
-
-```bash
-kubectl edit configmap argocd-cm -n argocd
-```
-
-Then add the health check configurations under the `data` section. You can copy the content from the provided YAML files, ensuring proper indentation.
-
-### Method 3: Patch Existing ConfigMap
-
-If you already have an ArgoCD ConfigMap:
-
-```bash
-kubectl patch configmap argocd-cm -n argocd --type merge -p @config/argocd/ephemeralrunner-health.yaml
-```
-
-### Method 4: Using Kustomize
-
-#### Option A: Merge with existing ConfigMap
-
-If ArgoCD ConfigMap is managed by ArgoCD itself:
-
-```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-namespace: argocd
-
-generatorOptions:
-  disableNameSuffixHash: true
-
-configMapGenerator:
-- name: argocd-cm
-  behavior: merge
-  files:
-  - resource.customizations.health.actions.summerwind.dev_Runner=config/argocd/runner-health.yaml
-  - resource.customizations.health.actions.github.com_EphemeralRunner=config/argocd/ephemeralrunner-health.yaml
-```
-
-#### Option B: Direct ConfigMap management
-
-If you manage `argocd-cm` as a file, add the health checks directly to your ConfigMap:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: argocd-cm
-  namespace: argocd
-data:
-  # Health check for legacy Runner
-  resource.customizations.health.actions.summerwind.dev_Runner: |
-    hs = {}
-    if obj.status ~= nil then
-      local phase = obj.status.phase
-      if obj.status.ready and phase == "Running" then
-        hs.status = "Healthy"
-        hs.message = "Runner is ready and running"
-      elseif phase == "Pending" or phase == "Created" then
-        hs.status = "Progressing"
-        hs.message = "Runner is starting up"
-      elseif phase == "Failed" then
-        hs.status = "Degraded"
-        hs.message = obj.status.message or "Runner has failed"
-      else
-        hs.status = "Progressing"
-        hs.message = "Runner status: " .. (phase or "Unknown")
-      end
-    else
-      hs.status = "Progressing"
-      hs.message = "Waiting for runner status"
-    end
-    return hs
-
-  # Health check for EphemeralRunner
-  resource.customizations.health.actions.github.com_EphemeralRunner: |
-    hs = {}
-    if obj.status ~= nil then
-      local phase = obj.status.phase
-      if phase == "Running" then
-        hs.status = "Healthy"
-        hs.message = "EphemeralRunner is running"
-      elseif phase == "Pending" then
-        hs.status = "Progressing"
-        hs.message = "EphemeralRunner is pending"
-      elseif phase == "Failed" then
-        hs.status = "Degraded"
-        hs.message = obj.status.message or "EphemeralRunner has failed"
-      elseif phase == "Finished" then
-        hs.status = "Healthy"
-        hs.message = "EphemeralRunner has finished"
-      else
-        hs.status = "Progressing"
-        hs.message = "EphemeralRunner status: " .. (phase or "Unknown")
-      end
-    else
-      hs.status = "Progressing"
-      hs.message = "Waiting for EphemeralRunner status"
-    end
-    return hs
-
-  # Health check for actions.github.com/v1alpha1 AutoScalingRunnerSet
-  resource.customizations.health.actions.github.com_AutoScalingRunnerSet: |
-    hs = {}
-    if obj.status ~= nil then
-      local desired = obj.status.desiredReplicas or 0
-      local ready = obj.status.readyReplicas or 0
-      local current = obj.status.currentReplicas or 0
-
-      if desired > 0 and ready == desired then
-        hs.status = "Healthy"
-        hs.message = string.format("Ready runners: %d/%d", ready, desired)
-      elseif desired > 0 then
-        hs.status = "Progressing"
-        hs.message = string.format("Runners: %d/%d ready, %d current", ready, desired, current)
-      else
-        hs.status = "Progressing"
-        hs.message = "No desired replicas set"
-      end
-    else
-      hs.status = "Progressing"
-      hs.message = "Waiting for AutoScalingRunnerSet status"
-    end
-    return hs
-
-```
-
-### Method 5: Helm Values
-
-When installing ArgoCD via Helm, add to your values.yaml:
-
-```yaml
-server:
-  config:
-    # Copy the health check configurations from the YAML files
-    resource.customizations.health.actions.summerwind.dev_Runner: |
-      # ... (content from YAML file)
-```
-
-## Verifying the Configuration
-
-### Check ArgoCD UI
-
-1. Navigate to your application in ArgoCD UI
-2. Look for Runner resources
-3. Verify health status indicators show correct colors
-
-### Using ArgoCD CLI
-
-```bash
-# Refresh and check application status
-argocd app get <your-app-name> --refresh
-
-# Check specific resource health
-argocd app resources <your-app-name> --kind Runner
-```
-
-### Using kubectl
-
-Verify runner status that ArgoCD reads:
-
-```bash
-# Check runner status
-kubectl get runners -o jsonpath='{.items[*].status.phase}'
-
-# Check ephemeral runner status
-kubectl get ephemeralrunners -o jsonpath='{.items[*].status.phase}'
-
-# Check autoscaling runner set
-kubectl get autoscalingrunnersets -o jsonpath='{.items[*].status.currentReplicas}'
-```
+3. **Namespace**: All configurations assume ArgoCD is installed in the `argocd` namespace
 
 ## Troubleshooting
 
 ### Health Status Not Updating
 
-1. **Verify ConfigMap is applied**:
-   ```bash
-   kubectl get configmap argocd-cm -n argocd -o yaml | grep actions
-   ```
+1. Verify ConfigMap is applied:
+```sh
+kubectl get configmap argocd-cm -n argocd -o yaml | grep customizations
+```
 
-2. **Ensure ArgoCD server was restarted**:
-   ```bash
-   kubectl rollout status deployment argocd-server -n argocd
-   ```
+2. Check ArgoCD logs:
+```sh
+kubectl logs -n argocd deployment/argocd-server | grep health
+```
 
-3. **Check ArgoCD logs**:
-   ```bash
-   kubectl logs -n argocd deployment/argocd-server | grep health
-   ```
+3. Refresh application in ArgoCD:
+```sh
+argocd app get <app-name> --refresh
+```
 
 ### Incorrect Health Status
 
-If runners show as "Progressing" when they should be "Healthy":
+1. Check runner status:
+```sh
+kubectl get runners -o yaml
+kubectl get pods -l app.kubernetes.io/component=runner
+```
 
-1. Check runner pod status:
-   ```bash
-   kubectl get pods -l app.kubernetes.io/name=runner
-   ```
-
-2. Verify runner registration:
-   ```bash
-   kubectl describe runner <runner-name>
-   ```
-
-3. Look for status fields:
-   - `status.phase` should be "Running"
-   - `status.ready` should be "true"
+2. Verify labels on pods:
+```sh
+kubectl get pods -o jsonpath='{.items[*].metadata.labels}'
+```
