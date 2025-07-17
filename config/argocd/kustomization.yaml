@@ -1,0 +1,36 @@
+# Kustomization for adding ARC health checks to ArgoCD
+# This example shows different ways to apply health check patches
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+# Option 1: Apply all health checks at once
+patchesStrategicMerge:
+  - argocd-cm.yaml  # Complete health check configuration
+
+# Option 2: Apply specific health checks selectively
+# Uncomment the patches you need:
+# patchesStrategicMerge:
+#   - health-check-runner.yaml # Legacy Runner API
+#   - health-check-ephemeralrunner.yaml # New Runner API
+#   - health-check-autoscalingrunnerset.yaml # AutoScaling support
+#   - health-check-pod.yaml # Pod health checks
+
+# Option 3: Use configMapGenerator to merge with existing ConfigMap
+# This is useful when ArgoCD is managed by another system
+# generatorOptions:
+#   disableNameSuffixHash: true
+#
+# configMapGenerator:
+# - name: argocd-cm
+#   behavior: merge
+#   files:
+#   - resource.customizations.health.actions.summerwind.dev_Runner=health-check-runner.yaml
+#   - resource.customizations.health.actions.github.com_EphemeralRunner=health-check-ephemeralrunner.yaml
+#   - resource.customizations.health.actions.github.com_AutoScalingRunnerSet=health-check-autoscalingrunnerset.yaml
+#   - resource.customizations.health.core_Pod=health-check-pod.yaml
+
+# Note: After applying these patches, restart ArgoCD server:
+# kubectl rollout restart deployment argocd-server -n argocd
