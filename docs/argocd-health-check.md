@@ -60,15 +60,7 @@ kubectl edit configmap argocd-cm -n argocd
 
 Then add the health check configurations under the `data` section. You can copy the content from the provided YAML files, ensuring proper indentation.
 
-### Method 5: Patch Existing ConfigMap
-
-If you already have an ArgoCD ConfigMap:
-
-```sh
-kubectl patch configmap argocd-cm -n argocd --type merge -p @config/argocd/argocd-cm.yaml
-```
-
-### Method 6: Helm Values
+### Method 5: Helm Values
 
 When installing ArgoCD via Helm, add to your values.yaml:
 
@@ -175,7 +167,7 @@ The configurations support four resource types:
    - Healthy when scaled to target size
    - Displays pending, running, and terminating runner counts
 
-4. **Pod** (v1)
+4. **Pod** (core/v1)
    - Health checks for runner pods specifically
    - Monitors container readiness and status
    - Detects common issues like CrashLoopBackOff and ImagePullBackOff
