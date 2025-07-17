@@ -1,0 +1,87 @@
+# Health check patch for core/v1 Pod - specifically for Runner pods
+# This patch adds health check for ARC runner pods to ArgoCD
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  resource.customizations.health.core_Pod: |
+    hs = {}
+
+    -- Detect if this is an ARC runner pod by label
+    local labels = (obj.metadata or {}).labels or {}
+    local isRunnerPod =
+        labels["actions.github.com/runner-pod"] or
+        labels["runner-deployment-name"] or
+        labels["actions-runner-controller/inject-registration-token"] or
+        labels["app.kubernetes.io/component"] == "runner" or
+        labels["app.kubernetes.io/part-of"] == "actions-runner-controller"
+
+    if not isRunnerPod then
+      return nil -- let ArgoCD fallback to default Pod checker
+    end
+
+    if obj.status then
+      local phase = obj.status.phase
+      local containerStatuses = obj.status.containerStatuses or {}
+      local allReady, anyRunning, failedCnt = true, false, 0
+      local msgs = {}
+
+      for _, cs in ipairs(containerStatuses) do
+        if not cs.ready then allReady = false end
+        if cs.state and cs.state.running then anyRunning = true end
+
+        if cs.state and cs.state.terminated and cs.state.terminated.exitCode ~= 0 then
+          failedCnt = failedCnt + 1
+          table.insert(msgs,
+            string.format("Container %s exited %d (%s)",
+              cs.name,
+              cs.state.terminated.exitCode,
+              cs.state.terminated.reason or ""))
+        end
+
+        if cs.state and cs.state.waiting then
+          local reason = cs.state.waiting.reason or ""
+          if reason == "CrashLoopBackOff" or reason == "ErrImagePull" or reason == "ImagePullBackOff" then
+            failedCnt = failedCnt + 1
+            table.insert(msgs,
+              string.format("Container %s waiting: %s", cs.name, reason))
+          end
+        end
+      end
+
+      if phase == "Running" and allReady and anyRunning then
+        hs.status = "Healthy"
+        hs.message = "Runner pod is running and all containers are ready"
+      elseif phase == "Succeeded" then
+        hs.status = "Healthy"
+        hs.message = "Runner pod completed successfully"
+      elseif phase == "Failed" or failedCnt > 0 then
+        hs.status = "Degraded"
+        local concatenatedMsgs = (#msgs > 0) and table.concat(msgs, "; ") or nil
+        local fallbackMsg = obj.status.message or "Pod has failed"
+        hs.message = concatenatedMsgs or fallbackMsg
+      elseif phase == "Pending" then
+        local msg = "Pod is pending"
+        for _, cond in ipairs(obj.status.conditions or {}) do
+          if cond.type == "PodScheduled" and cond.status == "False" then
+            msg = "Pod unschedulable: " .. (cond.reason or "")
+            break
+          end
+        end
+        hs.status = "Progressing"
+        hs.message = msg
+      elseif phase == "Running" and not allReady then
+        hs.status = "Progressing"
+        hs.message = "Pod is running but containers not ready"
+      else
+        hs.status = "Progressing"
+        hs.message = "Pod status: " .. (phase or "(nil)")
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for pod status"
+    end
+
+    return hs

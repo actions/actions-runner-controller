@@ -1,0 +1,39 @@
+# Health check patch for actions.github.com/v1alpha1 AutoScalingRunnerSet
+# This patch adds health check for AutoScalingRunnerSet resources to ArgoCD
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  resource.customizations.health.actions.github.com_AutoScalingRunnerSet: |
+    hs = {}
+    if obj.status then
+      local desired = obj.status.desiredReplicas or obj.status.replicas or 0
+      local ready = obj.status.readyReplicas or 0
+      local current = obj.status.currentReplicas or 0
+      local pending = obj.status.pendingEphemeralRunners or 0
+      local terminating = obj.status.terminatingEphemeralRunners or 0
+      local running = obj.status.runningEphemeralRunners or 0
+
+      if desired == 0 and current == 0 then
+        hs.status = "Healthy"
+        hs.message = "AutoScaler scaled down to zero"
+      elseif desired > 0 and ready == desired and pending == 0 and terminating == 0 then
+        hs.status = "Healthy"
+        hs.message = string.format("All runners ready: %d/%d (Running: %d)", ready, desired, running)
+      elseif terminating > 0 then
+        hs.status = "Progressing"
+        hs.message = string.format("Scaling down: %d terminating, %d/%d ready", terminating, ready, desired)
+      elseif pending > 0 or ready < desired then
+        hs.status = "Progressing"
+        hs.message = string.format("Scaling up: %d/%d ready, %d pending", ready, desired, pending)
+      else
+        hs.status = "Progressing"
+        hs.message = string.format("Runners: %d current, %d desired", current, desired)
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for AutoScalingRunnerSet status"
+    end
+    return hs

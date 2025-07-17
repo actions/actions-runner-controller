@@ -1,0 +1,40 @@
+# Health check patch for actions.summerwind.dev/v1alpha1 Runner (Legacy API)
+# This patch adds health check for legacy Runner resources to ArgoCD
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  resource.customizations.health.actions.summerwind.dev_Runner: |
+    hs = {}
+    if obj.status then
+      local phase = obj.status.phase
+      if obj.status.ready and phase == "Running" then
+        hs.status = "Healthy"
+        hs.message = "Runner is ready and running"
+      elseif phase == "Running" then
+        hs.status = "Progressing"
+        hs.message = "Runner is running but not ready"
+      elseif phase == "Pending" or phase == "Created" or phase == "Initializing" then
+        hs.status = "Progressing"
+        hs.message = "Runner is starting up: " .. phase
+      elseif phase == "Failed" or phase == "Error" then
+        hs.status = "Degraded"
+        hs.message = obj.status.message or "Runner has failed"
+      elseif phase == "Terminating" then
+        hs.status = "Progressing"
+        hs.message = "Runner is terminating"
+      else
+        hs.status = "Progressing"
+        hs.message = "Runner status: " .. (phase or "(nil)")
+      end
+
+      if obj.status.podName then
+        hs.message = hs.message .. " (Pod: " .. obj.status.podName .. ")"
+      end
+    else
+      hs.status = "Progressing"
+      hs.message = "Waiting for runner status"
+    end
+    return hs
