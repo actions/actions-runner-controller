@@ -24,6 +24,7 @@ const (
 	labelKeyJobWorkflowRef          = "job_workflow_ref"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
+	labelKeyRunnerName              = "runner_name"
 )
 
 const (
@@ -88,11 +89,14 @@ func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels 
 func (e *exporter) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
 	l := e.jobLabels(&msg.JobMessageBase)
 	l[labelKeyJobResult] = msg.Result
+	l[labelKeyRunnerName] = msg.RunnerName
 	return l
 }
 
 func (e *exporter) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
-	return e.jobLabels(&msg.JobMessageBase)
+	l := e.jobLabels(&msg.JobMessageBase)
+	l[labelKeyRunnerName] = msg.RunnerName
+	return l
 }
 
 //go:generate mockery --name Publisher --output ./mocks --outpkg mocks --case underscore
