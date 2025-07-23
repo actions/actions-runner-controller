@@ -415,6 +415,14 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 	return metrics
 }
 
+func configuredLabelsOnly(allLabels prometheus.Labels, configuredLabels []string) prometheus.Labels {
+	labels := make(prometheus.Labels, len(configuredLabels))
+	for _, label := range configuredLabels {
+		labels[label] = allLabels[label]
+	}
+	return labels
+}
+
 func (e *exporter) ListenAndServe(ctx context.Context) error {
 	e.logger.Info("starting metrics server", "addr", e.srv.Addr)
 	go func() {
@@ -432,10 +440,7 @@ func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float6
 	if !ok {
 		return
 	}
-	labels := make(prometheus.Labels, len(m.config.Labels))
-	for _, label := range m.config.Labels {
-		labels[label] = allLabels[label]
-	}
+	labels := configuredLabelsOnly(allLabels, m.config.Labels)
 	m.gauge.With(labels).Set(val)
 }
 
@@ -444,10 +449,7 @@ func (e *exporter) incCounter(name string, allLabels prometheus.Labels) {
 	if !ok {
 		return
 	}
-	labels := make(prometheus.Labels, len(m.config.Labels))
-	for _, label := range m.config.Labels {
-		labels[label] = allLabels[label]
-	}
+	labels := configuredLabelsOnly(allLabels, m.config.Labels)
 	m.counter.With(labels).Inc()
 }
 
@@ -456,10 +458,7 @@ func (e *exporter) observeHistogram(name string, allLabels prometheus.Labels, va
 	if !ok {
 		return
 	}
-	labels := make(prometheus.Labels, len(m.config.Labels))
-	for _, label := range m.config.Labels {
-		labels[label] = allLabels[label]
-	}
+	labels := configuredLabelsOnly(allLabels, m.config.Labels)
 	m.histogram.With(labels).Observe(val)
 }
 

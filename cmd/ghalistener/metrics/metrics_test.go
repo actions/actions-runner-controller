@@ -265,6 +265,26 @@ func TestExporterConfigDefaults(t *testing.T) {
 	assert.Equal(t, want, config)
 }
 
+func TestConfiguredLabelsOnly(t *testing.T) {
+	allLabels := prometheus.Labels{
+		labelKeyRepository:   "test-repo",
+		labelKeyOrganization: "test-org",
+		labelKeyJobName:      "test-job",
+	}
+
+	configuredLabels := []string{labelKeyRepository, labelKeyJobName}
+
+	got := configuredLabelsOnly(allLabels, configuredLabels)
+
+	want := prometheus.Labels{
+		labelKeyRepository: "test-repo",
+		labelKeyJobName:    "test-job",
+	}
+
+	assert.Equal(t, want, got)
+	assert.NotContains(t, got, labelKeyOrganization)
+}
+
 func TestCompletedJobAllLabels(t *testing.T) {
 	config := ExporterConfig{
 		ScaleSetName:      "test-scale-set",
