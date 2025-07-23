@@ -117,9 +117,6 @@ manifests: manifests-gen-crds chart-crds
 
 manifests-gen-crds: controller-gen yq
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	for YAMLFILE in config/crd/bases/actions*.yaml; do \
-		$(YQ) '.spec.preserveUnknownFields = false' --inplace "$$YAMLFILE" ; \
-	done
 	make manifests-gen-crds-fix DELETE_KEY=x-kubernetes-list-type
 	make manifests-gen-crds-fix DELETE_KEY=x-kubernetes-list-map-keys
 
