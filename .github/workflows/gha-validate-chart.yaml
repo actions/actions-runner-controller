@@ -41,8 +41,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2.0
-        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -52,7 +51,6 @@ jobs:
           python-version: "3.11"
 
       - name: Set up chart-testing
-        # https://github.com/helm/chart-testing-action/releases/tag/v2.7.0
         uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b
 
       - name: Run chart-testing (list-changed)
@@ -69,13 +67,12 @@ jobs:
           ct lint --config charts/.ci/ct-config-gha.yaml
 
       - name: Set up docker buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
         if: steps.list-changed.outputs.changed == 'true'
         with:
           version: latest
 
       - name: Build controller image
-        # https://github.com/docker/build-push-action/releases/tag/v6.18.0
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         if: steps.list-changed.outputs.changed == 'true'
         with:
@@ -91,7 +88,6 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create kind cluster
-        # https://github.com/helm/kind-action/releases/tag/v1.12.0
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
         if: steps.list-changed.outputs.changed == 'true'
         with:

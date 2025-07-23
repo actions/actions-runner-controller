@@ -54,7 +54,9 @@ spec:
         - "--leader-election-id={{ include "gha-runner-scale-set-controller.fullname" . }}"
         {{- end }}
         {{- with .Values.imagePullSecrets }}
-        - "--auto-scaler-image-pull-secrets={{ include "gha-runner-scale-set-controller.imagePullSecretsNames" . }}"
+        {{- range . }}
+        - "--auto-scaler-image-pull-secrets={{- .name -}}"
+        {{- end }}
         {{- end }}
         {{- with .Values.flags.logLevel }}
         - "--log-level={{ . }}"
