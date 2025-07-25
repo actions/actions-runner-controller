@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "actions-runner-controller.labels" . | nindent 4 }}
   name: {{ include "actions-runner-controller-github-webhook-server.pdbName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "actions-runner-controller.namespace" . }}
 spec:
   {{- if .Values.githubWebhookServer.podDisruptionBudget.minAvailable }}
   minAvailable: {{ .Values.githubWebhookServer.podDisruptionBudget.minAvailable }}

@@ -36,8 +36,8 @@ var (
 
 	testResultCMNamePrefix = "test-result-"
 
-	RunnerVersion               = "2.316.1"
-	RunnerContainerHooksVersion = "0.6.0"
+	RunnerVersion               = "2.327.0"
+	RunnerContainerHooksVersion = "0.7.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
@@ -598,9 +598,9 @@ func initTestEnv(t *testing.T, k8sMinorVer string, vars vars) *env {
 		}
 
 		e.Kind = testing.StartKind(t, k8sMinorVer, testing.Preload(images...))
-		e.Env.Kubeconfig = e.Kind.Kubeconfig()
+		e.Kubeconfig = e.Kind.Kubeconfig()
 	} else {
-		e.Env.Kubeconfig = e.remoteKubeconfig
+		e.Kubeconfig = e.remoteKubeconfig
 
 		// Kind automatically installs https://github.com/rancher/local-path-provisioner for PVs.
 		// But assuming the remote cluster isn't a kind Kubernetes cluster,
@@ -654,7 +654,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 			t.Logf("%v", ioerr)
 			return err
 		}
-		t.Logf(string(b))
+		t.Log(string(b))
 		return err
 	}
 
@@ -667,7 +667,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 				t.Logf("%v", ioerr)
 				return err
 			}
-			t.Logf(string(b))
+			t.Log(string(b))
 			return err
 		}
 	}
@@ -679,7 +679,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 				t.Logf("%v", ioerr)
 				return err
 			}
-			t.Logf(string(b))
+			t.Log(string(b))
 			return err
 		}
 	}
@@ -693,7 +693,7 @@ func (e *env) checkGitHubToken(t *testing.T, tok string) error {
 				t.Logf("%v", ioerr)
 				return err
 			}
-			t.Logf(string(b))
+			t.Log(string(b))
 			return err
 		}
 	}
@@ -1045,7 +1045,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 
 	var container string
 	if kubernetesContainerMode {
-		container = "golang:1.18"
+		container = "golang:1.24"
 	}
 
 	for _, j := range testJobs {
@@ -1106,7 +1106,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.22.1",
+						GoVersion: "1.24.3",
 					},
 				},
 			)
@@ -1181,7 +1181,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				steps = append(steps,
 					testing.Step{
 						Name: "Set up Docker Buildx",
-						Uses: "docker/setup-buildx-action@v1",
+						Uses: "docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2",
 						With: setupBuildXActionWith,
 					},
 					testing.Step{
@@ -1193,7 +1193,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 						Run: "docker run --rm test1",
 					},
 					testing.Step{
-						Uses: "addnab/docker-run-action@v3",
+						Uses: "addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185",
 						With: &testing.With{
 							Image: "test1",
 							Run:   "hello",
@@ -1234,9 +1234,9 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 
 		steps = append(steps,
 			testing.Step{
-				Uses: "azure/setup-kubectl@v1",
+				Uses: "azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f",
 				With: &testing.With{
-					Version: "v1.22.1",
+					Version: "v1.24.0",
 				},
 			},
 			testing.Step{

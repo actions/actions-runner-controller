@@ -126,7 +126,6 @@ func TestARCJobs(t *testing.T) {
 		if !success {
 			t.Fatal("Expected pods count did not match available pods count during job run.")
 		}
-
 	},
 	)
 	t.Run("Get available pods after job run", func(t *testing.T) {

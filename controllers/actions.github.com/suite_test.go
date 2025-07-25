@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/onsi/ginkgo/config"
 
@@ -79,6 +80,15 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClient).ToNot(BeNil())
+
+	failedRunnerBackoff = []time.Duration{
+		20 * time.Millisecond,
+		20 * time.Millisecond,
+		20 * time.Millisecond,
+		20 * time.Millisecond,
+		20 * time.Millisecond,
+		20 * time.Millisecond,
+	}
 })
 
 var _ = AfterSuite(func() {

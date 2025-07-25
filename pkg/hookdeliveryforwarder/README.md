@@ -3,6 +3,6 @@ That being said, we are likely accept bug reports with concrete reproduction ste
 
 To use this, you need to write some Kubernetes manifest and a container image for deployment.
 
-For other information, please see the original pull request introduced it.
+For other information, please see the original pull request that introduced it.
 
 https://github.com/actions/actions-runner-controller/pull/682

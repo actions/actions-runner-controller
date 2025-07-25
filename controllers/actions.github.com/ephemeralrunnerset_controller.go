@@ -53,14 +53,14 @@ type EphemeralRunnerSetReconciler struct {
 
 	PublishMetrics bool
 
-	resourceBuilder resourceBuilder
+	ResourceBuilder
 }
 
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/finalizers,verbs=update;patch
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -83,7 +83,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Requested deletion does not need reconciled.
-	if !ephemeralRunnerSet.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(ephemeralRunnerSet, ephemeralRunnerSetFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -275,7 +275,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 	proxySecret.Name = proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)
 
 	if err := r.Delete(ctx, proxySecret); err != nil && !kerrors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete proxy secret: %v", err)
+		return fmt.Errorf("failed to delete proxy secret: %w", err)
 	}
 
 	log.Info("Deleted proxy secret")
@@ -287,7 +287,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
 	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
 	if err != nil {
-		return false, fmt.Errorf("failed to list child ephemeral runners: %v", err)
+		return false, fmt.Errorf("failed to list child ephemeral runners: %w", err)
 	}
 
 	log.Info("Actual Ephemeral runner counts", "count", len(ephemeralRunnerList.Items))
@@ -331,7 +331,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, nil
 	}
 
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
 	if err != nil {
 		return false, err
 	}
@@ -360,7 +360,7 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	// Track multiple errors at once and return the bundle.
 	errs := make([]error, 0)
 	for i := 0; i < count; i++ {
-		ephemeralRunner := r.resourceBuilder.newEphemeralRunner(runnerSet)
+		ephemeralRunner := r.newEphemeralRunner(runnerSet)
 		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
 			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
 		}
@@ -439,9 +439,9 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
 		return nil
 	}
-	actionsClient, err := r.actionsClientFor(ctx, ephemeralRunnerSet)
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
 	if err != nil {
-		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %v", err)
+		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
 	}
 	var errs []error
 	deletedCount := 0
@@ -500,73 +500,6 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 
 	log.Info("Deleted ephemeral runner", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
 	return true, nil
-}
-
-func (r *EphemeralRunnerSetReconciler) actionsClientFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) (actions.ActionsService, error) {
-	secret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: rs.Spec.EphemeralRunnerSpec.GitHubConfigSecret}, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret: %w", err)
-	}
-
-	opts, err := r.actionsClientOptionsFor(ctx, rs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get actions client options: %w", err)
-	}
-
-	return r.ActionsClient.GetClientFromSecret(
-		ctx,
-		rs.Spec.EphemeralRunnerSpec.GitHubConfigUrl,
-		rs.Namespace,
-		secret.Data,
-		opts...,
-	)
-}
-
-func (r *EphemeralRunnerSetReconciler) actionsClientOptionsFor(ctx context.Context, rs *v1alpha1.EphemeralRunnerSet) ([]actions.ClientOption, error) {
-	var opts []actions.ClientOption
-	if rs.Spec.EphemeralRunnerSpec.Proxy != nil {
-		proxyFunc, err := rs.Spec.EphemeralRunnerSpec.Proxy.ProxyFunc(func(s string) (*corev1.Secret, error) {
-			var secret corev1.Secret
-			err := r.Get(ctx, types.NamespacedName{Namespace: rs.Namespace, Name: s}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
-			}
-
-			return &secret, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get proxy func: %w", err)
-		}
-
-		opts = append(opts, actions.WithProxy(proxyFunc))
-	}
-
-	tlsConfig := rs.Spec.EphemeralRunnerSpec.GitHubServerTLS
-	if tlsConfig != nil {
-		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
-			var configmap corev1.ConfigMap
-			err := r.Get(
-				ctx,
-				types.NamespacedName{
-					Namespace: rs.Namespace,
-					Name:      name,
-				},
-				&configmap,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
-			}
-
-			return []byte(configmap.Data[key]), nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tls config: %w", err)
-		}
-
-		opts = append(opts, actions.WithRootCAs(pool))
-	}
-
-	return opts, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -641,7 +574,7 @@ func newEphemeralRunnerState(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) 
 		if err == nil && patchID > ephemeralRunnerState.latestPatchID {
 			ephemeralRunnerState.latestPatchID = patchID
 		}
-		if !r.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !r.DeletionTimestamp.IsZero() {
 			ephemeralRunnerState.deleting = append(ephemeralRunnerState.deleting, r)
 			continue
 		}

@@ -14,7 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	listenerconfig "github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
+	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+	"github.com/actions/actions-runner-controller/github/actions/fake"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +26,7 @@ import (
 )
 
 const (
-	autoscalingListenerTestTimeout     = time.Second * 5
+	autoscalingListenerTestTimeout     = time.Second * 20
 	autoscalingListenerTestInterval    = time.Millisecond * 250
 	autoscalingListenerTestGitHubToken = "gh_token"
 )
@@ -43,10 +44,17 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -134,37 +142,25 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
 
-			// Check if secret is created
-			mirrorSecret := new(corev1.Secret)
-			Eventually(
-				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerSecretMirrorName(autoscalingListener), Namespace: autoscalingListener.Namespace}, mirrorSecret)
-					if err != nil {
-						return "", err
-					}
-					return string(mirrorSecret.Data["github_token"]), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerTestGitHubToken), "Mirror secret should be created")
-
 			// Check if service account is created
 			serviceAccount := new(corev1.ServiceAccount)
 			Eventually(
 				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerServiceAccountName(autoscalingListener), Namespace: autoscalingListener.Namespace}, serviceAccount)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, serviceAccount)
 					if err != nil {
 						return "", err
 					}
 					return serviceAccount.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(scaleSetListenerServiceAccountName(autoscalingListener)), "Service account should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Service account should be created")
 
 			// Check if role is created
 			role := new(rbacv1.Role)
 			Eventually(
 				func() ([]rbacv1.PolicyRule, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
 					if err != nil {
 						return nil, err
 					}
@@ -178,7 +174,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			roleBinding := new(rbacv1.RoleBinding)
 			Eventually(
 				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
 					if err != nil {
 						return "", err
 					}
@@ -186,7 +182,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return roleBinding.RoleRef.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(scaleSetListenerRoleName(autoscalingListener)), "Rolebinding should be created")
+				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Rolebinding should be created")
 
 			// Check if pod is created
 			pod := new(corev1.Pod)
@@ -248,7 +244,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			Eventually(
 				func() bool {
 					roleBinding := new(rbacv1.RoleBinding)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
 					return kerrors.IsNotFound(err)
 				},
 				autoscalingListenerTestTimeout,
@@ -259,7 +255,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			Eventually(
 				func() bool {
 					role := new(rbacv1.Role)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
 					return kerrors.IsNotFound(err)
 				},
 				autoscalingListenerTestTimeout,
@@ -340,7 +336,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			role := new(rbacv1.Role)
 			Eventually(
 				func() ([]rbacv1.PolicyRule, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerRoleName(autoscalingListener), Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
 					if err != nil {
 						return nil, err
 					}
@@ -351,7 +347,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
 		})
 
-		It("It should update mirror secrets to match secret used by AutoScalingRunnerSet", func() {
+		It("It should re-create pod and config secret whenever listener container is terminated", func() {
 			// Waiting for the pod is created
 			pod := new(corev1.Pod)
 			Eventually(
@@ -364,49 +360,64 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return pod.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
-			// Update the secret
-			updatedSecret := configSecret.DeepCopy()
-			updatedSecret.Data["github_token"] = []byte(autoscalingListenerTestGitHubToken + "_updated")
-			err := k8sClient.Update(ctx, updatedSecret)
-			Expect(err).NotTo(HaveOccurred(), "failed to update test secret")
-
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			err = k8sClient.Status().Update(ctx, updatedPod)
-			Expect(err).NotTo(HaveOccurred(), "failed to update test pod to failed")
-
-			// Check if mirror secret is updated with right data
-			mirrorSecret := new(corev1.Secret)
-			Eventually(
-				func() (map[string][]byte, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerSecretMirrorName(autoscalingListener), Namespace: autoscalingListener.Namespace}, mirrorSecret)
-					if err != nil {
-						return nil, err
-					}
-
-					return mirrorSecret.Data, nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(updatedSecret.Data), "Mirror secret should be updated")
-
-			// Check if we re-created a new pod
+			secret := new(corev1.Secret)
 			Eventually(
 				func() error {
-					latestPod := new(corev1.Pod)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, latestPod)
-					if err != nil {
-						return err
-					}
-					if latestPod.UID == pod.UID {
-						return fmt.Errorf("Pod should be recreated")
-					}
-
-					return nil
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(Succeed(), "Pod should be recreated")
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Config secret should be created")
+
+			oldPodUID := string(pod.UID)
+			oldSecretUID := string(secret.UID)
+
+			updated := pod.DeepCopy()
+			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+						},
+					},
+				},
+			}
+			err := k8sClient.Status().Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "failed to update test pod")
+
+			// Waiting for the new pod is created
+			Eventually(
+				func() (string, error) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return string(pod.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be re-created")
+
+			// Check if config secret is re-created
+			Eventually(
+				func() (string, error) {
+					secret := new(corev1.Secret)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
+					if err != nil {
+						return "", err
+					}
+
+					return string(secret.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldSecretUID), "Config secret should be re-created")
 		})
 	})
 })
@@ -420,6 +431,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 	var autoscalingListener *v1alpha1.AutoscalingListener
 
 	var runAsUser int64 = 1001
+	const sidecarContainerName = "sidecar"
 
 	listenerPodTemplate := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
@@ -432,7 +444,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 					},
 				},
 				{
-					Name:            "sidecar",
+					Name:            sidecarContainerName,
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Image:           "busybox",
 				},
@@ -448,10 +460,17 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -525,7 +544,8 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 					return created.Finalizers[0], nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
 
 			// Check if config is created
 			config := new(corev1.Secret)
@@ -559,9 +579,98 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 			Expect(pod.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(&runAsUser), "Pod should have the correct security context")
 			Expect(pod.Spec.Containers[0].ImagePullPolicy).To(Equal(corev1.PullAlways), "Pod should have the correct image pull policy")
 
-			Expect(pod.Spec.Containers[1].Name).To(Equal("sidecar"), "Pod should have the correct container name")
+			Expect(pod.Spec.Containers[1].Name).To(Equal(sidecarContainerName), "Pod should have the correct container name")
 			Expect(pod.Spec.Containers[1].Image).To(Equal("busybox"), "Pod should have the correct image")
 			Expect(pod.Spec.Containers[1].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent), "Pod should have the correct image pull policy")
+		})
+	})
+
+	Context("When AutoscalingListener pod has interuptions", func() {
+		It("Should re-create pod when it is deleted", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			Expect(len(pod.Spec.Containers)).To(Equal(2), "Pod should have 2 containers")
+			oldPodUID := string(pod.UID)
+
+			err := k8sClient.Delete(ctx, pod)
+			Expect(err).NotTo(HaveOccurred(), "failed to delete pod")
+
+			pod = new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return string(pod.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be created")
+		})
+
+		It("Should re-create pod when the listener pod is terminated", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			updated := pod.DeepCopy()
+			oldPodUID := string(pod.UID)
+			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+						},
+					},
+				},
+				{
+					Name: sidecarContainerName,
+					State: corev1.ContainerState{
+						Running: &corev1.ContainerStateRunning{},
+					},
+				},
+			}
+			err := k8sClient.Status().Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "failed to update pod status")
+
+			pod = new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return string(pod.UID), nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be created")
 		})
 	})
 })
@@ -631,11 +740,17 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		ctx = context.Background()
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
 
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -828,10 +943,17 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -887,7 +1009,6 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 
 				g.Expect(pod.ObjectMeta.Annotations).To(HaveKeyWithValue("test-annotation-key", "test-annotation-value"), "pod annotations should be copied from runner set template")
 				g.Expect(pod.ObjectMeta.Labels).To(HaveKeyWithValue("test-label-key", "test-label-value"), "pod labels should be copied from runner set template")
-
 			},
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval).Should(Succeed(), "failed to create listener pod with proxy details")
@@ -925,6 +1046,12 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
+		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+
+		rb := ResourceBuilder{
+			SecretResolver: secretResolver,
+		}
+
 		cert, err := os.ReadFile(filepath.Join(
 			"../../",
 			"github",
@@ -946,9 +1073,10 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
 		controller := &AutoscalingListenerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Log:             logf.Log,
+			ResourceBuilder: rb,
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -963,7 +1091,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
-				GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -999,7 +1127,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 			Spec: v1alpha1.AutoscalingListenerSpec{
 				GitHubConfigUrl:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
-				GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -1043,7 +1171,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 
 					g.Expect(config.Data["config.json"]).ToNot(BeEmpty(), "listener configuration file should not be empty")
 
-					var listenerConfig listenerconfig.Config
+					var listenerConfig ghalistenerconfig.Config
 					err = json.Unmarshal(config.Data["config.json"], &listenerConfig)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
 

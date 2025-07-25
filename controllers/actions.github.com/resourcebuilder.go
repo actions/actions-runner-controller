@@ -5,16 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
-	listenerconfig "github.com/actions/actions-runner-controller/cmd/githubrunnerscalesetlistener/config"
+	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,9 +72,17 @@ func SetListenerEntrypoint(entrypoint string) {
 	}
 }
 
-type resourceBuilder struct{}
+type ResourceBuilder struct {
+	ExcludeLabelPropagationPrefixes []string
+	*SecretResolver
+}
 
-func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
+// boolPtr returns a pointer to a bool value
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
 		return nil, err
@@ -85,7 +97,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
 	}
 
-	labels := mergeLabels(autoscalingRunnerSet.Labels, map[string]string{
+	labels := b.mergeLabels(autoscalingRunnerSet.Labels, map[string]string{
 		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
 		LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
@@ -112,6 +124,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
 			GitHubConfigSecret:            autoscalingRunnerSet.Spec.GitHubConfigSecret,
+			VaultConfig:                   autoscalingRunnerSet.VaultConfig(),
 			RunnerScaleSetId:              runnerScaleSetId,
 			AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 			AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
@@ -122,6 +135,7 @@ func (b *resourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			ImagePullSecrets:              imagePullSecrets,
 			Proxy:                         autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
+			Metrics:                       autoscalingRunnerSet.Spec.ListenerMetrics,
 			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
 		},
 	}
@@ -150,7 +164,7 @@ func (lm *listenerMetricsServerConfig) containerPort() (corev1.ContainerPort, er
 	}, nil
 }
 
-func (b *resourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
+func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, appConfig *appconfig.AppConfig, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
 	var (
 		metricsAddr     = ""
 		metricsEndpoint = ""
@@ -160,30 +174,8 @@ func (b *resourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		metricsEndpoint = metricsConfig.endpoint
 	}
 
-	var appID int64
-	if id, ok := secret.Data["github_app_id"]; ok {
-		var err error
-		appID, err = strconv.ParseInt(string(id), 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert github_app_id to int: %v", err)
-		}
-	}
-
-	var appInstallationID int64
-	if id, ok := secret.Data["github_app_installation_id"]; ok {
-		var err error
-		appInstallationID, err = strconv.ParseInt(string(id), 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert github_app_installation_id to int: %v", err)
-		}
-	}
-
-	config := listenerconfig.Config{
+	config := ghalistenerconfig.Config{
 		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigUrl,
-		AppID:                       appID,
-		AppInstallationID:           appInstallationID,
-		AppPrivateKey:               string(secret.Data["github_app_private_key"]),
-		Token:                       string(secret.Data["github_token"]),
 		EphemeralRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		EphemeralRunnerSetName:      autoscalingListener.Spec.EphemeralRunnerSetName,
 		MaxRunners:                  autoscalingListener.Spec.MaxRunners,
@@ -195,6 +187,25 @@ func (b *resourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		LogFormat:                   scaleSetListenerLogFormat,
 		MetricsAddr:                 metricsAddr,
 		MetricsEndpoint:             metricsEndpoint,
+		Metrics:                     autoscalingListener.Spec.Metrics,
+	}
+
+	vault := autoscalingListener.Spec.VaultConfig
+	if vault == nil {
+		config.AppConfig = appConfig
+	} else {
+		config.VaultType = vault.Type
+		config.VaultLookupKey = autoscalingListener.Spec.GitHubConfigSecret
+		config.AzureKeyVaultConfig = &azurekeyvault.Config{
+			TenantID:        vault.AzureKeyVault.TenantID,
+			ClientID:        vault.AzureKeyVault.ClientID,
+			URL:             vault.AzureKeyVault.URL,
+			CertificatePath: vault.AzureKeyVault.CertificatePath,
+		}
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid listener config: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -213,7 +224,7 @@ func (b *resourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	}, nil
 }
 
-func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, podConfig *corev1.Secret, serviceAccount *corev1.ServiceAccount, secret *corev1.Secret, metricsConfig *listenerMetricsServerConfig, envs ...corev1.EnvVar) (*corev1.Pod, error) {
+func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, podConfig *corev1.Secret, serviceAccount *corev1.ServiceAccount, metricsConfig *listenerMetricsServerConfig, envs ...corev1.EnvVar) (*corev1.Pod, error) {
 	listenerEnv := []corev1.EnvVar{
 		{
 			Name:  "LISTENER_CONFIG_PATH",
@@ -268,9 +279,7 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 	}
 
 	labels := make(map[string]string, len(autoscalingListener.Labels))
-	for key, val := range autoscalingListener.Labels {
-		labels[key] = val
-	}
+	maps.Copy(labels, autoscalingListener.Labels)
 
 	newRunnerScaleSetListenerPod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -281,6 +290,16 @@ func (b *resourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
 			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingListener.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingListener.GetObjectKind().GroupVersionKind().Kind,
+					UID:                autoscalingListener.GetUID(),
+					Name:               autoscalingListener.GetName(),
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: podSpec,
 	}
@@ -406,12 +425,12 @@ func mergeListenerContainer(base, from *corev1.Container) {
 	base.TTY = from.TTY
 }
 
-func (b *resourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
+func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerServiceAccountName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
-			Labels: mergeLabels(autoscalingListener.Labels, map[string]string{
+			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 			}),
@@ -419,14 +438,14 @@ func (b *resourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 	}
 }
 
-func (b *resourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.Role {
+func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.Role {
 	rules := rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName})
 	rulesHash := hash.ComputeTemplateHash(&rules)
 	newRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerRoleName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-			Labels: mergeLabels(autoscalingListener.Labels, map[string]string{
+			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				labelKeyListenerNamespace:       autoscalingListener.Namespace,
@@ -440,7 +459,7 @@ func (b *resourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 	return newRole
 }
 
-func (b *resourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount) *rbacv1.RoleBinding {
+func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount) *rbacv1.RoleBinding {
 	roleRef := rbacv1.RoleRef{
 		Kind: "Role",
 		Name: listenerRole.Name,
@@ -458,9 +477,9 @@ func (b *resourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 
 	newRoleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerRoleName(autoscalingListener),
+			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-			Labels: mergeLabels(autoscalingListener.Labels, map[string]string{
+			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
 				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 				labelKeyListenerNamespace:       autoscalingListener.Namespace,
@@ -476,33 +495,14 @@ func (b *resourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 	return newRoleBinding
 }
 
-func (b *resourceBuilder) newScaleSetListenerSecretMirror(autoscalingListener *v1alpha1.AutoscalingListener, secret *corev1.Secret) *corev1.Secret {
-	dataHash := hash.ComputeTemplateHash(&secret.Data)
-
-	newListenerSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      scaleSetListenerSecretMirrorName(autoscalingListener),
-			Namespace: autoscalingListener.Namespace,
-			Labels: mergeLabels(autoscalingListener.Labels, map[string]string{
-				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
-				"secret-data-hash":              dataHash,
-			}),
-		},
-		Data: secret.DeepCopy().Data,
-	}
-
-	return newListenerSecret
-}
-
-func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*v1alpha1.EphemeralRunnerSet, error) {
+func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*v1alpha1.EphemeralRunnerSet, error) {
 	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
 	if err != nil {
 		return nil, err
 	}
 	runnerSpecHash := autoscalingRunnerSet.RunnerSetSpecHash()
 
-	labels := mergeLabels(autoscalingRunnerSet.Labels, map[string]string{
+	labels := b.mergeLabels(autoscalingRunnerSet.Labels, map[string]string{
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-set",
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
@@ -515,7 +515,6 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	}
 
 	newAnnotations := map[string]string{
-
 		AnnotationKeyGitHubRunnerGroupName:    autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
 		AnnotationKeyGitHubRunnerScaleSetName: autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName],
 		annotationKeyRunnerSpecHash:           runnerSpecHash,
@@ -524,10 +523,20 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: autoscalingRunnerSet.ObjectMeta.Name + "-",
-			Namespace:    autoscalingRunnerSet.ObjectMeta.Namespace,
+			GenerateName: autoscalingRunnerSet.Name + "-",
+			Namespace:    autoscalingRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  newAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         autoscalingRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:               autoscalingRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+					UID:                autoscalingRunnerSet.GetUID(),
+					Name:               autoscalingRunnerSet.GetName(),
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
@@ -538,6 +547,7 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 				Proxy:              autoscalingRunnerSet.Spec.Proxy,
 				GitHubServerTLS:    autoscalingRunnerSet.Spec.GitHubServerTLS,
 				PodTemplateSpec:    autoscalingRunnerSet.Spec.Template,
+				VaultConfig:        autoscalingRunnerSet.VaultConfig(),
 			},
 		},
 	}
@@ -545,7 +555,7 @@ func (b *resourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	return newEphemeralRunnerSet, nil
 }
 
-func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) *v1alpha1.EphemeralRunner {
+func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) *v1alpha1.EphemeralRunner {
 	labels := make(map[string]string)
 	for k, v := range ephemeralRunnerSet.Labels {
 		if k == LabelKeyKubernetesComponent {
@@ -559,6 +569,7 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	for key, val := range ephemeralRunnerSet.Annotations {
 		annotations[key] = val
 	}
+
 	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 	return &v1alpha1.EphemeralRunner{
 		TypeMeta: metav1.TypeMeta{},
@@ -567,29 +578,39 @@ func (b *resourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         ephemeralRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:               ephemeralRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+					UID:                ephemeralRunnerSet.GetUID(),
+					Name:               ephemeralRunnerSet.GetName(),
+					Controller:         boolPtr(true),
+					BlockOwnerDeletion: boolPtr(true),
+				},
+			},
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}
 }
 
-func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
+func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
 	var newPod corev1.Pod
 
 	labels := map[string]string{}
 	annotations := map[string]string{}
 
-	for k, v := range runner.ObjectMeta.Labels {
+	for k, v := range runner.Labels {
 		labels[k] = v
 	}
-	for k, v := range runner.Spec.PodTemplateSpec.Labels {
+	for k, v := range runner.Spec.Labels {
 		labels[k] = v
 	}
 	labels["actions-ephemeral-runner"] = string(corev1.ConditionTrue)
 
-	for k, v := range runner.ObjectMeta.Annotations {
+	for k, v := range runner.Annotations {
 		annotations[k] = v
 	}
-	for k, v := range runner.Spec.PodTemplateSpec.Annotations {
+	for k, v := range runner.Spec.Annotations {
 		annotations[k] = v
 	}
 
@@ -601,18 +622,28 @@ func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	)
 
 	objectMeta := metav1.ObjectMeta{
-		Name:        runner.ObjectMeta.Name,
-		Namespace:   runner.ObjectMeta.Namespace,
+		Name:        runner.Name,
+		Namespace:   runner.Namespace,
 		Labels:      labels,
 		Annotations: annotations,
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         runner.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+				Kind:               runner.GetObjectKind().GroupVersionKind().Kind,
+				UID:                runner.GetUID(),
+				Name:               runner.GetName(),
+				Controller:         boolPtr(true),
+				BlockOwnerDeletion: boolPtr(true),
+			},
+		},
 	}
 
 	newPod.ObjectMeta = objectMeta
-	newPod.Spec = runner.Spec.PodTemplateSpec.Spec
-	newPod.Spec.Containers = make([]corev1.Container, 0, len(runner.Spec.PodTemplateSpec.Spec.Containers))
+	newPod.Spec = runner.Spec.Spec
+	newPod.Spec.Containers = make([]corev1.Container, 0, len(runner.Spec.Spec.Containers))
 
-	for _, c := range runner.Spec.PodTemplateSpec.Spec.Containers {
-		if c.Name == EphemeralRunnerContainerName {
+	for _, c := range runner.Spec.Spec.Containers {
+		if c.Name == v1alpha1.EphemeralRunnerContainerName {
 			c.Env = append(
 				c.Env,
 				corev1.EnvVar{
@@ -640,7 +671,7 @@ func (b *resourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	return &newPod
 }
 
-func (b *resourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner) *corev1.Secret {
+func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ephemeralRunner.Name,
@@ -662,30 +693,6 @@ func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) s
 		namespaceHash = namespaceHash[:8]
 	}
 	return fmt.Sprintf("%v-%v-listener", autoscalingRunnerSet.Name, namespaceHash)
-}
-
-func scaleSetListenerServiceAccountName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
-}
-
-func scaleSetListenerRoleName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
-}
-
-func scaleSetListenerSecretMirrorName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
 }
 
 func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) string {
@@ -745,17 +752,29 @@ func trimLabelValue(val string) string {
 	if len(val) > 63 {
 		return val[:63-len(trimLabelVauleSuffix)] + trimLabelVauleSuffix
 	}
-	return val
+	return strings.Trim(val, "-_.")
 }
 
-func mergeLabels(base, overwrite map[string]string) map[string]string {
-	mergedLabels := map[string]string{}
+func (b *ResourceBuilder) mergeLabels(base, overwrite map[string]string) map[string]string {
+	mergedLabels := make(map[string]string, len(base))
 
+base:
 	for k, v := range base {
+		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
+			if strings.HasPrefix(k, prefix) {
+				continue base
+			}
+		}
 		mergedLabels[k] = v
 	}
 
+overwrite:
 	for k, v := range overwrite {
+		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
+			if strings.HasPrefix(k, prefix) {
+				continue overwrite
+			}
+		}
 		mergedLabels[k] = v
 	}
 

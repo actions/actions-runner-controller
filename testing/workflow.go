@@ -1,7 +1,7 @@
 package testing
 
 const (
-	ActionsCheckout = "actions/checkout@v3"
+	ActionsCheckout = "actions/checkout@v4"
 )
 
 type Workflow struct {
