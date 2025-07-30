@@ -145,8 +145,6 @@ type EphemeralRunnerStatus struct {
 	RunnerId int `json:"runnerId,omitempty"`
 	// +optional
 	RunnerName string `json:"runnerName,omitempty"`
-	// +optional
-	RunnerJITConfig string `json:"runnerJITConfig,omitempty"`
 
 	// +optional
 	Failures map[string]metav1.Time `json:"failures,omitempty"`
