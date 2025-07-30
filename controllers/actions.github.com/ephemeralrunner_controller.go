@@ -217,8 +217,13 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Updating ephemeral runner status with runnerId and runnerName")
 		runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
 		if err != nil {
-			// TODO: Delete secret
-			return ctrl.Result{}, fmt.Errorf("runner id is not present in the secret")
+			log.Error(err, "Runner config secret is corrupted: missing runnerId")
+			log.Info("Deleting corrupted runner config secret")
+			if err := r.Delete(ctx, secret); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
+			}
+			log.Info("Corrupted runner config secret has been deleted")
+			return ctrl.Result{Requeue: true}, nil
 		}
 
 		if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
