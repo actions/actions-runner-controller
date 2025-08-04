@@ -618,7 +618,7 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 		FilterLabels(labels, LabelKeyRunnerTemplateHash),
 		annotations,
 		runner.Spec,
-		runner.Status.RunnerJITConfig,
+		secret.Data,
 	)
 
 	objectMeta := metav1.ObjectMeta{
@@ -671,14 +671,17 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1a
 	return &newPod
 }
 
-func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner) *corev1.Secret {
+func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner, jitConfig *actions.RunnerScaleSetJitRunnerConfig) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ephemeralRunner.Name,
 			Namespace: ephemeralRunner.Namespace,
 		},
 		Data: map[string][]byte{
-			jitTokenKey: []byte(ephemeralRunner.Status.RunnerJITConfig),
+			jitTokenKey:  []byte(jitConfig.EncodedJITConfig),
+			"runnerName": []byte(jitConfig.Runner.Name),
+			"runnerId":   []byte(strconv.Itoa(jitConfig.Runner.Id)),
+			"scaleSetId": []byte(strconv.Itoa(jitConfig.Runner.RunnerScaleSetId)),
 		},
 	}
 }
