@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
@@ -262,4 +263,114 @@ func TestExporterConfigDefaults(t *testing.T) {
 	}
 
 	assert.Equal(t, want, config)
+}
+
+func TestConfiguredLabelsOnly(t *testing.T) {
+	allLabels := prometheus.Labels{
+		labelKeyRepository:   "test-repo",
+		labelKeyOrganization: "test-org",
+		labelKeyJobName:      "test-job",
+	}
+
+	configuredLabels := []string{labelKeyRepository, labelKeyJobName}
+
+	got := configuredLabelsOnly(allLabels, configuredLabels)
+
+	want := prometheus.Labels{
+		labelKeyRepository: "test-repo",
+		labelKeyJobName:    "test-job",
+	}
+
+	assert.Equal(t, want, got)
+	assert.NotContains(t, got, labelKeyOrganization)
+}
+
+func TestCompletedJobAllLabels(t *testing.T) {
+	config := ExporterConfig{
+		ScaleSetName:      "test-scale-set",
+		ScaleSetNamespace: "test-namespace",
+		Enterprise:        "",
+		Organization:      "org",
+		Repository:        "repo",
+		ServerAddr:        "",
+		ServerEndpoint:    "",
+		Logger:            logr.Discard(),
+		Metrics:           nil, // when metrics is nil, all default metrics should be registered
+	}
+
+	exporter, ok := NewExporter(config).(*exporter)
+	require.True(t, ok, "expected exporter to be of type *exporter")
+	require.NotNil(t, exporter)
+
+	jobMessage := &actions.JobCompleted{
+		JobMessageBase: actions.JobMessageBase{
+			RepositoryName: "repo",
+			OwnerName:      "org",
+			EventName:      "",
+			JobDisplayName: "test-job",
+			JobWorkflowRef: "org/repo/.github/workflows/test.yml",
+		},
+		Result:     "success",
+		RunnerId:   1,
+		RunnerName: "runner1",
+	}
+
+	labels := exporter.completedJobLabels(jobMessage)
+
+	want := prometheus.Labels{
+		labelKeyEnterprise:     "",
+		labelKeyRepository:     "repo",
+		labelKeyJobName:        "test-job",
+		labelKeyOrganization:   "org",
+		labelKeyEventName:      "",
+		labelKeyJobWorkflowRef: "org/repo/.github/workflows/test.yml",
+		labelKeyJobResult:      "success",
+		labelKeyRunnerName:     "runner1",
+	}
+
+	assert.Equal(t, want, labels)
+}
+
+func TestStartedJobAllLabels(t *testing.T) {
+	config := ExporterConfig{
+		ScaleSetName:      "test-scale-set",
+		ScaleSetNamespace: "test-namespace",
+		Enterprise:        "",
+		Organization:      "org",
+		Repository:        "repo",
+		ServerAddr:        "",
+		ServerEndpoint:    "",
+		Logger:            logr.Discard(),
+		Metrics:           nil, // when metrics is nil, all default metrics should be registered
+	}
+
+	exporter, ok := NewExporter(config).(*exporter)
+	require.True(t, ok, "expected exporter to be of type *exporter")
+	require.NotNil(t, exporter)
+
+	jobMessage := &actions.JobStarted{
+		JobMessageBase: actions.JobMessageBase{
+			RepositoryName: "repo",
+			OwnerName:      "org",
+			EventName:      "",
+			JobDisplayName: "test-job",
+			JobWorkflowRef: "org/repo/.github/workflows/test.yml",
+		},
+		RunnerId:   1,
+		RunnerName: "runner1",
+	}
+
+	labels := exporter.startedJobLabels(jobMessage)
+
+	want := prometheus.Labels{
+		labelKeyEnterprise:     "",
+		labelKeyRepository:     "repo",
+		labelKeyJobName:        "test-job",
+		labelKeyOrganization:   "org",
+		labelKeyEventName:      "",
+		labelKeyJobWorkflowRef: "org/repo/.github/workflows/test.yml",
+		labelKeyRunnerName:     "runner1",
+	}
+
+	assert.Equal(t, want, labels)
 }
