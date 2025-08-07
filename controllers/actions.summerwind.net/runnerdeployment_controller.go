@@ -313,6 +313,13 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	status.DesiredReplicas = &newDesiredReplicas
 	status.Replicas = &totalCurrentReplicas
 	status.UpdatedReplicas = &updatedReplicas
+	selector, err := metav1.LabelSelectorAsSelector(rd.Spec.Selector)
+	if err != nil {
+		log.Error(err, "Failed to retrieve pod labels")
+
+		return ctrl.Result{}, err
+	}
+	status.Selector = selector.String()
 
 	if !reflect.DeepEqual(rd.Status, status) {
 		updated := rd.DeepCopy()
