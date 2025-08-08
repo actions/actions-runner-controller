@@ -193,10 +193,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// create secret if not created
 			log.Info("Creating new ephemeral runner secret for jitconfig.")
 			if err := r.createSecret(ctx, ephemeralRunner, jitConfig, log); err != nil {
-				if kerrors.IsAlreadyExists(err) {
-					log.Info("Secret already exists. Requeing after 1 second to wait for the event")
-					return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
-				}
 				return ctrl.Result{}, fmt.Errorf("failed to create secret: %w", err)
 			}
 			log.Info("Created new ephemeral runner secret for jitconfig.")
@@ -280,7 +276,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return result, nil
 		case kerrors.IsAlreadyExists(err):
 			log.Info("Runner pod already exists. Waiting for the pod event to be received")
-			return ctrl.Result{}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
 		case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
 			log.Error(err, "Failed to create a pod due to unrecoverable failure")
 			errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
