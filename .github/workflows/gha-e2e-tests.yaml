@@ -33,7 +33,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -124,7 +124,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -217,7 +217,7 @@ jobs:
     env:
       WORKFLOW_FILE: arc-test-dind-workflow.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -309,7 +309,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -410,7 +410,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -513,7 +513,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -610,7 +610,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -732,7 +732,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-sleepy-matrix.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -904,7 +904,7 @@ jobs:
     env:
       WORKFLOW_FILE: arc-test-workflow.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
 
