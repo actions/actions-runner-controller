@@ -28,7 +28,7 @@ jobs:
     name: Trigger Build and Push of Runner Images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get runner version
         id: versions
         run: |

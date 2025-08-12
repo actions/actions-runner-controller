@@ -21,7 +21,7 @@ jobs:
       container_hooks_current_version: ${{ steps.container_hooks_versions.outputs.container_hooks_current_version }}
       container_hooks_latest_version: ${{ steps.container_hooks_versions.outputs.container_hooks_latest_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Get runner current and latest versions
         id: runner_versions
@@ -64,7 +64,7 @@ jobs:
           echo "CONTAINER_HOOKS_CURRENT_VERSION=${{ needs.check_versions.outputs.container_hooks_current_version }}"
           echo "CONTAINER_HOOKS_LATEST_VERSION=${{ needs.check_versions.outputs.container_hooks_latest_version }}"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: PR Name
         id: pr_name
@@ -119,7 +119,7 @@ jobs:
       PR_NAME: ${{ needs.check_pr.outputs.pr_name }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: New branch
         run: git checkout -b update-runner-"$(date +%Y-%m-%d)"

@@ -40,7 +40,7 @@ jobs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -134,7 +134,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -184,7 +184,7 @@ jobs:
       # this workaround is intended to move the index.yaml to the target repo
       # where the github pages are hosted
       - name: Checkout target repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}
           path: ${{ env.CHART_TARGET_REPO }}
