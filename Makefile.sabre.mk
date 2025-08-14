@@ -1,7 +1,7 @@
-VERSION ?= 0.11.0-sabre-1
+VERSION ?= 0.14.0-sabre-1
 
 DOCKER_IMAGE_NAME ?= sabre/gh/arc/actions-runner-controller
-DOCKER_IMAGE_VERSION ?= 0.11.0-sabre-1
+DOCKER_IMAGE_VERSION ?= 0.14.0-sabre-1
 
 COMMIT_SHA = $(shell git rev-parse HEAD)
 
