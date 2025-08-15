@@ -7,7 +7,6 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION
 ARG CHANNEL=stable
 ARG DOCKER_VERSION=24.0.7
 ARG DOCKER_COMPOSE_VERSION=v2.23.0
-ARG DUMB_INIT_VERSION=1.2.5
 
 # Use 1001 and 121 for compatibility with GitHub-hosted runners
 ARG RUNNER_UID=1000
@@ -23,6 +22,7 @@ RUN apt-get update -y \
     ca-certificates \
     curl \
     dnsutils \
+    dumb-init \
     ftp \
     git \
     iproute2 \
@@ -61,12 +61,6 @@ RUN adduser --disabled-password --gecos "" --uid $RUNNER_UID runner \
     && echo "Defaults env_keep += \"DEBIAN_FRONTEND\"" >> /etc/sudoers
 
 ENV HOME=/home/runner
-
-RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
-    && chmod +x /usr/bin/dumb-init
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \

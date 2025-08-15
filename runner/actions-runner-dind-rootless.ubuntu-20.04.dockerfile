@@ -6,7 +6,6 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
 ARG DOCKER_COMPOSE_VERSION=v2.23.0
-ARG DUMB_INIT_VERSION=1.2.5
 
 # Other arguments
 ARG DEBUG=false
@@ -25,6 +24,7 @@ RUN apt-get update -y \
     ca-certificates \
     curl \
     dnsutils \
+    dumb-init \
     ftp \
     git \
     iproute2 \
@@ -70,12 +70,6 @@ RUN set -eux; \
     adduser --system --ingroup dockremap dockremap; \
     echo 'dockremap:165536:65536' >> /etc/subuid; \
     echo 'dockremap:165536:65536' >> /etc/subgid
-
-RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
-    && chmod +x /usr/bin/dumb-init
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
