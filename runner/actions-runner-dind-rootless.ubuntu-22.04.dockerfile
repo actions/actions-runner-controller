@@ -20,8 +20,9 @@ RUN apt-get update -y \
     && add-apt-repository -y ppa:git-core/ppa \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
-    curl \
     ca-certificates \
+    curl \
+    fuse-overlayfs \
     git \
     iproute2 \
     iptables \
@@ -30,7 +31,6 @@ RUN apt-get update -y \
     uidmap \
     unzip \
     zip \
-    fuse-overlayfs \
     && rm -rf /var/lib/apt/lists/*
 
 # Download latest git-lfs version

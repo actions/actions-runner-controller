@@ -20,19 +20,19 @@ RUN apt-get update -y \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     ca-certificates \
+    curl \
     dnsutils \
     ftp \
     git \
     iproute2 \
-    iputils-ping \
     iptables \
+    iputils-ping \
     jq \
     libunwind8 \
     locales \
-    netcat \
     net-tools \
+    netcat \
     openssh-client \
     parallel \
     python3-pip \
