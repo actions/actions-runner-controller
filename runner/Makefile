@@ -12,7 +12,7 @@ DOCKER_VERSION ?= 24.0.7
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
-	export PLATFORMS="linux/amd64,linux/arm64"
+	export PLATFORMS="linux/amd64,linux/arm64,linux/arm/v7"
 endif
 
 # if IMG_RESULT is unspecified, by default the image will be pushed to registry
