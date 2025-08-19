@@ -33,7 +33,6 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -238,16 +237,6 @@ func main() {
 	cfg.QPS = float32(rateLimiterQPS)
 	cfg.Burst = rateLimiterBurst
 
-	clientOptions := client.Options{}
-	if watchSingleNamespace == "" {
-		clientOptions.Cache = &client.CacheOptions{
-			DisableFor: []client.Object{
-				&corev1.Secret{},
-				&corev1.ConfigMap{},
-			},
-		}
-	}
-
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -260,7 +249,7 @@ func main() {
 		WebhookServer:    webhookServer,
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: leaderElectionId,
-		Client:           clientOptions,
+		Client:           client.Options{},
 		PprofBindAddress: pprofAddr,
 	})
 	if err != nil {
