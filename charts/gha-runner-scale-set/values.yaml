@@ -295,6 +295,11 @@ githubConfigSecret:
 #           3600.0,
 #         ]
 
+# if using dind - you can overwrite the image used
+dind:
+  image: docker:dind
+  imagePullPolicy: IfNotPresent
+
 ## template is the PodSpec for each runner Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:
