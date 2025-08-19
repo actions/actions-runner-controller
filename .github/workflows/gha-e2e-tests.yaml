@@ -13,9 +13,9 @@ permissions:
   contents: read
 
 env:
-  TARGET_ORG: actions-runner-controller
-  TARGET_REPO: arc_e2e_test_dummy
-  IMAGE_NAME: "arc-test-image"
+  TARGET_ORG: justanotherspy  # Changed from actions-runner-controller
+  TARGET_REPO: test-runner-repo  # Changed from arc_e2e_test_dummy
+  IMAGE_NAME: "danielschwartzlol/arc-test-image"  # Changed from arc-test-image
   IMAGE_VERSION: "0.12.1"
 
 concurrency:

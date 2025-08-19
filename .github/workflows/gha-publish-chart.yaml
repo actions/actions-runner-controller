@@ -31,6 +31,8 @@ on:
 
 env:
   HELM_VERSION: v3.8.0
+  DOCKER_REGISTRY: docker.io
+  DOCKER_REPOSITORY: danielschwartzlol
 
 permissions:
   packages: write

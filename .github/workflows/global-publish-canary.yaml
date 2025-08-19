@@ -43,7 +43,9 @@ concurrency:
 
 env:
   # Safeguard to prevent pushing images to registeries after build
-  PUSH_TO_REGISTRIES: true
+  PUSH_TO_REGISTRIES: false
+  DOCKER_REGISTRY: docker.io
+  DOCKER_REPOSITORY: danielschwartzlol
 
 jobs:
   legacy-canary-build:
