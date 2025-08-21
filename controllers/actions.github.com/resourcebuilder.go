@@ -207,6 +207,19 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 	}
 	b.ResourceCache.autoscalingListener.Upsert(autoscalingRunnerSet, autoscalingListener, ephemeralRunnerSet, inputDependency)
 
+	if namespace == autoscalingRunnerSet.Namespace {
+		autoscalingListener.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{
+				APIVersion:         v1alpha1.GroupVersion.String(),
+				Kind:               "AutoscalingRunnerSet",
+				UID:                autoscalingRunnerSet.GetUID(),
+				Name:               autoscalingRunnerSet.GetName(),
+				Controller:         new(true),
+				BlockOwnerDeletion: new(true),
+			},
+		}
+	}
+
 	return autoscalingListener, nil
 }
 
