@@ -6,7 +6,6 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
 ARG DOCKER_COMPOSE_VERSION=v2.23.0
-ARG DUMB_INIT_VERSION=1.2.5
 
 # Other arguments
 ARG DEBUG=false
@@ -22,19 +21,20 @@ RUN apt-get update -y \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     ca-certificates \
+    curl \
     dnsutils \
+    dumb-init \
     ftp \
     git \
     iproute2 \
-    iputils-ping \
     iptables \
+    iputils-ping \
     jq \
     libunwind8 \
     locales \
-    netcat \
     net-tools \
+    netcat \
     openssh-client \
     parallel \
     python3-pip \
@@ -70,12 +70,6 @@ RUN set -eux; \
     adduser --system --ingroup dockremap dockremap; \
     echo 'dockremap:165536:65536' >> /etc/subuid; \
     echo 'dockremap:165536:65536' >> /etc/subgid
-
-RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
-    && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
-    && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
-    && curl -fLo /usr/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v${DUMB_INIT_VERSION}/dumb-init_${DUMB_INIT_VERSION}_${ARCH} \
-    && chmod +x /usr/bin/dumb-init
 
 ENV RUNNER_ASSETS_DIR=/runnertmp
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
@@ -142,6 +136,7 @@ RUN export SKIP_IPTABLES=1 \
 RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && if [ "$ARCH" = "arm64" ]; then export ARCH=aarch64 ; fi \
     && if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then export ARCH=x86_64 ; fi \
+    && if [ "$ARCH" = "arm" ]; then export ARCH=armv7 ; fi \
     && mkdir -p /home/runner/.docker/cli-plugins \
     && curl -fLo /home/runner/.docker/cli-plugins/docker-compose https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${ARCH} \
     && chmod +x /home/runner/.docker/cli-plugins/docker-compose \
