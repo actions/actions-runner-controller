@@ -72,11 +72,16 @@ type RunnerDeploymentStatus struct {
 	// Replicas is the total number of replicas
 	// +optional
 	Replicas *int `json:"replicas"`
+
+	// Selector is the string form of the pod selector
+	// +optional
+	Selector string `json:"selector"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=rdeploy
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:printcolumn:JSONPath=".spec.template.spec.enterprise",name=Enterprise,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.template.spec.organization",name=Organization,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.template.spec.repository",name=Repository,type=string
