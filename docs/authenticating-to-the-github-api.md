@@ -200,7 +200,7 @@ metadata:
 spec:
   template:
     spec:
-      repository: USER/REO
+      repository: USER/REPO
       serviceAccountName: my-service-account
       securityContext:
         # For Ubuntu 20.04 runner
