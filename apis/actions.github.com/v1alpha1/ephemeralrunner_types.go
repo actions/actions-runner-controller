@@ -50,6 +50,10 @@ func (er *EphemeralRunner) IsDone() bool {
 	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
 }
 
+func (er *EphemeralRunner) HasJob() bool {
+	return er.Status.JobRequestId != 0
+}
+
 func (er *EphemeralRunner) HasContainerHookConfigured() bool {
 	for i := range er.Spec.Spec.Containers {
 		if er.Spec.Spec.Containers[i].Name != EphemeralRunnerContainerName {

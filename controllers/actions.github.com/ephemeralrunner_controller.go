@@ -321,6 +321,18 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	case cs.State.Terminated.ExitCode != 0: // failed
 		log.Info("Ephemeral runner container failed", "exitCode", cs.State.Terminated.ExitCode)
+		if ephemeralRunner.HasJob() {
+			log.Error(
+				errors.New("ephemeral runner has a job assigned, but the pod has failed"),
+				"Ephemeral runner either has faulty entrypoint or something external killing the runner",
+			)
+			log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
+			if err := r.Delete(ctx, ephemeralRunner); err != nil {
+				log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
 		if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
 			log.Error(err, "Failed to delete runner pod on failure")
 			return ctrl.Result{}, err
@@ -328,9 +340,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 
 	default: // succeeded
-		log.Info("Ephemeral runner has finished successfully")
-		if err := r.markAsFinished(ctx, ephemeralRunner, log); err != nil {
-			log.Error(err, "Failed to mark ephemeral runner as finished")
+		log.Info("Ephemeral runner has finished successfully, deleting ephemeral runner", "exitCode", cs.State.Terminated.ExitCode)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil {
+			log.Error(err, "Failed to delete ephemeral runner after successful completion")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -497,18 +509,6 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 	}
 
 	log.Info("EphemeralRunner is marked as Failed and deleted from the service")
-	return nil
-}
-
-func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	log.Info("Updating ephemeral runner status to Finished")
-	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = corev1.PodSucceeded
-	}); err != nil {
-		return fmt.Errorf("failed to update ephemeral runner with status finished: %w", err)
-	}
-
-	log.Info("EphemeralRunner status is marked as Finished")
 	return nil
 }
 
