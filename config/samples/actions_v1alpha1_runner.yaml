@@ -1,6 +1,0 @@
-apiVersion: actions.summerwind.dev/v1alpha1
-kind: Runner
-metadata:
-  name: summerwind-actions-runner-controller
-spec:
-  repository: actions/actions-runner-controller
