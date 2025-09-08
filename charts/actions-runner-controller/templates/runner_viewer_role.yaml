@@ -1,0 +1,20 @@
+# permissions to do viewer runners.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "actions-runner-controller.runnerViewerRoleName" . }}
+rules:
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners/status
+  verbs:
+  - get

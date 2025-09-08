@@ -1,0 +1,202 @@
+name: 'Execute and Assert ARC E2E Test Action'
+description: 'Queue E2E test workflow and assert workflow run result to be succeed'
+
+inputs:
+  auth-token:
+    description: 'GitHub access token to queue workflow run'
+    required: true
+  repo-owner:
+    description: "The repository owner name that has the test workflow file, ex: actions"
+    required: true
+  repo-name:
+    description: "The repository name that has the test workflow file, ex: test"
+    required: true
+  workflow-file:
+    description: 'The file name of the workflow yaml, ex: test.yml'
+    required: true
+  arc-name:
+    description: 'The name of the configured gha-runner-scale-set'
+    required: true
+  arc-namespace:
+    description: 'The namespace of the configured gha-runner-scale-set'
+    required: true
+  arc-controller-namespace:
+    description: 'The namespace of the configured gha-runner-scale-set-controller'
+    required: true
+  wait-to-finish:
+    description: 'Wait for the workflow run to finish'
+    required: true
+    default: "true"
+  wait-to-running:
+    description: 'Wait for the workflow run to start running'
+    required: true
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Queue test workflow
+      shell: bash
+      id: queue_workflow
+      run: |
+        queue_time=`date +%FT%TZ`
+        echo "queue_time=$queue_time" >> $GITHUB_OUTPUT
+        curl -X POST https://api.github.com/repos/${{inputs.repo-owner}}/${{inputs.repo-name}}/actions/workflows/${{inputs.workflow-file}}/dispatches \
+        -H "Accept: application/vnd.github.v3+json" \
+        -H "Authorization: token ${{inputs.auth-token}}" \
+        -d '{"ref": "main", "inputs": { "arc_name": "${{inputs.arc-name}}" } }'
+
+    - name: Fetch workflow run & job ids
+      uses: actions/github-script@v7
+      id: query_workflow
+      with:
+        script: |
+          // Try to find the workflow run triggered by the previous step using the workflow_dispatch event.
+          // - Find recently create workflow runs in the test repository
+          // - For each workflow run, list its workflow job and see if the job's labels contain `inputs.arc-name`
+          // - Since the inputs.arc-name should be unique per e2e workflow run, once we find the job with the label, we find the workflow that we just triggered.
+          function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms))
+          }
+          const owner = '${{inputs.repo-owner}}'
+          const repo = '${{inputs.repo-name}}'
+          const workflow_id = '${{inputs.workflow-file}}'
+          let workflow_run_id = 0
+          let workflow_job_id = 0
+          let workflow_run_html_url = ""
+          let count = 0
+          while (count++<12) {
+            await sleep(10 * 1000);
+            let listRunResponse = await github.rest.actions.listWorkflowRuns({
+              owner: owner,
+              repo: repo,
+              workflow_id: workflow_id,
+              created: '>${{steps.queue_workflow.outputs.queue_time}}'
+            })
+            if (listRunResponse.data.total_count > 0) {
+              console.log(`Found some new workflow runs for ${workflow_id}`)
+              for (let i = 0; i<listRunResponse.data.total_count; i++) {
+                let workflowRun = listRunResponse.data.workflow_runs[i]
+                console.log(`Check if workflow run ${workflowRun.id} is triggered by us.`)
+                let listJobResponse = await github.rest.actions.listJobsForWorkflowRun({
+                  owner: owner,
+                  repo: repo,
+                  run_id: workflowRun.id
+                })
+                console.log(`Workflow run ${workflowRun.id} has ${listJobResponse.data.total_count} jobs.`)
+                if (listJobResponse.data.total_count > 0) {
+                  for (let j = 0; j<listJobResponse.data.total_count; j++) {
+                    let workflowJob = listJobResponse.data.jobs[j]
+                    console.log(`Check if workflow job ${workflowJob.id} is triggered by us.`)
+                    console.log(JSON.stringify(workflowJob.labels));
+                    if (workflowJob.labels.includes('${{inputs.arc-name}}')) {
+                      console.log(`Workflow job ${workflowJob.id} (Run id: ${workflowJob.run_id}) is triggered by us.`)
+                      workflow_run_id = workflowJob.run_id
+                      workflow_job_id = workflowJob.id
+                      workflow_run_html_url = workflowRun.html_url
+                      break
+                    }
+                  }
+                }
+
+                if (workflow_job_id > 0) {
+                  break;
+                }
+              }
+            }
+
+            if (workflow_job_id > 0) {
+              break;
+            }
+          }
+          if (workflow_job_id == 0) {
+            core.setFailed(`Can't find workflow run and workflow job triggered to 'runs-on ${{inputs.arc-name}}'`)
+          } else {
+            core.setOutput('workflow_run', workflow_run_id);
+            core.setOutput('workflow_job', workflow_job_id);
+            core.setOutput('workflow_run_url', workflow_run_html_url);
+          }
+
+    - name: Generate summary about the triggered workflow run
+      shell: bash
+      run: |
+        cat <<-EOF > $GITHUB_STEP_SUMMARY
+        | **Triggered workflow run** |
+        |:--------------------------:|
+        | ${{steps.query_workflow.outputs.workflow_run_url}} |
+        EOF
+
+    - name: Wait for workflow to start running
+      if: inputs.wait-to-running == 'true' && inputs.wait-to-finish == 'false'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms))
+          }
+          const owner = '${{inputs.repo-owner}}'
+          const repo = '${{inputs.repo-name}}'
+          const workflow_run_id = ${{steps.query_workflow.outputs.workflow_run}}
+          const workflow_job_id = ${{steps.query_workflow.outputs.workflow_job}}
+          let count = 0
+          while (count++<10) {
+            await sleep(30 * 1000);
+            let getRunResponse = await github.rest.actions.getWorkflowRun({
+              owner: owner,
+              repo: repo,
+              run_id: workflow_run_id
+            })
+            console.log(`${getRunResponse.data.html_url}: ${getRunResponse.data.status} (${getRunResponse.data.conclusion})`);
+            if (getRunResponse.data.status == 'in_progress') {
+              console.log(`Workflow run is in progress.`)
+              return
+            }
+          }
+          core.setFailed(`The triggered workflow run didn't start properly using ${{inputs.arc-name}}`)
+
+    - name: Wait for workflow to finish successfully
+      if: inputs.wait-to-finish == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Wait 5 minutes and make sure the workflow run we triggered completed with result 'success'
+          function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms))
+          }
+          const owner = '${{inputs.repo-owner}}'
+          const repo = '${{inputs.repo-name}}'
+          const workflow_run_id = ${{steps.query_workflow.outputs.workflow_run}}
+          const workflow_job_id = ${{steps.query_workflow.outputs.workflow_job}}
+          let count = 0
+          while (count++<10) {
+            await sleep(30 * 1000);
+            let getRunResponse = await github.rest.actions.getWorkflowRun({
+              owner: owner,
+              repo: repo,
+              run_id: workflow_run_id
+            })
+            console.log(`${getRunResponse.data.html_url}: ${getRunResponse.data.status} (${getRunResponse.data.conclusion})`);
+            if (getRunResponse.data.status == 'completed') {
+              if ( getRunResponse.data.conclusion == 'success') {
+                console.log(`Workflow run finished properly.`)
+                return
+              } else {
+                core.setFailed(`The triggered workflow run finish with result ${getRunResponse.data.conclusion}`)
+                return
+              }
+            }
+          }
+          core.setFailed(`The triggered workflow run didn't finish properly using ${{inputs.arc-name}}`)
+
+    - name: cleanup
+      if: inputs.wait-to-finish == 'true'
+      shell: bash
+      run: |
+        helm uninstall ${{ inputs.arc-name }} --namespace ${{inputs.arc-namespace}} --debug
+        kubectl wait --timeout=30s --for=delete AutoScalingRunnerSet -n ${{inputs.arc-namespace}} -l app.kubernetes.io/instance=${{ inputs.arc-name }}
+
+    - name: Gather logs and cleanup
+      shell: bash
+      if: always()
+      run: |
+        kubectl logs deployment/arc-gha-rs-controller -n ${{inputs.arc-controller-namespace}}

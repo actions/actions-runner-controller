@@ -1,0 +1,113 @@
+name: Bug Report (actions.github.com API group)
+description: File a bug report for actions.github.com API group
+title: "<Please write what didn't work for you here>"
+labels: ["bug", "needs triage", "gha-runner-scale-set"]
+body:
+- type: checkboxes
+  id: read-troubleshooting-guide
+  attributes:
+    label: Checks
+    description: Please check all the boxes below before submitting
+    options:
+    - label: I've already read https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/troubleshooting-actions-runner-controller-errors and I'm sure my issue is not covered in the troubleshooting guide.
+      required: true
+
+    - label: I am using charts that are officially provided
+- type: input
+  id: controller-version
+  attributes:
+    label: Controller Version
+    description: Refers to semver-like release tags for controller versions. Any release tags prefixed with `gha-runner-scale-set-` are releases associated with this API group
+    placeholder: ex. 0.6.1
+  validations:
+    required: true
+- type: dropdown
+  id: deployment-method
+  attributes:
+    label: Deployment Method
+    description: Which deployment method did you use to install ARC?
+    options:
+      - Helm
+      - Kustomize
+      - ArgoCD
+      - Other
+  validations:
+    required: true
+- type: checkboxes
+  id: checks
+  attributes:
+    label: Checks
+    description: Please check all the boxes below before submitting
+    options:
+    - label: This isn't a question or user support case (For Q&A and community support, go to [Discussions](https://github.com/actions/actions-runner-controller/discussions)).
+      required: true
+    - label: I've read the [Changelog](https://github.com/actions/actions-runner-controller/blob/master/docs/gha-runner-scale-set-controller/README.md#changelog) before submitting this issue and I'm sure it's not due to any recently-introduced backward-incompatible changes
+      required: true
+- type: textarea
+  id: reproduction-steps
+  attributes:
+    label: To Reproduce
+    description: "Steps to reproduce the behavior"
+    render: markdown
+    placeholder: |
+      1. Go to '...'
+      2. Click on '....'
+      3. Scroll down to '....'
+      4. See error
+  validations:
+    required: true
+- type: textarea
+  id: actual-behavior
+  attributes:
+    label: Describe the bug
+    description: Also tell us, what did happen?
+    placeholder: A clear and concise description of what happened.
+  validations:
+    required: true
+
+- type: textarea
+  id: expected-behavior
+  attributes:
+    label: Describe the expected behavior
+    description: Also tell us, what did you expect to happen?
+    placeholder: A clear and concise description of what the expected behavior is.
+  validations:
+    required: true
+
+- type: textarea
+  id: additional-context
+  attributes:
+    label: Additional Context
+    render: yaml
+    description: |
+      Provide `values.yaml` files that are relevant for this issue. PLEASE REDACT ANY INFORMATION THAT SHOULD NOT BE PUBLICALY AVAILABLE, LIKE GITHUB TOKEN FOR EXAMPLE.
+    placeholder: |
+      PLEASE REDACT ANY INFORMATION THAT SHOULD NOT BE PUBLICALY AVAILABLE, LIKE GITHUB TOKEN FOR EXAMPLE.
+  validations:
+    required: true
+
+- type: textarea
+  id: controller-logs
+  attributes:
+    label: Controller Logs
+    description: "NEVER EVER OMIT THIS! Include complete logs from `actions-runner-controller`'s controller-manager pod."
+    render: shell
+    placeholder: |
+      PROVIDE THE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+
+      To grab controller logs:
+
+      kubectl logs -n $NAMESPACE deployments/$CONTROLLER_DEPLOYMENT
+  validations:
+    required: true
+- type: textarea
+  id: runner-pod-logs
+  attributes:
+    label: Runner Pod Logs
+    description: "Include logs and kubectl describe output from runner pod(s)."
+    render: shell
+    placeholder: |
+      PROVIDE THE WHOLE LOGS VIA A GIST LINK (https://gist.github.com/), NOT DIRECTLY IN THIS TEXT AREA
+  validations:
+    required: true
+

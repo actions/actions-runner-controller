@@ -1,0 +1,47 @@
+{{- if .Values.actionsMetricsServer.ingress.enabled -}}
+{{- $fullName := include "actions-runner-controller-actions-metrics-server.fullname" . -}}
+{{- $svcPort := (index .Values.actionsMetricsServer.service.ports 0).port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+  {{- with .Values.actionsMetricsServer.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.actionsMetricsServer.ingress.tls }}
+  tls:
+    {{- range .Values.actionsMetricsServer.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.actionsMetricsServer.ingress.ingressClassName }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range .Values.actionsMetricsServer.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- if .extraPaths }}
+          {{- toYaml .extraPaths | nindent 10 }}
+          {{- end }}
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+               name: {{ $fullName }}
+               port:
+                 number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+  {{- end }}

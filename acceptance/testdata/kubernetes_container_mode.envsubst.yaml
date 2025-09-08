@@ -1,0 +1,86 @@
+# USAGE:
+#   cat acceptance/testdata/kubernetes_container_mode.envsubst.yaml  | NAMESPACE=default envsubst  | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-mode-runner
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "delete"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list", "watch",]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "create", "delete"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "delete"]
+# Needed to report test success by crating a cm from within workflow job step
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: runner-status-updater
+rules:
+- apiGroups: ["actions.summerwind.dev"]
+  resources: ["runners/status"]
+  verbs: ["get", "update", "patch"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${RUNNER_SERVICE_ACCOUNT_NAME}
+  namespace: ${NAMESPACE}
+---
+# To verify it's working, try:
+#   kubectl auth can-i --as system:serviceaccount:default:runner get pod
+# If incomplete, workflows and jobs would fail with an error message like:
+#   Error: Error: The Service account needs the following permissions [{"group":"","verbs":["get","list","create","delete"],"resource":"pods","subresource":""},{"group":"","verbs":["get","create"],"resource":"pods","subresource":"exec"},{"group":"","verbs":["get","list","watch"],"resource":"pods","subresource":"log"},{"group":"batch","verbs":["get","list","create","delete"],"resource":"jobs","subresource":""},{"group":"","verbs":["create","delete","get","list"],"resource":"secrets","subresource":""}] on the pod resource in the 'default' namespace. Please contact your self hosted runner administrator.
+#   Error: Process completed with exit code 1.
+apiVersion: rbac.authorization.k8s.io/v1
+# This role binding allows "jane" to read pods in the "default" namespace.
+# You need to already have a Role named "pod-reader" in that namespace.
+kind: RoleBinding
+metadata:
+  name: runner-k8s-mode-runner
+  namespace: ${NAMESPACE}
+subjects:
+- kind: ServiceAccount
+  name: ${RUNNER_SERVICE_ACCOUNT_NAME}
+  namespace: ${NAMESPACE}
+roleRef:
+  kind: ClusterRole
+  name: k8s-mode-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: runner-runner-stat-supdater
+  namespace: ${NAMESPACE}
+subjects:
+- kind: ServiceAccount
+  name: ${RUNNER_SERVICE_ACCOUNT_NAME}
+  namespace: ${NAMESPACE}
+roleRef:
+  kind: ClusterRole
+  name: runner-status-updater
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: org-runnerdeploy-runner-work-dir
+  labels:
+    content: org-runnerdeploy-runner-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer

@@ -1,0 +1,84 @@
+{{- if .Values.flags.watchSingleNamespace }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" . }}
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalinglisteners
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalinglisteners/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalinglisteners/finalizers
+  verbs:
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunnersets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners
+  verbs:
+  - list
+  - watch
+{{- end }}

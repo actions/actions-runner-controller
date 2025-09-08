@@ -1,0 +1,261 @@
+{{/*
+We will use a self managed CA if one is not provided by cert-manager
+*/}}
+{{- $ca := genCA "actions-runner-ca" 3650 }}
+{{- $cert := genSignedCert (printf "%s.%s.svc" (include "actions-runner-controller.webhookServiceName" .) .Release.Namespace) nil (list (printf "%s.%s.svc" (include "actions-runner-controller.webhookServiceName" .) .Release.Namespace)) 3650 $ca }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: {{ include "actions-runner-controller.fullname" . }}-mutating-webhook-configuration
+  {{- if .Values.certManagerEnabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+  {{- end }}
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-actions-summerwind-dev-v1alpha1-runner
+  failurePolicy: Fail
+  name: mutate.runner.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runners
+  sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-actions-summerwind-dev-v1alpha1-runnerdeployment
+  failurePolicy: Fail
+  name: mutate.runnerdeployment.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerdeployments
+  sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-actions-summerwind-dev-v1alpha1-runnerreplicaset
+  failurePolicy: Fail
+  name: mutate.runnerreplicaset.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerreplicasets
+  sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-runner-set-pod
+  failurePolicy: Fail
+  name: mutate-runner-pod.webhook.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  sideEffects: None
+  objectSelector:
+    matchLabels:
+      "actions-runner-controller/inject-registration-token": "true"
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: {{ include "actions-runner-controller.fullname" . }}-validating-webhook-configuration
+  {{- if .Values.certManagerEnabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "actions-runner-controller.servingCertName" . }}
+  {{- end }}
+webhooks:
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /validate-actions-summerwind-dev-v1alpha1-runner
+  failurePolicy: Fail
+  name: validate.runner.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runners
+  sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /validate-actions-summerwind-dev-v1alpha1-runnerdeployment
+  failurePolicy: Fail
+  name: validate.runnerdeployment.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerdeployments
+  sideEffects: None
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+- admissionReviewVersions:
+  - v1beta1
+  {{- if .Values.scope.singleNamespace }}
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.scope.watchNamespace }}
+  {{- end }}
+  clientConfig:
+    {{- if .Values.admissionWebHooks.caBundle }}
+    caBundle: {{ quote .Values.admissionWebHooks.caBundle }}
+    {{- else if not .Values.certManagerEnabled }}
+    caBundle: {{ $ca.Cert | b64enc | quote }}
+    {{- end }}
+    service:
+      name: {{ include "actions-runner-controller.webhookServiceName" . }}
+      namespace: {{ .Release.Namespace }}
+      path: /validate-actions-summerwind-dev-v1alpha1-runnerreplicaset
+  failurePolicy: Fail
+  name: validate.runnerreplicaset.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - actions.summerwind.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - runnerreplicasets
+  sideEffects: None
+{{ if not (or (hasKey .Values.admissionWebHooks "caBundle") .Values.certManagerEnabled) }}
+  timeoutSeconds: {{ .Values.admissionWebHooks.timeoutSeconds | default 10}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "actions-runner-controller.servingCertName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $cert.Cert | b64enc | quote }}
+  tls.key: {{ $cert.Key | b64enc | quote }}
+  ca.crt: {{ $ca.Cert | b64enc | quote }}
+{{- end }}

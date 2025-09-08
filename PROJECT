@@ -1,0 +1,25 @@
+domain: summerwind.dev
+repo: github.com/actions/actions-runner-controller
+resources:
+- group: actions
+  kind: Runner
+  version: v1alpha1
+- group: actions
+  kind: RunnerReplicaSet
+  version: v1alpha1
+- group: actions
+  kind: RunnerDeployment
+  version: v1alpha1
+- group: actions
+  kind: AutoscalingRunnerSet
+  version: v1alpha1
+- group: actions
+  kind: EphemeralRunnerSet
+  version: v1alpha1
+- group: actions
+  kind: EphemeralRunner
+  version: v1alpha1
+- group: actions
+  kind: AutoscalingListener
+  version: v1alpha1
+version: "2"

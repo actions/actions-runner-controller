@@ -1,0 +1,132 @@
+# Default values for gha-runner-scale-set-controller.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+labels: {}
+
+# leaderElection will be enabled when replicaCount>1,
+# So, only one replica will in charge of reconciliation at a given time
+# leaderElectionId will be set to {{ define gha-runner-scale-set-controller.fullname }}.
+replicaCount: 1
+
+image:
+  repository: "ghcr.io/actions/gha-runner-scale-set-controller"
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+## Define environment variables for the controller pod
+#  - name: "ENV_VAR_NAME_1"
+#    value: "ENV_VAR_VALUE_1"
+#  - name: "ENV_VAR_NAME_2"
+#    valueFrom:
+#      secretKeyRef:
+#        key: ENV_VAR_NAME_2
+#        name: secret-name
+#        optional: true
+
+serviceAccount:
+  # Specifies whether a service account should be created for running the controller pod
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  # You can not use the default service account for this.
+  name: ""
+
+podAnnotations: {}
+
+podLabels: {}
+
+podSecurityContext: {}
+# fsGroup: 2000
+
+securityContext: {}
+# capabilities:
+#   drop:
+#   - ALL
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+resources: {}
+## We usually recommend not to specify default resources and to leave this as a conscious
+## choice for the user. This also increases chances charts run on environments with little
+## resources, such as Minikube. If you do want to specify resources, uncomment the following
+## lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+# limits:
+#   cpu: 100m
+#   memory: 128Mi
+# requests:
+#   cpu: 100m
+#   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+topologySpreadConstraints: []
+
+# Mount volumes in the container.
+volumes: []
+volumeMounts: []
+
+# Leverage a PriorityClass to ensure your pods survive resource shortages
+# ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+# PriorityClass: system-cluster-critical
+priorityClassName: ""
+
+## If `metrics:` object is not provided, or commented out, the following flags
+## will be applied the controller-manager and listener pods with empty values:
+## `--metrics-addr`, `--listener-metrics-addr`, `--listener-metrics-endpoint`.
+## This will disable metrics.
+##
+## To enable metrics, uncomment the following lines.
+# metrics:
+#   controllerManagerAddr: ":8080"
+#   listenerAddr: ":8080"
+#   listenerEndpoint: "/metrics"
+
+flags:
+  ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
+  ## Defaults to "debug".
+  logLevel: "debug"
+  ## Log format can be set with one of the following values: "text", "json"
+  ## Defaults to "text"
+  logFormat: "text"
+
+  ## Restricts the controller to only watch resources in the desired namespace.
+  ## Defaults to watch all namespaces when unset.
+  # watchSingleNamespace: ""
+
+  ## Defines how the controller should handle upgrades while having running jobs.
+  ##
+  ## The strategies available are:
+  ## - "immediate": (default) The controller will immediately apply the change causing the
+  ##   recreation of the listener and ephemeral runner set. This can lead to an
+  ##   overprovisioning of runners, if there are pending / running jobs. This should not
+  ##   be a problem at a small scale, but it could lead to a significant increase of
+  ##   resources if you have a lot of jobs running concurrently.
+  ##
+  ## - "eventual": The controller will remove the listener and ephemeral runner set
+  ##   immediately, but will not recreate them (to apply changes) until all
+  ##   pending / running jobs have completed.
+  ##   This can lead to a longer time to apply the change but it will ensure
+  ##   that you don't have any overprovisioning of runners.
+  updateStrategy: "immediate"
+
+  ## Defines a list of prefixes that should not be propagated to internal resources.
+  ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
+  ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.
+  ##
+  ## By default, all labels are propagated to internal resources
+  ## Labels that match prefix specified in the list are excluded from propagation.
+  # excludeLabelPropagationPrefixes:
+  #   - "argocd.argoproj.io/instance"

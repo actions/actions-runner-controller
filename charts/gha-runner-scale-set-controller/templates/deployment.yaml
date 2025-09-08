@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gha-runner-scale-set-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gha-runner-scale-set-controller.labels" . | nindent 4 }}
+    actions.github.com/controller-service-account-namespace: {{ .Release.Namespace }}
+    actions.github.com/controller-service-account-name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+    {{- if .Values.flags.watchSingleNamespace }}
+    actions.github.com/controller-watch-single-namespace: {{ .Values.flags.watchSingleNamespace }}
+    {{- end }}
+spec:
+  replicas: {{ default 1 .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: "manager"
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/part-of: gha-rs-controller
+        app.kubernetes.io/component: controller-manager
+        app.kubernetes.io/version: {{ .Chart.Version }}
+        {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: "{{ . }}"
+      {{- end }}
+      containers:
+      - name: manager
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - "--auto-scaling-runner-set-only"
+        {{- if gt (int (default 1 .Values.replicaCount)) 1 }}
+        - "--enable-leader-election"
+        - "--leader-election-id={{ include "gha-runner-scale-set-controller.fullname" . }}"
+        {{- end }}
+        {{- with .Values.imagePullSecrets }}
+        - "--auto-scaler-image-pull-secrets={{ include "gha-runner-scale-set-controller.imagePullSecretsNames" . }}"
+        {{- end }}
+        {{- with .Values.flags.logLevel }}
+        - "--log-level={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.logFormat }}
+        - "--log-format={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.watchSingleNamespace }}
+        - "--watch-single-namespace={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.updateStrategy }}
+        - "--update-strategy={{ . }}"
+        {{- end }}
+        {{- if .Values.metrics }}
+        {{- with .Values.metrics }}
+        - "--listener-metrics-addr={{ .listenerAddr }}"
+        - "--listener-metrics-endpoint={{ .listenerEndpoint }}"
+        - "--metrics-addr={{ .controllerManagerAddr }}"
+        {{- end }}
+        {{- else }}
+        - "--listener-metrics-addr=0"
+        - "--listener-metrics-endpoint="
+        - "--metrics-addr=0"
+        {{- end }}
+        {{- range .Values.flags.excludeLabelPropagationPrefixes }}
+        - "--exclude-label-propagation-prefix={{ . }}"
+        {{- end }}
+        command:
+        - "/manager"
+        {{- with .Values.metrics }}
+        ports:
+        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerManagerAddr "${1}"}}
+          protocol: TCP
+          name: metrics
+        {{- end }}
+        env:
+        - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
+          value: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        - name: CONTROLLER_MANAGER_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- with .Values.env }}
+          {{- if kindIs "slice" . }}
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+        {{- end }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        {{- range .Values.volumeMounts }}
+        - {{ toYaml . | nindent 10 }}
+        {{- end }}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- range .Values.volumes }}
+      - {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,219 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "actions-runner-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "actions-runner-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        kubectl.kubernetes.io/default-logs-container: "manager"
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "actions-runner-controller.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "actions-runner-controller.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: "{{ . }}"
+      {{- end }}
+      containers:
+      - args:
+        {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
+        {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
+        - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
+        {{- if .Values.enableLeaderElection }}
+        - "--enable-leader-election"
+        {{- end }}
+        {{- if .Values.leaderElectionId }}
+        - "--leader-election-id={{ .Values.leaderElectionId }}"
+        {{- end }}
+        - "--port={{ .Values.webhookPort }}"
+        - "--sync-period={{ .Values.syncPeriod }}"
+        - "--default-scale-down-delay={{ .Values.defaultScaleDownDelay }}"
+        - "--docker-image={{ .Values.image.dindSidecarRepositoryAndTag }}"
+        - "--runner-image={{ .Values.image.actionsRunnerRepositoryAndTag }}"
+        {{- range .Values.image.actionsRunnerImagePullSecrets }}
+        - "--runner-image-pull-secret={{ . }}"
+        {{- end }}
+        {{- if .Values.dockerRegistryMirror }}
+        - "--docker-registry-mirror={{ .Values.dockerRegistryMirror }}"
+        {{- end }}
+        {{- if .Values.scope.singleNamespace }}
+        - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
+        {{- end }}
+        {{- if .Values.logLevel }}
+        - "--log-level={{ .Values.logLevel }}"
+        {{- end }}
+        {{- if .Values.runnerGithubURL  }}
+        - "--runner-github-url={{ .Values.runnerGithubURL }}"
+        {{- end }}
+        {{- if .Values.runner.statusUpdateHook.enabled }}
+        - "--runner-status-update-hook"
+        {{- end }}
+        {{- if .Values.logFormat  }}  
+        - "--log-format={{ .Values.logFormat }}"
+        {{- end }}
+        {{- if .Values.dockerGID  }}
+        - "--docker-gid={{ .Values.dockerGID }}"
+        {{- end }}
+        command:
+        - "/manager"
+        env:
+        {{- if .Values.githubEnterpriseServerURL  }}
+        - name: GITHUB_ENTERPRISE_URL
+          value: {{ .Values.githubEnterpriseServerURL }}
+        {{- end }}
+        {{- if .Values.githubURL  }}
+        - name: GITHUB_URL
+          value: {{ .Values.githubURL }}
+        {{- end }}
+        {{- if .Values.githubUploadURL  }}
+        - name: GITHUB_UPLOAD_URL
+          value: {{ .Values.githubUploadURL }}
+        {{- end }}
+        {{- if .Values.authSecret.enabled }}
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: github_token
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_id
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        - name: GITHUB_APP_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_installation_id
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              key: github_app_private_key
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        {{- if .Values.authSecret.github_basicauth_username }}
+        - name: GITHUB_BASICAUTH_USERNAME
+          value: {{ .Values.authSecret.github_basicauth_username }}
+        {{- end }}
+        - name: GITHUB_BASICAUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: github_basicauth_password
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        {{- end }}
+        {{- if kindIs "slice" .Values.env }}
+        {{- toYaml .Values.env | nindent 8 }}
+        {{- else }}
+        {{- range $key, $val := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $val | quote }}
+        {{- end }}
+        {{- end }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (cat "v" .Chart.AppVersion | replace " " "") }}"
+        name: manager
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.webhookPort }}
+          name: webhook-server
+          protocol: TCP
+        {{- if not .Values.metrics.proxy.enabled }}
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
+          protocol: TCP
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        volumeMounts:
+        {{- if .Values.authSecret.enabled }}
+        - mountPath: "/etc/actions-runner-controller"
+          name: secret
+          readOnly: true
+        {{- end }}
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+        {{- if .Values.additionalVolumeMounts }}
+          {{- toYaml .Values.additionalVolumeMounts | nindent 8 }} 
+        {{- end }}
+      {{- if .Values.metrics.proxy.enabled }}
+      - args:
+        - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.port }}"
+        - "--upstream=http://127.0.0.1:8080/"
+        - "--logtostderr=true"
+        - "--v=10"
+        image: "{{ .Values.metrics.proxy.image.repository }}:{{ .Values.metrics.proxy.image.tag }}"
+        name: kube-rbac-proxy
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      {{- if .Values.authSecret.enabled }}
+      - name: secret
+        secret:
+          secretName: {{ include "actions-runner-controller.secretName" . }}
+      {{- end }}
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ include "actions-runner-controller.servingCertName" . }}
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.additionalVolumes }}
+        {{- toYaml .Values.additionalVolumes | nindent 6}}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}

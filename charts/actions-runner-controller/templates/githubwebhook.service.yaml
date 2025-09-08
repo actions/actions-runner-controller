@@ -1,0 +1,32 @@
+{{- if .Values.githubWebhookServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "actions-runner-controller-github-webhook-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}
+{{- if .Values.githubWebhookServer.service.annotations }}
+  annotations:
+    {{ toYaml .Values.githubWebhookServer.service.annotations | nindent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.githubWebhookServer.service.type }}
+  ports:
+    {{ range $_, $port := .Values.githubWebhookServer.service.ports -}}
+    - {{ $port | toYaml | nindent 6 }}
+    {{- end }}
+    {{- if .Values.metrics.serviceMonitor.enable }}
+    - name: metrics-port
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics-port
+    {{- end }}
+  selector:
+    {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 4 }}
+  {{- if .Values.githubWebhookServer.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range $ip := .Values.githubWebhookServer.service.loadBalancerSourceRanges }}
+    - {{ $ip -}}
+    {{- end }}
+  {{- end }}
+{{- end }}

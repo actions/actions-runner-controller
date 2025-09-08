@@ -1,0 +1,6 @@
+rules:
+  # One blank line is OK
+  empty-lines: 
+    max-start: 1
+    max-end: 1
+    max: 1

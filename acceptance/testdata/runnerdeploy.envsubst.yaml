@@ -1,0 +1,166 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-runner-work-dir
+  labels:
+    content: ${NAME}-runner-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-rootless-dind-work-dir
+  labels:
+    content: ${NAME}-rootless-dind-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: ${NAME}
+spec:
+#  replicas: 1
+  template:
+    spec:
+      enterprise: ${TEST_ENTERPRISE}
+      group: ${TEST_GROUP}
+      organization: ${TEST_ORG}
+      repository: ${TEST_REPO}
+
+      #
+      # Custom runner image
+      #
+      image: ${RUNNER_NAME}:${RUNNER_TAG}
+      imagePullPolicy: IfNotPresent
+
+      ephemeral: ${TEST_EPHEMERAL}
+
+      #
+      # dockerd within runner container
+      #
+      ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
+      #dockerdWithinRunnerContainer: true
+      #image: mumoshu/actions-runner-dind:dev
+      dockerdWithinRunnerContainer: ${RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER}
+
+      #
+      # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
+      #
+      #dockerMTU: 1450
+
+      #Runner group
+      # labels:
+      # - "mylabel 1"
+      # - "mylabel 2"
+      labels:
+      - "${RUNNER_LABEL}"
+
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
+      terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
+
+      env:
+      - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+        value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
+      - name: ROLLING_UPDATE_PHASE
+        value: "${ROLLING_UPDATE_PHASE}"
+      - name: ARC_DOCKER_MTU_PROPAGATION
+        value: "true"
+      # https://github.com/docker/docs/issues/8663
+      - name: DOCKER_DEFAULT_ADDRESS_POOL_BASE
+        value: "172.17.0.0/12"
+      - name: DOCKER_DEFAULT_ADDRESS_POOL_SIZE
+        value: "24"
+      - name: WAIT_FOR_DOCKER_SECONDS
+        value: "3"
+
+      dockerMTU: 1400
+      dockerEnv:
+      - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+        value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
+
+      # Fix the following no space left errors with rootless-dind runners that can happen while running buildx build:
+      #   ------
+      #   > [4/5] RUN go mod download:
+      #   ------
+      #   ERROR: failed to solve: failed to prepare yxsw8lv9hqnuafzlfta244l0z: mkdir /home/runner/.local/share/docker/vfs/dir/yxsw8lv9hqnuafzlfta244l0z/usr/local/go/src/cmd/compile/internal/types2/testdata: no space left on device
+      #   Error: Process completed with exit code 1.
+      #
+      volumeMounts:
+      - name: rootless-dind-work-dir
+        # Omit the /share/docker part of the /home/runner/.local/share/docker as
+        # that part is created by dockerd.
+        mountPath: /home/runner/.local
+        readOnly: false
+      # See https://github.com/actions/actions-runner-controller/issues/2123
+      # Be sure to omit the "aliases" field from the config.json.
+      # Otherwise you may encounter nasty errors like:
+      #   $ docker build
+      #   docker: 'buildx' is not a docker command.
+      #   See 'docker --help'
+      # due to the incompatibility between your host docker config.json and the runner environment.
+      # That is, your host dockcer config.json might contain this:
+      #   "aliases": {
+      #     "builder": "buildx"
+      #   }
+      # And this results in the above error when the runner does not have buildx installed yet.
+      - name: docker-config
+        mountPath: /home/runner/.docker/config.json
+        subPath: config.json
+        readOnly: true
+      - name: docker-config-root
+        mountPath: /home/runner/.docker
+      volumes:
+      - name: rootless-dind-work-dir
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: "${NAME}-rootless-dind-work-dir"
+              resources:
+                requests:
+                  storage: 3Gi
+      - name: docker-config
+        # Refer to .dockerconfigjson/.docker/config.json
+        secret:
+          secretName: docker-config
+          items:
+          - key: .dockerconfigjson
+            path: config.json
+      - name: docker-config-root
+        emptyDir: {}
+
+      #
+      # Non-standard working directory
+      #
+      # workDir: "/"
+
+      # # Uncomment the below to enable the kubernetes container mode
+      # # See https://github.com/actions/actions-runner-controller#runner-with-k8s-jobs
+      containerMode: ${RUNNER_CONTAINER_MODE}
+      workVolumeClaimTemplate:
+        accessModes:
+        - ReadWriteOnce
+        storageClassName: "${NAME}-runner-work-dir"
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: ${NAME}
+spec:
+  scaleTargetRef:
+    name: ${NAME}
+  scaleUpTriggers:
+  - githubEvent:
+      workflowJob: {}
+    amount: 1
+    duration: "10m"
+  minReplicas: ${RUNNER_MIN_REPLICAS}
+  maxReplicas: 10
+  scaleDownDelaySecondsAfterScaleOut: ${RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT}

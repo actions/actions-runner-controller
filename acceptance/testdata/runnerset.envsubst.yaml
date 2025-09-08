@@ -1,0 +1,312 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-runner-work-dir
+  labels:
+    content: ${NAME}-runner-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}
+# In kind environments, the provider writes:
+#   /var/lib/docker/volumes/KIND_NODE_CONTAINER_VOL_ID/_data/local-path-provisioner/PV_NAME
+# It can be hundreds of gigabytes depending on what you cache in the test workflow. Beware to not encounter `no space left on device` errors!
+# If you did encounter no space errorrs try:
+#   docker system prune
+#   docker buildx prune #=> frees up /var/lib/docker/volumes/buildx_buildkit_container-builder0_state
+#   sudo rm -rf /var/lib/docker/volumes/KIND_NODE_CONTAINER_VOL_ID/_data/local-path-provisioner #=> frees up local-path-provisioner's data
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-var-lib-docker
+  labels:
+    content: ${NAME}-var-lib-docker
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-cache
+  labels:
+    content: ${NAME}-cache
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-runner-tool-cache
+  labels:
+    content: ${NAME}-runner-tool-cache
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${NAME}-rootless-dind-work-dir
+  labels:
+    content: ${NAME}-rootless-dind-work-dir
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerSet
+metadata:
+  name: ${NAME}
+spec:
+  # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
+  #   missing required field "selector" in dev.summerwind.actions.v1alpha1.RunnerSet.spec
+  selector:
+    matchLabels:
+      app: ${NAME}
+
+  # MANDATORY because it is based on StatefulSet: Results in a below error when omitted:
+  # missing required field "serviceName" in dev.summerwind.actions.v1alpha1.RunnerSet.spec]
+  serviceName: ${NAME}
+
+  #replicas: 1
+
+  # From my limited testing, `ephemeral: true` is more reliable.
+  # Seomtimes, updating already deployed runners from `ephemeral: false` to `ephemeral: true` seems to
+  # result in queued jobs hanging forever.
+  ephemeral: ${TEST_EPHEMERAL}
+
+  enterprise: ${TEST_ENTERPRISE}
+  group: ${TEST_GROUP}
+  organization: ${TEST_ORG}
+  repository: ${TEST_REPO}
+
+  #
+  # Custom runner image
+  #
+  image: ${RUNNER_NAME}:${RUNNER_TAG}
+
+  #
+  # dockerd within runner container
+  #
+  ## Replace `mumoshu/actions-runner-dind:dev` with your dind image
+  #dockerdWithinRunnerContainer: true
+  dockerdWithinRunnerContainer: ${RUNNER_DOCKERD_WITHIN_RUNNER_CONTAINER}
+
+  #
+  # Set the MTU used by dockerd-managed network interfaces (including docker-build-ubuntu)
+  #
+  #dockerMTU: 1450
+  #Runner group
+  # labels:
+  # - "mylabel 1"
+  # - "mylabel 2"
+  labels:
+  - "${RUNNER_LABEL}"
+  #
+  # Non-standard working directory
+  #
+  # workDir: "/"
+  template:
+    metadata:
+      labels:
+        app: ${NAME}
+    spec:
+      serviceAccountName: ${RUNNER_SERVICE_ACCOUNT_NAME}
+      terminationGracePeriodSeconds: ${RUNNER_TERMINATION_GRACE_PERIOD_SECONDS}
+      containers:
+      # # Uncomment only when non-dind-runner / you're using docker sidecar
+      # - name: docker
+      #   # Image is required for the dind sidecar definition within RunnerSet spec
+      #   image: "docker:dind"
+      #   env:
+      #   - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+      #     value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
+      - name: runner
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: RUNNER_GRACEFUL_STOP_TIMEOUT
+          value: "${RUNNER_GRACEFUL_STOP_TIMEOUT}"
+        - name: RUNNER_FEATURE_FLAG_EPHEMERAL
+          value: "${RUNNER_FEATURE_FLAG_EPHEMERAL}"
+        - name: GOMODCACHE
+          value: "/home/runner/.cache/go-mod"
+        - name: ROLLING_UPDATE_PHASE
+          value: "${ROLLING_UPDATE_PHASE}"
+        # PV-backed runner work dir
+        volumeMounts:
+        # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
+        # The volume and mount with the same names will be created by workVolumeClaimTemplate and the kubernetes container mode support.
+        # - name: work
+        #   mountPath: /runner/_work
+        # Cache docker image layers, in case dockerdWithinRunnerContainer=true
+        - name: var-lib-docker
+          mountPath: /var/lib/docker
+        # Cache go modules and builds
+        # - name: gocache
+        #   # Run `goenv | grep GOCACHE` to verify the path is correct for your env
+        #   mountPath: /home/runner/.cache/go-build
+        # - name: gomodcache
+        #   # Run `goenv | grep GOMODCACHE` to verify the path is correct for your env
+        #   # mountPath: /home/runner/go/pkg/mod
+        - name: cache
+          # go: could not create module cache: stat /home/runner/.cache/go-mod: permission denied
+          mountPath: "/home/runner/.cache"
+        - name: runner-tool-cache
+          # This corresponds to our runner image's default setting of RUNNER_TOOL_CACHE=/opt/hostedtoolcache.
+          #
+          # In case you customize the envvar in both runner and docker containers of the runner pod spec,
+          # You'd need to change this mountPath accordingly.
+          #
+          # The tool cache directory is defined in actions/toolkit's tool-cache module:
+          # https://github.com/actions/toolkit/blob/2f164000dcd42fb08287824a3bc3030dbed33687/packages/tool-cache/src/tool-cache.ts#L621-L638
+          #
+          # Many setup-* actions like setup-go utilizes the tool-cache module to download and cache installed binaries:
+          # https://github.com/actions/setup-go/blob/56a61c9834b4a4950dbbf4740af0b8a98c73b768/src/installer.ts#L144
+          mountPath: "/opt/hostedtoolcache"
+      # Valid only when dockerdWithinRunnerContainer=false
+      # - name: docker
+      #   # PV-backed runner work dir
+      #   volumeMounts:
+      #   - name: work
+      #     mountPath: /runner/_work
+      #   # Cache docker image layers, in case dockerdWithinRunnerContainer=false
+      #   - name: var-lib-docker
+      #     mountPath: /var/lib/docker
+      #   # image: mumoshu/actions-runner-dind:dev
+
+      #   # For buildx cache
+      #   - name: cache
+      #     mountPath: "/home/runner/.cache"
+
+        # For fixing no space left error on rootless dind runner
+        - name: rootless-dind-work-dir
+          # Omit the /share/docker part of the /home/runner/.local/share/docker as
+          # that part is created by dockerd.
+          mountPath: /home/runner/.local
+          readOnly: false
+
+      # Comment out the ephemeral work volume if you're going to test the kubernetes container mode
+      # volumes:
+      # - name: work
+      #   ephemeral:
+      #     volumeClaimTemplate:
+      #       spec:
+      #         accessModes:
+      #         - ReadWriteOnce
+      #         storageClassName: "${NAME}-runner-work-dir"
+      #         resources:
+      #           requests:
+      #             storage: 10Gi
+
+      # Fix the following no space left errors with rootless-dind runners that can happen while running buildx build:
+      #   ------
+      #   > [4/5] RUN go mod download:
+      #   ------
+      #   ERROR: failed to solve: failed to prepare yxsw8lv9hqnuafzlfta244l0z: mkdir /home/runner/.local/share/docker/vfs/dir/yxsw8lv9hqnuafzlfta244l0z/usr/local/go/src/cmd/compile/internal/types2/testdata: no space left on device
+      #   Error: Process completed with exit code 1.
+      #
+      volumes:
+      - name: rootless-dind-work-dir
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: "${NAME}-rootless-dind-work-dir"
+              resources:
+                requests:
+                  storage: 3Gi
+  volumeClaimTemplates:
+  - metadata:
+      name: vol1
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}
+      ## Dunno which provider supports auto-provisioning with selector.
+      ## At least the rancher local path provider stopped with:
+      ##  waiting for a volume to be created, either by external provisioner "rancher.io/local-path" or manually created by system administrator
+      # selector:
+      #    matchLabels:
+      #      runnerset-volume-id: ${NAME}-vol1
+  - metadata:
+      name: vol2
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}
+      # selector:
+      #    matchLabels:
+      #      runnerset-volume-id: ${NAME}-vol2
+  - metadata:
+      name: var-lib-docker
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}-var-lib-docker
+  - metadata:
+      name: cache
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}-cache
+  - metadata:
+      name: runner-tool-cache
+      # It turns out labels doesn't distinguish PVs across PVCs and the
+      # end result is PVs are reused by wrong PVCs.
+      # The correct way seems to be to differentiate storage class per pvc template.
+      # labels:
+      #   id: runner-tool-cache
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Mi
+      storageClassName: ${NAME}-runner-tool-cache
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: ${NAME}
+spec:
+  scaleTargetRef:
+    kind: RunnerSet
+    name: ${NAME}
+  scaleUpTriggers:
+  - githubEvent:
+      workflowJob: {}
+    amount: 1
+    duration: "10m"
+  minReplicas: ${RUNNER_MIN_REPLICAS}
+  maxReplicas: 10
+  scaleDownDelaySecondsAfterScaleOut: ${RUNNER_SCALE_DOWN_DELAY_SECONDS_AFTER_SCALE_OUT}
+  # Comment out the whole metrics if you'd like to solely test webhook-based scaling
+  metrics:
+  - type: PercentageRunnersBusy
+    scaleUpThreshold: '0.75'
+    scaleDownThreshold: '0.25'
+    scaleUpFactor: '2'
+    scaleDownFactor: '0.5'

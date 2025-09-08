@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: actions-runner-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      containers:
+      - name: manager
+        image: controller:latest
+        command:
+        - /manager
+        args:
+        - --enable-leader-election
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: controller-manager
+              key: github_token
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: controller-manager
+              key: github_app_id
+              optional: true
+        - name: GITHUB_APP_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              name: controller-manager
+              key: github_app_installation_id
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          value: /etc/actions-runner-controller/github_app_private_key
+        - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
+          value: CONTROLLER_MANAGER_CONTAINER_IMAGE
+        - name: CONTROLLER_MANAGER_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: controller-manager
+          mountPath: "/etc/actions-runner-controller"
+          readOnly: true
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+      volumes:
+      - name: controller-manager
+        secret:
+          secretName: controller-manager
+      terminationGracePeriodSeconds: 10

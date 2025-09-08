@@ -1,0 +1,15 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+listenerTemplate:
+  spec:
+    hostname: "example"
+    containers:
+    - name: listener
+      image: listener:latest
+      command: ["/path/to/entrypoint"]
+      volumeMounts:
+      - name: work
+        mountPath: /home/example
+    - name: side-car
+      image: nginx:latest

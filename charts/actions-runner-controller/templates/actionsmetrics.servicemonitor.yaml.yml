@@ -1,0 +1,28 @@
+{{- if and .Values.actionsMetricsServer.enabled .Values.actionsMetrics.serviceMonitor.enable }}
+{{- $servicemonitornamespace := .Values.actionsMetrics.serviceMonitor.namespace | default .Release.Namespace }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+  {{- with .Values.actionsMetrics.serviceMonitorLabels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  name: {{ include "actions-runner-controller-actions-metrics-server.serviceMonitorName" . }}
+  namespace: {{ $servicemonitornamespace }}
+spec:
+  endpoints:
+    - path: /metrics
+      port: metrics-port
+      {{- if .Values.actionsMetrics.proxy.enabled }}
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      {{- end }}
+      interval: {{ .Values.actionsMetrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.actionsMetrics.serviceMonitor.timeout }}
+  selector:
+    matchLabels:
+      {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 6 }}
+{{- end }}

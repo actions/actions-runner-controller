@@ -1,0 +1,26 @@
+{{- if .Values.certManagerEnabled }}
+# The following manifests contain a self-signed issuer CR and a certificate CR.
+# More document can be found at https://docs.cert-manager.io
+# WARNING: Targets CertManager 0.11 check https://docs.cert-manager.io/en/latest/tasks/upgrading/index.html for breaking changes
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "actions-runner-controller.selfsignedIssuerName" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "actions-runner-controller.servingCertName" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+  - {{ include "actions-runner-controller.webhookServiceName" . }}.{{ .Release.Namespace }}.svc
+  - {{ include "actions-runner-controller.webhookServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ include "actions-runner-controller.selfsignedIssuerName" . }}
+  secretName: {{ include "actions-runner-controller.servingCertName" . }}
+{{- end }}

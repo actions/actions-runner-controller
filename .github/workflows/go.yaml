@@ -1,0 +1,88 @@
+name: Go
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/go.yaml'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - '.github/workflows/go.yaml'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+concurrency:
+  # This will make sure we only apply the concurrency limits on pull requests
+  # but not pushes to master branch by making the concurrency group name unique
+  # for pushes
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: fmt
+        run: go fmt ./...
+      - name: Check diff
+        run: git diff --exit-code
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          only-new-issues: true
+          version: v1.55.2
+
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: Generate
+        run: make generate
+      - name: Check diff
+        run: git diff --exit-code
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - run: make manifests
+      - name: Check diff
+        run: git diff --exit-code
+      - name: Install kubebuilder
+        run: |
+          curl -D headers.txt -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.26.1-linux-amd64.tar.gz" -o kubebuilder-tools
+          echo "$(grep -i etag headers.txt -m 1 | cut -d'"' -f2) kubebuilder-tools" > sum
+          md5sum -c sum
+          tar -zvxf kubebuilder-tools
+          sudo mv kubebuilder /usr/local/
+      - name: Run go tests
+        run: |
+          go test -short `go list ./... | grep -v ./test_e2e_arc`

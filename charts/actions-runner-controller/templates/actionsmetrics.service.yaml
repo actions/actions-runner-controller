@@ -1,0 +1,32 @@
+{{- if .Values.actionsMetricsServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "actions-runner-controller-actions-metrics-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 4 }}
+{{- if .Values.actionsMetricsServer.service.annotations }}
+  annotations:
+    {{ toYaml .Values.actionsMetricsServer.service.annotations | nindent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.actionsMetricsServer.service.type }}
+  ports:
+    {{ range $_, $port := .Values.actionsMetricsServer.service.ports -}}
+    - {{ $port | toYaml | nindent 6 }}
+    {{- end }}
+    {{- if .Values.actionsMetrics.serviceMonitor.enable }}
+    - name: metrics-port
+      port: {{ .Values.actionsMetrics.port }}
+      targetPort: metrics-port
+    {{- end }}
+  selector:
+    {{- include "actions-runner-controller-actions-metrics-server.selectorLabels" . | nindent 4 }}
+  {{- if .Values.actionsMetricsServer.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range $ip := .Values.actionsMetricsServer.service.loadBalancerSourceRanges }}
+    - {{ $ip -}}
+    {{- end }}
+  {{- end }}
+{{- end }}

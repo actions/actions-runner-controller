@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: List
+items:
+- apiVersion: actions.summerwind.dev/v1alpha1
+  kind: RunnerDeployment
+  metadata:
+    name: {{ include "actions-runner.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+    labels:
+      {{- include "actions-runner.labels" . | nindent 6 }}
+  spec:
+    {{- if not .Values.autoscaler.enabled }}
+    replicas: {{ .Values.replicaCount }}
+    {{- end }}
+    selector:
+      matchLabels:
+        {{- include "actions-runner.selectorLabels" . | nindent 8 }}
+    template:
+      metadata:
+        {{- with .Values.podAnnotations }}
+        annotations:
+          kubectl.kubernetes.io/default-logs-container: "runner"
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        labels:
+          {{- include "actions-runner.selectorLabels" . | nindent 10 }}
+        {{- with .Values.podLabels }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        {{- with .Values.imagePullSecrets }}
+        imagePullSecrets:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext:
+          {{- toYaml .Values.podSecurityContext | nindent 10 }}
+        {{- with .Values.priorityClassName }}
+        priorityClassName: "{{ . }}"
+        {{- end }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (cat "v" .Chart.AppVersion | replace " " "") }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if .Values.organization }}
+        organization: {{ .Values.organization }}
+        {{- end }}
+        {{- if .Values.repository }}
+        repository: {{ .Values.repository }}
+        {{- end }}
+        group: {{ .Values.group | default "Default" }}
+        {{- with .Values.runnerLabels }}
+        labels:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.nodeSelector }}
+        nodeSelector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.affinity }}
+        affinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.tolerations }}
+        tolerations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if .Values.env }}
+        env:
+        {{- range $key, $val := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $val | quote }}
+        {{- end }}
+        {{- end }}
+{{- if .Values.autoscaler.enabled }}
+- apiVersion: actions.summerwind.dev/v1alpha1
+  kind: HorizontalRunnerAutoscaler
+  metadata:
+    name: {{ (list (include "actions-runner.fullname" .) "autoscaler" | join "-") }}
+    namespace: {{ .Release.Namespace }}
+    labels:
+      {{- include "actions-runner.labels" . | nindent 6 }}
+  spec:
+    {{- if .Values.autoscaler.scaleDownDelaySecondsAfterScaleOut }}
+    scaleDownDelaySecondsAfterScaleOut: {{ .Values.autoscaler.scaleDownDelaySecondsAfterScaleOut }}
+    {{- end }}
+    scaleTargetRef:
+      name: {{ include "actions-runner.fullname" . }}
+    minReplicas: {{ .Values.autoscaler.minReplicas }}
+    maxReplicas: {{ .Values.autoscaler.maxReplicas }}
+    {{- with .Values.autoscaler.scaleUpTriggers }}
+    scaleUpTriggers:
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.autoscaler.metrics }}
+    metrics:
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

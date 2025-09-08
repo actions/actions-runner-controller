@@ -1,0 +1,15 @@
+{{- if .Values.flags.watchSingleNamespace }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceRoleBinding" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: github-webhook-server
+    app.kubernetes.io/part-of: actions-runner-controller
+  name: github-webhook-server
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: github-webhook-server
+    app.kubernetes.io/part-of: actions-runner-controller
+  name: github-webhook-server
+rules:
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - horizontalrunnerautoscalers
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - horizontalrunnerautoscalers/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - horizontalrunnerautoscalers/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - runnersets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - runnerdeployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - runnerdeployments/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - actions.summerwind.dev
+    resources:
+      - runnerdeployments/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - authentication.k8s.io
+    resources:
+      - tokenreviews
+    verbs:
+      - create
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: github-webhook-server
+    app.kubernetes.io/part-of: actions-runner-controller
+  name: github-webhook-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: github-webhook-server
+subjects:
+  - kind: ServiceAccount
+    name: github-webhook-server

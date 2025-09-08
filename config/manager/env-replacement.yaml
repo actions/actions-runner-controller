@@ -1,0 +1,10 @@
+source:
+  kind: Deployment
+  name: controller-manager
+  fieldPath: spec.template.spec.containers.[name=manager].image
+targets:
+- select:
+    kind: Deployment
+    name: controller-manager
+  fieldPaths:
+  - spec.template.spec.containers.[name=manager].env.[name=CONTROLLER_MANAGER_CONTAINER_IMAGE].value

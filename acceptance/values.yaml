@@ -1,0 +1,55 @@
+# Set actions-runner-controller settings for testing
+logLevel: "-4"
+imagePullSecrets: []
+image:
+  # This needs to be an empty array rather than a single-item array with empty name.
+  # Otherwise you end up with the following error on helm-upgrade:
+  #   Error: UPGRADE FAILED: failed to create patch: map: map[] does not contain declared merge key: name && failed to create patch: map: map[] does not contain declared merge key: name
+  actionsRunnerImagePullSecrets: []
+runner:
+  statusUpdateHook:
+    enabled: true
+rbac:
+  allowGrantingKubernetesContainerModePermissions: true
+githubWebhookServer:
+  imagePullSecrets: []
+  logLevel: "-4"
+  enabled: true
+  labels: {}
+  replicaCount: 1
+  syncPeriod: 10m
+  useRunnerGroupsVisibility: true
+  secret:
+    enabled: true
+    # create: true
+    name: "github-webhook-server"
+    ### GitHub Webhook Configuration
+    #github_webhook_secret_token: ""
+  service:
+    type: NodePort
+    ports:
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        nodePort: 31000
+actionsMetricsServer:
+  imagePullSecrets: []
+  logLevel: "-4"
+  enabled: true
+  labels: {}
+  replicaCount: 1
+  secret:
+    enabled: true
+    # create: true
+    name: "actions-metrics-server"
+    ### GitHub Webhook Configuration
+    #github_webhook_secret_token: ""
+  service:
+    type: NodePort
+    ports:
+      - port: 80
+        targetPort: http
+        protocol: TCP
+        name: http
+        nodePort: 31001

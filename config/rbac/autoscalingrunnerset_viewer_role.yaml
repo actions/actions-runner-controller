@@ -1,0 +1,20 @@
+# permissions for end users to view autoscalingrunnersets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autoscalingrunnerset-viewer-role
+rules:
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets/status
+  verbs:
+  - get

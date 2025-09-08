@@ -1,0 +1,178 @@
+{{- if .Values.githubWebhookServer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "actions-runner-controller-github-webhook-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.githubWebhookServer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.githubWebhookServer.podAnnotations }}
+      annotations:
+        kubectl.kubernetes.io/default-logs-container: "github-webhook-server"
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 8 }}
+      {{- with .Values.githubWebhookServer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.githubWebhookServer.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "actions-runner-controller-github-webhook-server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.githubWebhookServer.podSecurityContext | nindent 8 }}
+      {{- with .Values.githubWebhookServer.priorityClassName }}
+      priorityClassName: "{{ . }}"
+      {{- end }}
+      containers:
+      - args:
+        {{- $metricsHost := .Values.metrics.proxy.enabled | ternary "127.0.0.1" "0.0.0.0" }}
+        {{- $metricsPort := .Values.metrics.proxy.enabled | ternary "8080" .Values.metrics.port }}
+        - "--metrics-addr={{ $metricsHost }}:{{ $metricsPort }}"
+        {{- if .Values.githubWebhookServer.logLevel }}
+        - "--log-level={{ .Values.githubWebhookServer.logLevel }}"
+        {{- end }}
+        {{- if .Values.scope.singleNamespace }}
+        - "--watch-namespace={{ default .Release.Namespace .Values.scope.watchNamespace }}"
+        {{- end }}
+        {{- if .Values.runnerGithubURL  }}
+        - "--runner-github-url={{ .Values.runnerGithubURL }}"
+        {{- end }}
+        {{- if .Values.githubWebhookServer.queueLimit }}
+        - "--queue-limit={{ .Values.githubWebhookServer.queueLimit }}"
+        {{- end }}
+        {{- if .Values.githubWebhookServer.logFormat  }}
+        - "--log-format={{ .Values.githubWebhookServer.logFormat }}"
+        {{- end }}
+        command:
+        - "/github-webhook-server"
+        {{- if .Values.githubWebhookServer.lifecycle }}
+        {{- with .Values.githubWebhookServer.lifecycle }}
+        lifecycle:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        env:
+        - name: GITHUB_WEBHOOK_SECRET_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: github_webhook_secret_token
+              name: {{ include "actions-runner-controller-github-webhook-server.secretName" . }}
+              optional: true
+        {{- if .Values.githubEnterpriseServerURL  }}
+        - name: GITHUB_ENTERPRISE_URL
+          value: {{ .Values.githubEnterpriseServerURL }}
+        {{- end }}
+        {{- if .Values.githubURL  }}
+        - name: GITHUB_URL
+          value: {{ .Values.githubURL }}
+        {{- end }}
+        {{- if .Values.githubUploadURL  }}
+        - name: GITHUB_UPLOAD_URL
+          value: {{ .Values.githubUploadURL }}
+        {{- end }}
+        {{- if and .Values.githubWebhookServer.useRunnerGroupsVisibility .Values.githubWebhookServer.secret.enabled }}
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: github_token
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              optional: true
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_id
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              optional: true
+        - name: GITHUB_APP_INSTALLATION_ID
+          valueFrom:
+            secretKeyRef:
+              key: github_app_installation_id
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              key: github_app_private_key
+              name: {{ include "actions-runner-controller.githubWebhookServerSecretName" . }}
+              optional: true
+        {{- if .Values.authSecret.github_basicauth_username }}
+        - name: GITHUB_BASICAUTH_USERNAME
+          value: {{ .Values.authSecret.github_basicauth_username }}
+        {{- end }}
+        - name: GITHUB_BASICAUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: github_basicauth_password
+              name: {{ include "actions-runner-controller.secretName" . }}
+              optional: true
+        {{- end }}
+        {{- if kindIs "slice" .Values.githubWebhookServer.env }}
+        {{- toYaml .Values.githubWebhookServer.env | nindent 8 }}
+        {{- else }}
+        {{- range $key, $val := .Values.githubWebhookServer.env }}
+        - name: {{ $key }}
+          value: {{ $val | quote }}
+        {{- end }}
+        {{- end }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag  | default (cat "v" .Chart.AppVersion | replace " " "") }}"
+        name: github-webhook-server
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        {{- if not .Values.metrics.proxy.enabled }}
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
+          protocol: TCP
+        {{- end }}
+        resources:
+          {{- toYaml .Values.githubWebhookServer.resources | nindent 12 }}
+        securityContext:
+          {{- toYaml .Values.githubWebhookServer.securityContext | nindent 12 }}
+      {{- if .Values.metrics.proxy.enabled }}
+      - args:
+        - "--secure-listen-address=0.0.0.0:{{ .Values.metrics.port }}"
+        - "--upstream=http://127.0.0.1:8080/"
+        - "--logtostderr=true"
+        - "--v=10"
+        image: "{{ .Values.metrics.proxy.image.repository }}:{{ .Values.metrics.proxy.image.tag }}"
+        name: kube-rbac-proxy
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.metrics.port }}
+          name: metrics-port
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.githubWebhookServer.terminationGracePeriodSeconds }}
+      {{- with .Values.githubWebhookServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.githubWebhookServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.githubWebhookServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.githubWebhookServer.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,19 @@
+{{- if .Values.githubWebhookServer.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+  name: {{ include "actions-runner-controller-github-webhook-server.pdbName" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  {{- if .Values.githubWebhookServer.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.githubWebhookServer.podDisruptionBudget.minAvailable }}
+  {{- end  }}
+  {{- if .Values.githubWebhookServer.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.githubWebhookServer.podDisruptionBudget.maxUnavailable }}
+  {{- end  }}
+  selector:
+    matchLabels:
+      {{- include "actions-runner-controller-github-webhook-server.selectorLabels" . | nindent 6 }}
+{{- end -}}

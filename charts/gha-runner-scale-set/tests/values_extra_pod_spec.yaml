@@ -1,0 +1,12 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    containers:
+    - name: runner
+      image: runner-image:latest
+    dnsPolicy: "None"
+    dnsConfig:
+      nameservers:
+        - 192.0.2.1
