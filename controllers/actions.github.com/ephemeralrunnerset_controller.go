@@ -454,7 +454,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		}
 
 		if !isDone && ephemeralRunner.HasJob() {
-			log.Info("Skipping ephemeral runner since it is running a job", "name", ephemeralRunner.Name, "jobRequestId", ephemeralRunner.Status.JobRequestId)
+			log.Info("Skipping ephemeral runner since it is running a job", "name", ephemeralRunner.Name, "workflowRunId", ephemeralRunner.Status.WorkflowRunId)
 			continue
 		}
 

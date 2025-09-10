@@ -213,7 +213,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(Succeed(), "failed to get ephemeral runner")
 
 			// update job id to simulate job assigned
-			er.Status.JobRequestId = 1
+			er.Status.WorkflowRunId = 1
 			err := k8sClient.Status().Update(ctx, er)
 			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
 
@@ -224,7 +224,7 @@ var _ = Describe("EphemeralRunner", func() {
 					if err != nil {
 						return 0, err
 					}
-					return er.Status.JobRequestId, nil
+					return er.Status.WorkflowRunId, nil
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,

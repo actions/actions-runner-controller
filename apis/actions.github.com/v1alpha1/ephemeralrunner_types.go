@@ -51,7 +51,7 @@ func (er *EphemeralRunner) IsDone() bool {
 }
 
 func (er *EphemeralRunner) HasJob() bool {
-	return er.Status.JobRequestId != 0
+	return er.Status.WorkflowRunId != 0
 }
 
 func (er *EphemeralRunner) HasContainerHookConfigured() bool {
