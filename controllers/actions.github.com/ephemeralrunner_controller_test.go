@@ -213,22 +213,22 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(Succeed(), "failed to get ephemeral runner")
 
 			// update job id to simulate job assigned
-			er.Status.WorkflowRunId = 1
+			er.Status.JobID = "1"
 			err := k8sClient.Status().Update(ctx, er)
 			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
 
 			er = new(v1alpha1.EphemeralRunner)
 			Eventually(
-				func() (int64, error) {
+				func() (string, error) {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
 					if err != nil {
-						return 0, err
+						return "", err
 					}
-					return er.Status.WorkflowRunId, nil
+					return er.Status.JobID, nil
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(int64(1)))
+			).Should(BeEquivalentTo("1"))
 
 			pod := new(corev1.Pod)
 			Eventually(func() (bool, error) {

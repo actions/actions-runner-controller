@@ -34,6 +34,7 @@ const EphemeralRunnerContainerName = "runner"
 // +kubebuilder:printcolumn:JSONPath=".status.jobWorkflowRef",name=JobWorkflowRef,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.workflowRunId",name=WorkflowRunId,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.jobDisplayName",name=JobDisplayName,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.jobId",name=JobId,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
@@ -51,7 +52,7 @@ func (er *EphemeralRunner) IsDone() bool {
 }
 
 func (er *EphemeralRunner) HasJob() bool {
-	return er.Status.WorkflowRunId != 0
+	return len(er.Status.JobID) > 0
 }
 
 func (er *EphemeralRunner) HasContainerHookConfigured() bool {
@@ -155,6 +156,9 @@ type EphemeralRunnerStatus struct {
 
 	// +optional
 	JobRequestId int64 `json:"jobRequestId,omitempty"`
+
+	// +optional
+	JobID string `json:"jobId,omitempty"`
 
 	// +optional
 	JobRepositoryName string `json:"jobRepositoryName,omitempty"`
