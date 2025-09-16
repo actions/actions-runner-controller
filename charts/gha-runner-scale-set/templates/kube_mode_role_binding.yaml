@@ -1,6 +1,6 @@
 {{- $containerMode := .Values.containerMode }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRoleBinding) }}
-{{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+{{- if and (or (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume")) (not .Values.template.spec.serviceAccountName) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
