@@ -627,17 +627,17 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		availableJobs := []*actions.JobAvailable{
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 1,
+					RunnerRequestID: 1,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 2,
+					RunnerRequestID: 2,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 3,
+					RunnerRequestID: 3,
 				},
 			},
 		}
@@ -678,17 +678,17 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		availableJobs := []*actions.JobAvailable{
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 1,
+					RunnerRequestID: 1,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 2,
+					RunnerRequestID: 2,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 3,
+					RunnerRequestID: 3,
 				},
 			},
 		}
@@ -724,17 +724,17 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		availableJobs := []*actions.JobAvailable{
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 1,
+					RunnerRequestID: 1,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 2,
+					RunnerRequestID: 2,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 3,
+					RunnerRequestID: 3,
 				},
 			},
 		}
@@ -809,17 +809,17 @@ func TestListener_acquireAvailableJobs(t *testing.T) {
 		availableJobs := []*actions.JobAvailable{
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 1,
+					RunnerRequestID: 1,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 2,
+					RunnerRequestID: 2,
 				},
 			},
 			{
 				JobMessageBase: actions.JobMessageBase{
-					RunnerRequestId: 3,
+					RunnerRequestID: 3,
 				},
 			},
 		}
@@ -881,7 +881,7 @@ func TestListener_parseMessage(t *testing.T) {
 					JobMessageType: actions.JobMessageType{
 						MessageType: messageTypeJobAvailable,
 					},
-					RunnerRequestId: 1,
+					RunnerRequestID: 1,
 				},
 			},
 			{
@@ -890,7 +890,7 @@ func TestListener_parseMessage(t *testing.T) {
 					JobMessageType: actions.JobMessageType{
 						MessageType: messageTypeJobAvailable,
 					},
-					RunnerRequestId: 2,
+					RunnerRequestID: 2,
 				},
 			},
 		}
@@ -904,7 +904,7 @@ func TestListener_parseMessage(t *testing.T) {
 					JobMessageType: actions.JobMessageType{
 						MessageType: messageTypeJobAssigned,
 					},
-					RunnerRequestId: 3,
+					RunnerRequestID: 3,
 				},
 			},
 			{
@@ -912,7 +912,7 @@ func TestListener_parseMessage(t *testing.T) {
 					JobMessageType: actions.JobMessageType{
 						MessageType: messageTypeJobAssigned,
 					},
-					RunnerRequestId: 4,
+					RunnerRequestID: 4,
 				},
 			},
 		}
@@ -926,9 +926,9 @@ func TestListener_parseMessage(t *testing.T) {
 					JobMessageType: actions.JobMessageType{
 						MessageType: messageTypeJobStarted,
 					},
-					RunnerRequestId: 5,
+					RunnerRequestID: 5,
 				},
-				RunnerId:   2,
+				RunnerID:   2,
 				RunnerName: "runner2",
 			},
 		}
@@ -942,7 +942,7 @@ func TestListener_parseMessage(t *testing.T) {
 					JobMessageType: actions.JobMessageType{
 						MessageType: messageTypeJobCompleted,
 					},
-					RunnerRequestId: 6,
+					RunnerRequestID: 6,
 				},
 				Result:     "success",
 				RunnerId:   1,

@@ -37,7 +37,7 @@ type JobAssigned struct {
 }
 
 type JobStarted struct {
-	RunnerId   int    `json:"runnerId"`
+	RunnerID   int    `json:"runnerId"`
 	RunnerName string `json:"runnerName"`
 	JobMessageBase
 }
@@ -55,12 +55,13 @@ type JobMessageType struct {
 
 type JobMessageBase struct {
 	JobMessageType
-	RunnerRequestId    int64     `json:"runnerRequestId"`
+	RunnerRequestID    int64     `json:"runnerRequestId"`
 	RepositoryName     string    `json:"repositoryName"`
 	OwnerName          string    `json:"ownerName"`
+	JobID              string    `json:"jobId"`
 	JobWorkflowRef     string    `json:"jobWorkflowRef"`
 	JobDisplayName     string    `json:"jobDisplayName"`
-	WorkflowRunId      int64     `json:"workflowRunId"`
+	WorkflowRunID      int64     `json:"workflowRunId"`
 	EventName          string    `json:"eventName"`
 	RequestLabels      []string  `json:"requestLabels"`
 	QueueTime          time.Time `json:"queueTime"`

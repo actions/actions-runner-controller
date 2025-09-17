@@ -192,10 +192,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		case err == nil:
 			// create secret if not created
 			log.Info("Creating new ephemeral runner secret for jitconfig.")
-			if err := r.createSecret(ctx, ephemeralRunner, jitConfig, log); err != nil {
+			jitSecret, err := r.createSecret(ctx, ephemeralRunner, jitConfig, log)
+			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to create secret: %w", err)
 			}
 			log.Info("Created new ephemeral runner secret for jitconfig.")
+			secret = jitSecret
 
 		case errors.Is(err, retryableError):
 			log.Info("Encountered retryable error, requeueing", "error", err.Error())
@@ -226,12 +228,15 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{Requeue: true}, nil
 		}
 
+		runnerName := string(secret.Data["runnerName"])
 		if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 			obj.Status.RunnerId = runnerID
-			obj.Status.RunnerName = string(secret.Data["runnerName"])
+			obj.Status.RunnerName = runnerName
 		}); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %w", err)
 		}
+		ephemeralRunner.Status.RunnerId = runnerID
+		ephemeralRunner.Status.RunnerName = runnerName
 		log.Info("Updated ephemeral runner status with runnerId and runnerName")
 	}
 
@@ -321,6 +326,18 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	case cs.State.Terminated.ExitCode != 0: // failed
 		log.Info("Ephemeral runner container failed", "exitCode", cs.State.Terminated.ExitCode)
+		if ephemeralRunner.HasJob() {
+			log.Error(
+				errors.New("ephemeral runner has a job assigned, but the pod has failed"),
+				"Ephemeral runner either has faulty entrypoint or something external killing the runner",
+			)
+			log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
+			if err := r.Delete(ctx, ephemeralRunner); err != nil {
+				log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
 		if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
 			log.Error(err, "Failed to delete runner pod on failure")
 			return ctrl.Result{}, err
@@ -328,9 +345,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 
 	default: // succeeded
-		log.Info("Ephemeral runner has finished successfully")
-		if err := r.markAsFinished(ctx, ephemeralRunner, log); err != nil {
-			log.Error(err, "Failed to mark ephemeral runner as finished")
+		log.Info("Ephemeral runner has finished successfully, deleting ephemeral runner", "exitCode", cs.State.Terminated.ExitCode)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil {
+			log.Error(err, "Failed to delete ephemeral runner after successful completion")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -497,18 +514,6 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 	}
 
 	log.Info("EphemeralRunner is marked as Failed and deleted from the service")
-	return nil
-}
-
-func (r *EphemeralRunnerReconciler) markAsFinished(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	log.Info("Updating ephemeral runner status to Finished")
-	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = corev1.PodSucceeded
-	}); err != nil {
-		return fmt.Errorf("failed to update ephemeral runner with status finished: %w", err)
-	}
-
-	log.Info("EphemeralRunner status is marked as Finished")
 	return nil
 }
 
@@ -680,21 +685,21 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, jitConfig *actions.RunnerScaleSetJitRunnerConfig, log logr.Logger) error {
+func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, jitConfig *actions.RunnerScaleSetJitRunnerConfig, log logr.Logger) (*corev1.Secret, error) {
 	log.Info("Creating new secret for ephemeral runner")
 	jitSecret := r.newEphemeralRunnerJitSecret(runner, jitConfig)
 
 	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference: %w", err)
+		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	log.Info("Created new secret spec for ephemeral runner")
 	if err := r.Create(ctx, jitSecret); err != nil {
-		return fmt.Errorf("failed to create jit secret: %w", err)
+		return nil, fmt.Errorf("failed to create jit secret: %w", err)
 	}
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
-	return nil
+	return jitSecret, nil
 }
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
