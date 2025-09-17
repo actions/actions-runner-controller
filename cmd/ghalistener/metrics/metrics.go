@@ -22,6 +22,8 @@ const (
 	labelKeyRepository              = "repository"
 	labelKeyJobName                 = "job_name"
 	labelKeyJobWorkflowRef          = "job_workflow_ref"
+	labelKeyJobWorkflowName         = "job_workflow_name"
+	labelKeyJobWorkflowTarget       = "job_workflow_target"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
 )
@@ -75,13 +77,16 @@ var metricsHelp = metricsHelpRegistry{
 }
 
 func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
+	workflowRefInfo := ParseWorkflowRef(jobBase.JobWorkflowRef)
 	return prometheus.Labels{
-		labelKeyEnterprise:     e.scaleSetLabels[labelKeyEnterprise],
-		labelKeyOrganization:   jobBase.OwnerName,
-		labelKeyRepository:     jobBase.RepositoryName,
-		labelKeyJobName:        jobBase.JobDisplayName,
-		labelKeyJobWorkflowRef: jobBase.JobWorkflowRef,
-		labelKeyEventName:      jobBase.EventName,
+		labelKeyEnterprise:        e.scaleSetLabels[labelKeyEnterprise],
+		labelKeyOrganization:      jobBase.OwnerName,
+		labelKeyRepository:        jobBase.RepositoryName,
+		labelKeyJobName:           jobBase.JobDisplayName,
+		labelKeyJobWorkflowRef:    jobBase.JobWorkflowRef,
+		labelKeyJobWorkflowName:   workflowRefInfo.Name,
+		labelKeyJobWorkflowTarget: workflowRefInfo.Target,
+		labelKeyEventName:         jobBase.EventName,
 	}
 }
 
