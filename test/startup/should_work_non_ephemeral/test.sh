@@ -15,7 +15,7 @@ startup_log() {
 }
 
 log "Setting up test area"
-export RUNNER_HOME=testarea
+export RUNNER_HOME=$(pwd)/testarea
 mkdir -p ${RUNNER_HOME}
 
 log "Setting up the test"
@@ -49,7 +49,9 @@ log ""
 
 # Run the runner entrypstartupoint script which as a final step runs this
 # unit tests run.sh as it was symlinked
-../../../runner/startup.sh 2> >(startup_log)
+cd ../../../runner
+export PATH=${PATH}:$(pwd)
+./startup.sh 2> >(startup_log)
 
 if [ "$?" != "0" ]; then
   error "==========================================="
