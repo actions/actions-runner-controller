@@ -116,6 +116,12 @@ githubConfigSecret:
 ## empty, and configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to dind or kubernetes
+#   dind:
+#     ## extraDockerDaemonArgs is a list of extra arguments to pass to the docker daemon
+#     extraDockerDaemonArgs:
+#       - --registry-mirror=https://my-mirror.com
+#       - --https-proxy=http://my-proxy.com:1234
+#       - --mtu=1400
 #   ## the following is required when containerMode.type=kubernetes
 #   kubernetesModeWorkVolumeClaim:
 #     accessModes: ["ReadWriteOnce"]
