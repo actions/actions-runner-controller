@@ -341,7 +341,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Info("Trying to remove the runner from the service")
 			actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
 			if err != nil {
-				log.Error(err, "Failed to get actions client for checking the job status")
+				log.Error(err, "Failed to get actions client for removing the runner from the service")
 				return ctrl.Result{}, nil
 			}
 			if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
