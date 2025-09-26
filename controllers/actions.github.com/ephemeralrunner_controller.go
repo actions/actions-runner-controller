@@ -336,6 +336,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
 				return ctrl.Result{}, err
 			}
+
+			log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
+			log.Info("Trying to remove the runner from the service")
+			actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+			if err != nil {
+				log.Error(err, "Failed to get actions client for removing the runner from the service")
+				return ctrl.Result{}, nil
+			}
+			if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
+				log.Error(err, "Failed to remove the runner from the service")
+				return ctrl.Result{}, nil
+			}
+			log.Info("Removed the runner from the service")
 			return ctrl.Result{}, nil
 		}
 		if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
