@@ -1082,7 +1082,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume(t *te
 	assert.Equal(t, "ACTIONS_RUNNER_IMAGE", ars.Spec.Template.Spec.Containers[0].Env[3].Name)
 	assert.Equal(t, ars.Spec.Template.Spec.Containers[0].Image, ars.Spec.Template.Spec.Containers[0].Env[3].Value)
 
-	assert.Len(t, ars.Spec.Template.Spec.Volumes, 0, "Template.Spec should have 1 volume")
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 0, "Template.Spec should have 0 volumes")
 }
 
 func TestTemplateRenderedAutoscalingRunnerSet_ListenerPodTemplate(t *testing.T) {
