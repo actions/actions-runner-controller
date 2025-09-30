@@ -397,7 +397,7 @@ template:
   ##       command: ["/home/runner/run.sh"]
   ##       env:
   ##         - name: ACTIONS_RUNNER_CONTAINER_HOOKS
-  ##           value: /home/runner/k8s/index.js
+  ##           value: /home/runner/k8s-novolume/index.js
   ##         - name: ACTIONS_RUNNER_POD_NAME
   ##           valueFrom:
   ##             fieldRef:
