@@ -307,7 +307,7 @@ func TestTemplateRenderedSetServiceAccountToKubeNoVolumeMode(t *testing.T) {
 
 	assert.Equal(t, "actions.github.com/cleanup-protection", role.Finalizers[0])
 
-	assert.Len(t, role.Rules, 4, "kube mode role should have 5 rules")
+	assert.Len(t, role.Rules, 4, "kube mode role should have 4 rules")
 	assert.Equal(t, "pods", role.Rules[0].Resources[0])
 	assert.Equal(t, "pods/exec", role.Rules[1].Resources[0])
 	assert.Equal(t, "pods/log", role.Rules[2].Resources[0])
