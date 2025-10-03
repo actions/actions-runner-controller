@@ -68,7 +68,7 @@ endif
 all: manager
 
 lint:
-	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.1.2 golangci-lint run
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.5.0 golangci-lint run
 
 GO_TEST_ARGS ?= -short
 
@@ -317,7 +317,7 @@ ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.17.2 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 endif
