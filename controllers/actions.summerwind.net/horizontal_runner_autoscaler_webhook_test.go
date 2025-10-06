@@ -419,7 +419,7 @@ func TestGetValidCapacityReservations(t *testing.T) {
 
 func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.Buffer {
 	logs := &bytes.Buffer{}
-	
+
 	// Wrap the buffer with a synchronized writer to prevent race conditions
 	syncWriter := &syncWriter{
 		writer: logs,
