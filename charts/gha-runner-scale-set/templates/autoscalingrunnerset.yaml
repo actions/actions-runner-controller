@@ -11,23 +11,42 @@ metadata:
   name: {{ include "gha-runner-scale-set.scale-set-name" . | replace "_" "-" }}
   namespace: {{ include "gha-runner-scale-set.namespace" . }}
   labels:
+    {{- $base := include "gha-runner-scale-set.labels" . | fromYaml }}
+    {{- $extra := dict "app.kubernetes.io/component" "" }}
+    {{- $reserved := merge $base $extra }}
     {{- with .Values.labels }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.autoscalingRunnerSet.labels }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- end }}
     app.kubernetes.io/component: "autoscaling-runner-set"
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
   annotations:
     {{- with .Values.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasPrefix "actions.github.com/cleanup-" $k) (eq $k "actions.github.com/values-hash")) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.autoscalingRunnerSet.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasPrefix "actions.github.com/cleanup-" $k) (eq $k "actions.github.com/values-hash")) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- end }}
     actions.github.com/values-hash: {{ toJson .Values | sha256sum | trunc 63 }}
