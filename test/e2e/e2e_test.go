@@ -37,7 +37,7 @@ var (
 	testResultCMNamePrefix = "test-result-"
 
 	RunnerVersion               = "2.328.0"
-	RunnerContainerHooksVersion = "0.7.0"
+	RunnerContainerHooksVersion = "0.8.0"
 )
 
 // If you're willing to run this test via VS Code "run test" or "debug test",
