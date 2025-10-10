@@ -361,7 +361,11 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, fmt.Errorf("failed to decode job available: %w", err)
 			}
 
-			l.logger.Info("Job available message received", "jobId", jobAvailable.JobID)
+			l.logger.Info("Job available message received",
+				"jobId", jobAvailable.JobID,
+				"JobDisplayName", jobAvailable.JobDisplayName,
+				"JobName", jobAvailable.JobName,
+				"EffectiveJobName", jobAvailable.GetJobName())
 			parsedMsg.jobsAvailable = append(parsedMsg.jobsAvailable, &jobAvailable)
 
 		case messageTypeJobAssigned:
@@ -377,7 +381,14 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 			if err := json.Unmarshal(msg, &jobStarted); err != nil {
 				return nil, fmt.Errorf("could not decode job started message. %w", err)
 			}
-			l.logger.Info("Job started message received.", "JobID", jobStarted.JobID, "RunnerId", jobStarted.RunnerID)
+			l.logger.Info("Job started message received.",
+				"JobID", jobStarted.JobID,
+				"RunnerId", jobStarted.RunnerID,
+				"JobDisplayName", jobStarted.JobDisplayName,
+				"JobName", jobStarted.JobName,
+				"EffectiveJobName", jobStarted.GetJobName(),
+				"RepositoryName", jobStarted.RepositoryName,
+				"OwnerName", jobStarted.OwnerName)
 			parsedMsg.jobsStarted = append(parsedMsg.jobsStarted, &jobStarted)
 
 		case messageTypeJobCompleted:
@@ -392,6 +403,9 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				"Result", jobCompleted.Result,
 				"RunnerId", jobCompleted.RunnerId,
 				"RunnerName", jobCompleted.RunnerName,
+				"JobDisplayName", jobCompleted.JobDisplayName,
+				"JobName", jobCompleted.JobName,
+				"EffectiveJobName", jobCompleted.GetJobName(),
 			)
 			parsedMsg.jobsCompleted = append(parsedMsg.jobsCompleted, &jobCompleted)
 

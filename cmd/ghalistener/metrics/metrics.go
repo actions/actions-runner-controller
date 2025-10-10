@@ -82,7 +82,7 @@ func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels 
 		labelKeyEnterprise:        e.scaleSetLabels[labelKeyEnterprise],
 		labelKeyOrganization:      jobBase.OwnerName,
 		labelKeyRepository:        jobBase.RepositoryName,
-		labelKeyJobName:           jobBase.JobDisplayName,
+		labelKeyJobName:           jobBase.GetJobName(),
 		labelKeyJobWorkflowRef:    jobBase.JobWorkflowRef,
 		labelKeyJobWorkflowName:   workflowRefInfo.Name,
 		labelKeyJobWorkflowTarget: workflowRefInfo.Target,

@@ -61,6 +61,7 @@ type JobMessageBase struct {
 	JobID              string    `json:"jobId"`
 	JobWorkflowRef     string    `json:"jobWorkflowRef"`
 	JobDisplayName     string    `json:"jobDisplayName"`
+	JobName            string    `json:"jobName"`
 	WorkflowRunID      int64     `json:"workflowRunId"`
 	EventName          string    `json:"eventName"`
 	RequestLabels      []string  `json:"requestLabels"`

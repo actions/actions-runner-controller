@@ -96,6 +96,7 @@ func (w *Worker) applyDefaults() error {
 // about the ephemeral runner that should not be deleted when scaling down.
 // It returns an error if there is any issue with updating the job information.
 func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
+	jobName := jobInfo.GetJobName()
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
@@ -104,6 +105,8 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 		"workflowRef", jobInfo.JobWorkflowRef,
 		"workflowRunId", jobInfo.WorkflowRunID,
 		"jobDisplayName", jobInfo.JobDisplayName,
+		"jobName", jobInfo.JobName,
+		"effectiveJobName", jobName,
 		"requestId", jobInfo.RunnerRequestID)
 
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
@@ -119,7 +122,7 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 				JobID:             jobInfo.JobID,
 				WorkflowRunId:     jobInfo.WorkflowRunID,
 				JobWorkflowRef:    jobInfo.JobWorkflowRef,
-				JobDisplayName:    jobInfo.JobDisplayName,
+				JobDisplayName:    jobName,
 			},
 		},
 	)
