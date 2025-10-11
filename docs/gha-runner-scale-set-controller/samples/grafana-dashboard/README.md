@@ -15,7 +15,7 @@ This sample dashboard shows how to visualize the metrics with [Grafana](https://
 
 1. Make sure to have [Grafana](https://grafana.com/docs/grafana/latest/installation/) and [Prometheus](https://prometheus.io/docs/prometheus/latest/installation/) running in your cluster.
 2. Make sure that Prometheus is properly scraping the metrics endpoints of the controller-manager and listeners.
-3. Import the [dashboard](ARC-Autoscaling-Runner-Set-Monitoring_1692627561838.json) into Grafana.
+3. Import the [dashboard](ARC-Autoscaling-Runner-Set-Monitoring.json) into Grafana.
 
 ## Required metrics
 
