@@ -139,7 +139,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	if ephemeralRunner.IsDone() {
+	if ephemeralRunner.IsDone() && ephemeralRunner.Status.Phase != corev1.PodFailed {
 		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
 		err := r.cleanupResources(ctx, ephemeralRunner, log)
 		if err != nil {
@@ -517,16 +517,14 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 		obj.Status.Phase = corev1.PodFailed
 		obj.Status.Reason = reason
 		obj.Status.Message = errMessage
+		if obj.Status.Failures == nil {
+			obj.Status.Failures = make(map[string]metav1.Time)
+		}
+		obj.Status.Failures[metav1.Now().GoString()] = metav1.Now()
 	}); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
-
-	log.Info("Removing the runner from the service")
-	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
-		return fmt.Errorf("failed to remove the runner from service: %w", err)
-	}
-
-	log.Info("EphemeralRunner is marked as Failed and deleted from the service")
+	log.Info("EphemeralRunner is marked as Failed")
 	return nil
 }
 
