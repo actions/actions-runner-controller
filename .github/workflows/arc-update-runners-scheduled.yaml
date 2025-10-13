@@ -2,7 +2,8 @@
 # updates files containing runner version and opens a pull request.
 name: Runner Updates Check (Scheduled Job)
 permissions:
-  contents: read
+  pull-requests: write
+  contents: write
 
 on:
   schedule:
