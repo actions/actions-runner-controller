@@ -50,6 +50,8 @@ jobs:
   # it sets a PR name as output.
   check_pr:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: check_versions
     if: needs.check_versions.outputs.runner_current_version != needs.check_versions.outputs.runner_latest_version || needs.check_versions.outputs.container_hooks_current_version != needs.check_versions.outputs.container_hooks_latest_version
     outputs:
