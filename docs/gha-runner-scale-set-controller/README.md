@@ -45,7 +45,7 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ### 0.13.0
 
-1. Remove workflow actions version comments since upgrades are done via dependabot (https://github.com/actions/actions-runner-controller/pull/4161)
+1. Remove workflow actions version comments since upgrades are done via dependabot [#4161](https://github.com/actions/actions-runner-controller/pull/4161)
 1. Fix image pull secrets list arguments in the chart [#4164](https://github.com/actions/actions-runner-controller/pull/4164)
 1. Update example GitHub URLs in values.yaml to include an example for enterprise account-level runners [#4181](https://github.com/actions/actions-runner-controller/pull/4181)
 1. docs: fix repo path typo [#4229](https://github.com/actions/actions-runner-controller/pull/4229)
