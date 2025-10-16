@@ -43,6 +43,22 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.13.0
+
+1. Remove workflow actions version comments since upgrades are done via dependabot [#4161](https://github.com/actions/actions-runner-controller/pull/4161)
+1. Fix image pull secrets list arguments in the chart [#4164](https://github.com/actions/actions-runner-controller/pull/4164)
+1. Update example GitHub URLs in values.yaml to include an example for enterprise account-level runners [#4181](https://github.com/actions/actions-runner-controller/pull/4181)
+1. docs: fix repo path typo [#4229](https://github.com/actions/actions-runner-controller/pull/4229)
+1. Remove deprecated preserveUnknownFields from CRDs [#4135](https://github.com/actions/actions-runner-controller/pull/4135)
+1. Add workflow name and target labels [#4240](https://github.com/actions/actions-runner-controller/pull/4240)
+1. docs: fix broken Grafana dashboard JSON path [#4270](https://github.com/actions/actions-runner-controller/pull/4270)
+1. Ensure ephemeral runner is deleted from the service on exit != 0 [#4260](https://github.com/actions/actions-runner-controller/pull/4260)
+1. Remove JIT config from ephemeral runner status field [#4191](https://github.com/actions/actions-runner-controller/pull/4191)
+1. Remove ephemeral runner when exit code != 0 and is patched with the job [#4239](https://github.com/actions/actions-runner-controller/pull/4239)
+1. Bump the gomod group across 1 directory with 4 updates [#4277](https://github.com/actions/actions-runner-controller/pull/4277)
+1. Bump all dependencies [#4266](https://github.com/actions/actions-runner-controller/pull/4266)
+
+
 ### 0.12.1
 
 1. Fix indentation of startupProbe attributes in dind sidecar [#4126](https://github.com/actions/actions-runner-controller/pull/4126)
