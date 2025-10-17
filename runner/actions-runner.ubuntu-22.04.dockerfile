@@ -17,13 +17,34 @@ RUN apt-get update -y \
     && add-apt-repository -y ppa:git-core/ppa \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
+    build-essential \
     curl \
     ca-certificates \
+    dnsutils \
+    ftp \
     git \
+    iproute2 \
+    iputils-ping \
     jq \
+    libunwind8 \
+    locales \
+    netcat \
+    openssh-client \
+    parallel \
+    python3-pip \
+    rsync \
+    shellcheck \
     sudo \
+    telnet \
+    time \
+    tzdata \
     unzip \
+    upx \
+    wget \
     zip \
+    zstd \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Download latest git-lfs version
