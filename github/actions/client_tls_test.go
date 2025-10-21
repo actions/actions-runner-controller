@@ -84,7 +84,12 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 	})
 
 	t.Run("client with ca certs", func(t *testing.T) {
-		server := startNewTLSTestServer(t, certPath, keyPath, http.HandlerFunc(h))
+		server := startNewTLSTestServer(
+			t,
+			certPath,
+			keyPath,
+			http.HandlerFunc(h),
+		)
 		u = server.URL
 		configURL := server.URL + "/my-org"
 
@@ -98,7 +103,11 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 		pool := x509.NewCertPool()
 		require.True(t, pool.AppendCertsFromPEM(cert))
 
-		client, err := actions.NewClient(configURL, auth, actions.WithRootCAs(pool))
+		client, err := actions.NewClient(
+			configURL,
+			auth,
+			actions.WithRootCAs(pool),
+		)
 		require.NoError(t, err)
 		assert.NotNil(t, client)
 
@@ -109,7 +118,7 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 	t.Run("client with ca chain certs", func(t *testing.T) {
 		server := startNewTLSTestServer(
 			t,
-			filepath.Join("testdata", "leaf.pem"),
+			filepath.Join("testdata", "leaf.crt"),
 			filepath.Join("testdata", "leaf.key"),
 			http.HandlerFunc(h),
 		)
@@ -120,13 +129,18 @@ func TestServerWithSelfSignedCertificates(t *testing.T) {
 			Token: "token",
 		}
 
-		cert, err := os.ReadFile(filepath.Join("testdata", "intermediate.pem"))
+		cert, err := os.ReadFile(filepath.Join("testdata", "intermediate.crt"))
 		require.NoError(t, err)
 
 		pool := x509.NewCertPool()
 		require.True(t, pool.AppendCertsFromPEM(cert))
 
-		client, err := actions.NewClient(configURL, auth, actions.WithRootCAs(pool), actions.WithRetryMax(0))
+		client, err := actions.NewClient(
+			configURL,
+			auth,
+			actions.WithRootCAs(pool),
+			actions.WithRetryMax(0),
+		)
 		require.NoError(t, err)
 		require.NotNil(t, client)
 

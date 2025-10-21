@@ -7,10 +7,10 @@ on:
   # are available to the workflow run
   push:
     branches:
-      - 'master'
+      - "master"
     paths:
-      - 'runner/VERSION'
-      - '.github/workflows/arc-release-runners.yaml'
+      - "runner/VERSION"
+      - ".github/workflows/arc-release-runners.yaml"
 
 env:
   # Safeguard to prevent pushing images to registeries after build
@@ -28,7 +28,7 @@ jobs:
     name: Trigger Build and Push of Runner Images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get runner version
         id: versions
         run: |
@@ -39,7 +39,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}

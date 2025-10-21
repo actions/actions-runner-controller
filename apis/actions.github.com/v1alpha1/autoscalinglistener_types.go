@@ -59,7 +59,13 @@ type AutoscalingListenerSpec struct {
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
+
+	// +optional
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
+
+	// +optional
+	Metrics *MetricsConfig `json:"metrics,omitempty"`
 
 	// +optional
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
@@ -68,11 +74,11 @@ type AutoscalingListenerSpec struct {
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
 type AutoscalingListenerStatus struct{}
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name=GitHub Configure URL,type=string
-//+kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetNamespace",name=AutoscalingRunnerSet Namespace,type=string
-//+kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetName",name=AutoscalingRunnerSet Name,type=string
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name=GitHub Configure URL,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetNamespace",name=AutoscalingRunnerSet Namespace,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetName",name=AutoscalingRunnerSet Name,type=string
 
 // AutoscalingListener is the Schema for the autoscalinglisteners API
 type AutoscalingListener struct {
@@ -83,8 +89,7 @@ type AutoscalingListener struct {
 	Status AutoscalingListenerStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-
+// +kubebuilder:object:root=true
 // AutoscalingListenerList contains a list of AutoscalingListener
 type AutoscalingListenerList struct {
 	metav1.TypeMeta `json:",inline"`

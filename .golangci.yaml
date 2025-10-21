@@ -1,19 +1,14 @@
+version: "2"
 run:
-  timeout: 3m
-output:
-  formats:
-    - format: github-actions
-      path: stdout
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - (net/http.ResponseWriter).Write
-      - (*net/http.Server).Shutdown
-      - (*github.com/actions/actions-runner-controller/simulator.VisibleRunnerGroups).Add
-      - (*github.com/actions/actions-runner-controller/testing.Kind).Stop
-issues:
-  exclude-rules:
-    - path: controllers/suite_test.go
-      linters:
-        - staticcheck
-      text: "SA1019"
+  timeout: 5m
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - (*net/http.Server).Shutdown
+        - (*github.com/actions/actions-runner-controller/simulator.VisibleRunnerGroups).Add
+        - (*github.com/actions/actions-runner-controller/testing.Kind).Stop
+  exclusions:
+    presets:
+      - std-error-handling

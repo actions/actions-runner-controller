@@ -100,10 +100,11 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
 		"repoName", jobInfo.RepositoryName,
+		"jobId", jobInfo.JobID,
 		"workflowRef", jobInfo.JobWorkflowRef,
-		"workflowRunId", jobInfo.WorkflowRunId,
+		"workflowRunId", jobInfo.WorkflowRunID,
 		"jobDisplayName", jobInfo.JobDisplayName,
-		"requestId", jobInfo.RunnerRequestId)
+		"requestId", jobInfo.RunnerRequestID)
 
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
 	if err != nil {
@@ -113,9 +114,10 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 	patch, err := json.Marshal(
 		&v1alpha1.EphemeralRunner{
 			Status: v1alpha1.EphemeralRunnerStatus{
-				JobRequestId:      jobInfo.RunnerRequestId,
+				JobRequestId:      jobInfo.RunnerRequestID,
 				JobRepositoryName: fmt.Sprintf("%s/%s", jobInfo.OwnerName, jobInfo.RepositoryName),
-				WorkflowRunId:     jobInfo.WorkflowRunId,
+				JobID:             jobInfo.JobID,
+				WorkflowRunId:     jobInfo.WorkflowRunID,
 				JobWorkflowRef:    jobInfo.JobWorkflowRef,
 				JobDisplayName:    jobInfo.JobDisplayName,
 			},

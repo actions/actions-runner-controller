@@ -1,11 +1,38 @@
 {{- $containerMode := .Values.containerMode }}
-{{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+{{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRole) }}
+{{- if and (or (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume")) (not .Values.template.spec.serviceAccountName) }}
 # default permission for runner pod service account in kubernetes mode (container hook)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set.namespace" . }}
+  labels:
+    {{- $base := include "gha-runner-scale-set.labels" . | fromYaml }}
+    {{- $extra := dict "app.kubernetes.io/component" "" }}
+    {{- $reserved := merge $base $extra }}
+    {{- with .Values.labels }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.kubernetesModeRole.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.kubernetesModeRole.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
   finalizers:
     - actions.github.com/cleanup-protection
 rules:
@@ -18,9 +45,11 @@ rules:
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get", "list", "watch",]
+{{- if ne $containerMode.type "kubernetes-novolume" }}
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "create", "delete"]
+{{- end }}
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "delete"]

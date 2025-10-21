@@ -7,30 +7,30 @@ on:
     branches:
       - master
     paths-ignore:
-      - '**.md'
-      - '.github/actions/**'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/workflows/e2e-test-dispatch-workflow.yaml'
-      - '.github/workflows/gha-e2e-tests.yaml'
-      - '.github/workflows/arc-publish.yaml'
-      - '.github/workflows/arc-publish-chart.yaml'
-      - '.github/workflows/gha-publish-chart.yaml'
-      - '.github/workflows/arc-release-runners.yaml'
-      - '.github/workflows/global-run-codeql.yaml'
-      - '.github/workflows/global-run-first-interaction.yaml'
-      - '.github/workflows/global-run-stale.yaml'
-      - '.github/workflows/arc-update-runners-scheduled.yaml'
-      - '.github/workflows/validate-arc.yaml'
-      - '.github/workflows/arc-validate-chart.yaml'
-      - '.github/workflows/gha-validate-chart.yaml'
-      - '.github/workflows/arc-validate-runners.yaml'
-      - '.github/dependabot.yml'
-      - '.github/RELEASE_NOTE_TEMPLATE.md'
-      - 'runner/**'
-      - '.gitignore'
-      - 'PROJECT'
-      - 'LICENSE'
-      - 'Makefile'
+      - "**.md"
+      - ".github/actions/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/e2e-test-dispatch-workflow.yaml"
+      - ".github/workflows/gha-e2e-tests.yaml"
+      - ".github/workflows/arc-publish.yaml"
+      - ".github/workflows/arc-publish-chart.yaml"
+      - ".github/workflows/gha-publish-chart.yaml"
+      - ".github/workflows/arc-release-runners.yaml"
+      - ".github/workflows/global-run-codeql.yaml"
+      - ".github/workflows/global-run-first-interaction.yaml"
+      - ".github/workflows/global-run-stale.yaml"
+      - ".github/workflows/arc-update-runners-scheduled.yaml"
+      - ".github/workflows/validate-arc.yaml"
+      - ".github/workflows/arc-validate-chart.yaml"
+      - ".github/workflows/gha-validate-chart.yaml"
+      - ".github/workflows/arc-validate-runners.yaml"
+      - ".github/dependabot.yml"
+      - ".github/RELEASE_NOTE_TEMPLATE.md"
+      - "runner/**"
+      - ".gitignore"
+      - "PROJECT"
+      - "LICENSE"
+      - "Makefile"
 
 # https://docs.github.com/en/rest/overview/permissions-required-for-github-apps
 permissions:
@@ -55,11 +55,11 @@ jobs:
       TARGET_REPO: actions-runner-controller
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
@@ -90,10 +90,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -110,16 +110,16 @@ jobs:
           echo "repository_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
         with:
           version: latest
 
       # Unstable builds - run at your own risk
       - name: Build and Push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
           context: .
           file: ./Dockerfile

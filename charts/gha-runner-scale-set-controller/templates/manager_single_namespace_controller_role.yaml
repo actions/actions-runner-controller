@@ -3,7 +3,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceRoleName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
 rules:
 - apiGroups:
   - actions.github.com

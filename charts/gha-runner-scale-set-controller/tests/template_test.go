@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Chart struct {
@@ -366,6 +367,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--metrics-addr=0",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
+		"--runner-max-concurrent-reconciles=2",
 	}
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
@@ -518,6 +520,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -646,6 +649,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -679,13 +683,15 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 
 	expectedArgs := []string{
 		"--auto-scaling-runner-set-only",
-		"--auto-scaler-image-pull-secrets=dockerhub,ghcr",
+		"--auto-scaler-image-pull-secrets=dockerhub",
+		"--auto-scaler-image-pull-secrets=ghcr",
 		"--log-level=debug",
 		"--log-format=text",
 		"--update-strategy=immediate",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -776,6 +782,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
+		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -1072,4 +1079,148 @@ func TestDeployment_excludeLabelPropagationPrefixes(t *testing.T) {
 
 	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=prefix.com/")
 	assert.Contains(t, container.Args, "--exclude-label-propagation-prefix=complete.io/label")
+}
+
+func TestNamespaceOverride(t *testing.T) {
+	t.Parallel()
+
+	chartPath := "../../gha-runner-scale-set-controller"
+
+	releaseName := "test"
+	releaseNamespace := "test-" + strings.ToLower(random.UniqueId())
+	namespaceOverride := "test-" + strings.ToLower(random.UniqueId())
+
+	tt := map[string]struct {
+		file          string
+		options       *helm.Options
+		wantNamespace string
+	}{
+		"deployment": {
+			file: "deployment.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"leader_election_role_binding": {
+			file: "leader_election_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"leader_election_role": {
+			file: "leader_election_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_listener_role_binding": {
+			file: "manager_listener_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_listener_role": {
+			file: "manager_listener_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride": namespaceOverride,
+					"replicaCount":      "2",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_single_namespace_controller_role": {
+			file: "manager_single_namespace_controller_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "true",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_single_namespace_controller_role_binding": {
+			file: "manager_single_namespace_controller_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "true",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: namespaceOverride,
+		},
+		"manager_single_namespace_watch_role": {
+			file: "manager_single_namespace_watch_role.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "target-ns",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: "target-ns",
+		},
+		"manager_single_namespace_watch_role_binding": {
+			file: "manager_single_namespace_watch_role_binding.yaml",
+			options: &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"namespaceOverride":          namespaceOverride,
+					"flags.watchSingleNamespace": "target-ns",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", releaseNamespace),
+			},
+			wantNamespace: "target-ns",
+		},
+	}
+
+	for name, tc := range tt {
+		c := tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			templateFile := filepath.Join("./templates", c.file)
+
+			output, err := helm.RenderTemplateE(t, c.options, chartPath, releaseName, []string{templateFile})
+			if err != nil {
+				t.Errorf("Error rendering template %s from chart %s: %s", c.file, chartPath, err)
+			}
+
+			type object struct {
+				Metadata metav1.ObjectMeta
+			}
+			var renderedObject object
+			helm.UnmarshalK8SYaml(t, output, &renderedObject)
+			assert.Equal(t, tc.wantNamespace, renderedObject.Metadata.Namespace)
+		})
+	}
 }

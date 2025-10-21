@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -35,6 +37,10 @@ const (
 	ephemeralRunnerSetTestGitHubToken = "gh_token"
 )
 
+func TestPrecomputedConstants(t *testing.T) {
+	require.Equal(t, len(failedRunnerBackoff), maxFailures+1)
+}
+
 var _ = Describe("Test EphemeralRunnerSet controller", func() {
 	var ctx context.Context
 	var mgr ctrl.Manager
@@ -48,10 +54,15 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller := &EphemeralRunnerSetReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			Log:           logf.Log,
-			ActionsClient: fake.NewMultiClient(),
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   mgr.GetClient(),
+					multiClient: fake.NewMultiClient(),
+				},
+			},
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1098,10 +1109,15 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
 		controller := &EphemeralRunnerSetReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			Log:           logf.Log,
-			ActionsClient: actions.NewMultiClient(logr.Discard()),
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   mgr.GetClient(),
+					multiClient: actions.NewMultiClient(logr.Discard()),
+				},
+			},
 		}
 		err := controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1397,10 +1413,15 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 		Expect(err).NotTo(HaveOccurred(), "failed to create configmap with root CAs")
 
 		controller := &EphemeralRunnerSetReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			Log:           logf.Log,
-			ActionsClient: actions.NewMultiClient(logr.Discard()),
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: &SecretResolver{
+					k8sClient:   mgr.GetClient(),
+					multiClient: actions.NewMultiClient(logr.Discard()),
+				},
+			},
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
@@ -1439,7 +1460,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
-					GitHubServerTLS: &v1alpha1.GitHubServerTLSConfig{
+					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{

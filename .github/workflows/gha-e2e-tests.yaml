@@ -16,7 +16,7 @@ env:
   TARGET_ORG: actions-runner-controller
   TARGET_REPO: arc_e2e_test_dummy
   IMAGE_NAME: "arc-test-image"
-  IMAGE_VERSION: "0.9.3"
+  IMAGE_VERSION: "0.13.0"
 
 concurrency:
   # This will make sure we only apply the concurrency limits on pull requests
@@ -33,7 +33,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -103,6 +103,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -122,7 +124,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -194,6 +196,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -213,7 +217,7 @@ jobs:
     env:
       WORKFLOW_FILE: arc-test-dind-workflow.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -284,6 +288,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -303,7 +309,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-kubernetes-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -383,6 +389,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -402,7 +410,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -484,6 +492,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -503,7 +513,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -579,6 +589,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -598,7 +610,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-workflow.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -699,6 +711,8 @@ jobs:
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
 
+          sleep 60
+
       - name: Test ARC E2E
         uses: ./.github/actions/execute-assert-arc-e2e
         timeout-minutes: 10
@@ -718,7 +732,7 @@ jobs:
     env:
       WORKFLOW_FILE: "arc-test-sleepy-matrix.yaml"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.head_ref}}
 
@@ -788,6 +802,8 @@ jobs:
           done
           kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
           kubectl get pod -n arc-systems
+
+          sleep 60
 
       - name: Trigger long running jobs and wait for runners to pick them up
         uses: ./.github/actions/execute-assert-arc-e2e
@@ -888,7 +904,7 @@ jobs:
     env:
       WORKFLOW_FILE: arc-test-workflow.yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
 

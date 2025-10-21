@@ -9,17 +9,17 @@ on:
   workflow_dispatch:
     inputs:
       release_tag_name:
-        description: 'Tag name of the release to publish'
+        description: "Tag name of the release to publish"
         required: true
       push_to_registries:
-        description: 'Push images to registries'
+        description: "Push images to registries"
         required: true
         type: boolean
         default: false
 
 permissions:
- contents: write
- packages: write
+  contents: write
+  packages: write
 
 env:
   TARGET_ORG: actions-runner-controller
@@ -39,11 +39,11 @@ jobs:
     if: ${{ !startsWith(github.event.inputs.release_tag_name, 'gha-runner-scale-set-') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Install tools
         run: |
@@ -73,7 +73,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}

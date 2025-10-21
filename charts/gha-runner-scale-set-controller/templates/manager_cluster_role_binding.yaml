@@ -10,5 +10,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
 {{- end }}

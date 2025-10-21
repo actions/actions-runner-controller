@@ -4,16 +4,16 @@ on:
     branches:
       - master
     paths:
-      - '.github/workflows/go.yaml'
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
+      - ".github/workflows/go.yaml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
   pull_request:
     paths:
-      - '.github/workflows/go.yaml'
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
+      - ".github/workflows/go.yaml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
 
 permissions:
   contents: read
@@ -29,10 +29,10 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: false
       - name: fmt
         run: go fmt ./...
@@ -42,24 +42,24 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: false
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9
         with:
           only-new-issues: true
-          version: v1.55.2
+          version: v2.5.0
 
   generate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: false
       - name: Generate
         run: make generate
@@ -69,10 +69,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
       - run: make manifests
       - name: Check diff
         run: git diff --exit-code
