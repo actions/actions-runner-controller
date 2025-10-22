@@ -261,11 +261,12 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeTrue(), "Ephemeral runner should eventually be deleted")
 		})
 
-		It("It should failed if a pod template is invalid", func() {
-			invalideEphemeralRunner := newExampleRunner("invalid-ephemeral-runner", autoscalingNS.Name, configSecret.Name)
-			invalideEphemeralRunner.Spec.Spec.PriorityClassName = "notexist"
+		It("It should failed and eventually retry if a pod template is invalid", func() {
 
-			err := k8sClient.Create(ctx, invalideEphemeralRunner)
+			invalidEphemeralRunner := newExampleRunner("invalid-ephemeral-runner", autoscalingNS.Name, configSecret.Name)
+			invalidEphemeralRunner.Spec.Spec.PriorityClassName = "notexist"
+
+			err := k8sClient.Create(ctx, invalidEphemeralRunner)
 			Expect(err).To(BeNil())
 
 			updated := new(v1alpha1.EphemeralRunner)
@@ -273,7 +274,7 @@ var _ = Describe("EphemeralRunner", func() {
 				func() (corev1.PodPhase, error) {
 					err := k8sClient.Get(
 						ctx,
-						client.ObjectKey{Name: invalideEphemeralRunner.Name, Namespace: invalideEphemeralRunner.Namespace},
+						client.ObjectKey{Name: invalidEphemeralRunner.Name, Namespace: invalidEphemeralRunner.Namespace},
 						updated,
 					)
 					if err != nil {
@@ -287,6 +288,16 @@ var _ = Describe("EphemeralRunner", func() {
 
 			Expect(updated.Status.Reason).Should(Equal("InvalidPod"))
 			Expect(updated.Status.Message).Should(Equal("Failed to create the pod: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
+
+			er := new(v1alpha1.EphemeralRunner)
+			Eventually(
+				func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: invalidEphemeralRunner.Name, Namespace: invalidEphemeralRunner.Namespace}, er)
+					return kerrors.IsNotFound(err)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "Ephemeral runner should eventually be deleted")
 		})
 
 		It("It should clean up resources when deleted", func() {
