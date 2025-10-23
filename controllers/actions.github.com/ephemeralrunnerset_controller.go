@@ -23,6 +23,8 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
@@ -42,6 +44,9 @@ import (
 
 const (
 	ephemeralRunnerSetFinalizerName = "ephemeralrunner.actions.github.com/finalizer"
+	// maxConcurrentRunnerCreations limits the number of concurrent runner creation operations
+	// to prevent overwhelming the Kubernetes API server during large scale-up events.
+	maxConcurrentRunnerCreations = 10
 )
 
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
@@ -356,31 +361,64 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 }
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
+// This function creates runners in parallel with a concurrency limit to optimize performance during
+// large scale-up operations while preventing overwhelming the Kubernetes API server.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
 	// Track multiple errors at once and return the bundle.
-	errs := make([]error, 0)
+	var errs []error
+	var errMu sync.Mutex
+
+	// Use a semaphore pattern to limit concurrent operations
+	semaphore := make(chan struct{}, maxConcurrentRunnerCreations)
+	var wg sync.WaitGroup
+
+	// Track progress for logging
+	var completed atomic.Int32
+
 	for i := 0; i < count; i++ {
-		ephemeralRunner := r.newEphemeralRunner(runnerSet)
-		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
-			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
-		}
+		wg.Add(1)
 
-		// Make sure that we own the resource we create.
-		if err := ctrl.SetControllerReference(runnerSet, ephemeralRunner, r.Scheme); err != nil {
-			log.Error(err, "failed to set controller reference on ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
+		// Capture loop variable
+		index := i
 
-		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
-		if err := r.Create(ctx, ephemeralRunner); err != nil {
-			log.Error(err, "failed to make ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
+		go func() {
+			defer wg.Done()
 
-		log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			ephemeralRunner := r.newEphemeralRunner(runnerSet)
+			if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+				ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
+			}
+
+			// Make sure that we own the resource we create.
+			if err := ctrl.SetControllerReference(runnerSet, ephemeralRunner, r.Scheme); err != nil {
+				log.Error(err, "failed to set controller reference on ephemeral runner")
+				errMu.Lock()
+				errs = append(errs, err)
+				errMu.Unlock()
+				return
+			}
+
+			progress := completed.Add(1)
+			log.Info("Creating new ephemeral runner", "progress", progress, "total", count)
+
+			if err := r.Create(ctx, ephemeralRunner); err != nil {
+				log.Error(err, "failed to make ephemeral runner", "index", index+1)
+				errMu.Lock()
+				errs = append(errs, err)
+				errMu.Unlock()
+				return
+			}
+
+			log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+		}()
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	return multierr.Combine(errs...)
 }
