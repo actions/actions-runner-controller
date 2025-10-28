@@ -1,4 +1,6 @@
 name: Release ARC Runner Images
+permissions:
+  contents: read
 
 # Revert to https://github.com/actions-runner-controller/releases#releases
 # for details on why we use this approach
