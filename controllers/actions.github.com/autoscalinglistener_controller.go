@@ -19,6 +19,7 @@ package actionsgithubcom
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -84,14 +85,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanupResources(ctx, autoscalingListener, log)
+		requeue, err := r.cleanupResources(ctx, autoscalingListener, log)
 		if err != nil {
 			log.Error(err, "Failed to cleanup resources after deletion")
 			return ctrl.Result{}, err
 		}
-		if !done {
+		if requeue {
 			log.Info("Waiting for resources to be deleted before removing finalizer")
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -272,7 +273,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (done bool, err error) {
+func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (requeue bool, err error) {
 	logger.Info("Cleaning up the listener pod")
 	listenerPod := new(corev1.Pod)
 	err = r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, listenerPod)
@@ -284,7 +285,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener pod: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case kerrors.IsNotFound(err):
 		_ = r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
 	default:
@@ -302,7 +303,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener config secret: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener config secret: %w", err)
 	}
@@ -319,7 +320,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 					return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
 				}
 			}
-			return false, nil
+			requeue = true
 		case !kerrors.IsNotFound(err):
 			return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 		}
@@ -336,7 +337,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener role binding: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener role binding: %w", err)
 	}
@@ -352,7 +353,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener role: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener role: %w", err)
 	}
@@ -369,13 +370,13 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener service account: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener service account: %w", err)
 	}
 	logger.Info("Listener service account is deleted")
 
-	return true, nil
+	return requeue, nil
 }
 
 func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
