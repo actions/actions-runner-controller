@@ -649,6 +649,11 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		return ctrl.Result{}, err
 	}
 
+	if err := ctrl.SetControllerReference(autoscalingRunnerSet, autoscalingListener, r.Scheme); err != nil {
+		log.Error(err, "Failed to set controller reference to AutoscalingListener")
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Creating a new AutoscalingListener resource", "name", autoscalingListener.Name, "namespace", autoscalingListener.Namespace)
 	if err := r.Create(ctx, autoscalingListener); err != nil {
 		log.Error(err, "Failed to create AutoscalingListener resource")
