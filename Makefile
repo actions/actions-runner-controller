@@ -6,7 +6,7 @@ endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
 COMMIT_SHA = $(shell git rev-parse HEAD)
-RUNNER_VERSION ?= 2.328.0
+RUNNER_VERSION ?= 2.329.0
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -307,7 +307,7 @@ github-release: release
 # Otherwise we get errors like the below:
 #   Error: failed to install CRD crds/actions.summerwind.dev_runnersets.yaml: CustomResourceDefinition.apiextensions.k8s.io "runnersets.actions.summerwind.dev" is invalid: [spec.validation.openAPIV3Schema.properties[spec].properties[template].properties[spec].properties[containers].items.properties[ports].items.properties[protocol].default: Required value: this property is in x-kubernetes-list-map-keys, so it must have a default or be a required property, spec.validation.openAPIV3Schema.properties[spec].properties[template].properties[spec].properties[initContainers].items.properties[ports].items.properties[protocol].default: Required value: this property is in x-kubernetes-list-map-keys, so it must have a default or be a required property]
 #
-# Note that controller-gen newer than 0.7.0 is needed due to https://github.com/kubernetes-sigs/controller-tools/issues/448
+# Note that controller-gen newer than 0.8.0 is needed due to https://github.com/kubernetes-sigs/controller-tools/issues/448
 # Otherwise ObjectMeta embedded in Spec results in empty on the storage.
 controller-gen:
 ifeq (, $(shell which controller-gen))
