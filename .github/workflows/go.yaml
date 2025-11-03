@@ -78,7 +78,7 @@ jobs:
         run: git diff --exit-code
       - name: Install kubebuilder
         run: |
-          curl -D headers.txt -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.26.1-linux-amd64.tar.gz" -o kubebuilder-tools
+          curl -D headers.txt -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.30.0-linux-amd64.tar.gz" -o kubebuilder-tools
           echo "$(grep -i etag headers.txt -m 1 | cut -d'"' -f2) kubebuilder-tools" > sum
           md5sum -c sum
           tar -zvxf kubebuilder-tools
