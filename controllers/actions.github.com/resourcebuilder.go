@@ -715,11 +715,11 @@ func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) 
 }
 
 func proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) string {
-	return fmt.Sprintf("%v-%v-runner-proxy", ephemeralRunnerSet.Name, hashSuffix(
-		ephemeralRunnerSet.Namespace,
-		ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
-		ephemeralRunnerSet.GitHubConfigUrl(),
-	))
+	namespaceHash := hash.FNVHashString(ephemeralRunnerSet.Namespace)
+	if len(namespaceHash) > 8 {
+		namespaceHash = namespaceHash[:8]
+	}
+	return fmt.Sprintf("%v-%v-runner-proxy", ephemeralRunnerSet.Name, namespaceHash)
 }
 
 func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
