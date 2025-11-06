@@ -304,7 +304,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					}
 					return ctrl.Result{}, nil
 				case isResourceQuotaExceeded:
-					log.Error(err, "Resource quota is exceeded; reqeueue in 30s to retry pod creation")
+					log.Error(err, "Resource quota is exceeded; requeue in 30s to retry pod creation")
 					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 				default:
 					// other forbidden errors
