@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -282,7 +283,34 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		case kerrors.IsAlreadyExists(err):
 			log.Info("Runner pod already exists. Waiting for the pod event to be received")
 			return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
-		case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
+		case kerrors.IsInvalid(err):
+			log.Error(err, "Failed to create a pod due to unrecoverable failure")
+			errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
+			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
+				log.Error(err, "Failed to set ephemeral runner to phase Failed")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		case kerrors.IsForbidden(err):
+			if status, ok := err.(kerrors.APIStatus); ok || errors.As(err, &status) {
+				isResourceQuotaExceeded := strings.Contains(status.Status().Message, "exceeded quota:")
+				isAboutToExpire := ephemeralRunner.CreationTimestamp.Time.Add(10 * time.Minute).Before(time.Now())
+				switch {
+				case isResourceQuotaExceeded && isAboutToExpire:
+					log.Error(err, "Failed to create a pod due to resource quota exceeded and the ephemeral runner is about to expire; re-creating the ephemeral runner")
+					if err := r.Delete(ctx, ephemeralRunner); err != nil {
+						log.Error(err, "Failed to delete the ephemeral runner")
+						return ctrl.Result{}, err
+					}
+					return ctrl.Result{}, nil
+				case isResourceQuotaExceeded:
+					log.Error(err, "Resource quota is exceeded; reqeueue in 30s to retry pod creation")
+					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				default:
+					// other forbidden errors
+					// fallthrough to the default handling below
+				}
+			}
 			log.Error(err, "Failed to create a pod due to unrecoverable failure")
 			errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
 			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
