@@ -1,0 +1,94 @@
+apiVersion: actions.github.com/v1alpha1
+kind: AutoscalingRunnerSet
+metadata:
+  name: {{ include "autoscaling-runner-set.name" . | quote }}
+  namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+spec:
+  githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}
+  githubConfigSecret: {{ include "githubsecret.name" . | quote }}
+  runnerGroup: {{ .Values.scaleset.runnerGroup | quote }}
+
+  {{- if .Values.githubServerTLS }}
+  githubServerTLS:
+    {{- with .Values.githubServerTLS.certificateFrom }}
+    certificateFrom:
+      configMapKeyRef:
+        name: {{ .configMapKeyRef.name }}
+        key: {{ .configMapKeyRef.key }}
+    {{- end }}
+  {{- end }}
+
+  {{- if and .Values.keyVault .Values.keyVault.type }}
+  vaultConfig:
+    type: {{ .Values.keyVault.type }}
+    {{- if .Values.keyVault.proxy }}
+    proxy: {{- toYaml .Values.keyVault.proxy | nindent 6 }}
+    {{- end }}
+    {{- if eq .Values.keyVault.type "azure_key_vault" }}
+    azureKeyVault:
+      url: {{ .Values.keyVault.azureKeyVault.url }}
+      tenantId: {{ .Values.keyVault.azureKeyVault.tenantId }}
+      clientId: {{ .Values.keyVault.azureKeyVault.clientId }}
+      certificatePath: {{ .Values.keyVault.azureKeyVault.certificatePath }}
+      secretKey: {{ .Values.keyVault.azureKeyVault.secretKey }}
+    {{- else }}
+    {{- fail "Unsupported keyVault type: " .Values.keyVault.type }}
+    {{- end }}
+  {{- end }}
+
+  {{- if .Values.proxy }}
+  proxy:
+    {{- if .Values.proxy.http }}
+    http:
+      url: {{ .Values.proxy.http.url }}
+      {{- if .Values.proxy.http.credentialSecretRef }}
+      credentialSecretRef: {{ .Values.proxy.http.credentialSecretRef }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.proxy.https }}
+    https:
+      url: {{ .Values.proxy.https.url }}
+      {{- if .Values.proxy.https.credentialSecretRef }}
+      credentialSecretRef: {{ .Values.proxy.https.credentialSecretRef }}
+      {{- end }}
+    {{- end }}
+    {{- if and .Values.proxy.noProxy (kindIs "slice" .Values.proxy.noProxy) }}
+    noProxy: {{ .Values.proxy.noProxy | toYaml | nindent 6}}
+    {{- end }}
+  {{- end }}
+
+  {{- if and (or (kindIs "int64" .Values.scaleset.minRunners) (kindIs "float64" .Values.scaleset.minRunners)) (or (kindIs "int64" .Values.scaleset.maxRunners) (kindIs "float64" .Values.scaleset.maxRunners)) }}
+    {{- if gt .Values.scaleset.minRunners .Values.scaleset.maxRunners }}
+      {{- fail "maxRunners has to be greater or equal to minRunners" }}
+    {{- end }}
+  {{- end }}
+
+  {{- if or (kindIs "int64" .Values.scaleset.maxRunners) (kindIs "float64" .Values.scaleset.maxRunners)}}
+    {{- if lt (.Values.scaleset.maxRunners | int) 0 }}
+      {{- fail "maxRunners has to be greater or equal to 0" }}
+    {{- end }}
+  maxRunners: {{ .Values.scaleset.maxRunners | int }}
+  {{- end }}
+
+  {{- if or (kindIs "int64" .Values.scaleset.minRunners) (kindIs "float64" .Values.scaleset.minRunners) }}
+    {{- if lt (.Values.scaleset.minRunners | int) 0 }}
+      {{- fail "minRunners has to be greater or equal to 0" }}
+    {{- end }}
+  minRunners: {{ .Values.scaleset.minRunners | int }}
+  {{- end }}
+
+  {{- with .Values.listenerPodTemplate }}
+  listenerTemplate:
+    {{- toYaml . | nindent 4}}
+  {{- end }}
+
+  {{- with .Values.listenerMetrics }}
+  listenerMetrics:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  template:
+    spec:
+      containers:
+        - name: runner
+          {{- include "runner-container-spec" . | nindent 10 }}
