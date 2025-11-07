@@ -1,0 +1,36 @@
+suite: "Controller Manager ClusterRoleBinding"
+templates:
+  - manager_cluster_role_binding.yaml
+tests:
+  - it: should render when watchSingleNamespace is empty
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: apiVersion
+          value: "rbac.authorization.k8s.io/v1"
+      - equal:
+          path: kind
+          value: "ClusterRoleBinding"
+      - equal:
+          path: subjects[0].kind
+          value: "ServiceAccount"
+      - equal:
+          path: subjects[0].name
+          value: "test-name-gha-rs-controller"
+      - equal:
+          path: subjects[0].namespace
+          value: "test-namespace"
+
+  - it: should not render when watchSingleNamespace is set
+    set:
+      controller:
+        flags:
+          watchSingleNamespace: "my-ns"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - hasDocuments:
+          count: 0

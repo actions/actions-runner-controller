@@ -1,0 +1,71 @@
+suite: "Test AutoscalingRunnerSet MinMax Runners"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should set minRunners and maxRunners correctly
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      scaleset.minRunners: 2
+      scaleset.maxRunners: 5
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.minRunners
+          value: 2
+      - equal:
+          path: spec.maxRunners
+          value: 5
+  - it: should fail when minRunners is greater than maxRunners
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      scaleset.minRunners: 6
+      scaleset.maxRunners: 5
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate: {}
+  - it: should work when minRunners equals maxRunners
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      scaleset.minRunners: 5
+      scaleset.maxRunners: 5
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.minRunners
+          value: 5
+      - equal:
+          path: spec.maxRunners
+          value: 5
+  - it: should not set minRunners and maxRunners when not provided
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists: 
+          path: spec.minRunners
+      - notExists:
+          path: spec.maxRunners

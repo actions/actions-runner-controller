@@ -1,0 +1,45 @@
+suite: "Controller Deployment env"
+templates:
+  - deployment.yaml
+tests:
+  - it: should not render envFrom in manager container
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+      - notExists:
+          path: spec.template.spec.containers[0].ports
+
+  - it: should include extra env entries from values
+    set:
+      controller:
+        manager:
+          env:
+            - name: "FOO"
+              value: "bar"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "FOO"
+            value: "bar"
+
+  - it: should enable leader election when replicaCount > 1
+    set:
+      controller:
+        replicaCount: 2
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--enable-leader-election"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--leader-election-id=test-name-gha-rs-controller"

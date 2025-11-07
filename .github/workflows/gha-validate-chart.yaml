@@ -61,6 +61,19 @@ jobs:
           if [[ -n "$changed" ]]; then
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
+          echo "changed_charts<<EOF" >> $GITHUB_OUTPUT
+          echo "$changed" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Install helm-unittest
+        if: contains(steps.list-changed.outputs.changed_charts, 'charts/gha-runner-scale-set-controller-dev')
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.6.3
+
+      - name: Run helm-unittest (gha-runner-scale-set-controller-dev)
+        if: contains(steps.list-changed.outputs.changed_charts, 'charts/gha-runner-scale-set-controller-dev')
+        run: |
+          helm unittest ./charts/gha-runner-scale-set-controller-dev/
 
       - name: Run chart-testing (lint)
         run: |

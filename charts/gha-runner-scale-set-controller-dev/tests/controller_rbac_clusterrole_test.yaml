@@ -1,0 +1,37 @@
+suite: "Controller RBAC cluster"
+templates:
+  - manager_cluster_role.yaml
+tests:
+  - it: should render manager ClusterRole when watchSingleNamespace is empty
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: kind
+          value: "ClusterRole"
+      - equal:
+          path: metadata.name
+          value: "test-arc-gha-rs-controller"
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - pods
+            verbs:
+              - list
+              - watch
+
+  - it: should not render manager ClusterRole when watchSingleNamespace is set
+    set:
+      controller:
+        flags:
+          watchSingleNamespace: "demo"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,0 +1,68 @@
+suite: "Controller RBAC listener"
+templates:
+  - manager_listener_role.yaml
+  - manager_listener_role_binding.yaml
+tests:
+  - it: should render listener role with expected rules
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: kind
+          value: "Role"
+        template: manager_listener_role.yaml
+      - equal:
+          path: metadata.name
+          value: "test-arc-gha-rs-controller-listener"
+        template: manager_listener_role.yaml
+      - equal:
+          path: metadata.namespace
+          value: "test-ns"
+        template: manager_listener_role.yaml
+      - equal:
+          path: rules[0].resources[0]
+          value: "pods"
+        template: manager_listener_role.yaml
+      - equal:
+          path: rules[1].resources[0]
+          value: "pods/status"
+        template: manager_listener_role.yaml
+      - equal:
+          path: rules[2].resources[0]
+          value: "secrets"
+        template: manager_listener_role.yaml
+      - equal:
+          path: rules[3].resources[0]
+          value: "serviceaccounts"
+        template: manager_listener_role.yaml
+
+  - it: should bind listener role to controller serviceaccount
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: kind
+          value: "RoleBinding"
+        template: manager_listener_role_binding.yaml
+      - equal:
+          path: metadata.name
+          value: "test-arc-gha-rs-controller-listener"
+        template: manager_listener_role_binding.yaml
+      - equal:
+          path: metadata.namespace
+          value: "test-ns"
+        template: manager_listener_role_binding.yaml
+      - equal:
+          path: roleRef.name
+          value: "test-arc-gha-rs-controller-listener"
+        template: manager_listener_role_binding.yaml
+      - equal:
+          path: subjects[0].name
+          value: "test-arc-gha-rs-controller"
+        template: manager_listener_role_binding.yaml
+      - equal:
+          path: subjects[0].namespace
+          value: "test-ns"
+        template: manager_listener_role_binding.yaml

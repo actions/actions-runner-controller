@@ -1,0 +1,52 @@
+suite: "Controller Deployment pod extra fields"
+templates:
+  - deployment.yaml
+tests:
+  - it: should render extra pod spec fields from controller.pod
+    set:
+      controller:
+        pod:
+          nodeSelector:
+            kubernetes.io/os: linux
+          tolerations:
+            - key: "dedicated"
+              operator: "Equal"
+              value: "arc"
+              effect: "NoSchedule"
+          hostNetwork: true
+          dnsPolicy: "ClusterFirstWithHostNet"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/os"]
+          value: "linux"
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: "dedicated"
+      - equal:
+          path: spec.template.spec.tolerations[0].value
+          value: "arc"
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: "ClusterFirstWithHostNet"
+
+  - it: should not allow overriding serviceAccountName via controller.pod
+    set:
+      controller:
+        pod:
+          serviceAccountName: "hacker-sa"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "test-name-gha-rs-controller"
+      - notEqual:
+          path: spec.template.spec.serviceAccountName
+          value: "hacker-sa"

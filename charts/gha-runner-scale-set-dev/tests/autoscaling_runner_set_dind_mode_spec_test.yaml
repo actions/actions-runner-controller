@@ -1,0 +1,342 @@
+suite: "AutoscalingRunnerSet dind mode podspec"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render the default dind pod spec (initContainers, runner container, volumes)
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: init-dind-externals
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/actions/actions-runner:latest
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: cp
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: dind
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: docker:dind
+      - equal:
+          path: spec.template.spec.initContainers[1].args[0]
+          value: dockerd
+      - equal:
+          path: spec.template.spec.initContainers[1].args[1]
+          value: --host=unix:///var/run/docker.sock
+      - equal:
+          path: spec.template.spec.initContainers[1].args[2]
+          value: --group=$(DOCKER_GROUP_GID)
+      - equal:
+          path: spec.template.spec.initContainers[1].env[0].name
+          value: DOCKER_GROUP_GID
+      - equal:
+          path: spec.template.spec.initContainers[1].env[0].value
+          value: "123"
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.privileged
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].startupProbe.exec.command[0]
+          value: docker
+      - equal:
+          path: spec.template.spec.initContainers[1].startupProbe.exec.command[1]
+          value: info
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[0].name
+          value: work
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[0].mountPath
+          value: /home/runner/_work
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[1].name
+          value: dind-sock
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[1].mountPath
+          value: /var/run
+
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/actions/actions-runner:latest
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: DOCKER_HOST
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: unix:///var/run/docker.sock
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "120"
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: work
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /home/runner/_work
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: dind-sock
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /var/run
+
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: work
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: dind-sock
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: dind-externals
+            emptyDir: {}
+
+  - it: should omit init-dind-externals and dind-externals volume when copyExternals is false
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        dind:
+          copyExternals: false
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: dind
+      - notExists:
+          path: spec.template.spec.initContainers[1]
+      - notExists:
+          path: spec.template.spec.volumes[2]
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts[2]
+
+  - it: should allow overriding dind container name, image, and securityContext
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        dind:
+          container:
+            name: "dockerd-custom"
+            image: "docker:27.3-dind"
+            securityContext:
+              privileged: false
+              runAsUser: 1000
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: dockerd-custom
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: docker:27.3-dind
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.privileged
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 1000
+
+  - it: should respect dockerSock override in DOCKER_HOST, mountPath, and dind args
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        dind:
+          dockerSock: "unix:///var/run/custom/docker.sock"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: DOCKER_HOST
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: unix:///var/run/custom/docker.sock
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /var/run/custom
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[1].mountPath
+          value: /var/run/custom
+      - equal:
+          path: spec.template.spec.initContainers[1].args[1]
+          value: --host=unix:///var/run/custom/docker.sock
+
+  - it: should respect waitForDockerInSeconds override
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        dind:
+          waitForDockerInSeconds: 30
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "30"
+
+  - it: should include extraInitContainers in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        pod:
+          spec:
+            initContainers:
+              - name: "extra-init-1"
+                image: "busybox:1.36"
+                imagePullPolicy: IfNotPresent
+                command:
+                  - "sh"
+                  - "-c"
+                args:
+                  - "echo extra-init && env | grep FOO"
+                env:
+                  - name: FOO
+                    value: BAR
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 16Mi
+                  limits:
+                    cpu: 100m
+                    memory: 64Mi
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                volumeMounts:
+                  - name: work
+                    mountPath: /work
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: init-dind-externals
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: extra-init-1
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: busybox:1.36
+      - equal:
+          path: spec.template.spec.initContainers[1].imagePullPolicy
+          value: IfNotPresent
+      - equal:
+          path: spec.template.spec.initContainers[1].command[0]
+          value: sh
+      - equal:
+          path: spec.template.spec.initContainers[1].args[0]
+          value: echo extra-init && env | grep FOO
+      - equal:
+          path: spec.template.spec.initContainers[1].env[0].name
+          value: FOO
+      - equal:
+          path: spec.template.spec.initContainers[1].env[0].value
+          value: BAR
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 10m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.memory
+          value: 16Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[0].name
+          value: work
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[0].mountPath
+          value: /work
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: dind
+
+  - it: should include extraVolumes in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        pod:
+          spec:
+            volumes:
+              - name: "cache"
+                emptyDir: {}
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cache
+            emptyDir: {}

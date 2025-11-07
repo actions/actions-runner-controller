@@ -1,0 +1,54 @@
+suite: "Controller RBAC single-namespace mode"
+templates:
+  - manager_single_namespace_controller_role.yaml
+  - manager_single_namespace_controller_role_binding.yaml
+  - manager_single_namespace_watch_role.yaml
+  - manager_single_namespace_watch_role_binding.yaml
+tests:
+  - it: should not render single-namespace roles when watchSingleNamespace is empty
+    set:
+      controller:
+        flags:
+          watchSingleNamespace: ""
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: manager_single_namespace_controller_role.yaml
+      - hasDocuments:
+          count: 0
+        template: manager_single_namespace_controller_role_binding.yaml
+      - hasDocuments:
+          count: 0
+        template: manager_single_namespace_watch_role.yaml
+      - hasDocuments:
+          count: 0
+        template: manager_single_namespace_watch_role_binding.yaml
+
+  - it: should render roles in controller namespace and watch namespace
+    set:
+      controller:
+        flags:
+          watchSingleNamespace: "demo"
+    release:
+      name: "test-arc"
+      namespace: "ctrl-ns"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "ctrl-ns"
+        template: manager_single_namespace_controller_role.yaml
+      - equal:
+          path: metadata.namespace
+          value: "ctrl-ns"
+        template: manager_single_namespace_controller_role_binding.yaml
+      - equal:
+          path: metadata.namespace
+          value: "demo"
+        template: manager_single_namespace_watch_role.yaml
+      - equal:
+          path: metadata.namespace
+          value: "demo"
+        template: manager_single_namespace_watch_role_binding.yaml

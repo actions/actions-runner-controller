@@ -1,0 +1,87 @@
+suite: "AutoscalingRunnerSet runner pod metadata"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render runner.pod.metadata labels and annotations merged with common/global metadata
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels:
+              team: "platform"
+            annotations:
+              global-annotation: "1"
+      runner:
+        pod:
+          metadata:
+            labels:
+              purpose: "ci"
+            annotations:
+              pod-annotation: "2"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    chart:
+      appVersion: "0.14.0"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["purpose"]
+          value: "ci"
+      - equal:
+          path: spec.template.metadata.labels["team"]
+          value: "platform"
+      - equal:
+          path: spec.template.metadata.labels["helm.sh/chart"]
+          value: "gha-rs-0.14.0"
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
+      - equal:
+          path: spec.template.metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: spec.template.metadata.annotations["global-annotation"]
+          value: "1"
+      - equal:
+          path: spec.template.metadata.annotations["pod-annotation"]
+          value: "2"
+
+  - it: should drop reserved actions.github.com/* keys from runner.pod.metadata
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata:
+            labels:
+              actions.github.com/scale-set-name: "should-not-override"
+              ok: "yes"
+            annotations:
+              actions.github.com/some-annotation: "should-not-appear"
+              ok-annotation: "yes"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: spec.template.metadata.labels["ok"]
+          value: "yes"
+      - notExists:
+          path: spec.template.metadata.annotations["actions.github.com/some-annotation"]
+      - equal:
+          path: spec.template.metadata.annotations["ok-annotation"]
+          value: "yes"

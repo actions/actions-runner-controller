@@ -1,0 +1,54 @@
+suite: "Controller Deployment extra containers"
+templates:
+  - deployment.yaml
+tests:
+  - it: should render manager container first and then extra containers
+    set:
+      controller:
+        pod:
+          containers:
+            - name: "sidecar"
+              image: "busybox:1.36"
+              command:
+                - "sh"
+                - "-c"
+              args:
+                - "echo hello && sleep 3600"
+            - name: "another"
+              image: "alpine:3.19"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "manager"
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: "sidecar"
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "busybox:1.36"
+      - equal:
+          path: spec.template.spec.containers[1].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.containers[1].args[0]
+          value: "echo hello && sleep 3600"
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: "another"
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: "alpine:3.19"
+
+  - it: should not fail when extra containers are unset
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "manager"
+      - notExists:
+          path: spec.template.spec.containers[1]

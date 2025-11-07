@@ -1,0 +1,73 @@
+suite: "Controller Deployment args"
+templates:
+  - deployment.yaml
+tests:
+  - it: should include metrics-disabled flags by default
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-addr=0"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-metrics-addr=0"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-metrics-endpoint="
+
+  - it: should include watch-single-namespace flag when configured
+    set:
+      controller:
+        flags:
+          watchSingleNamespace: "demo"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--watch-single-namespace=demo"
+
+  - it: should include exclude-label-propagation-prefix flags when configured
+    set:
+      controller:
+        flags:
+          excludeLabelPropagationPrefixes:
+            - "prefix.com/"
+            - "complete.io/label"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--exclude-label-propagation-prefix=prefix.com/"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--exclude-label-propagation-prefix=complete.io/label"
+
+  - it: should render metrics port when metrics are enabled
+    set:
+      controller:
+        metrics:
+          controllerManagerAddr: ":8080"
+          listenerAddr: ":8081"
+          listenerEndpoint: "/metrics"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-addr=:8080"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-metrics-addr=:8081"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-metrics-endpoint=/metrics"

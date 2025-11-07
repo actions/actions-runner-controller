@@ -1,0 +1,45 @@
+suite: AutoscalingRunnerSet runner pod spec passthrough fields
+
+templates:
+  - templates/autoscalingrunnserset.yaml
+
+tests:
+  - it: should apply additional runner.pod.spec fields to the runner pod spec
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            nodeSelector:
+              disktype: ssd
+            tolerations:
+              - key: "dedicated"
+                operator: "Equal"
+                value: "ci"
+                effect: "NoSchedule"
+            priorityClassName: "runner-high"
+            terminationGracePeriodSeconds: 42
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.disktype
+          value: ssd
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: dedicated
+      - equal:
+          path: spec.template.spec.tolerations[0].value
+          value: ci
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: runner-high
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 42

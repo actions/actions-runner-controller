@@ -1,0 +1,91 @@
+suite: "Test Manager RoleBinding Labels"
+templates:
+  - manager_role_binding.yaml
+tests:
+  - it: should render base labels
+    set:
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    chart:
+      appVersion: "0.14.0"
+    asserts:
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: "gha-rs-0.14.0"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "manager-role-binding"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: "gha-rs"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "0.14.0"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-namespace"]
+          value: "test-namespace"
+
+  - it: should merge global and resource labels (resource wins)
+    set:
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels:
+              owner: "platform"
+              environment: "production"
+        managerRoleBinding:
+          metadata:
+            labels:
+              environment: "staging"
+              team: "backend"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    chart:
+      appVersion: "0.14.0"
+    asserts:
+      - equal:
+          path: metadata.labels["owner"]
+          value: "platform"
+      - equal:
+          path: metadata.labels["team"]
+          value: "backend"
+      - equal:
+          path: metadata.labels["environment"]
+          value: "staging"
+
+  - it: should not allow actions.github.com/* labels from user input
+    set:
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        managerRoleBinding:
+          metadata:
+            labels:
+              actions.github.com/scale-set-name: "overridden"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    chart:
+      appVersion: "0.14.0"
+    asserts:
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"

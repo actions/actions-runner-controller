@@ -1,0 +1,55 @@
+suite: "Test AutoscalingRunnerSet Listener Metrics"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should not render listenerMetrics when not configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.listenerMetrics
+
+  - it: should render listenerMetrics when configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listenerMetrics:
+        counters:
+          gha_started_jobs_total:
+            labels:
+              - repository
+              - organization
+        histograms:
+          gha_job_startup_duration_seconds:
+            buckets:
+              - 0.1
+              - 1
+              - 2.5
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - exists:
+          path: spec.listenerMetrics
+      - equal:
+          path: spec.listenerMetrics.counters.gha_started_jobs_total.labels[0]
+          value: repository
+      - equal:
+          path: spec.listenerMetrics.counters.gha_started_jobs_total.labels[1]
+          value: organization
+      - contains:
+          path: spec.listenerMetrics.histograms.gha_job_startup_duration_seconds.buckets
+          content: 0.1
+      - contains:
+          path: spec.listenerMetrics.histograms.gha_job_startup_duration_seconds.buckets
+          content: 2.5

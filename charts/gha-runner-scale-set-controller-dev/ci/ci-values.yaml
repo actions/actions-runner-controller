@@ -1,0 +1,5 @@
+# Set the following to dummy values.
+# This is only useful in CI
+controller:
+  manager:
+    image: test-arc:dev

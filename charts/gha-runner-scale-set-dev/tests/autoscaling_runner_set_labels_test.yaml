@@ -1,0 +1,293 @@
+suite: "Test AutoscalingRunnerSet Labels"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render base labels
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    chart:
+      appVersion: "0.14.0"
+    asserts:
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: "gha-rs-0.14.0"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "autoscaling-runner-set"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: "gha-rs"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "0.14.0"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-namespace"]
+          value: "test-namespace"
+
+  - it: should include user-defined labels
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingRunnerSet:
+          metadata:
+            labels:
+              team: "backend"
+              environment: "production"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["team"]
+          value: "backend"
+      - equal:
+          path: metadata.labels["environment"]
+          value: "production"
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: "gha-rs-0.14.0"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "autoscaling-runner-set"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: "gha-rs"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "0.14.0"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-namespace"]
+          value: "test-namespace"
+
+  - it: should include global labels
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels:
+              global-team: "platform"
+              owner: "devops"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["global-team"]
+          value: "platform"
+      - equal:
+          path: metadata.labels["owner"]
+          value: "devops"
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: "gha-rs-0.14.0"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "autoscaling-runner-set"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: "gha-rs"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "0.14.0"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-namespace"]
+          value: "test-namespace"
+
+  - it: should merge both user and global labels
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingRunnerSet:
+          metadata:
+            labels:
+              team: "backend"
+              environment: "staging"
+        all:
+          metadata:
+            labels:
+              global-team: "platform"
+              environment: "production"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["team"]
+          value: "backend"
+      - equal:
+          path: metadata.labels["global-team"]
+          value: "platform"
+      - equal:
+          path: metadata.labels["environment"]
+          value: "staging"
+      - equal:
+          path: metadata.labels["helm.sh/chart"]
+          value: "gha-rs-0.14.0"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "autoscaling-runner-set"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: "gha-rs"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "0.14.0"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-namespace"]
+          value: "test-namespace"
+
+  - it: should allow user labels to override global labels
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingRunnerSet:
+          metadata:
+            labels:
+              tier: "frontend"
+              cost-center: "100"
+        all:
+          metadata:
+            labels:
+              tier: "backend"
+              environment: "staging"
+              cost-center: "200"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["tier"]
+          value: "frontend"
+      - equal:
+          path: metadata.labels["cost-center"]
+          value: "100"
+      - equal:
+          path: metadata.labels["environment"]
+          value: "staging"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
+
+  - it: should preserve actions.github.com custom labels from user config
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingRunnerSet:
+          metadata:
+            labels:
+              team: "backend"
+              actions.github.com/custom-label: "user-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["team"]
+          value: "backend"
+      - notExists:
+          path: metadata.labels["actions.github.com/custom-label"]
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+
+  - it: should preserve actions.github.com custom labels from global config
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels:
+              owner: "devops"
+              actions.github.com/global-custom: "global-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["owner"]
+          value: "devops"
+      - notExists:
+          path: metadata.labels["actions.github.com/global-custom"]
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"

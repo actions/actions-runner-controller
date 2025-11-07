@@ -1,0 +1,219 @@
+{{- $runner := (.Values.runner | default dict) }}
+{{- $runnerMode := (index $runner "mode" | default "") }}
+{{- $kubeMode := (index $runner "kubernetesMode" | default dict) }}
+{{- $dind := (index $runner "dind" | default dict) }}
+{{- $kubeDefaults := (index $kubeMode "default" | default true) }}
+{{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") }}
+{{- $usesKubernetesSecrets := or (not .Values.secretResolution) (eq .Values.secretResolution.type "kubernetes") }}
+
+{{- $runnerPod := (index $runner "pod" | default dict) -}}
+{{- if not (kindIs "map" $runnerPod) -}}
+  {{- fail ".Values.runner.pod must be an object" -}}
+{{- end }}
+{{- $runnerPodSpec := (index $runnerPod "spec" | default dict) -}}
+{{- if not (kindIs "map" $runnerPodSpec) -}}
+  {{- fail ".Values.runner.pod.spec must be an object" -}}
+{{- end }}
+
+{{- $extraContainers := (index $runnerPodSpec "containers" | default list) -}}
+{{- if not (kindIs "slice" $extraContainers) -}}
+  {{- fail ".Values.runner.pod.spec.containers must be a list of container specifications" -}}
+{{- end }}
+{{- range $extraContainers -}}
+  {{- if not (kindIs "map" .) -}}
+    {{- fail ".Values.runner.pod.spec.containers must be a list of container specifications" -}}
+  {{- end }}
+  {{- $extraContainerName := (index . "name" | default "") -}}
+  {{- if empty $extraContainerName -}}
+    {{- fail ".Values.runner.pod.spec.containers[].name is required" -}}
+  {{- end }}
+  {{- if eq $extraContainerName "runner" -}}
+    {{- fail ".Values.runner.pod.spec.containers[].name must not be 'runner' (reserved)" -}}
+  {{- end }}
+{{- end }}
+{{- $extraInitContainers := (index $runnerPodSpec "initContainers" | default list) -}}
+{{- if not (kindIs "slice" $extraInitContainers) -}}
+  {{- fail ".Values.runner.pod.spec.initContainers must be a list of container specifications" -}}
+{{- end }}
+{{- range $extraInitContainers -}}
+  {{- if not (kindIs "map" .) -}}
+    {{- fail ".Values.runner.pod.spec.initContainers must be a list of container specifications" -}}
+  {{- end }}
+  {{- $extraInitContainerName := (index . "name" | default "") -}}
+  {{- if empty $extraInitContainerName -}}
+    {{- fail ".Values.runner.pod.spec.initContainers[].name is required" -}}
+  {{- end }}
+{{- end }}
+
+{{- $runnerPodSpecExtraFields := (omit $runnerPodSpec "containers" "initContainers" "volumes" "serviceAccountName") -}}
+{{- $extraVolumes := (index $runnerPodSpec "volumes" | default list) -}}
+{{- if not (kindIs "slice" $extraVolumes) -}}
+  {{- fail ".Values.runner.pod.spec.volumes must be a list of volume specifications" -}}
+{{- end }}
+{{- $hasInitContainers := or (gt (len $extraInitContainers) 0) (eq $runnerMode "dind") -}}
+{{- $hasVolumes := or (gt (len $extraVolumes) 0) (eq $runnerMode "kubernetes") (eq $runnerMode "dind") -}}
+apiVersion: actions.github.com/v1alpha1
+kind: AutoscalingRunnerSet
+metadata:
+  name: {{ include "autoscaling-runner-set.name" . | quote }}
+  namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+  labels:
+    {{- include "autoscaling-runner-set.labels" . | nindent 4 }}
+  annotations:
+    {{- include "autoscaling-runner-set.annotations" . | nindent 4 }}
+    actions.github.com/values-hash: {{ toJson .Values | sha256sum | trunc 63 }}
+    {{- if and $usesKubernetesSecrets (empty .Values.auth.secretName) }}
+    actions.github.com/cleanup-github-secret-name: {{ include "github-secret.name" . | quote }}
+    {{- end }}
+    actions.github.com/cleanup-manager-role-binding: {{ include "manager-role-binding.name" . | quote }}
+    actions.github.com/cleanup-manager-role-name: {{ include "manager-role.name" . | quote }}
+    {{- if ne $runnerMode "kubernetes" }}
+    actions.github.com/cleanup-no-permission-service-account-name: {{ include "no-permission-serviceaccount.name" . | quote }}
+    {{- end }}
+    {{- if and (eq $runnerMode "kubernetes") $kubeDefaults (empty $kubeServiceAccountName) }}
+    actions.github.com/cleanup-kubernetes-mode-role-binding-name: {{ include "kube-mode-role-binding.name" . | quote }}
+    actions.github.com/cleanup-kubernetes-mode-role-name: {{ include "kube-mode-role.name" . | quote }}
+    actions.github.com/cleanup-kubernetes-mode-service-account-name: {{ include "kube-mode-serviceaccount.name" . | quote }}
+    {{- end }}
+
+spec:
+  githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}
+  githubConfigSecret: {{ include "github-secret.name" . | quote }}
+  runnerGroup: {{ .Values.scaleset.runnerGroup | quote }}
+  runnerScaleSetName: {{ .Values.scaleset.name | quote }}
+
+  {{- if .Values.githubServerTLS }}
+  githubServerTLS:
+    {{- with .Values.githubServerTLS.certificateFrom }}
+    certificateFrom:
+      configMapKeyRef:
+        name: {{ .configMapKeyRef.name }}
+        key: {{ .configMapKeyRef.key }}
+    {{- end }}
+  {{- end }}
+
+  {{- if and .Values.secretResolution (ne .Values.secretResolution.type "kubernetes") }}
+  vaultConfig:
+    type: {{ .Values.secretResolution.type }}
+    {{- if .Values.secretResolution.proxy }}
+    proxy: {{- toYaml .Values.secretResolution.proxy | nindent 6 }}
+    {{- end }}
+    {{- if eq .Values.secretResolution.type "azureKeyVault" }}
+    azureKeyVault:
+      url: {{ .Values.secretResolution.azureKeyVault.url }}
+      tenantId: {{ .Values.secretResolution.azureKeyVault.tenantId }}
+      clientId: {{ .Values.secretResolution.azureKeyVault.clientId }}
+      certificatePath: {{ .Values.secretResolution.azureKeyVault.certificatePath }}
+      secretKey: {{ .Values.secretResolution.azureKeyVault.secretKey }}
+    {{- else }}
+    {{- fail (printf "Unsupported keyVault type: %s" .Values.secretResolution.type) }}
+    {{- end }}
+  {{- end }}
+
+  {{- if .Values.proxy }}
+  proxy:
+    {{- if .Values.proxy.http }}
+    http:
+      url: {{ .Values.proxy.http.url }}
+      {{- if .Values.proxy.http.credentialSecretRef }}
+      credentialSecretRef: {{ .Values.proxy.http.credentialSecretRef }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.proxy.https }}
+    https:
+      url: {{ .Values.proxy.https.url }}
+      {{- if .Values.proxy.https.credentialSecretRef }}
+      credentialSecretRef: {{ .Values.proxy.https.credentialSecretRef }}
+      {{- end }}
+    {{- end }}
+    {{- if and .Values.proxy.noProxy (kindIs "slice" .Values.proxy.noProxy) }}
+    noProxy: {{ .Values.proxy.noProxy | toYaml | nindent 6}}
+    {{- end }}
+  {{- end }}
+
+  {{- if and (or (kindIs "int64" .Values.scaleset.minRunners) (kindIs "float64" .Values.scaleset.minRunners)) (or (kindIs "int64" .Values.scaleset.maxRunners) (kindIs "float64" .Values.scaleset.maxRunners)) }}
+    {{- if gt .Values.scaleset.minRunners .Values.scaleset.maxRunners }}
+      {{- fail "maxRunners has to be greater or equal to minRunners" }}
+    {{- end }}
+  {{- end }}
+
+  {{- if or (kindIs "int64" .Values.scaleset.maxRunners) (kindIs "float64" .Values.scaleset.maxRunners)}}
+    {{- if lt (.Values.scaleset.maxRunners | int) 0 }}
+      {{- fail "maxRunners has to be greater or equal to 0" }}
+    {{- end }}
+  maxRunners: {{ .Values.scaleset.maxRunners | int }}
+  {{- end }}
+
+  {{- if or (kindIs "int64" .Values.scaleset.minRunners) (kindIs "float64" .Values.scaleset.minRunners) }}
+    {{- if lt (.Values.scaleset.minRunners | int) 0 }}
+      {{- fail "minRunners has to be greater or equal to 0" }}
+    {{- end }}
+  minRunners: {{ .Values.scaleset.minRunners | int }}
+  {{- end }}
+
+  {{- if and .Values.listenerPodTemplate (or .Values.listenerPodTemplate.metadata .Values.listenerPodTemplate.spec) }}
+  listenerTemplate:
+    {{- include "listener-template.pod" . | nindent 4}}
+  {{- end }}
+
+  {{- with .Values.listenerMetrics }}
+  listenerMetrics:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  template:
+    {{- $runnerPodLabels := (include "autoscaling-runner-set.runner-pod.labels" .) -}}
+    {{- $runnerPodAnnotations := (include "autoscaling-runner-set.runner-pod.annotations" .) -}}
+    {{- if or $runnerPodLabels $runnerPodAnnotations }}
+    metadata:
+      {{- if $runnerPodLabels }}
+      labels:
+        {{- $runnerPodLabels | nindent 8 }}
+      {{- end }}
+      {{- if $runnerPodAnnotations }}
+      annotations:
+        {{- $runnerPodAnnotations | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    spec:
+      serviceAccountName: {{ include "autoscaling-runner-set.template-service-account" . | quote }}
+      {{- if $hasInitContainers }}
+      initContainers:
+        {{- if and (eq $runnerMode "dind") $dind.copyExternals }}
+        - {{ include "runner-mode-dind.copy-externals" . | nindent 10 }}
+        {{- end }}
+        {{- range $extraInitContainers }}
+        - {{ toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if eq $runnerMode "dind" }}
+        - {{ include "runner-mode-dind.dind-container" . | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        -
+          {{- if eq $runnerMode "kubernetes" }}
+            {{- include "runner-mode-kubernetes.runner-container" . | nindent 10 }}
+          {{- else }}
+            {{- include "runner-mode-dind.runner-container" . | nindent 10 }}
+          {{- end }}
+        {{- if $extraContainers }}
+          {{- range $extraContainers }}
+        - {{ toYaml . | nindent 10 }}
+          {{- end }}
+        {{- end }}
+      {{- if $hasVolumes }}
+      volumes:
+        {{- if eq $runnerMode "kubernetes" }}
+        {{- include "runner-mode-kubernetes.pod-volumes" . | nindent 8 }}
+        {{- else }}
+        {{- include "runner-mode-dind.pod-volumes" . | nindent 8 }}
+        {{- end }}
+        {{- if $extraVolumes }}
+          {{- range $extraVolumes }}
+        - {{ toYaml . | nindent 10 }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if gt (len $runnerPodSpecExtraFields) 0 }}
+      {{- toYaml $runnerPodSpecExtraFields | nindent 6 }}
+      {{- end }}

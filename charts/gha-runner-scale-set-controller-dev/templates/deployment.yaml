@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gha-controller.name" . }}
+  namespace: {{ include "gha-controller.namespace" . }}
+  labels:
+    {{- include "gha-controller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ default 1 .Values.controller.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "gha-controller-template.annotations" . | nindent 8 }}
+      labels:
+        {{- include "gha-controller-template.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+      containers:
+        -
+      {{- include "gha-controller-template.manager-container" . | nindent 10 }}
+        {{- range .Values.controller.pod.containers }}
+        -
+      {{- toYaml . | nindent 10 }}
+        {{- end }}
+      terminationGracePeriodSeconds: {{ default 10 .Values.controller.pod.terminationGracePeriodSeconds }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- range .Values.controller.pod.extraVolumes }}
+        - {{- toYaml . | nindent 10 }}
+      {{- end }}
+      {{- $runnerPodSpecExtraFields := (omit .Values.controller.pod "containers" "serviceAccountName" "terminationGracePeriodSeconds") -}}
+      {{- if gt (len $runnerPodSpecExtraFields) 0 }}
+      {{- toYaml $runnerPodSpecExtraFields | nindent 6 }}
+      {{- end }}

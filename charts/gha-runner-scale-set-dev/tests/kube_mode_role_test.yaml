@@ -1,0 +1,117 @@
+suite: "Test Kubernetes Mode Role"
+templates:
+  - kube_mode_role.yaml
+tests:
+  - it: should render base role metadata in kubernetes mode
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          default: true
+          serviceAccountName: ""
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    chart:
+      appVersion: "0.14.0"
+    asserts:
+      - equal:
+          path: apiVersion
+          value: "rbac.authorization.k8s.io/v1"
+      - equal:
+          path: kind
+          value: "Role"
+      - equal:
+          path: metadata.name
+          value: "test-name-kube-mode"
+      - equal:
+          path: metadata.namespace
+          value: "test-namespace"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: "kube-mode-role"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-name"]
+          value: "test-name"
+      - equal:
+          path: metadata.labels["actions.github.com/scale-set-namespace"]
+          value: "test-namespace"
+      - equal:
+          path: metadata.finalizers[0]
+          value: "actions.github.com/cleanup-protection"
+
+  - it: should append extra RBAC policy rules
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          default: true
+          serviceAccountName: ""
+      resource:
+        kubernetesModeRole:
+          extraRules:
+            - apiGroups:
+                - ""
+              resources:
+                - "events"
+              verbs:
+                - "create"
+                - "patch"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: rules[5].apiGroups[0]
+          value: ""
+      - equal:
+          path: rules[5].resources[0]
+          value: "events"
+      - equal:
+          path: rules[5].verbs[0]
+          value: "create"
+      - equal:
+          path: rules[5].verbs[1]
+          value: "patch"
+
+  - it: should fail when extraRules is not a list
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          default: true
+          serviceAccountName: ""
+      resource:
+        kubernetesModeRole:
+          extraRules: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.resource.kubernetesModeRole.extraRules must be a list of RBAC policy rules"
+
+  - it: should not render when runner mode is not kubernetes
+    set:
+      runner:
+        mode: "dind"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when serviceAccountName is provided
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          default: true
+          serviceAccountName: "custom-sa"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - hasDocuments:
+          count: 0

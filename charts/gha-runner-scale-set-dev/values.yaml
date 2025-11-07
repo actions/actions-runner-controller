@@ -1,0 +1,383 @@
+## By default .Release.namespace is used
+namespaceOverride: ""
+
+scaleset:
+  # Name of the scaleset
+  name: ""
+  runnerGroup: "default"
+  ## minRunners is the min number of idle runners. The target number of runners created will be
+  ## calculated as a sum of minRunners and the number of jobs assigned to the scale set.
+  # minRunners: 0
+  ## maxRunners is the max number of runners the autoscaling runner set will scale up to.
+  # maxRunners: 5
+
+# Auth object provides authorization parameters.
+# You should apply either:
+# 1) secretName referencing the secret containing authorization parameters in the same namespace where the scale set is being installed in
+# 2) app object parameters
+# 3) github_tokne
+#
+# If multiple of them are set, only single one will be applied based on the above mentioned order.
+auth:
+  url: "" # Required
+  githubToken: ""
+  secretName: ""
+  app:
+    clientId: ""
+    installationId: ""
+    privateKey: ""
+
+# secretResolution configures how secrets are resolved for this scale set.
+# By default, secrets are resolved using Kubernetes secrets. When Kubernetes
+# secrets are used, no proxy config will be applied.
+#
+# If you decide to use secret integrations with vaults, you can configure
+# proxy settings for the vault communication here.
+secretResolution:
+  # Name of the secret resolver to use.
+  # Available values:
+  # - "kubernetes" - use Kubernetes secrets
+  # - "azureKeyVault" - use Azure Key Vault
+  type: "kubernetes"
+
+  ## Proxy settings when type is NOT "kubernetes"
+  # proxy:
+  #   http:
+  #     url: http://proxy.com:1234
+  #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+  #   https:
+  #     url: http://proxy.com:1234
+  #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+  #   noProxy:
+  #     - example.com
+  #     - example.org
+
+  ## Configuration for Azure Key Vault integration
+  # azureKeyVault:
+  #   url: ""
+  #   client_id: ""
+  #   tenant_id: ""
+  #   certificate_path: ""
+
+## Proxy can be used to define proxy settings that will be used by the
+## controller, the listener and the runner of this scale set.
+# proxy:
+#   http:
+#     url: http://proxy.com:1234
+#     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+#   https:
+#     url: http://proxy.com:1234
+#     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+#   noProxy:
+#     - example.com
+#     - example.org
+
+## listenerTemplate is the PodSpec for each listener Pod
+## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
+# listenerPodTemplate:
+#   spec:
+#     containers:
+#     # Use this section to append additional configuration to the listener container.
+#     # If you change the name of the container, the configuration will not be applied to the listener,
+#     # and it will be treated as a side-car container.
+#     - name: listener
+#       securityContext:
+#         runAsUser: 1000
+#     # Use this section to add the configuration of a side-car container.
+#     # Comment it out or remove it if you don't need it.
+#     # Spec for this container will be applied as is without any modifications.
+#     - name: side-car
+#       image: example-sidecar
+
+## Resource object allows modifying resources created by the chart itself
+resource:
+  # Specifies metadata that will be applied to all resources managed by ARC
+  all:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the AutoscalingRunnerSet resource
+  autoscalingRunnerSet:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the manager Role resource
+  managerRole:
+    metadata:
+      labels: {}
+      annotations: {}
+    extraRules: []
+
+  # Specifies metadata that will be applied to the manager RoleBinding resource
+  managerRoleBinding:
+    metadata:
+      labels: {}
+      annotations: {}
+      
+  # Specifies metadata that will be applied to the no-permission ServiceAccount
+  # (created for non-kubernetes runner modes).
+  noPermissionServiceAccount:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the kubernetes-mode RoleBinding
+  # (created when runner.mode is "kubernetes" and a ServiceAccountName is not provided).
+  kubernetesModeRoleBinding:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the kubernetes-mode Role.
+  kubernetesModeRole:
+    metadata:
+      labels: {}
+      annotations: {}
+    extraRules: []
+
+  # Specifies metadata that will be applied to the kubernetes-mode ServiceAccount.
+  kubernetesModeServiceAccount:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # TODO: Add more resource customizations when needed
+
+# Template applied for the runner container
+runner:
+  # Mode can be used to automatically add configuration for the selected mode
+  # The available modes are:
+  # - "" (default) - no additional configuration is applied
+  # - "kubernetes" - configuration for running jobs in Kubernetes mode is applied
+  # - "dind" - configuration for running jobs in Docker-in-Docker mode is
+  # 
+  # For each mode, we provide configuration out of the box that works for most use
+  # cases. You can customize our configuration by modifying the fields below,
+  # or you can leave mode empty and provide your own complete configuration.
+  mode: ""
+  
+  pod:
+    metadata:
+      labels: {}
+      annotations: {}
+    # Runner pod template customization.
+    #
+    # All fields under runner.pod.spec (except those listed below) are applied directly to
+    # spec.template.spec of the generated runner pod.
+    #
+    # Special handling:
+    # - spec.containers: appended after the generated "runner" container (name "runner" is reserved)
+    # - spec.initContainers: appended after any generated initContainers (e.g. dind mode)
+    # - spec.volumes: appended after generated volumes
+    #
+    # Note: serviceAccountName is managed by the chart and cannot be overridden via runner.pod.spec.
+    spec:
+      # The name "runner" is reserved and must not be used here.
+      containers: []
+      initContainers: []
+      volumes: []
+    
+  # container field is applied to the container named "runner". You cannot override the name of the runner container
+  container:
+    image: "ghcr.io/actions/actions-runner:latest"
+    command: ["/home/runner/run.sh"]
+
+  dind:
+    copyExternals: true
+    dockerGroupId: "123"
+    dockerSock: "unix:///var/run/docker.sock"
+    waitForDockerInSeconds: 120
+    container:
+      image: "docker:dind"
+
+  kubernetesMode:
+    serviceAccountName: ""
+    hookPath: "/home/runner/k8s/index.js"
+    requireJobContainer: true
+    extension: {}
+  
+
+
+## A self-signed CA certificate for communication with the GitHub server can be
+## provided using a config map key selector. If `runnerMountPath` is set, for
+## each runner pod ARC will:
+## - create a `github-server-tls-cert` volume containing the certificate
+##   specified in `certificateFrom`
+## - mount that volume on path `runnerMountPath`/{certificate name}
+## - set NODE_EXTRA_CA_CERTS environment variable to that same path
+## - set RUNNER_UPDATE_CA_CERTS environment variable to "1" (as of version
+##   2.303.0 this will instruct the runner to reload certificates on the host)
+##
+## If any of the above had already been set by the user in the runner pod
+## template, ARC will observe those and not overwrite them.
+## Example configuration:
+#
+# githubServerTLS:
+#   certificateFrom:
+#     configMapKeyRef:
+#       name: config-map-name
+#       key: ca.crt
+#   runnerMountPath: /usr/local/share/ca-certificates/
+
+## controllerServiceAccount is the service account of the controller
+controllerServiceAccount:
+  namespace: ""
+  name: ""
+
+## listenerMetrics are configurable metrics applied to the listener.
+## In order to avoid helm merging these fields, we left the metrics commented out.
+## When configuring metrics, please uncomment the listenerMetrics object below.
+## You can modify the configuration to remove the label or specify custom buckets for histogram.
+##
+## If the buckets field is not specified, the default buckets will be applied. Default buckets are
+## provided here for documentation purposes
+# listenerMetrics:
+#   counters:
+#     gha_started_jobs_total:
+#       labels:
+#         ["repository", "organization", "enterprise", "job_name", "event_name", "job_workflow_ref", "job_workflow_name", "job_workflow_target"]
+#     gha_completed_jobs_total:
+#       labels:
+#         [
+#           "repository",
+#           "organization",
+#           "enterprise",
+#           "job_name",
+#           "event_name",
+#           "job_result",
+#           "job_workflow_ref",
+#           "job_workflow_name",
+#           "job_workflow_target",
+#         ]
+#   gauges:
+#     gha_assigned_jobs:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_running_jobs:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_registered_runners:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_busy_runners:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_min_runners:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_max_runners:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_desired_runners:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_idle_runners:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#   histograms:
+#     gha_job_startup_duration_seconds:
+#       labels:
+#         ["repository", "organization", "enterprise", "job_name", "event_name","job_workflow_ref", "job_workflow_name", "job_workflow_target"]
+#       buckets:
+#         [
+#           0.01,
+#           0.05,
+#           0.1,
+#           0.5,
+#           1.0,
+#           2.0,
+#           3.0,
+#           4.0,
+#           5.0,
+#           6.0,
+#           7.0,
+#           8.0,
+#           9.0,
+#           10.0,
+#           12.0,
+#           15.0,
+#           18.0,
+#           20.0,
+#           25.0,
+#           30.0,
+#           40.0,
+#           50.0,
+#           60.0,
+#           70.0,
+#           80.0,
+#           90.0,
+#           100.0,
+#           110.0,
+#           120.0,
+#           150.0,
+#           180.0,
+#           210.0,
+#           240.0,
+#           300.0,
+#           360.0,
+#           420.0,
+#           480.0,
+#           540.0,
+#           600.0,
+#           900.0,
+#           1200.0,
+#           1800.0,
+#           2400.0,
+#           3000.0,
+#           3600.0,
+#         ]
+#     gha_job_execution_duration_seconds:
+#       labels:
+#         [
+#           "repository",
+#           "organization",
+#           "enterprise",
+#           "job_name",
+#           "event_name",
+#           "job_result",
+#           "job_workflow_ref",
+#           "job_workflow_name",
+#           "job_workflow_target"
+#         ]
+#       buckets:
+#         [
+#           0.01,
+#           0.05,
+#           0.1,
+#           0.5,
+#           1.0,
+#           2.0,
+#           3.0,
+#           4.0,
+#           5.0,
+#           6.0,
+#           7.0,
+#           8.0,
+#           9.0,
+#           10.0,
+#           12.0,
+#           15.0,
+#           18.0,
+#           20.0,
+#           25.0,
+#           30.0,
+#           40.0,
+#           50.0,
+#           60.0,
+#           70.0,
+#           80.0,
+#           90.0,
+#           100.0,
+#           110.0,
+#           120.0,
+#           150.0,
+#           180.0,
+#           210.0,
+#           240.0,
+#           300.0,
+#           360.0,
+#           420.0,
+#           480.0,
+#           540.0,
+#           600.0,
+#           900.0,
+#           1200.0,
+#           1800.0,
+#           2400.0,
+#           3000.0,
+#           3600.0,
+#         ]

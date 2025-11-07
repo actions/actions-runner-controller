@@ -1,0 +1,46 @@
+suite: "AutoscalingRunnerSet listenerPodTemplate"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render listenerTemplate from listenerPodTemplate
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listenerPodTemplate:
+        spec:
+          containers:
+            - name: listener
+              image: "ghcr.io/actions/actions-runner-controller/actionsmetricsserver:latest"
+              securityContext:
+                runAsUser: 1000
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerTemplate.spec.containers[0].name
+          value: listener
+      - equal:
+          path: spec.listenerTemplate.spec.containers[0].securityContext.runAsUser
+          value: 1000
+
+  - it: should default listenerTemplate containers when not specified
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listenerPodTemplate:
+        spec:
+          restartPolicy: Always
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerTemplate.spec.containers[0].name
+          value: listener
