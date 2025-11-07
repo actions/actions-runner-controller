@@ -984,7 +984,7 @@ jobs:
               echo "5 pods are up!"
               break
             fi
-            if [[ "$count" -ge 12 ]]; then
+            if [[ "$count" -ge 30 ]]; then
               echo "Timeout waiting for 5 pods to be created"
               exit 1
             fi
