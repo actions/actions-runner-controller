@@ -752,6 +752,31 @@ jobs:
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
 
+  self-signed-ca-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run default setup test
+        run: hack/e2e-test.sh self-signed-ca-setup
+        shell: bash
+
   self-signed-ca-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
