@@ -7,6 +7,7 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION
 ARG CHANNEL=stable
 ARG DOCKER_VERSION=24.0.7
 ARG DOCKER_COMPOSE_VERSION=v2.23.0
+ARG BUILDX_VERSION=0.12.1
 ARG DUMB_INIT_VERSION=1.2.5
 ARG RUNNER_USER_UID=1001
 ARG DOCKER_GROUP_GID=121
@@ -89,6 +90,14 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/bin/docker-compose \
     && which docker-compose \
     && docker compose version
+
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "aarch64" ]; then export ARCH=arm64 ; fi \
+    && if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=amd64 ; fi \
+    && mkdir -p /usr/libexec/docker/cli-plugins \
+    && curl -fLo /usr/libexec/docker/cli-plugins/docker-buildx \
+        "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-${ARCH}" \
+    && chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.

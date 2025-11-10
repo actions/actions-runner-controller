@@ -6,6 +6,7 @@ ARG RUNNER_CONTAINER_HOOKS_VERSION
 # Docker and Docker Compose arguments
 ENV CHANNEL=stable
 ARG DOCKER_COMPOSE_VERSION=v2.23.0
+ARG BUILDX_VERSION=0.12.1
 ARG DUMB_INIT_VERSION=1.2.5
 
 # Other arguments
@@ -148,6 +149,14 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && ln -s /home/runner/.docker/cli-plugins/docker-compose /home/runner/bin/docker-compose \
     && which docker-compose \
     && docker compose version
+
+RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && if [ "$ARCH" = "aarch64" ]; then export ARCH=arm64 ; fi \
+    && if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i386" ]; then export ARCH=amd64 ; fi \
+    && mkdir -p /home/runner/.docker/cli-plugins \
+    && curl -fLo /home/runner/.docker/cli-plugins/docker-buildx \
+        "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-${ARCH}" \
+    && chmod +x /home/runner/.docker/cli-plugins/docker-buildx
 
 # Create folder structure here to avoid permission issues
 # when mounting the daemon.json file from a configmap.
