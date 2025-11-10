@@ -690,20 +690,28 @@ func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListene
 	return fmt.Sprintf("%s-config", autoscalingListener.Name)
 }
 
-func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
-	namespaceHash := hash.FNVHashString(autoscalingRunnerSet.Namespace)
+func hashSuffix(namespace, runnerGroup, configURL string) string {
+	namespaceHash := hash.FNVHashString(namespace + "@" + runnerGroup + "@" + configURL)
 	if len(namespaceHash) > 8 {
 		namespaceHash = namespaceHash[:8]
 	}
-	return fmt.Sprintf("%v-%v-listener", autoscalingRunnerSet.Name, namespaceHash)
+	return namespaceHash
+}
+
+func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) string {
+	return fmt.Sprintf(
+		"%v-%v-listener",
+		autoscalingRunnerSet.Name,
+		hashSuffix(
+			autoscalingRunnerSet.Namespace,
+			autoscalingRunnerSet.Spec.RunnerGroup,
+			autoscalingRunnerSet.Spec.GitHubConfigUrl,
+		),
+	)
 }
 
 func proxyListenerSecretName(autoscalingListener *v1alpha1.AutoscalingListener) string {
-	namespaceHash := hash.FNVHashString(autoscalingListener.Spec.AutoscalingRunnerSetNamespace)
-	if len(namespaceHash) > 8 {
-		namespaceHash = namespaceHash[:8]
-	}
-	return fmt.Sprintf("%v-%v-listener-proxy", autoscalingListener.Spec.AutoscalingRunnerSetName, namespaceHash)
+	return autoscalingListener.Name + "-proxy"
 }
 
 func proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) string {
