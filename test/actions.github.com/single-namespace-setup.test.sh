@@ -24,7 +24,7 @@ function install_arc() {
         --create-namespace \
         --set image.repository="${IMAGE_NAME}" \
         --set image.tag="${IMAGE_TAG}" \
-        --set flags.watchSingleNamespace="${ARC_NAMESPACE}"
+        --set flags.watchSingleNamespace="${ARC_NAMESPACE}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
         --debug
 
@@ -52,7 +52,6 @@ function install_scale_set() {
 }
 
 function main() {
-    echo "[*] Running single namespace setup"
     local failed=()
 
     build_image

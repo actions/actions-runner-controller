@@ -101,12 +101,12 @@ function assert_listener_recreated() {
       if [ "${LISTENER_COUNT}" -eq 1 ]; then
         echo "Listener is up!"
         echo "${RESOURCES}"
-        exit 0
+        return 0
       fi
       if [ "${count}" -ge 120 ]; then
         echo "Timeout waiting for listener to be recreated"
         echo "${RESOURCES}"
-        exit 1
+        return 1
       fi
 
       echo "Waiting for listener to be recreated"

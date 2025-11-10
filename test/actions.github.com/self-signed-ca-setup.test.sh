@@ -14,6 +14,8 @@ WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
+HOST_MITM_CONFIG="/tmp/mitmproxy"
+
 function install_arc() {
     echo "Creating namespace ${ARC_NAMESPACE}"
     kubectl create namespace "${SCALE_SET_NAMESPACE}"
@@ -68,10 +70,10 @@ function wait_for_mitmproxy_cert() {
     echo "Waiting for mitmproxy generated CA certificate"
     local count=0
     while true; do
-        if [ -f "./mitmproxy/mitmproxy-ca-cert.pem" ]; then
+        if [ -f "$HOST_MITM_CONFIG/mitmproxy-ca-cert.pem" ]; then
             echo "CA certificate is generated"
             echo "CA certificate:"
-            cat "./mitmproxy/mitmproxy-ca-cert.pem"
+            cat "$HOST_MITM_CONFIG/mitmproxy-ca-cert.pem"
             return 0
         fi
 
@@ -87,15 +89,14 @@ function wait_for_mitmproxy_cert() {
 
 function run_mitmproxy() {
     echo "Running mitmproxy"
+    mkdir -p 
     docker run -d \
         --rm \
         --name mitmproxy \
         --publish 8080:8080 \
-        -b ./mitmproxy:/home/mitmproxy/.mitmproxy \
+        -v "$HOST_MITM_CONFIG:/home/mitmproxy/.mitmproxy" \
         mitmproxy/mitmproxy:latest \
-
-    echo "Mitm dump:"
-    mitmdump
+        mitmdump
 
     if ! wait_for_mitmproxy_cert; then
         return 1
@@ -103,8 +104,8 @@ function run_mitmproxy() {
 
     echo "CA certificate is generated"
 
-    sudo cp ./mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
-    sudo chown runner ./mitmproxy/mitmproxy-ca-cert.crt
+    sudo cp "$HOST_MITM_CONFIG/mitmproxy-ca-cert.pem" /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
+    sudo chown runner /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
 }
 
 function main() {
@@ -112,6 +113,8 @@ function main() {
         echo "mitmdump is not installed"
         return 1
     fi
+
+    mkdir -p "$HOST_MITM_CONFIG" || { echo "Failed to create mitmproxy config dir"; return 1; }
 
     local failed=()
 

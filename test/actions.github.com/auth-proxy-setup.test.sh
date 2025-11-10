@@ -76,7 +76,6 @@ function install_scale_set() {
 }
 
 function main() {
-    echo "[*] Running auth proxy setup"
     local failed=()
 
     build_image
