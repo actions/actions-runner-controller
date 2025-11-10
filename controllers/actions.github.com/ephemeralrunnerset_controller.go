@@ -162,7 +162,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		"pending", len(ephemeralRunnerState.pending),
 		"running", len(ephemeralRunnerState.running),
 		"finished", len(ephemeralRunnerState.finished),
-		"failed", len(ephemeralRunnerState.failed),
+		"failed", len(ephemeralRunnerState.aborted),
 		"deleting", len(ephemeralRunnerState.deleting),
 	)
 
@@ -185,7 +185,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			},
 			len(ephemeralRunnerState.pending),
 			len(ephemeralRunnerState.running),
-			len(ephemeralRunnerState.failed),
+			len(ephemeralRunnerState.aborted),
 		)
 	}
 
@@ -232,7 +232,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		CurrentReplicas:         total,
 		PendingEphemeralRunners: len(ephemeralRunnerState.pending),
 		RunningEphemeralRunners: len(ephemeralRunnerState.running),
-		FailedEphemeralRunners:  len(ephemeralRunnerState.failed),
+		FailedEphemeralRunners:  len(ephemeralRunnerState.aborted),
 	}
 
 	// Update the status if needed.
@@ -307,13 +307,13 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		"pending", len(ephemeralRunnerState.pending),
 		"running", len(ephemeralRunnerState.running),
 		"finished", len(ephemeralRunnerState.finished),
-		"failed", len(ephemeralRunnerState.failed),
+		"failed", len(ephemeralRunnerState.aborted),
 		"deleting", len(ephemeralRunnerState.deleting),
 	)
 
 	log.Info("Cleanup finished or failed ephemeral runners")
 	var errs []error
-	for _, ephemeralRunner := range append(ephemeralRunnerState.finished, ephemeralRunnerState.failed...) {
+	for _, ephemeralRunner := range append(ephemeralRunnerState.finished, ephemeralRunnerState.aborted...) {
 		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
 		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
 			errs = append(errs, err)
@@ -564,7 +564,7 @@ type ephemeralRunnerState struct {
 	pending  []*v1alpha1.EphemeralRunner
 	running  []*v1alpha1.EphemeralRunner
 	finished []*v1alpha1.EphemeralRunner
-	failed   []*v1alpha1.EphemeralRunner
+	aborted  []*v1alpha1.EphemeralRunner
 	deleting []*v1alpha1.EphemeralRunner
 
 	latestPatchID int
@@ -585,12 +585,12 @@ func newEphemeralRunnerState(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) 
 		}
 
 		switch r.Status.Phase {
-		case corev1.PodRunning:
+		case v1alpha1.EphemeralRunnerRunning:
 			ephemeralRunnerState.running = append(ephemeralRunnerState.running, r)
-		case corev1.PodSucceeded:
+		case v1alpha1.EphemeralRunnerSucceeded, v1alpha1.EphemeralRunnerFailed:
 			ephemeralRunnerState.finished = append(ephemeralRunnerState.finished, r)
-		case corev1.PodFailed:
-			ephemeralRunnerState.failed = append(ephemeralRunnerState.failed, r)
+		case v1alpha1.EphemeralRunnerAborted:
+			ephemeralRunnerState.aborted = append(ephemeralRunnerState.aborted, r)
 		default:
 			// Pending or no phase should be considered as pending.
 			//
@@ -603,5 +603,5 @@ func newEphemeralRunnerState(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) 
 }
 
 func (s *ephemeralRunnerState) scaleTotal() int {
-	return len(s.pending) + len(s.running) + len(s.failed)
+	return len(s.pending) + len(s.running) + len(s.aborted)
 }

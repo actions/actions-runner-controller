@@ -285,7 +285,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		case kerrors.IsInvalid(err) || kerrors.IsForbidden(err):
 			log.Error(err, "Failed to create a pod due to unrecoverable failure")
 			errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
-			if err := r.markAsFailed(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
+			if err := r.markAsAborted(ctx, ephemeralRunner, errMessage, ReasonInvalidPodFailure, log); err != nil {
 				log.Error(err, "Failed to set ephemeral runner to phase Failed")
 				return ctrl.Result{}, err
 			}
@@ -511,10 +511,12 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	return errors.Join(errs...)
 }
 
-func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
+// markAsAborted updates the ephemeral runner status to aborted and stops the reconciliation.
+// This runner is left in aborted state and won't be deleted until someone manually does that.
+func (r *EphemeralRunnerReconciler) markAsAborted(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Failed")
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = corev1.PodFailed
+		obj.Status.Phase = v1alpha1.EphemeralRunnerAborted
 		obj.Status.Reason = reason
 		obj.Status.Message = errMessage
 	}); err != nil {
@@ -545,6 +547,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 		if obj.Status.Failures == nil {
 			obj.Status.Failures = make(map[string]metav1.Time)
 		}
+		obj.Status.Phase = v1alpha1.EphemeralRunnerRestarting
 		obj.Status.Failures[string(pod.UID)] = metav1.Now()
 		obj.Status.Ready = false
 		obj.Status.Reason = pod.Status.Reason
@@ -734,7 +737,8 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		}
 	}
 
-	phaseChanged := ephemeralRunner.Status.Phase != pod.Status.Phase
+	newPhase := v1alpha1.EphemeralRunnerPhaseFromPodPhase(pod.Status.Phase)
+	phaseChanged := ephemeralRunner.Status.Phase != newPhase
 	readyChanged := ready != ephemeralRunner.Status.Ready
 
 	if !phaseChanged && !readyChanged {
@@ -749,7 +753,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		"ready", ready,
 	)
 	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = pod.Status.Phase
+		obj.Status.Phase = newPhase
 		obj.Status.Ready = ready
 		obj.Status.Reason = pod.Status.Reason
 		obj.Status.Message = pod.Status.Message

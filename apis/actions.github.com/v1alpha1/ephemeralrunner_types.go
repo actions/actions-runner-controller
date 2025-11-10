@@ -48,7 +48,7 @@ type EphemeralRunner struct {
 }
 
 func (er *EphemeralRunner) IsDone() bool {
-	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
+	return er.Status.Phase == EphemeralRunnerSucceeded || er.Status.Phase == EphemeralRunnerFailed
 }
 
 func (er *EphemeralRunner) HasJob() bool {
@@ -125,6 +125,40 @@ type EphemeralRunnerSpec struct {
 	corev1.PodTemplateSpec `json:",inline"`
 }
 
+// EphemeralRunnerPhase is a label for the condition of an EphemeralRunner at the current time.
+// +kubebuilder:validation:Enum=Pending;Running;Restarting;Succeeded;Failed;Aborted
+type EphemeralRunnerPhase string
+
+const (
+	// EphemeralRunnerPending is the stage where the ephemeral runner is about to start.
+	EphemeralRunnerPending EphemeralRunnerPhase = "Pending"
+	// EphemeralRunnerRunning is the stage where the ephemeral runner is running and ready to accept the job.
+	EphemeralRunnerRunning EphemeralRunnerPhase = "Running"
+	// EphemeralRunnerRestarting is the stage where the ephemeral runner pod stopped, so the ephemeral runner should restart it
+	EphemeralRunnerRestarting EphemeralRunnerPhase = "Restarting"
+	// EphemeralRunnerSucceeded is the stage where the ephemeral runner finished running and exited with exit code 0.
+	EphemeralRunnerSucceeded EphemeralRunnerPhase = "Succeeded"
+	// EphemeralRunnerFailed means that the ephemeral runner finished running and exited with a non-zero exit code.
+	EphemeralRunnerFailed EphemeralRunnerPhase = "Failed"
+	// EphemeralRunnerAborted means that the ephemeral runner failed to start due to unrecoverable failure, and will be left as is for manual inspection.
+	EphemeralRunnerAborted EphemeralRunnerPhase = "Aborted"
+)
+
+func EphemeralRunnerPhaseFromPodPhase(podPhase corev1.PodPhase) EphemeralRunnerPhase {
+	switch podPhase {
+	case corev1.PodPending:
+		return EphemeralRunnerPending
+	case corev1.PodRunning:
+		return EphemeralRunnerRunning
+	case corev1.PodSucceeded:
+		return EphemeralRunnerSucceeded
+	case corev1.PodFailed:
+		return EphemeralRunnerFailed
+	default:
+		return EphemeralRunnerPending
+	}
+}
+
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
 type EphemeralRunnerStatus struct {
 	// Turns true only if the runner is online.
@@ -140,7 +174,7 @@ type EphemeralRunnerStatus struct {
 	// The PodSucceded phase should be set only when confirmed that EphemeralRunner
 	// actually executed the job and has been removed from the service.
 	// +optional
-	Phase corev1.PodPhase `json:"phase,omitempty"`
+	Phase EphemeralRunnerPhase `json:"phase,omitempty"`
 	// +optional
 	Reason string `json:"reason,omitempty"`
 	// +optional

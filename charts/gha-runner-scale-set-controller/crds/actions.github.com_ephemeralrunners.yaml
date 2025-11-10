@@ -8257,6 +8257,13 @@ spec:
 
                     The PodSucceded phase should be set only when confirmed that EphemeralRunner
                     actually executed the job and has been removed from the service.
+                  enum:
+                    - Pending
+                    - Running
+                    - Restarting
+                    - Succeeded
+                    - Failed
+                    - Aborted
                   type: string
                 ready:
                   description: Turns true only if the runner is online.
