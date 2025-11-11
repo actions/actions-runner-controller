@@ -96,7 +96,13 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+{{ $image := "docker:dind"}}
+{{- range $i, $val := .Values.template.spec.initContainers }}
+{{- if and (eq $val.name "dind") (not (empty $val.image)) }}
+{{- $image = $val.image }}
+{{- end }}
+{{- end }}
+image: {{ $image }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
