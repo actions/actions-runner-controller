@@ -37,7 +37,14 @@ function create_cluster() {
     minikube delete || true
 
     echo "Creating minikube cluster"
-    minikube start
+    minikube start --driver=docker --container-runtime=docker --wait=all
+
+    echo "Verifying ns works"
+    if ! minikube ssh "nslookup github.com >/dev/null 2>&1"; then
+        echo "Nameserver configuration failed"
+        exit 1
+    fi
+
 
     echo "Loading image into minikube cluster"
     minikube image load "${IMAGE}"
