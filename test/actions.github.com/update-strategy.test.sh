@@ -133,7 +133,7 @@ function main() {
 
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
 
-    NAMESPACE="${ARC_NAMESPACE}" arc_logs
+    NAMESPACE="${ARC_NAMESPACE}" log_arc || failed+=("log_arc")
 
     delete_cluster
 

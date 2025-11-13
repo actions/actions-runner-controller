@@ -46,11 +46,10 @@ function install_scale_set() {
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
         --set containerMode.type="kubernetes" \
-        --set containerMode.kubernetesModeWorkVolumeClaim.accessModes="{\"ReadWriteOnce\"}" \
+        --set containerMode.kubernetesModeWorkVolumeClaim.accessModes={"ReadWriteOnce"} \
         --set containerMode.kubernetesModeWorkVolumeClaim.storageClassName="openebs-hostpath" \
         --set containerMode.kubernetesModeWorkVolumeClaim.resources.requests.storage="1Gi" \
         "${ROOT_DIR}/charts/gha-runner-scale-set" \
-        --version="${VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then

@@ -20,7 +20,7 @@ function install_arc() {
     --namespace "arc-systems" \
     --create-namespace \
     --set image.repository="${IMAGE_NAME}" \
-    --set image.tag="${IMAGE_VERSION}" \
+    --set image.tag="${IMAGE_TAG}" \
     --set flags.updateStrategy="eventual" \
     "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
     --debug
@@ -33,8 +33,8 @@ function install_arc() {
 
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
-    helm install "$ARC_NAME" \
-    --namespace "arc-runners" \
+    helm install "${SCALE_SET_NAME}" \
+    --namespace "${SCALE_SET_NAMESPACE}" \
     --create-namespace \
     --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
     --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
@@ -52,7 +52,7 @@ function assert_5_runners() {
     echo "[*] Asserting 5 runners are created"
     local count=0
     while true; do
-        pod_count=$(kubectl get runners -n "${SCALE_SET_NAMESPACE}" --selector="gha-runner-scale-set=${SCALE_SET_NAME}" --no-headers | wc -l)
+        pod_count=$(kubectl get pods -n arc-runners --no-headers | wc -l)
 
         if [[ "${pod_count}" = 5 ]]; then
             echo "[*] Found 5 runners as expected"

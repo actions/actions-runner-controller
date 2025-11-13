@@ -55,6 +55,12 @@ function start_squid_proxy() {
         --from-literal=password='actions'
 }
 
+function stop_squid_proxy() {
+    echo "Stopping squid-proxy"
+    docker stop squid
+    docker rm squid
+}
+
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
     helm install "${SCALE_SET_NAME}" \
@@ -92,6 +98,7 @@ function main() {
     NAMESPACE="${ARC_NAMESPACE}" log_arc || failed+=("log_arc")
 
     delete_cluster
+    stop_squid_proxy
 
     print_results "${failed[@]}"
 }
