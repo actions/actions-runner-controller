@@ -26,6 +26,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  default-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run default setup test
+        run: hack/e2e-test.sh default-setup
+        shell: bash
+
   default-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -116,6 +140,31 @@ jobs:
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
+
+  single-namespace-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run single namespace setup test
+        run: hack/e2e-test.sh single-namespace-setup
+        shell: bash
 
   single-namespace-setup:
     runs-on: ubuntu-latest
@@ -210,6 +259,31 @@ jobs:
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
 
+  dind-mode-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run dind mode setup test
+        run: hack/e2e-test.sh dind-mode-setup
+        shell: bash
+
   dind-mode-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -301,6 +375,31 @@ jobs:
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
+
+  kubernetes-mode-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run kubernetes mode setup test
+        run: hack/e2e-test.sh kubernetes-mode-setup
+        shell: bash
 
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
@@ -402,6 +501,31 @@ jobs:
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
+
+  auth-proxy-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run single namespace setup test
+        run: hack/e2e-test.sh single-namespace-setup
+        shell: bash
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
@@ -506,6 +630,31 @@ jobs:
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
 
+  anonymous-proxy-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run anonymous proxy setup test
+        run: hack/e2e-test.sh anonymous-proxy-setup
+        shell: bash
+
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -602,6 +751,31 @@ jobs:
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
+
+  self-signed-ca-setup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run self signed CA setup test
+        run: hack/e2e-test.sh self-signed-ca-setup
+        shell: bash
 
   self-signed-ca-setup:
     runs-on: ubuntu-latest
@@ -724,6 +898,31 @@ jobs:
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
           arc-controller-namespace: "arc-systems"
+
+  update-strategy-tests-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run update strategy test
+        run: hack/e2e-test.sh update-strategy
+        shell: bash
 
   update-strategy-tests:
     runs-on: ubuntu-latest
@@ -896,6 +1095,31 @@ jobs:
           helm uninstall "${{ steps.install_arc.outputs.ARC_NAME }}" --namespace "arc-runners" --debug
           kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${{ steps.install_arc.outputs.ARC_NAME }}" -l app.kubernetes.io/instance="${{ steps.install_arc.outputs.ARC_NAME }}"
           kubectl logs deployment/arc-gha-rs-controller -n "arc-systems"
+
+  init-with-min-runners-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    env:
+      TARGET_ORG: ${{ env.TARGET_ORG }}
+      TARGET_REPO: ${{ env.TARGET_REPO }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+
+      - name: Run init with min runners test
+        run: hack/e2e-test.sh init-with-min-runners
+        shell: bash
 
   init-with-min-runners:
     runs-on: ubuntu-latest
