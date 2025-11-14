@@ -103,7 +103,7 @@ function wait_for_scale_set() {
         count=$((count+1))
     done
     kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
-    kubectl get pod -n "${NAMESPACE}"
+    kubectl get pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
 }
 
 function cleanup_scale_set() {

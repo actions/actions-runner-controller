@@ -8,7 +8,7 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 +  1))"
+SCALE_SET_NAME="default-$(date +'%M%S')$(((${RANDOM} + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
@@ -38,12 +38,9 @@ function install_arc() {
     fi
 }
 
-function start_squid_proxy() {
+function install_squid() {
     echo "Starting squid-proxy"
-    docker run -d \
-        --name squid \
-        --publish 3128:3128 \
-        huangtingluo/squid-proxy:latest
+    kubectl apply -f "${DIR}/auth-proxy-setup.squid.yaml"
 
     echo "Creating scale set namespace"
     kubectl create namespace "${SCALE_SET_NAMESPACE}" || true
@@ -55,12 +52,6 @@ function start_squid_proxy() {
         --from-literal=password='actions'
 }
 
-function stop_squid_proxy() {
-    echo "Stopping squid-proxy"
-    docker stop squid
-    docker rm squid
-}
-
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
     helm install "${SCALE_SET_NAME}" \
@@ -68,7 +59,7 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set proxy.https.url="http://host.minikube.internal:3128" \
+        --set proxy.https.url="http://squid.default.svc.cluster.local:3128" \
         --set proxy.https.credentialSecretRef="proxy-auth" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
         "${ROOT_DIR}/charts/gha-runner-scale-set" \
@@ -88,8 +79,14 @@ function main() {
     create_cluster
 
     install_arc
-    start_squid_proxy
-    install_scale_set
+    install_squid
+
+    install_scale_set || {
+        echo "Scale set installation failed"
+        NAMESPACE="${ARC_NAMESPACE}" log_arc
+        delete_cluster
+        exit 1
+    }
 
     WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
 
@@ -98,7 +95,6 @@ function main() {
     NAMESPACE="${ARC_NAMESPACE}" log_arc || failed+=("log_arc")
 
     delete_cluster
-    stop_squid_proxy
 
     print_results "${failed[@]}"
 }
