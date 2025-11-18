@@ -50,7 +50,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -58,7 +58,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -70,9 +70,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -88,7 +88,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -100,8 +100,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -115,7 +115,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   single-namespace-setup:
     runs-on: ubuntu-latest
@@ -142,7 +142,7 @@ jobs:
         run: |
           kubectl create namespace arc-runners
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -151,7 +151,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -163,9 +163,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -181,7 +181,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -193,8 +193,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -208,7 +208,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   dind-mode-setup:
     runs-on: ubuntu-latest
@@ -234,7 +234,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -242,7 +242,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -254,9 +254,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -273,7 +273,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -285,8 +285,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -300,7 +300,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
@@ -331,7 +331,7 @@ jobs:
           helm install openebs openebs/openebs -n openebs --create-namespace
 
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -339,7 +339,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -351,9 +351,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
           kubectl wait --timeout=30s --for=condition=ready pod -n openebs -l name=openebs-localpv-provisioner
 
       - name: Install gha-runner-scale-set
@@ -374,7 +374,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -386,8 +386,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -401,7 +401,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   auth-proxy-setup:
     runs-on: ubuntu-latest
@@ -427,7 +427,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -435,7 +435,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -447,9 +447,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -477,7 +477,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -489,8 +489,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -504,7 +504,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
@@ -530,7 +530,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -538,7 +538,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -550,9 +550,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -574,7 +574,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -586,8 +586,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -601,7 +601,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   self-signed-ca-setup:
     runs-on: ubuntu-latest
@@ -627,7 +627,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -635,7 +635,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -647,9 +647,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -696,7 +696,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -708,8 +708,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -723,7 +723,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
 
   update-strategy-tests:
     runs-on: ubuntu-latest
@@ -749,7 +749,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -758,7 +758,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -770,9 +770,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -788,7 +788,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -800,8 +800,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
 
           sleep 60
 
@@ -815,7 +815,7 @@ jobs:
           workflow-file: ${{env.WORKFLOW_FILE}}
           arc-name: ${{steps.install_arc.outputs.ARC_NAME}}
           arc-namespace: "arc-runners"
-          arc-controller-namespace: "arc-systems"
+          arc-controller-namespace: "arc-system"
           wait-to-running: "true"
           wait-to-finish: "false"
 
@@ -840,7 +840,7 @@ jobs:
         run: |
           count=0
           while true; do
-            LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name=${{ steps.install_arc.outputs.ARC_NAME }} -n arc-systems --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
+            LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name=${{ steps.install_arc.outputs.ARC_NAME }} -n arc-system --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
             RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n arc-runners --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
             RESOURCES="$(kubectl get pods -A)"
 
@@ -867,7 +867,7 @@ jobs:
         run: |
           count=0
           while true; do
-            LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name=${{ steps.install_arc.outputs.ARC_NAME }} -n arc-systems --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
+            LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name=${{ steps.install_arc.outputs.ARC_NAME }} -n arc-system --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
             RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n arc-runners --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
             RESOURCES="$(kubectl get pods -A)"
 
@@ -895,7 +895,7 @@ jobs:
         run: |
           helm uninstall "${{ steps.install_arc.outputs.ARC_NAME }}" --namespace "arc-runners" --debug
           kubectl wait --timeout=10s --for=delete AutoScalingRunnerSet -n "${{ steps.install_arc.outputs.ARC_NAME }}" -l app.kubernetes.io/instance="${{ steps.install_arc.outputs.ARC_NAME }}"
-          kubectl logs deployment/arc-gha-rs-controller -n "arc-systems"
+          kubectl logs deployment/arc-gha-rs-controller -n "arc-system"
 
   init-with-min-runners:
     runs-on: ubuntu-latest
@@ -921,7 +921,7 @@ jobs:
         id: install_arc_controller
         run: |
           helm install arc \
-          --namespace "arc-systems" \
+          --namespace "arc-system" \
           --create-namespace \
           --set image.repository=${{ env.IMAGE_NAME }} \
           --set image.tag=${{ env.IMAGE_VERSION }} \
@@ -930,7 +930,7 @@ jobs:
           --debug
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l app.kubernetes.io/name=gha-rs-controller -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l app.kubernetes.io/name=gha-rs-controller -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -942,9 +942,9 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l app.kubernetes.io/name=gha-rs-controller
-          kubectl get pod -n arc-systems
-          kubectl describe deployment arc-gha-rs-controller -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l app.kubernetes.io/name=gha-rs-controller
+          kubectl get pod -n arc-system
+          kubectl describe deployment arc-gha-rs-controller -n arc-system
 
       - name: Install gha-runner-scale-set
         id: install_arc
@@ -961,7 +961,7 @@ jobs:
           echo "ARC_NAME=$ARC_NAME" >> $GITHUB_OUTPUT
           count=0
           while true; do
-            POD_NAME=$(kubectl get pods -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME -o name)
+            POD_NAME=$(kubectl get pods -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME -o name)
             if [ -n "$POD_NAME" ]; then
               echo "Pod found: $POD_NAME"
               break
@@ -973,8 +973,8 @@ jobs:
             sleep 1
             count=$((count+1))
           done
-          kubectl wait --timeout=30s --for=condition=ready pod -n arc-systems -l actions.github.com/scale-set-name=$ARC_NAME
-          kubectl get pod -n arc-systems
+          kubectl wait --timeout=30s --for=condition=ready pod -n arc-system -l actions.github.com/scale-set-name=$ARC_NAME
+          kubectl get pod -n arc-system
       - name: Ensure 5 runners are up
         run: |
           count=0
