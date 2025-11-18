@@ -6,20 +6,27 @@ DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 
 ROOT_DIR="$(realpath "${DIR}/../..")"
 
-source "${DIR}/helper.sh" || { echo "Failed to source helper.sh"; exit 1; }
+source "${DIR}/helper.sh" || {
+    echo "Failed to source helper.sh"
+    exit 1
+}
 
-SCALE_SET_NAME="self-signed-crt-$(date '+%M%S')$((($RANDOM + 100) % 100 + 1))"
+TEMP_DIR=$(mktemp -d)
+LOCAL_CERT_PATH="${TEMP_DIR}/mitmproxy-ca-cert.pem"
+MITM_CERT_PATH="/root/.mitmproxy/mitmproxy-ca-cert.pem"
+
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+SCALE_SET_NAME="self-signed-crt-$(date '+%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
-HOST_MITM_CONFIG="/tmp/mitmproxy"
+MITMPROXY_NAMESPACE="mitmproxy"
+MITMPROXY_POD_NAME="mitmproxy"
 
 function install_arc() {
-    echo "Creating namespace ${ARC_NAMESPACE}"
-    kubectl create namespace "${SCALE_SET_NAMESPACE}"
-
     echo "Installing ARC"
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
@@ -41,10 +48,7 @@ function install_scale_set() {
 
     echo "Installing ca-cert config map"
     kubectl -n "${SCALE_SET_NAMESPACE}" create configmap ca-cert \
-        --from-file="${DIR}/mitmproxy/mitmproxy-ca-cert.pem"
-
-    echo "Config map:"
-    kubectl -n "${SCALE_SET_NAMESPACE}" get configmap ca-cert -o yaml
+        --from-file=mitmproxy-ca-cert.pem="${LOCAL_CERT_PATH}"
 
     echo "Installing scale set ${SCALE_SET_NAME}/${SCALE_SET_NAMESPACE}"
     helm install "${SCALE_SET_NAME}" \
@@ -52,7 +56,7 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set proxy.https.url="http://host.minikube.internal:3128" \
+        --set proxy.https.url="http://mitmproxy.mitmproxy.cluster.svc.local:8080" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
         --set "githubServerTLS.certificateFrom.configMapKeyRef.name=ca-cert" \
         --set "githubServerTLS.certificateFrom.configMapKeyRef.key=mitmproxy-ca-cert.pem" \
@@ -66,68 +70,76 @@ function install_scale_set() {
     fi
 }
 
-function wait_for_mitmproxy_cert() {
-    echo "Waiting for mitmproxy generated CA certificate"
-    local count=0
-    while true; do
-        if [ -f "$HOST_MITM_CONFIG/mitmproxy-ca-cert.pem" ]; then
-            echo "CA certificate is generated"
-            echo "CA certificate:"
-            cat "$HOST_MITM_CONFIG/mitmproxy-ca-cert.pem"
-            return 0
-        fi
+function wait_for_mitmproxy_ready() {
+    echo "Waiting for mitmproxy pod to be ready"
 
-        if [ "${count}" -ge 60  ]; then
-            echo "Timeout waiting for mitmproxy generated CA certificate"
-            return 1
-        fi
+    # Wait for pod to be running
+    if ! kubectl wait --for=condition=ready pod -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" --timeout=60s; then
+        echo "Timeout waiting for mitmproxy pod"
+        kubectl get pods -n "${MITMPROXY_NAMESPACE}" || true
+        kubectl describe pod -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" || true
+        kubectl logs -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" || true
+        return 1
+    fi
 
-        sleep 1
-        count=$((count + 1))
-    done
+    echo "Mitmproxy pod is ready, trying to copy the certitficate..."
+
+    # Verify certificate exists
+    retry 15 1 kubectl exec -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" -- test -f "${MITM_CERT_PATH}"
+
+    echo "Getting mitmproxy CA certificate from pod"
+    if ! kubectl exec -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" -- cat "${MITM_CERT_PATH}" >"${TEMP_DIR}/mitmproxy-ca-cert.pem"; then
+        echo "Failed to get mitmproxy CA certificate from pod"
+        return 1
+    fi
+    echo "Mitmproxy certificate generated successfully and stored to ${TEMP_DIR}/mitmproxy-ca-cert.pem"
+    return 0
 }
 
 function run_mitmproxy() {
-    echo "Running mitmproxy"
-    mkdir -p 
-    docker run -d \
-        --rm \
-        --name mitmproxy \
-        --publish 8080:8080 \
-        -v "$HOST_MITM_CONFIG:/home/mitmproxy/.mitmproxy" \
-        mitmproxy/mitmproxy:latest \
-        mitmdump
+    echo "Deploying mitmproxy to Kubernetes"
 
-    if ! wait_for_mitmproxy_cert; then
+    # Create namespace
+    kubectl create namespace "${MITMPROXY_NAMESPACE}" || true
+
+    # Create mitmproxy pod and service
+    kubectl apply -f "${DIR}/self-signed-ca-setup.mitm.yaml"
+
+    if ! wait_for_mitmproxy_ready; then
         return 1
     fi
 
-    echo "CA certificate is generated"
+    echo "Mitmproxy is ready"
+}
 
-    sudo cp "$HOST_MITM_CONFIG/mitmproxy-ca-cert.pem" /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
-    sudo chown runner /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
+function cleanup_mitmproxy() {
+    echo "Cleaning up mitmproxy"
+    kubectl delete namespace "${MITMPROXY_NAMESPACE}" --ignore-not-found=true || true
+    rm -f "${TEMP_DIR}/mitmproxy-ca-cert.pem" || true
 }
 
 function main() {
-    if [[ ! -x "$(which mitmdump)" ]]; then
-        echo "mitmdump is not installed"
-        return 1
-    fi
-
-    mkdir -p "$HOST_MITM_CONFIG" || { echo "Failed to create mitmproxy config dir"; return 1; }
-
     local failed=()
 
     build_image
     create_cluster
     install_arc
-    run_mitmproxy
-    install_scale_set
+    run_mitmproxy || {
+        echo "Failed to run mitmproxy"
+        exit 1
+    }
+    install_scale_set || {
+        echo "Failed to install scale set"
+        NAMESPACE="${ARC_NAMESPACE}" log_arc
+        cleanup_mitmproxy
+        exit 1
+    }
 
     WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
 
     NAMESPACE="${ARC_NAMESPACE}" arc_logs
+    cleanup_mitmproxy
     delete_cluster
 
     print_results "${failed[@]}"

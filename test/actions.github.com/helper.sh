@@ -9,7 +9,7 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 export TARGET_ORG="${TARGET_ORG:-actions-runner-controller}"
 export TARGET_REPO="${TARGET_REPO:-arc_e2e_test_dummy}"
 export IMAGE_NAME="${IMAGE_NAME:-arc-test-image}"
-export VERSION="${VERSION:-$(yq .version < "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")}"
+export VERSION="${VERSION:-$(yq .version <"${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")}"
 export IMAGE_TAG="${VERSION}"
 export IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
 
@@ -21,12 +21,12 @@ function build_image() {
 
     cd "${ROOT_DIR}" || exit 1
 
-	docker buildx build --platform "${PLATFORMS}" \
-		--build-arg VERSION="${VERSION}" \
-		--build-arg COMMIT_SHA="${COMMIT_SHA}" \
-		-t "${IMAGE}" \
-		-f Dockerfile \
-		. --load
+    docker buildx build --platform "${PLATFORMS}" \
+        --build-arg VERSION="${VERSION}" \
+        --build-arg COMMIT_SHA="${COMMIT_SHA}" \
+        -t "${IMAGE}" \
+        -f Dockerfile \
+        . --load
 
     echo "Created image ${IMAGE}"
     cd - || exit 1
@@ -44,7 +44,6 @@ function create_cluster() {
         echo "Nameserver configuration failed"
         exit 1
     fi
-
 
     echo "Loading image into minikube cluster"
     minikube image load "${IMAGE}"
@@ -65,7 +64,7 @@ function log_arc() {
 
 function wait_for_arc() {
     echo "Waiting for ARC to be ready"
-    local count=0;
+    local count=0
     while true; do
         POD_NAME=$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller -o name)
         if [ -n "$POD_NAME" ]; then
@@ -77,7 +76,7 @@ function wait_for_arc() {
             return 1
         fi
         sleep 1
-        count=$((count+1))
+        count=$((count + 1))
     done
 
     kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l app.kubernetes.io/name=gha-rs-controller
@@ -100,7 +99,7 @@ function wait_for_scale_set() {
         fi
 
         sleep 1
-        count=$((count+1))
+        count=$((count + 1))
     done
     kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
     kubectl get pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
@@ -161,15 +160,34 @@ function run_workflow() {
 
         echo "Run not found yet, waiting 5 seconds"
         sleep 5
-        count=$((count+1))
+        count=$((count + 1))
     done
 
     echo "Waiting for run to complete"
-    local code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status &> /dev/null)
+    local code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status &>/dev/null)
     if [[ "${code}" -ne 0 ]]; then
         echo "Run failed with exit code ${code}"
         return 1
     fi
 
     echo "Run completed successfully"
+}
+
+function retry() {
+    local retries=$1
+    shift
+    local delay=$1
+    shift
+    local n=1
+
+    until "$@"; do
+        if [[ $n -ge $retries ]]; then
+            echo "Attempt $n failed! No more retries left."
+            return 1
+        else
+            echo "Attempt $n failed! Retrying in $delay seconds..."
+            sleep "$delay"
+            n=$((n + 1))
+        fi
+    done
 }
