@@ -12,7 +12,7 @@ source "${DIR}/helper.sh" || {
 }
 
 TEMP_DIR=$(mktemp -d)
-LOCAL_CERT_PATH="${TEMP_DIR}/mitmproxy-ca-cert.pem"
+LOCAL_CERT_PATH="${TEMP_DIR}/mitmproxy-ca-cert.crt"
 MITM_CERT_PATH="/root/.mitmproxy/mitmproxy-ca-cert.pem"
 
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -48,7 +48,7 @@ function install_scale_set() {
 
     echo "Installing ca-cert config map"
     kubectl -n "${SCALE_SET_NAMESPACE}" create configmap ca-cert \
-        --from-file=mitmproxy-ca-cert.pem="${LOCAL_CERT_PATH}"
+        --from-file=mitmproxy-ca-cert.crt="${LOCAL_CERT_PATH}"
 
     echo "Installing scale set ${SCALE_SET_NAME}/${SCALE_SET_NAMESPACE}"
     helm install "${SCALE_SET_NAME}" \
@@ -56,10 +56,10 @@ function install_scale_set() {
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set proxy.https.url="http://mitmproxy.mitmproxy.cluster.svc.local:8080" \
+        --set proxy.https.url="http://mitmproxy.mitmproxy.svc.cluster.local:8080" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
         --set "githubServerTLS.certificateFrom.configMapKeyRef.name=ca-cert" \
-        --set "githubServerTLS.certificateFrom.configMapKeyRef.key=mitmproxy-ca-cert.pem" \
+        --set "githubServerTLS.certificateFrom.configMapKeyRef.key=mitmproxy-ca-cert.crt" \
         --set "githubServerTLS.runnerMountPath=/usr/local/share/ca-certificates/" \
         "${ROOT_DIR}/charts/gha-runner-scale-set" \
         --debug
@@ -88,11 +88,11 @@ function wait_for_mitmproxy_ready() {
     retry 15 1 kubectl exec -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" -- test -f "${MITM_CERT_PATH}"
 
     echo "Getting mitmproxy CA certificate from pod"
-    if ! kubectl exec -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" -- cat "${MITM_CERT_PATH}" >"${TEMP_DIR}/mitmproxy-ca-cert.pem"; then
+    if ! kubectl exec -n "${MITMPROXY_NAMESPACE}" "${MITMPROXY_POD_NAME}" -- cat "${MITM_CERT_PATH}" >"${LOCAL_CERT_PATH}"; then
         echo "Failed to get mitmproxy CA certificate from pod"
         return 1
     fi
-    echo "Mitmproxy certificate generated successfully and stored to ${TEMP_DIR}/mitmproxy-ca-cert.pem"
+    echo "Mitmproxy certificate generated successfully and stored to ${LOCAL_CERT_PATH}"
     return 0
 }
 
@@ -112,12 +112,6 @@ function run_mitmproxy() {
     echo "Mitmproxy is ready"
 }
 
-function cleanup_mitmproxy() {
-    echo "Cleaning up mitmproxy"
-    kubectl delete namespace "${MITMPROXY_NAMESPACE}" --ignore-not-found=true || true
-    rm -f "${TEMP_DIR}/mitmproxy-ca-cert.pem" || true
-}
-
 function main() {
     local failed=()
 
@@ -126,20 +120,26 @@ function main() {
     install_arc
     run_mitmproxy || {
         echo "Failed to run mitmproxy"
+        echo "ARC logs:"
+        NAMESPACE="${ARC_NAMESPACE}" log_arc
+        echo "Deleting cluster..."
+        delete_cluster
         exit 1
     }
     install_scale_set || {
-        echo "Failed to install scale set"
+        echo "Failed to run mitmproxy"
+        echo "ARC logs:"
         NAMESPACE="${ARC_NAMESPACE}" log_arc
-        cleanup_mitmproxy
+        echo "Deleting cluster..."
+        delete_cluster
         exit 1
     }
 
     WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
 
-    NAMESPACE="${ARC_NAMESPACE}" arc_logs
-    cleanup_mitmproxy
+    NAMESPACE="${ARC_NAMESPACE}" log_arc || failed+=("log_arc")
+
     delete_cluster
 
     print_results "${failed[@]}"
