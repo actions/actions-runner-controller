@@ -6,9 +6,12 @@ DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 
 ROOT_DIR="$(realpath "${DIR}/../..")"
 
-source "${DIR}/helper.sh" || { echo "Failed to source helper.sh"; exit 1; }
+source "${DIR}/helper.sh" || {
+    echo "Failed to source helper.sh"
+    exit 1
+}
 
-SCALE_SET_NAME="update-strategy-$(date '+%M%S')$((($RANDOM + 100) % 100 + 1))"
+SCALE_SET_NAME="update-strategy-$(date '+%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-sleepy-matrix.yaml"
 ARC_NAME="arc"
@@ -73,47 +76,47 @@ function assert_listener_deleted() {
         RESOURCES="$(kubectl get pods -A)"
 
         if [ "${LISTENER_COUNT}" -eq 0 ]; then
-          echo "Listener has been deleted"
-          echo "${RESOURCES}"
-          return 0
+            echo "Listener has been deleted"
+            echo "${RESOURCES}"
+            return 0
         fi
         if [ "${count}" -ge 60 ]; then
-          echo "Timeout waiting for listener to be deleted"
-          echo "${RESOURCES}"
-          return 1
+            echo "Timeout waiting for listener to be deleted"
+            echo "${RESOURCES}"
+            return 1
         fi
 
         echo "Waiting for listener to be deleted"
         echo "Listener count: ${LISTENER_COUNT} target: 0 | Runners count: ${RUNNERS_COUNT} target: 3"
 
         sleep 1
-        count=$((count+1))
-      done
+        count=$((count + 1))
+    done
 }
 
 function assert_listener_recreated() {
     count=0
     while true; do
-      LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name="${SCALE_SET_NAME}" -n "${ARC_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-      RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n "${SCALE_SET_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-      RESOURCES="$(kubectl get pods -A)"
+        LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name="${SCALE_SET_NAME}" -n "${ARC_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
+        RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n "${SCALE_SET_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
+        RESOURCES="$(kubectl get pods -A)"
 
-      if [ "${LISTENER_COUNT}" -eq 1 ]; then
-        echo "Listener is up!"
-        echo "${RESOURCES}"
-        return 0
-      fi
-      if [ "${count}" -ge 120 ]; then
-        echo "Timeout waiting for listener to be recreated"
-        echo "${RESOURCES}"
-        return 1
-      fi
+        if [ "${LISTENER_COUNT}" -eq 1 ]; then
+            echo "Listener is up!"
+            echo "${RESOURCES}"
+            return 0
+        fi
+        if [ "${count}" -ge 120 ]; then
+            echo "Timeout waiting for listener to be recreated"
+            echo "${RESOURCES}"
+            return 1
+        fi
 
-      echo "Waiting for listener to be recreated"
-      echo "Listener count: ${LISTENER_COUNT} target: 1 | Runners count: ${RUNNERS_COUNT} target: 0"
+        echo "Waiting for listener to be recreated"
+        echo "Listener count: ${LISTENER_COUNT} target: 1 | Runners count: ${RUNNERS_COUNT} target: 0"
 
-      sleep 1
-      count=$((count+1))
+        sleep 1
+        count=$((count + 1))
     done
 }
 
