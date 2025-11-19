@@ -210,8 +210,6 @@ docker-buildx:
 		docker buildx create --platform ${PLATFORMS} --name container-builder --use;\
 	fi
 	docker buildx build --platform ${PLATFORMS} \
-		--build-arg RUNNER_VERSION=${RUNNER_VERSION} \
-		--build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 		--build-arg VERSION=${VERSION} \
 		--build-arg COMMIT_SHA=${COMMIT_SHA} \
 		-t "${DOCKER_IMAGE_NAME}:${VERSION}" \
@@ -296,6 +294,10 @@ acceptance/runner/startup:
 .PHONY: e2e
 e2e:
 	go test -count=1 -v -timeout 600s -run '^TestE2E$$' ./test/e2e
+
+.PHONY: gha-e2e
+gha-e2e:
+	bash hack/e2e-test.sh
 
 # Upload release file to GitHub.
 github-release: release

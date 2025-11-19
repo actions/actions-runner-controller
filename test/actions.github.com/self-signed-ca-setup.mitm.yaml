@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mitmproxy
+  namespace: mitmproxy
+  labels:
+    app: mitmproxy
+spec:
+  containers:
+    - name: mitmproxy
+      image: mitmproxy/mitmproxy:latest
+      command: ["mitmdump"]
+      ports:
+        - containerPort: 8080
+          name: proxy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mitmproxy
+  namespace: mitmproxy
+spec:
+  selector:
+    app: mitmproxy
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: proxy
+
