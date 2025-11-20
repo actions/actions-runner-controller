@@ -11,11 +11,12 @@ export PLATFORMS="linux/amd64"
 TARGETS=()
 
 function set_targets() {
-    local cases="$(find "${TEST_DIR}" -name '*.test.sh' | sed "s#^${TEST_DIR}/##g" )"
+    local cases
+    cases="$(find "${TEST_DIR}" -name '*.test.sh' | sed "s#^${TEST_DIR}/##g")"
 
     mapfile -t TARGETS < <(echo "${cases}")
 
-    echo $TARGETS
+    echo "${TARGETS[@]}"
 }
 
 function env_test() {
@@ -89,4 +90,4 @@ function main() {
     fi
 }
 
-main $@
+main "$@"
