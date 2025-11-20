@@ -14,7 +14,8 @@ export IMAGE_TAG="${VERSION}"
 export IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
 
 export PLATFORMS="linux/amd64"
-export COMMIT_SHA="$(git rev-parse HEAD)"
+COMMIT_SHA="$(git rev-parse HEAD)"
+export COMMIT_SHA
 
 function build_image() {
     echo "Building ARC image ${IMAGE}"
@@ -111,13 +112,6 @@ function cleanup_scale_set() {
     kubectl wait --timeout=40s --for=delete autoscalingrunnersets -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}"
 }
 
-function install_openebs() {
-    echo "Install openebs/dynamic-localpv-provisioner"
-    helm repo add openebs https://openebs.github.io/charts
-    helm repo update
-    helm install openebs openebs/openebs --namespace openebs --create-namespace
-}
-
 function print_results() {
     local failed=("$@")
 
@@ -138,7 +132,8 @@ function run_workflow() {
     echo "Checking if the workflow file exists"
     gh workflow view -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" || return 1
 
-    local queue_time="$(date -u +%FT%TZ)"
+    local queue_time
+    queue_time="$(date -u +%FT%TZ)"
 
     echo "Running workflow ${WORKFLOW_FILE}"
     gh workflow run -R "${TARGET_ORG}/${TARGET_REPO}" "${WORKFLOW_FILE}" --ref main -f arc_name="${SCALE_SET_NAME}" || return 1
@@ -164,7 +159,8 @@ function run_workflow() {
     done
 
     echo "Waiting for run to complete"
-    local code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status &>/dev/null)
+    local code
+    code=$(gh run watch "${run_id}" -R "${TARGET_ORG}/${TARGET_REPO}" --exit-status &>/dev/null)
     if [[ "${code}" -ne 0 ]]; then
         echo "Run failed with exit code ${code}"
         return 1
@@ -190,4 +186,11 @@ function retry() {
             n=$((n + 1))
         fi
     done
+}
+
+function install_openebs() {
+    echo "Install openebs/dynamic-localpv-provisioner"
+    helm repo add openebs https://openebs.github.io/openebs
+    helm repo update
+    helm install openebs openebs/openebs -n openebs --create-namespace
 }
