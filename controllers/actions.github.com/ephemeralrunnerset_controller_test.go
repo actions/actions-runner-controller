@@ -1115,7 +1115,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		startManagers(GinkgoT(), mgr)
 	})
 
-	FIt("should create a proxy secret and delete the proxy secreat after the runner-set is deleted", func() {
+	It("should create a proxy secret and delete the proxy secreat after the runner-set is deleted", func() {
 		secretCredentials := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "proxy-credentials",
