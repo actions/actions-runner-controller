@@ -30,9 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -145,10 +142,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -263,10 +256,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -380,10 +369,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -506,10 +491,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -634,10 +615,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -756,10 +733,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -903,10 +876,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -1100,10 +1069,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
