@@ -15,10 +15,10 @@ ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
 function install_arc() {
-    echo "Install openebs/dynamic-localpv-provisioner"
-    helm repo add openebs https://openebs.github.io/charts
-    helm repo update
-    helm install openebs openebs/openebs -n openebs --create-namespace
+    install_openebs || {
+        echo "OpenEBS installation failed"
+        return 1
+    }
 
     echo "Creating namespace ${ARC_NAMESPACE}"
     kubectl create namespace "${SCALE_SET_NAMESPACE}"
