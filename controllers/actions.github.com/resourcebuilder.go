@@ -572,12 +572,15 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 
 	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 	return &v1alpha1.EphemeralRunner{
-		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: ephemeralRunnerSet.Name + "-runner-",
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
+			Finalizers: []string{
+				ephemeralRunnerFinalizerName,
+				ephemeralRunnerActionsFinalizerName,
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         ephemeralRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),

@@ -41,7 +41,7 @@ function install_squid() {
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
 
-    echo helm install "${SCALE_SET_NAME}" \
+    helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
         --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \

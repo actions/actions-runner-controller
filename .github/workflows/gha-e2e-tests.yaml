@@ -30,9 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,6 +45,8 @@ jobs:
 
       - name: Run default setup test
         run: hack/e2e-test.sh default-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   default-setup:
@@ -145,10 +144,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -164,6 +159,8 @@ jobs:
 
       - name: Run single namespace setup test
         run: hack/e2e-test.sh single-namespace-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   single-namespace-setup:
@@ -263,10 +260,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -282,6 +275,8 @@ jobs:
 
       - name: Run dind mode setup test
         run: hack/e2e-test.sh dind-mode-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   dind-mode-setup:
@@ -380,10 +375,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -399,6 +390,8 @@ jobs:
 
       - name: Run kubernetes mode setup test
         run: hack/e2e-test.sh kubernetes-mode-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   kubernetes-mode-setup:
@@ -506,10 +499,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -525,6 +514,8 @@ jobs:
 
       - name: Run single namespace setup test
         run: hack/e2e-test.sh single-namespace-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   auth-proxy-setup:
@@ -634,10 +625,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -653,6 +640,8 @@ jobs:
 
       - name: Run anonymous proxy setup test
         run: hack/e2e-test.sh anonymous-proxy-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   anonymous-proxy-setup:
@@ -756,10 +745,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -775,6 +760,8 @@ jobs:
 
       - name: Run self signed CA setup test
         run: hack/e2e-test.sh self-signed-ca-setup
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   self-signed-ca-setup:
@@ -903,10 +890,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -922,6 +905,8 @@ jobs:
 
       - name: Run update strategy test
         run: hack/e2e-test.sh update-strategy
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   update-strategy-tests:
@@ -1100,10 +1085,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    env:
-      TARGET_ORG: ${{ env.TARGET_ORG }}
-      TARGET_REPO: ${{ env.TARGET_REPO }}
-
     steps:
       - uses: actions/checkout@v5
         with:
@@ -1119,6 +1100,8 @@ jobs:
 
       - name: Run init with min runners test
         run: hack/e2e-test.sh init-with-min-runners
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
   init-with-min-runners:
