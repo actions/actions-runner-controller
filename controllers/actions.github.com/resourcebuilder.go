@@ -555,17 +555,12 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 }
 
 func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) *v1alpha1.EphemeralRunner {
-	labels := make(map[string]string)
-	for k, v := range ephemeralRunnerSet.Labels {
-		if k == LabelKeyKubernetesComponent {
-			labels[k] = "runner"
-		} else {
-			labels[k] = v
-		}
-	}
+	labels := make(map[string]string, len(ephemeralRunnerSet.Labels))
+	maps.Copy(labels, ephemeralRunnerSet.Labels)
+	labels[LabelKeyKubernetesComponent] = "runner"
 
-	annotations := maps.Clone(ephemeralRunnerSet.Annotations)
-
+	annotations := make(map[string]string, len(ephemeralRunnerSet.Annotations)+1)
+	maps.Copy(annotations, ephemeralRunnerSet.Annotations)
 	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 	return &v1alpha1.EphemeralRunner{
 		ObjectMeta: metav1.ObjectMeta{
