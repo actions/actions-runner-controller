@@ -13,9 +13,7 @@ metadata:
 spec:
   type: {{ .Values.actionsMetricsServer.service.type }}
   ports:
-    {{ range $_, $port := .Values.actionsMetricsServer.service.ports -}}
-    - {{ $port | toYaml | nindent 6 }}
-    {{- end }}
+    {{- toYaml .Values.actionsMetricsServer.service.ports | nindent 4 }}
     {{- if .Values.actionsMetrics.serviceMonitor.enable }}
     - name: metrics-port
       port: {{ .Values.actionsMetrics.port }}
