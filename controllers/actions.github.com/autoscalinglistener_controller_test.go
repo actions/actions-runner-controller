@@ -26,9 +26,8 @@ import (
 )
 
 const (
-	autoscalingListenerTestTimeout     = time.Second * 20
-	autoscalingListenerTestInterval    = time.Millisecond * 250
-	autoscalingListenerTestGitHubToken = "gh_token"
+	autoscalingListenerTestTimeout  = time.Second * 20
+	autoscalingListenerTestInterval = time.Millisecond * 250
 )
 
 var _ = Describe("Test AutoScalingListener controller", func() {
