@@ -124,6 +124,7 @@ githubConfigSecret:
 #     resources:
 #       requests:
 #         storage: 1Gi
+#   kubernetesModeAdditionalRoleRules: []
 #
 
 ## listenerTemplate is the PodSpec for each listener Pod

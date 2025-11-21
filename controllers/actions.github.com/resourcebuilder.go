@@ -2,7 +2,6 @@ package actionsgithubcom
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -83,7 +82,7 @@ func boolPtr(v bool) *bool {
 }
 
 func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
-	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
+	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +124,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
 			GitHubConfigSecret:            autoscalingRunnerSet.Spec.GitHubConfigSecret,
 			VaultConfig:                   autoscalingRunnerSet.VaultConfig(),
-			RunnerScaleSetId:              runnerScaleSetId,
+			RunnerScaleSetId:              runnerScaleSetID,
 			AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 			AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 			EphemeralRunnerSetName:        ephemeralRunnerSet.Name,
@@ -496,7 +495,7 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 }
 
 func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*v1alpha1.EphemeralRunnerSet, error) {
-	runnerScaleSetId, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIdAnnotationKey])
+	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +540,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
 			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-				RunnerScaleSetId:   runnerScaleSetId,
+				RunnerScaleSetId:   runnerScaleSetID,
 				GitHubConfigUrl:    autoscalingRunnerSet.Spec.GitHubConfigUrl,
 				GitHubConfigSecret: autoscalingRunnerSet.Spec.GitHubConfigSecret,
 				Proxy:              autoscalingRunnerSet.Spec.Proxy,
@@ -556,28 +555,23 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 }
 
 func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) *v1alpha1.EphemeralRunner {
-	labels := make(map[string]string)
-	for k, v := range ephemeralRunnerSet.Labels {
-		if k == LabelKeyKubernetesComponent {
-			labels[k] = "runner"
-		} else {
-			labels[k] = v
-		}
-	}
+	labels := make(map[string]string, len(ephemeralRunnerSet.Labels))
+	maps.Copy(labels, ephemeralRunnerSet.Labels)
+	labels[LabelKeyKubernetesComponent] = "runner"
 
-	annotations := make(map[string]string)
-	for key, val := range ephemeralRunnerSet.Annotations {
-		annotations[key] = val
-	}
-
+	annotations := make(map[string]string, len(ephemeralRunnerSet.Annotations)+1)
+	maps.Copy(annotations, ephemeralRunnerSet.Annotations)
 	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 	return &v1alpha1.EphemeralRunner{
-		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: ephemeralRunnerSet.Name + "-runner-",
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
+			Finalizers: []string{
+				ephemeralRunnerFinalizerName,
+				ephemeralRunnerActionsFinalizerName,
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         ephemeralRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
@@ -593,27 +587,17 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	}
 }
 
-func (b *ResourceBuilder) newEphemeralRunnerPod(ctx context.Context, runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
+func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
 	var newPod corev1.Pod
 
-	labels := map[string]string{}
-	annotations := map[string]string{}
+	annotations := make(map[string]string, len(runner.Annotations)+len(runner.Spec.Annotations))
+	maps.Copy(annotations, runner.Annotations)
+	maps.Copy(annotations, runner.Spec.Annotations)
 
-	for k, v := range runner.Labels {
-		labels[k] = v
-	}
-	for k, v := range runner.Spec.Labels {
-		labels[k] = v
-	}
+	labels := make(map[string]string, len(runner.Labels)+len(runner.Spec.Labels)+2)
+	maps.Copy(labels, runner.Labels)
+	maps.Copy(labels, runner.Spec.Labels)
 	labels["actions-ephemeral-runner"] = string(corev1.ConditionTrue)
-
-	for k, v := range runner.Annotations {
-		annotations[k] = v
-	}
-	for k, v := range runner.Spec.Annotations {
-		annotations[k] = v
-	}
-
 	labels[LabelKeyPodTemplateHash] = hash.FNVHashStringObjects(
 		FilterLabels(labels, LabelKeyRunnerTemplateHash),
 		annotations,

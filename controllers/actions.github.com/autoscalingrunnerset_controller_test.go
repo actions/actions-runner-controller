@@ -34,9 +34,8 @@ import (
 )
 
 const (
-	autoscalingRunnerSetTestTimeout     = time.Second * 20
-	autoscalingRunnerSetTestInterval    = time.Millisecond * 250
-	autoscalingRunnerSetTestGitHubToken = "gh_token"
+	autoscalingRunnerSetTestTimeout  = time.Second * 20
+	autoscalingRunnerSetTestInterval = time.Millisecond * 250
 )
 
 var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
@@ -141,7 +140,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 						return "", err
 					}
 
-					if _, ok := created.Annotations[runnerScaleSetIdAnnotationKey]; !ok {
+					if _, ok := created.Annotations[runnerScaleSetIDAnnotationKey]; !ok {
 						return "", nil
 					}
 
@@ -149,7 +148,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 						return "", nil
 					}
 
-					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIdAnnotationKey], created.Annotations[AnnotationKeyGitHubRunnerGroupName]), nil
+					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIDAnnotationKey], created.Annotations[AnnotationKeyGitHubRunnerGroupName]), nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")

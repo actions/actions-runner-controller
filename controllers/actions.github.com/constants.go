@@ -36,7 +36,8 @@ const (
 	LabelKeyGitHubRepository        = "actions.github.com/repository"
 )
 
-// Finalizer used to protect resources from deletion while AutoscalingRunnerSet is running
+// AutoscalingRunnerSetCleanupFinalizerName is a finalizer used to protect resources
+// from deletion while AutoscalingRunnerSet is running
 const AutoscalingRunnerSetCleanupFinalizerName = "actions.github.com/cleanup-protection"
 
 const (
