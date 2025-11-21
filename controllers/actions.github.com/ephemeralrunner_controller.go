@@ -689,7 +689,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.newEphemeralRunnerPod(ctx, runner, secret, envs...)
+	newPod := r.newEphemeralRunnerPod(runner, secret, envs...)
 
 	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference to a new pod")
