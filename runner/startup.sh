@@ -132,7 +132,7 @@ cat .runner
 # }
 #
 # Especially `agentId` is important, as other than listing all the runners in the repo,
-# this is the only change we could get the exact runnner ID which can be useful for further
+# this is the only change we could get the exact runner ID which can be useful for further
 # GitHub API call like the below. Note that 171 is the agentId seen above.
 #   curl \
 #     -H "Accept: application/vnd.github.v3+json" \
