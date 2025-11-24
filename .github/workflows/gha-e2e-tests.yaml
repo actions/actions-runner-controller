@@ -31,13 +31,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -54,13 +54,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -77,13 +77,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -100,13 +100,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -123,13 +123,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -146,13 +146,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -169,13 +169,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -192,13 +192,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -215,13 +215,13 @@ jobs:
     timeout-minutes: 20
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{github.head_ref}}
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@dc0413987a085fa17d19df9e47d4677cf81ffef3
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
