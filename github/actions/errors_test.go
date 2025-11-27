@@ -119,7 +119,7 @@ func TestGitHubAPIError(t *testing.T) {
 	})
 }
 
-func ParseActionsErrorFromResponse(t *testing.T) {
+func TestParseActionsErrorFromResponse(t *testing.T) {
 	t.Run("empty content length", func(t *testing.T) {
 		response := &http.Response{
 			ContentLength: 0,
