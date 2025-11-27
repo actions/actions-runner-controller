@@ -119,88 +119,84 @@ func TestGitHubAPIError(t *testing.T) {
 	})
 }
 
-func ParseActionsErrorFromResponse(t *testing.T) {
+func TestParseActionsErrorFromResponse(t *testing.T) {
 	t.Run("empty content length", func(t *testing.T) {
 		response := &http.Response{
 			ContentLength: 0,
-			Header: http.Header{
-				actions.HeaderActionsActivityID: []string{"activity-id"},
-			},
-			StatusCode: 404,
+			Header:        http.Header{},
+			StatusCode:    404,
 		}
+		response.Header.Add(actions.HeaderActionsActivityID, "activity-id")
 
 		err := actions.ParseActionsErrorFromResponse(response)
 		require.Error(t, err)
-		assert.Equal(t, err.(*actions.ActionsError).ActivityID, "activity-id")
-		assert.Equal(t, err.(*actions.ActionsError).StatusCode, 404)
-		assert.Equal(t, err.(*actions.ActionsError).Err.Error(), "unknown exception")
+		assert.Equal(t, "activity-id", err.(*actions.ActionsError).ActivityID)
+		assert.Equal(t, 404, err.(*actions.ActionsError).StatusCode)
+		assert.Equal(t, "unknown exception", err.(*actions.ActionsError).Err.Error())
 	})
 
 	t.Run("contains text plain error", func(t *testing.T) {
 		errorMessage := "example error message"
 		response := &http.Response{
 			ContentLength: int64(len(errorMessage)),
-			Header: http.Header{
-				actions.HeaderActionsActivityID: []string{"activity-id"},
-				"Content-Type":                  []string{"text/plain"},
-			},
-			StatusCode: 404,
-			Body:       io.NopCloser(strings.NewReader(errorMessage)),
+			StatusCode:    404,
+			Header:        http.Header{},
+			Body:          io.NopCloser(strings.NewReader(errorMessage)),
 		}
+		response.Header.Add(actions.HeaderActionsActivityID, "activity-id")
+		response.Header.Add("Content-Type", "text/plain")
 
 		err := actions.ParseActionsErrorFromResponse(response)
 		require.Error(t, err)
 		var actionsError *actions.ActionsError
-		assert.ErrorAs(t, err, &actionsError)
-		assert.Equal(t, actionsError.ActivityID, "activity-id")
-		assert.Equal(t, actionsError.StatusCode, 404)
-		assert.Equal(t, actionsError.Err.Error(), errorMessage)
+		require.ErrorAs(t, err, &actionsError)
+		assert.Equal(t, "activity-id", actionsError.ActivityID)
+		assert.Equal(t, 404, actionsError.StatusCode)
+		assert.Equal(t, errorMessage, actionsError.Err.Error())
 	})
 
 	t.Run("contains json error", func(t *testing.T) {
 		errorMessage := `{"typeName":"exception-name","message":"example error message"}`
 		response := &http.Response{
 			ContentLength: int64(len(errorMessage)),
-			Header: http.Header{
-				actions.HeaderActionsActivityID: []string{"activity-id"},
-				"Content-Type":                  []string{"application/json"},
-			},
-			StatusCode: 404,
-			Body:       io.NopCloser(strings.NewReader(errorMessage)),
+			Header:        http.Header{},
+			StatusCode:    404,
+			Body:          io.NopCloser(strings.NewReader(errorMessage)),
 		}
+		response.Header.Add(actions.HeaderActionsActivityID, "activity-id")
+		response.Header.Add("Content-Type", "application/json")
 
 		err := actions.ParseActionsErrorFromResponse(response)
 		require.Error(t, err)
 		var actionsError *actions.ActionsError
-		assert.ErrorAs(t, err, &actionsError)
-		assert.Equal(t, actionsError.ActivityID, "activity-id")
-		assert.Equal(t, actionsError.StatusCode, 404)
+		require.ErrorAs(t, err, &actionsError)
+		assert.Equal(t, "activity-id", actionsError.ActivityID)
+		assert.Equal(t, 404, actionsError.StatusCode)
 
 		inner, ok := actionsError.Err.(*actions.ActionsExceptionError)
 		require.True(t, ok)
-		assert.Equal(t, inner.ExceptionName, "exception-name")
-		assert.Equal(t, inner.Message, "example error message")
+		assert.Equal(t, "exception-name", inner.ExceptionName)
+		assert.Equal(t, "example error message", inner.Message)
 	})
 
 	t.Run("wrapped exception error", func(t *testing.T) {
 		errorMessage := `{"typeName":"exception-name","message":"example error message"}`
 		response := &http.Response{
 			ContentLength: int64(len(errorMessage)),
-			Header: http.Header{
-				actions.HeaderActionsActivityID: []string{"activity-id"},
-				"Content-Type":                  []string{"application/json"},
-			},
-			StatusCode: 404,
-			Body:       io.NopCloser(strings.NewReader(errorMessage)),
+			Header:        http.Header{},
+			StatusCode:    404,
+			Body:          io.NopCloser(strings.NewReader(errorMessage)),
 		}
+		response.Header.Add(actions.HeaderActionsActivityID, "activity-id")
+		response.Header.Add("Content-Type", "application/json")
 
 		err := actions.ParseActionsErrorFromResponse(response)
 		require.Error(t, err)
 
 		var actionsExceptionError *actions.ActionsExceptionError
-		assert.ErrorAs(t, err, &actionsExceptionError)
+		require.ErrorAs(t, err, &actionsExceptionError)
 
-		assert.Equal(t, actionsExceptionError.ExceptionName, "exception-name")
-		assert.Equal(t, actionsExceptionError.Message, "example error message")
+		assert.Equal(t, "exception-name", actionsExceptionError.ExceptionName)
+		assert.Equal(t, "example error message", actionsExceptionError.Message)
 	})
 }

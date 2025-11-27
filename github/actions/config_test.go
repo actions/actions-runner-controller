@@ -15,10 +15,12 @@ import (
 func TestGitHubConfig(t *testing.T) {
 	t.Run("when given a valid URL", func(t *testing.T) {
 		tests := []struct {
+			name      string
 			configURL string
 			expected  *actions.GitHubConfig
 		}{
 			{
+				name:      "repository URL",
 				configURL: "https://github.com/org/repo",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeRepository,
@@ -29,6 +31,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "repository URL with trailing slash",
 				configURL: "https://github.com/org/repo/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeRepository,
@@ -39,6 +42,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "organization URL",
 				configURL: "https://github.com/org",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -49,6 +53,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "enterprise URL",
 				configURL: "https://github.com/enterprises/my-enterprise",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeEnterprise,
@@ -59,6 +64,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "enterprise URL with trailing slash",
 				configURL: "https://github.com/enterprises/my-enterprise/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeEnterprise,
@@ -69,6 +75,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "organization URL with www",
 				configURL: "https://www.github.com/org",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -79,6 +86,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "organization URL with www and trailing slash",
 				configURL: "https://www.github.com/org/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -89,6 +97,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "github local URL",
 				configURL: "https://github.localhost/org",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -99,6 +108,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "github local org URL",
 				configURL: "https://my-ghes.com/org",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -109,6 +119,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "github local URL with trailing slash",
 				configURL: "https://my-ghes.com/org/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -119,6 +130,7 @@ func TestGitHubConfig(t *testing.T) {
 				},
 			},
 			{
+				name:      "github local URL with ghe.com",
 				configURL: "https://my-ghes.ghe.com/org/",
 				expected: &actions.GitHubConfig{
 					Scope:        actions.GitHubScopeOrganization,
@@ -131,7 +143,7 @@ func TestGitHubConfig(t *testing.T) {
 		}
 
 		for _, test := range tests {
-			t.Run(test.configURL, func(t *testing.T) {
+			t.Run(test.name, func(t *testing.T) {
 				parsedURL, err := url.Parse(strings.Trim(test.configURL, "/"))
 				require.NoError(t, err)
 				test.expected.ConfigURL = parsedURL
