@@ -246,15 +246,6 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
 
-	case listenerPod.Status.Reason == "OOMKilled":
-		log.Info(
-			"Listener pod is OOMKilled",
-			"phase", listenerPod.Status.Phase,
-			"reason", listenerPod.Status.Reason,
-			"message", listenerPod.Status.Message,
-		)
-
-		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
 	case cs == nil:
 		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 		return ctrl.Result{}, nil

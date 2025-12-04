@@ -720,56 +720,6 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 				"Pod should be created",
 			)
 		})
-
-		It("Should re-create pod when the listener pod is OOMKilled", func() {
-			pod := new(corev1.Pod)
-			Eventually(
-				func() (string, error) {
-					err := k8sClient.Get(
-						ctx,
-						client.ObjectKey{
-							Name:      autoscalingListener.Name,
-							Namespace: autoscalingListener.Namespace,
-						},
-						pod,
-					)
-					if err != nil {
-						return "", err
-					}
-
-					return pod.Name, nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
-
-			updated := pod.DeepCopy()
-			oldPodUID := string(pod.UID)
-			updated.Status.Reason = "OOMKilled"
-			err := k8sClient.Status().Update(ctx, updated)
-			Expect(err).NotTo(HaveOccurred(), "failed to update pod status")
-
-			Eventually(
-				func() (string, error) {
-					pod = new(corev1.Pod)
-					err := k8sClient.Get(
-						ctx,
-						client.ObjectKey{
-							Name:      autoscalingListener.Name,
-							Namespace: autoscalingListener.Namespace,
-						},
-						pod,
-					)
-					if err != nil {
-						return "", err
-					}
-
-					return string(pod.UID), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be created")
-		})
 	})
 })
 
