@@ -745,7 +745,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
-		It("It should re-create pod on OutOfsomething", func() {
+		It("It should re-create pod on reason starting with OutOf", func() {
 			pod := new(corev1.Pod)
 			Eventually(
 				func() (bool, error) {

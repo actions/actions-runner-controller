@@ -316,26 +316,26 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		switch {
 		case pod.Status.Reason == "Evicted":
 			log.Info("Pod evicted; Deleting ephemeral runner or pod",
-				"PodPhase", pod.Status.Phase,
-				"PodReason", pod.Status.Reason,
-				"PodMessage", pod.Status.Message,
+				"podPhase", pod.Status.Phase,
+				"podReason", pod.Status.Reason,
+				"podMessage", pod.Status.Message,
 			)
 
 			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 
 		case strings.HasPrefix(pod.Status.Reason, "OutOf"): // most likely a transient issue.
 			log.Info("Pod set the termination phase due to resource constraints, but container state is not terminated. Deleting ephemeral runner or pod",
-				"PodPhase", pod.Status.Phase,
-				"PodReason", pod.Status.Reason,
-				"PodMessage", pod.Status.Message,
+				"podPhase", pod.Status.Phase,
+				"podReason", pod.Status.Reason,
+				"podMessage", pod.Status.Message,
 			)
 			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 
 		default:
 			log.Info("Pod is in failed phase; updating ephemeral runner status",
-				"PodPhase", pod.Status.Phase,
-				"PodReason", pod.Status.Reason,
-				"PodMessage", pod.Status.Message,
+				"podPhase", pod.Status.Phase,
+				"podReason", pod.Status.Reason,
+				"podMessage", pod.Status.Message,
 			)
 			if err := r.updateRunStatusFromPod(ctx, ephemeralRunner, pod, log); err != nil {
 				log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
@@ -349,7 +349,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Waiting for runner container status to be available")
 		return ctrl.Result{}, nil
 
-	case cs.State.Terminated == nil: // container is not terminated and pod phase is not faile< so runner is still running
+	case cs.State.Terminated == nil: // container is not terminated and pod phase is not failed, so runner is still running
+		log.Info("Runner container is still running; updating ephemeral runner status")
 		if err := r.updateRunStatusFromPod(ctx, ephemeralRunner, pod, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 			return ctrl.Result{}, err
