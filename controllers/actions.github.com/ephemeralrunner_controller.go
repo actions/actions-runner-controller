@@ -312,26 +312,44 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	cs := runnerContainerStatus(pod)
 	switch {
-	case cs == nil:
-		// starting, no container state yet
-		log.Info("Waiting for runner container status to be available")
-		return ctrl.Result{}, nil
-	case cs.State.Terminated == nil: // still running or evicted
-		if pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted" {
-			log.Info("Pod set the termination phase, but container state is not terminated. Deleting pod",
+	case pod.Status.Phase == corev1.PodFailed: // All containers are stopped
+		switch {
+		case pod.Status.Reason == "Evicted":
+			log.Info("Pod evicted; Deleting ephemeral runner or pod",
 				"PodPhase", pod.Status.Phase,
 				"PodReason", pod.Status.Reason,
 				"PodMessage", pod.Status.Message,
 			)
 
-			if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
-				log.Error(err, "failed to delete pod as failed on pod.Status.Phase: Failed")
+			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
+
+		case strings.HasPrefix(pod.Status.Reason, "OutOf"): // most likely a transient issue.
+			log.Info("Pod set the termination phase due to resource constraints, but container state is not terminated. Deleting ephemeral runner or pod",
+				"PodPhase", pod.Status.Phase,
+				"PodReason", pod.Status.Reason,
+				"PodMessage", pod.Status.Message,
+			)
+			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
+
+		default:
+			log.Info("Pod is in failed phase; updating ephemeral runner status",
+				"PodPhase", pod.Status.Phase,
+				"PodReason", pod.Status.Reason,
+				"PodMessage", pod.Status.Message,
+			)
+			if err := r.updateRunStatusFromPod(ctx, ephemeralRunner, pod, log); err != nil {
+				log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("Ephemeral runner container is still running")
+	case cs == nil:
+		// starting, no container state yet
+		log.Info("Waiting for runner container status to be available")
+		return ctrl.Result{}, nil
+
+	case cs.State.Terminated == nil: // container is not terminated and pod phase is not faile< so runner is still running
 		if err := r.updateRunStatusFromPod(ctx, ephemeralRunner, pod, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 			return ctrl.Result{}, err
@@ -340,36 +358,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	case cs.State.Terminated.ExitCode != 0: // failed
 		log.Info("Ephemeral runner container failed", "exitCode", cs.State.Terminated.ExitCode)
-		if ephemeralRunner.HasJob() {
-			log.Error(
-				errors.New("ephemeral runner has a job assigned, but the pod has failed"),
-				"Ephemeral runner either has faulty entrypoint or something external killing the runner",
-			)
-			log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
-			if err := r.Delete(ctx, ephemeralRunner); err != nil {
-				log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
-			log.Info("Trying to remove the runner from the service")
-			actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
-			if err != nil {
-				log.Error(err, "Failed to get actions client for removing the runner from the service")
-				return ctrl.Result{}, nil
-			}
-			if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
-				log.Error(err, "Failed to remove the runner from the service")
-				return ctrl.Result{}, nil
-			}
-			log.Info("Removed the runner from the service")
-			return ctrl.Result{}, nil
-		}
-		if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
-			log.Error(err, "Failed to delete runner pod on failure")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 
 	default: // succeeded
 		log.Info("Ephemeral runner has finished successfully, deleting ephemeral runner", "exitCode", cs.State.Terminated.ExitCode)
@@ -379,6 +368,40 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, nil
 	}
+}
+
+func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	if ephemeralRunner.HasJob() {
+		log.Error(
+			errors.New("ephemeral runner has a job assigned, but the pod has failed"),
+			"Ephemeral runner either has faulty entrypoint or something external killing the runner",
+		)
+		log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
+		if err := r.Delete(ctx, ephemeralRunner); err != nil {
+			log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
+			return err
+		}
+
+		log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
+		log.Info("Trying to remove the runner from the service")
+		actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+		if err != nil {
+			log.Error(err, "Failed to get actions client for removing the runner from the service")
+			return nil
+		}
+		if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
+			log.Error(err, "Failed to remove the runner from the service")
+			return nil
+		}
+		log.Info("Removed the runner from the service")
+		return nil
+	}
+	if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
+		log.Error(err, "Failed to delete runner pod on failure")
+		return err
+	}
+
+	return nil
 }
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ok bool, err error) {
