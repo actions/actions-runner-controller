@@ -324,7 +324,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 
 		case strings.HasPrefix(pod.Status.Reason, "OutOf"): // most likely a transient issue.
-			log.Info("Pod set the termination phase due to resource constraints, but container state is not terminated. Deleting ephemeral runner or pod",
+			log.Info("Pod failed with reason starting with OutOf. Deleting ephemeral runner or pod",
 				"podPhase", pod.Status.Phase,
 				"podReason", pod.Status.Reason,
 				"podMessage", pod.Status.Message,
