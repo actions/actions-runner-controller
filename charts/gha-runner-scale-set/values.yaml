@@ -13,6 +13,12 @@ githubConfigSecret:
   # Example:
   # github_token: "ghp_sampleSampleSampleSampleSampleSample"
   github_token: ""
+
+## logForwarding controls whether GitHub Actions build logs are forwarded to stdout
+## When enabled, job execution logs will be output to the pod's stdout after job completion
+## This allows capturing build logs through Kubernetes logging solutions
+logForwarding:
+  enabled: false
 #
 ## (Variation B) When using a GitHub App, the syntax is as follows:
 # githubConfigSecret:
