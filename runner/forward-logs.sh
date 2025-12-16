@@ -17,16 +17,15 @@ if [ ! -d "$DIAG_DIR" ]; then
 fi
 
 # Find worker log files (these contain the actual job execution logs)
-WORKER_LOGS=$(find "$DIAG_DIR" -name "Worker_*.log" -type f 2>/dev/null || true)
-
-if [ -z "$WORKER_LOGS" ]; then
-    echo "No worker log files found"
-    exit 0
-fi
-
 echo "=== GITHUB ACTIONS BUILD LOGS START ==="
-for log_file in $WORKER_LOGS; do
+found_logs=0
+find "$DIAG_DIR" -name "Worker_*.log" -type f -print0 2>/dev/null | while IFS= read -r -d '' log_file; do
+    found_logs=1
     echo "--- Log from: $(basename "$log_file") ---"
     cat "$log_file"
 done
+
+if [ "$found_logs" -eq 0 ]; then
+    echo "No worker log files found"
+fi
 echo "=== GITHUB ACTIONS BUILD LOGS END ==="
