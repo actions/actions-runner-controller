@@ -300,14 +300,6 @@ var _ = Describe("EphemeralRunner", func() {
 		})
 
 		It("It should delete ephemeral runner when pod failed before runner state is recorded and job not assigned", func() {
-			Eventually(func() (string, error) {
-				current := new(v1alpha1.EphemeralRunner)
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
-					return "", err
-				}
-				return current.Status.JobID, nil
-			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo("1"))
-
 			pod := new(corev1.Pod)
 			Eventually(func() (bool, error) {
 				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
