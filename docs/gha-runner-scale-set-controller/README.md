@@ -43,6 +43,33 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.13.1
+
+1. Make restart pod more flexible to different failure scenarios [#4340](https://github.com/actions/actions-runner-controller/pull/4340)
+1. Bump golangci/golangci-lint-action from 9.1.0 to 9.2.0 in the actions group [#4335](https://github.com/actions/actions-runner-controller/pull/4335)
+1. Bump the gomod group across 1 directory with 10 updates [#4338](https://github.com/actions/actions-runner-controller/pull/4338)
+1. Re-schedule if the failed reason starts with OutOf [#4336](https://github.com/actions/actions-runner-controller/pull/4336)
+1. Restart the listener if pod is evicted [#4332](https://github.com/actions/actions-runner-controller/pull/4332)
+1. Typo in test name caused test to not execute [#4330](https://github.com/actions/actions-runner-controller/pull/4330)
+1. Bump the actions group with 3 updates [#4328](https://github.com/actions/actions-runner-controller/pull/4328)
+1. Remove old e2e tests [#4325](https://github.com/actions/actions-runner-controller/pull/4325)
+1. Bump the actions group across 1 directory with 4 updates [#4309](https://github.com/actions/actions-runner-controller/pull/4309)
+1. Bump golang.org/x/crypto from 0.43.0 to 0.45.0 [#4318](https://github.com/actions/actions-runner-controller/pull/4318)
+1. Add support for giving kubernetes mode scaleset service account additional permissions [#4282](https://github.com/actions/actions-runner-controller/pull/4282)
+1. Bump the gomod group across 1 directory with 11 updates [#4317](https://github.com/actions/actions-runner-controller/pull/4317)
+1. Code style changes on the controller [#4324](https://github.com/actions/actions-runner-controller/pull/4324)
+1. Add ephemeral runner finalizer during creation and check finalizer without requeue [#4320](https://github.com/actions/actions-runner-controller/pull/4320)
+1. e2e: move from deprecated openebs charts to new registry [#4321](https://github.com/actions/actions-runner-controller/pull/4321)
+1. Create e2e test suite [#3136](https://github.com/actions/actions-runner-controller/pull/3136)
+1. Handle resource quota on status forbidden by retrying [#4305](https://github.com/actions/actions-runner-controller/pull/4305)
+1. Use combination of namespace, GitHub URL, and runner group when hashing the listener name [#4299](https://github.com/actions/actions-runner-controller/pull/4299)
+1. Bump kubebuilder tools in the workflow [#4300](https://github.com/actions/actions-runner-controller/pull/4300)
+1. Bump timeout for min runners workflow to 30s [#4306](https://github.com/actions/actions-runner-controller/pull/4306)
+1. Fix for code scanning alert no. 5: Workflow does not contain permissions [#4292](https://github.com/actions/actions-runner-controller/pull/4292)
+1. Delete listener resources without requeueing on each call [#4289](https://github.com/actions/actions-runner-controller/pull/4289)
+1. Fix first interaction action [#4290](https://github.com/actions/actions-runner-controller/pull/4290)
+1. Bump github/codeql-action from 3 to 4 in the actions group [#4281](https://github.com/actions/actions-runner-controller/pull/4281)
+
 ### 0.13.0
 
 1. Remove workflow actions version comments since upgrades are done via dependabot [#4161](https://github.com/actions/actions-runner-controller/pull/4161)
@@ -57,7 +84,6 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 1. Remove ephemeral runner when exit code != 0 and is patched with the job [#4239](https://github.com/actions/actions-runner-controller/pull/4239)
 1. Bump the gomod group across 1 directory with 4 updates [#4277](https://github.com/actions/actions-runner-controller/pull/4277)
 1. Bump all dependencies [#4266](https://github.com/actions/actions-runner-controller/pull/4266)
-
 
 ### 0.12.1
 
