@@ -1,14 +1,15 @@
-DOCKER_USER ?= summerwind
+DOCKER_USER ?= igeolise
 DOCKER ?= docker
 DEFAULT_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 DIND_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind
 DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
-OS_IMAGE ?= ubuntu-22.04
+OS_IMAGE ?= ubuntu-24.04
 TARGETPLATFORM ?= $(shell arch)
+IMAGE_TAG_SUFFIX ?= -0.0.1
 
 RUNNER_VERSION ?= 2.330.0
 RUNNER_CONTAINER_HOOKS_VERSION ?= 0.8.0
-DOCKER_VERSION ?= 28.0.4
+DOCKER_VERSION ?= 29.1.3
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
@@ -46,20 +47,20 @@ docker-build-set: check-target-platform
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.${OS_IMAGE}.dockerfile \
-	  -t ${DEFAULT_RUNNER_NAME}:${OS_IMAGE} .
+	  -t ${DEFAULT_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX} .
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
-	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE} .
+	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX} .
 	${DOCKER} build \
 	  --build-arg TARGETPLATFORM=${TARGETPLATFORM} \
 	  --build-arg RUNNER_VERSION=${RUNNER_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind-rootless.${OS_IMAGE}.dockerfile \
-	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}" .
+	  -t "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX}" .
 
 docker-build-default: check-target-platform
 	${DOCKER} build \
@@ -68,7 +69,7 @@ docker-build-default: check-target-platform
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner.${OS_IMAGE}.dockerfile \
-	  -t ${DEFAULT_RUNNER_NAME}:${OS_IMAGE} .
+	  -t ${DEFAULT_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX} .
 
 docker-build-dind: check-target-platform
 	${DOCKER} build \
@@ -77,18 +78,18 @@ docker-build-dind: check-target-platform
 	  --build-arg RUNNER_CONTAINER_HOOKS_VERSION=${RUNNER_CONTAINER_HOOKS_VERSION} \
 	  --build-arg DOCKER_VERSION=${DOCKER_VERSION} \
 	  -f actions-runner-dind.${OS_IMAGE}.dockerfile \
-	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE} .
+	  -t ${DIND_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX} .
 
 docker-push-default:
-	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}"
+	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX}"
 
 docker-push-dind:
-	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}"
+	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX}"
 
 docker-push-set:
-	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}"
-	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}"
-	${DOCKER} push "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}"
+	${DOCKER} push "${DEFAULT_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX}"
+	${DOCKER} push "${DIND_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX}"
+	${DOCKER} push "${DIND_ROOTLESS_RUNNER_NAME}:${OS_IMAGE}${IMAGE_TAG_SUFFIX}"
 
 docker-buildx-set:
 	export DOCKER_CLI_EXPERIMENTAL=enabled ;\
