@@ -415,7 +415,12 @@ template:
     containers:
       - name: runner
         image: ghcr.io/actions/actions-runner:latest
+        imagePullPolicy: Always
         command: ["/home/runner/run.sh"]
+    dindContainers:
+      - name: dind
+        image: docker:dind
+        imagePullPolicy: Always
 ## Optional controller service account that needs to have required Role and RoleBinding
 ## to operate this gha-runner-scale-set installation.
 ## The helm chart will try to find the controller deployment and its service account at installation time.
