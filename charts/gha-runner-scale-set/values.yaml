@@ -116,6 +116,8 @@ githubConfigSecret:
 ## empty, and configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to "dind", "kubernetes", or "kubernetes-novolume"
+#   dind:
+#     mtu: 1450   ## Optional, for DinD mode only.  Defaults to 1450.
 #   ## the following is required when containerMode.type=kubernetes
 #   kubernetesModeWorkVolumeClaim:
 #     accessModes: ["ReadWriteOnce"]
