@@ -1,0 +1,9 @@
+suite: "AutoscalingRunnerSet"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render base labels
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_"
