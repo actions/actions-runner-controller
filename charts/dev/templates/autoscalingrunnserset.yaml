@@ -3,9 +3,11 @@ kind: AutoscalingRunnerSet
 metadata:
   name: {{ include "autoscaling-runner-set.name" . | quote }}
   namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+  labels: {{ include "autoscaling-runner-set.labels" . | nindent 4 }}
+
 spec:
   githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}
-  githubConfigSecret: {{ include "githubsecret.name" . | quote }}
+  githubConfigSecret: {{ include "github-secret.name" . | quote }}
   runnerGroup: {{ .Values.scaleset.runnerGroup | quote }}
 
   {{- if .Values.githubServerTLS }}
@@ -18,21 +20,21 @@ spec:
     {{- end }}
   {{- end }}
 
-  {{- if and .Values.keyVault .Values.keyVault.type }}
+  {{- if and .Values.secretResolution (ne .Values.secretResolution.type "kubernetes") }}
   vaultConfig:
-    type: {{ .Values.keyVault.type }}
-    {{- if .Values.keyVault.proxy }}
-    proxy: {{- toYaml .Values.keyVault.proxy | nindent 6 }}
+    type: {{ .Values.secretResolution.type }}
+    {{- if .Values.secretResolution.proxy }}
+    proxy: {{- toYaml .Values.secretResolution.proxy | nindent 6 }}
     {{- end }}
-    {{- if eq .Values.keyVault.type "azure_key_vault" }}
+    {{- if eq .Values.secretResolution.type "azureKeyVault" }}
     azureKeyVault:
-      url: {{ .Values.keyVault.azureKeyVault.url }}
-      tenantId: {{ .Values.keyVault.azureKeyVault.tenantId }}
-      clientId: {{ .Values.keyVault.azureKeyVault.clientId }}
-      certificatePath: {{ .Values.keyVault.azureKeyVault.certificatePath }}
-      secretKey: {{ .Values.keyVault.azureKeyVault.secretKey }}
+      url: {{ .Values.secretResolution.azureKeyVault.url }}
+      tenantId: {{ .Values.secretResolution.azureKeyVault.tenantId }}
+      clientId: {{ .Values.secretResolution.azureKeyVault.clientId }}
+      certificatePath: {{ .Values.secretResolution.azureKeyVault.certificatePath }}
+      secretKey: {{ .Values.secretResolution.azureKeyVault.secretKey }}
     {{- else }}
-    {{- fail "Unsupported keyVault type: " .Values.keyVault.type }}
+        {{- fail "Unsupported keyVault type: " .Values.secretResolution.type }}
     {{- end }}
   {{- end }}
 

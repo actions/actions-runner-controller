@@ -1,14 +1,15 @@
 ## By default .Release.namespace is used
 namespaceOverride: ""
-# Name of the scaleset
+
 scaleset:
+  # Name of the scaleset
   name: ""
   runnerGroup: "default"
   ## minRunners is the min number of idle runners. The target number of runners created will be
   ## calculated as a sum of minRunners and the number of jobs assigned to the scale set.
-  # min_runners: 0
+  # minRunners: 0
   ## maxRunners is the max number of runners the autoscaling runner set will scale up to.
-  # max_runners: 5
+  # maxRunners: 5
 
 # Auth object provides authorization parameters.
 # You should apply either:
@@ -25,6 +26,32 @@ auth:
     clientId: ""
     installationId: ""
     privateKey: ""
+
+secretResolution:
+  # Name of the secret resolver to use.
+  # Available values:
+  # - "kubernetes" - use Kubernetes secrets
+  # - "azureKeyVault" - use Azure Key Vault
+  type: "kubernetes"
+
+  ## Proxy settings when type is NOT "kubernetes"
+  # proxy:
+  #   http:
+  #     url: http://proxy.com:1234
+  #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+  #   https:
+  #     url: http://proxy.com:1234
+  #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+  #   noProxy:
+  #     - example.com
+  #     - example.org
+
+  # azureKeyVault:
+  #   url: ""
+  #   client_id: ""
+  #   tenant_id: ""
+  #   certificate_path: ""
+
 #
 ## proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.
@@ -57,11 +84,26 @@ auth:
 #     - name: side-car
 #       image: example-sidecar
 
+## Resource object allows modifying resources created by the chart itself
+resource:
+  all:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  autoscalingRunnerSet:
+    metadata:
+      labels: {}
+      annotations: {}
+
 # Template applied for the runner container
 runner:
   # metadata:
   #   labels: []
   #   annotations: []
+
+  # Mode can be used to automatically add required configuration for the selected mode
+  mode: "" # Available modes: "", "kubernetes", "dind"
 
   # container field is applied to the container named "runner". You cannot override the name of the runner container
   container:
@@ -75,6 +117,7 @@ runner:
   kubernetesMode:
     default: true
     serviceAccountName: ""
+    extraPermissions: []
     extension: {}
 ## A self-signed CA certificate for communication with the GitHub server can be
 ## provided using a config map key selector. If `runnerMountPath` is set, for
