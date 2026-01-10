@@ -140,28 +140,10 @@ runner:
 #       key: ca.crt
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
-## keyVault object if applied switches from the kubernetes secrets to the vault provider defined in `keyVault.type`
-## Secret name is used to resolve the secret inside the vault
-# keyVault:
-# Available values: "azure_key_vault"
-# type: ""
-# Configuration related to azure key vault
-# azure_key_vault:
-#   url: ""
-#   client_id: ""
-#   tenant_id: ""
-#   certificate_path: ""
-# proxy:
-#   http:
-#     url: http://proxy.com:1234
-#     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
-#   https:
-#     url: http://proxy.com:1234
-#     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
-#   noProxy:
-#     - example.com
-#     - example.org
-
+## controllerServiceAccount is the service account of the controller
+controllerServiceAccount:
+  namespace: ""
+  name: ""
 ## listenerMetrics are configurable metrics applied to the listener.
 ## In order to avoid helm merging these fields, we left the metrics commented out.
 ## When configuring metrics, please uncomment the listenerMetrics object below.

@@ -6,4 +6,13 @@ tests:
     set:
       scaleset.name: "test"
       auth.url: "https://github.com/org"
-      auth.githubToken: "gh_"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: "test-name"
