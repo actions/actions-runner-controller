@@ -1,4 +1,4 @@
-suite: "Test AutoscalingRunnerSet"
+suite: "Test AutoscalingRunnerSet Labels"
 templates:
   - autoscalingrunnserset.yaml
 tests:

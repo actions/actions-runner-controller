@@ -1,0 +1,290 @@
+suite: "Test AutoscalingRunnerSet Proxy Configuration"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should not render proxy section when not configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.proxy
+
+  - it: should render http proxy configuration
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://proxy.example.com:3128"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://proxy.example.com:3128"
+      - notExists:
+          path: spec.proxy.https
+
+  - it: should render https proxy configuration
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        https:
+          url: "https://secure-proxy.example.com:3128"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.https.url
+          value: "https://secure-proxy.example.com:3128"
+      - notExists:
+          path: spec.proxy.http
+
+  - it: should render both http and https proxy configuration
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://proxy.example.com:3128"
+        https:
+          url: "https://secure-proxy.example.com:3128"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://proxy.example.com:3128"
+      - equal:
+          path: spec.proxy.https.url
+          value: "https://secure-proxy.example.com:3128"
+
+  - it: should render http proxy with credential secret reference
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://proxy.example.com:3128"
+          credentialSecretRef: "proxy-credentials"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://proxy.example.com:3128"
+      - equal:
+          path: spec.proxy.http.credentialSecretRef
+          value: "proxy-credentials"
+
+  - it: should render https proxy with credential secret reference
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        https:
+          url: "https://secure-proxy.example.com:3128"
+          credentialSecretRef: "secure-proxy-creds"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.https.url
+          value: "https://secure-proxy.example.com:3128"
+      - equal:
+          path: spec.proxy.https.credentialSecretRef
+          value: "secure-proxy-creds"
+
+  - it: should render proxy with noProxy list
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://proxy.example.com:3128"
+        noProxy:
+          - "localhost"
+          - "127.0.0.1"
+          - ".example.local"
+          - "10.0.0.0/8"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://proxy.example.com:3128"
+      - contains:
+          path: spec.proxy.noProxy
+          content: "localhost"
+      - contains:
+          path: spec.proxy.noProxy
+          content: "127.0.0.1"
+      - contains:
+          path: spec.proxy.noProxy
+          content: ".example.local"
+      - contains:
+          path: spec.proxy.noProxy
+          content: "10.0.0.0/8"
+
+  - it: should render complete proxy configuration with all options
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://proxy.example.com:3128"
+          credentialSecretRef: "proxy-credentials"
+        https:
+          url: "https://secure-proxy.example.com:3128"
+          credentialSecretRef: "secure-proxy-creds"
+        noProxy:
+          - "localhost"
+          - "127.0.0.1"
+          - ".local"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://proxy.example.com:3128"
+      - equal:
+          path: spec.proxy.http.credentialSecretRef
+          value: "proxy-credentials"
+      - equal:
+          path: spec.proxy.https.url
+          value: "https://secure-proxy.example.com:3128"
+      - equal:
+          path: spec.proxy.https.credentialSecretRef
+          value: "secure-proxy-creds"
+      - contains:
+          path: spec.proxy.noProxy
+          content: "localhost"
+      - contains:
+          path: spec.proxy.noProxy
+          content: "127.0.0.1"
+      - contains:
+          path: spec.proxy.noProxy
+          content: ".local"
+
+  - it: should render proxy configuration with empty noProxy list
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://proxy.example.com:3128"
+        noProxy: []
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://proxy.example.com:3128"
+      - notExists:
+          path: spec.proxy.noProxy
+
+  - it: should not render proxy when configured as empty object
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy: {}
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.proxy
+
+  - it: should render proxy with only http without credentials
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        http:
+          url: "http://unauthenticated-proxy.example.com:8080"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.http.url
+          value: "http://unauthenticated-proxy.example.com:8080"
+      - notExists:
+          path: spec.proxy.http.credentialSecretRef
+      - notExists:
+          path: spec.proxy.https
+
+  - it: should render proxy with https and noProxy without http
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      proxy:
+        https:
+          url: "https://secure-proxy.example.com:3128"
+        noProxy:
+          - "internal.example.com"
+          - "*.local"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.proxy.https.url
+          value: "https://secure-proxy.example.com:3128"
+      - notExists:
+          path: spec.proxy.http
+      - contains:
+          path: spec.proxy.noProxy
+          content: "internal.example.com"
+      - contains:
+          path: spec.proxy.noProxy
+          content: "*.local"

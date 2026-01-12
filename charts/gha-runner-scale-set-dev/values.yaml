@@ -27,6 +27,12 @@ auth:
     installationId: ""
     privateKey: ""
 
+# secretResolution configures how secrets are resolved for this scale set.
+# By default, secrets are resolved using Kubernetes secrets. When Kubernetes
+# secrets are used, no proxy config will be applied.
+#
+# If you decide to use secret integrations with vaults, you can configure
+# proxy settings for the vault communication here.
 secretResolution:
   # Name of the secret resolver to use.
   # Available values:
@@ -46,16 +52,15 @@ secretResolution:
   #     - example.com
   #     - example.org
 
+  ## Configuration for Azure Key Vault integration
   # azureKeyVault:
   #   url: ""
   #   client_id: ""
   #   tenant_id: ""
   #   certificate_path: ""
 
-#
-## proxy can be used to define proxy settings that will be used by the
+## Proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.
-#
 # proxy:
 #   http:
 #     url: http://proxy.com:1234
@@ -86,15 +91,19 @@ secretResolution:
 
 ## Resource object allows modifying resources created by the chart itself
 resource:
+  # Specifies metadata that will be applied to all resources managed by ARC
   all:
     metadata:
       labels: {}
       annotations: {}
 
+  # Specifies metadata that will be applied to the AutoscalingRunnerSet resource
   autoscalingRunnerSet:
     metadata:
       labels: {}
       annotations: {}
+      
+  # TODO: Add more resource customizations when needed
 
 # Template applied for the runner container
 runner:

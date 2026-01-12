@@ -10,6 +10,7 @@ spec:
   githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}
   githubConfigSecret: {{ include "github-secret.name" . | quote }}
   runnerGroup: {{ .Values.scaleset.runnerGroup | quote }}
+  runnerScaleSetName: {{ .Values.scaleset.name | quote }}
 
   {{- if .Values.githubServerTLS }}
   githubServerTLS:
