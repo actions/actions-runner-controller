@@ -22,15 +22,16 @@ The name of the GitHub secret used for authentication.
 {{- end }}
 {{- end }}
 
+
 {{/*
 Create the labels for the autoscaling runner set.
 */}}
 {{- define "autoscaling-runner-set.labels" -}}
 {{- $resourceLabels := dict "app.kubernetes.io/component" "autoscaling-runner-set" -}}
-{{- $commonLabels := include "gha-common-labels" .Values | fromYaml -}}
-{{- $userLabels := include "gha-process-labels" .Values.resource.autoscalingRunnerSet.metadata.labels | fromYaml -}}
-{{- $global := include "gha-process-labels" .Values.resource.all.metadata.labels | fromYaml -}}
-{{- mergeOverwrite $global $userLabels $resourceLabels $commonLabels -}}
+{{- $commonLabels := include "gha-common-labels" . | fromYaml -}}
+{{- $userLabels := include "gha-process-labels" (.Values.resource.autoscalingRunnerSet.metadata.labels | default (dict)) | fromYaml -}}
+{{- $global := include "gha-process-labels" (.Values.resource.all.metadata.labels | default (dict)) | fromYaml -}}
+{{- toYaml (mergeOverwrite $global $userLabels $resourceLabels $commonLabels) }}
 {{- end }}
 
 {{/*
@@ -47,6 +48,7 @@ actions.github.com/scale-set-name: {{ include "autoscaling-runner-set.name" . }}
 actions.github.com/scale-set-namespace: {{ include "autoscaling-runner-set.namespace" . }}
 {{- end }}
 
+
 {{/*
 Takes a map of user labels and removes the ones with "actions.github.com/" prefix
 */}}
@@ -58,12 +60,28 @@ Takes a map of user labels and removes the ones with "actions.github.com/" prefi
     {{- $_ := set $processed $key $value -}}
   {{- end -}}
 {{- end -}}
-{{- $processed -}}
+{{- $processed | toYaml -}}
 {{- end }}
 
 {{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "gha-runner-scale-set.chart" -}}
-{{- printf "%s-%s" (include "gha-base-name" .) .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- printf "gha-rs-%s" .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
+
+{{/*
+Container spec that is expanded for the runner container
+*/}}
+{{- define "container-spec.runner" -}}
+
+{{- if not .Values.runner.container }}
+{{ fail "You must provide a runner container specification in values.runner.container" }}
+{{- end }}
+
+{{- $tlsConfig := (default (dict) .Values.githubServerTLS) -}}
+name: runner
+image: {{ .Values.runner.container.image | default "ghcr.io/actions/runner:latest" }}
+command: {{ toJson (default (list "/home/runner/run.sh") .Values.runner.container.command) }}
+{{- end }}
+

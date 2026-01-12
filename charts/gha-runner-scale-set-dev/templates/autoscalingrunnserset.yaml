@@ -3,7 +3,8 @@ kind: AutoscalingRunnerSet
 metadata:
   name: {{ include "autoscaling-runner-set.name" . | quote }}
   namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
-  labels: {{ include "autoscaling-runner-set.labels" . | nindent 4 }}
+  labels:
+    {{- include "autoscaling-runner-set.labels" . | nindent 4 }}
 
 spec:
   githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}
@@ -92,5 +93,4 @@ spec:
   template:
     spec:
       containers:
-        - name: runner
-          {{- include "runner-container-spec" . | nindent 10 }}
+        # {{- include "container-spec.runner" . | nindent 8 }}
