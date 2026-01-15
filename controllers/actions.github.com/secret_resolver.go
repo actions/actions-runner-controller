@@ -45,7 +45,7 @@ func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient,
 
 type ActionsGitHubObject interface {
 	client.Object
-	GitHubConfigUrl() string
+	GitHubConfigURL() string
 	GitHubConfigSecret() string
 	GitHubProxy() *v1alpha1.ProxyConfig
 	GitHubServerTLS() *v1alpha1.TLSConfig
@@ -85,9 +85,9 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 		}
 
 		if proxy.HTTP != nil {
-			u, err := url.Parse(proxy.HTTP.Url)
+			u, err := url.Parse(proxy.HTTP.URL)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse proxy http url %q: %w", proxy.HTTP.Url, err)
+				return nil, fmt.Errorf("failed to parse proxy http url %q: %w", proxy.HTTP.URL, err)
 			}
 
 			if ref := proxy.HTTP.CredentialSecretRef; ref != "" {
@@ -101,9 +101,9 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 		}
 
 		if proxy.HTTPS != nil {
-			u, err := url.Parse(proxy.HTTPS.Url)
+			u, err := url.Parse(proxy.HTTPS.URL)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse proxy https url %q: %w", proxy.HTTPS.Url, err)
+				return nil, fmt.Errorf("failed to parse proxy https url %q: %w", proxy.HTTPS.URL, err)
 			}
 
 			if ref := proxy.HTTPS.CredentialSecretRef; ref != "" {
@@ -150,7 +150,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 
 	return sr.multiClient.GetClientFor(
 		ctx,
-		obj.GitHubConfigUrl(),
+		obj.GitHubConfigURL(),
 		appConfig,
 		obj.GetNamespace(),
 		clientOptions...,

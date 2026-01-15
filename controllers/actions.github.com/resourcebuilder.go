@@ -109,7 +109,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		annotationKeyValuesHash:     autoscalingRunnerSet.Annotations[annotationKeyValuesHash],
 	}
 
-	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
+	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigURL, labels); err != nil {
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
@@ -121,10 +121,10 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			Annotations: annotations,
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
-			GitHubConfigUrl:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
+			GitHubConfigURL:               autoscalingRunnerSet.Spec.GitHubConfigURL,
 			GitHubConfigSecret:            autoscalingRunnerSet.Spec.GitHubConfigSecret,
 			VaultConfig:                   autoscalingRunnerSet.VaultConfig(),
-			RunnerScaleSetId:              runnerScaleSetID,
+			RunnerScaleSetID:              runnerScaleSetID,
 			AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 			AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 			EphemeralRunnerSetName:        ephemeralRunnerSet.Name,
@@ -174,12 +174,12 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	}
 
 	config := ghalistenerconfig.Config{
-		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigUrl,
+		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigURL,
 		EphemeralRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		EphemeralRunnerSetName:      autoscalingListener.Spec.EphemeralRunnerSetName,
 		MaxRunners:                  autoscalingListener.Spec.MaxRunners,
 		MinRunners:                  autoscalingListener.Spec.MinRunners,
-		RunnerScaleSetId:            autoscalingListener.Spec.RunnerScaleSetId,
+		RunnerScaleSetId:            autoscalingListener.Spec.RunnerScaleSetID,
 		RunnerScaleSetName:          autoscalingListener.Spec.AutoscalingRunnerSetName,
 		ServerRootCA:                cert,
 		LogLevel:                    scaleSetListenerLogLevel,
@@ -509,7 +509,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
 	})
 
-	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
+	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigURL, labels); err != nil {
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
@@ -540,8 +540,8 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
 			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-				RunnerScaleSetId:   runnerScaleSetID,
-				GitHubConfigUrl:    autoscalingRunnerSet.Spec.GitHubConfigUrl,
+				RunnerScaleSetID:   runnerScaleSetID,
+				GitHubConfigURL:    autoscalingRunnerSet.Spec.GitHubConfigURL,
 				GitHubConfigSecret: autoscalingRunnerSet.Spec.GitHubConfigSecret,
 				Proxy:              autoscalingRunnerSet.Spec.Proxy,
 				GitHubServerTLS:    autoscalingRunnerSet.Spec.GitHubServerTLS,
@@ -689,7 +689,7 @@ func scaleSetListenerName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) s
 		hashSuffix(
 			autoscalingRunnerSet.Namespace,
 			autoscalingRunnerSet.Spec.RunnerGroup,
-			autoscalingRunnerSet.Spec.GitHubConfigUrl,
+			autoscalingRunnerSet.Spec.GitHubConfigURL,
 		),
 	)
 }

@@ -5,6 +5,14 @@ metadata:
   namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
   labels:
     {{- include "autoscaling-runner-set.labels" . | nindent 4 }}
+  annotations:
+    {{- $globalAnnotations := (default (dict) .Values.resource.all.metadata.annotations) }}
+    {{- $resourceAnnotations := (default (dict) .Values.resource.autoscalingRunnerSet.metadata.annotations) }}
+    {{- $annotations := mergeOverwrite $globalAnnotations $resourceAnnotations }}
+    {{- range $k, $v := $annotations }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    actions.github.com/values-hash: {{ toJson .Values | sha256sum | trunc 63 }}
 
 spec:
   githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}

@@ -73,9 +73,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			},
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigURL:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -158,10 +158,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					// Set status to simulate a configured EphemeralRunner
 					refetch := false
 					for i, runner := range runnerList.Items {
-						if runner.Status.RunnerId == 0 {
+						if runner.Status.RunnerID == 0 {
 							updatedRunner := runner.DeepCopy()
 							updatedRunner.Status.Phase = corev1.PodRunning
-							updatedRunner.Status.RunnerId = i + 100
+							updatedRunner.Status.RunnerID = i + 100
 							err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 							Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 							refetch = true
@@ -218,10 +218,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					// Set status to simulate a configured EphemeralRunner
 					refetch := false
 					for i, runner := range runnerList.Items {
-						if runner.Status.RunnerId == 0 {
+						if runner.Status.RunnerID == 0 {
 							updatedRunner := runner.DeepCopy()
 							updatedRunner.Status.Phase = corev1.PodRunning
-							updatedRunner.Status.RunnerId = i + 100
+							updatedRunner.Status.RunnerID = i + 100
 							err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 							Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 							refetch = true
@@ -776,12 +776,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Now, let's say ephemeral runner controller patched these ephemeral runners with the registration.
 
 			updatedRunner = runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.RunnerId = 1
+			updatedRunner.Status.RunnerID = 1
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.RunnerId = 2
+			updatedRunner.Status.RunnerID = 2
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -942,7 +942,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					var failedOriginal *v1alpha1.EphemeralRunner
 					var empty []*v1alpha1.EphemeralRunner
 					for _, runner := range runnerList.Items {
-						switch runner.Status.RunnerId {
+						switch runner.Status.RunnerID {
 						case 101:
 							pendingOriginal = runner.DeepCopy()
 						case 102:
@@ -961,7 +961,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						empty = empty[1:]
 
 						pending := pendingOriginal.DeepCopy()
-						pending.Status.RunnerId = 101
+						pending.Status.RunnerID = 101
 						pending.Status.Phase = corev1.PodPending
 
 						err = k8sClient.Status().Patch(ctx, pending, client.MergeFrom(pendingOriginal))
@@ -975,7 +975,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						runningOriginal = empty[0]
 						empty = empty[1:]
 						running := runningOriginal.DeepCopy()
-						running.Status.RunnerId = 102
+						running.Status.RunnerID = 102
 						running.Status.Phase = corev1.PodRunning
 
 						err = k8sClient.Status().Patch(ctx, running, client.MergeFrom(runningOriginal))
@@ -989,7 +989,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						failedOriginal = empty[0]
 
 						failed := pendingOriginal.DeepCopy()
-						failed.Status.RunnerId = 103
+						failed.Status.RunnerID = 103
 						failed.Status.Phase = corev1.PodFailed
 
 						err = k8sClient.Status().Patch(ctx, failed, client.MergeFrom(failedOriginal))
@@ -1138,16 +1138,16 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    "http://example.com/owner/repo",
+					GitHubConfigURL:    "http://example.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 "http://proxy.example.com",
+							URL:                 "http://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						HTTPS: &v1alpha1.ProxyServerConfig{
-							Url:                 "https://proxy.example.com",
+							URL:                 "https://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						NoProxy: []string{"example.com", "example.org"},
@@ -1224,10 +1224,10 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				// Set status to simulate a configured EphemeralRunner
 				refetch := false
 				for i, runner := range runnerList.Items {
-					if runner.Status.RunnerId == 0 {
+					if runner.Status.RunnerID == 0 {
 						updatedRunner := runner.DeepCopy()
 						updatedRunner.Status.Phase = corev1.PodSucceeded
-						updatedRunner.Status.RunnerId = i + 100
+						updatedRunner.Status.RunnerID = i + 100
 						err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 						Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 						refetch = true
@@ -1317,12 +1317,12 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    "http://example.com/owner/repo",
+					GitHubConfigURL:    "http://example.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 proxy.URL,
+							URL:                 proxy.URL,
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},
@@ -1358,7 +1358,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 
 		runner := runnerList.Items[0].DeepCopy()
 		runner.Status.Phase = corev1.PodRunning
-		runner.Status.RunnerId = 100
+		runner.Status.RunnerID = 100
 		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
 		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
 
@@ -1460,7 +1460,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigURL:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1472,7 +1472,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 							},
 						},
 					},
-					RunnerScaleSetId: 100,
+					RunnerScaleSetID: 100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -1508,7 +1508,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 		Expect(runner.Spec.GitHubServerTLS).To(BeEquivalentTo(ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS), "runner tls config should be correct")
 
 		runner.Status.Phase = corev1.PodRunning
-		runner.Status.RunnerId = 100
+		runner.Status.RunnerID = 100
 		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
 		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
 

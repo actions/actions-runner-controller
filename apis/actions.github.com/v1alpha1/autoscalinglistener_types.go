@@ -24,13 +24,13 @@ import (
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
 	// Required
-	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
+	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
 	// Required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// Required
-	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
+	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// Required
 	AutoscalingRunnerSetNamespace string `json:"autoscalingRunnerSetNamespace,omitempty"`

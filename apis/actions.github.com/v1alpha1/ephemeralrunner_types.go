@@ -41,10 +41,10 @@ const EphemeralRunnerContainerName = "runner"
 // EphemeralRunner is the Schema for the ephemeralrunners API
 type EphemeralRunner struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   EphemeralRunnerSpec   `json:"spec,omitempty"`
-	Status EphemeralRunnerStatus `json:"status,omitempty"`
+	Spec   EphemeralRunnerSpec   `json:"spec"`
+	Status EphemeralRunnerStatus `json:"status"`
 }
 
 func (er *EphemeralRunner) IsDone() bool {
@@ -76,8 +76,8 @@ func (er *EphemeralRunner) GitHubConfigSecret() string {
 	return er.Spec.GitHubConfigSecret
 }
 
-func (er *EphemeralRunner) GitHubConfigUrl() string {
-	return er.Spec.GitHubConfigUrl
+func (er *EphemeralRunner) GitHubConfigURL() string {
+	return er.Spec.GitHubConfigURL
 }
 
 func (er *EphemeralRunner) GitHubProxy() *ProxyConfig {
@@ -102,7 +102,7 @@ func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
 	// +required
-	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
+	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
 	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
@@ -111,7 +111,7 @@ type EphemeralRunnerSpec struct {
 	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +required
-	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
+	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
@@ -147,7 +147,7 @@ type EphemeralRunnerStatus struct {
 	Message string `json:"message,omitempty"`
 
 	// +optional
-	RunnerId int `json:"runnerId,omitempty"`
+	RunnerID int `json:"runnerId,omitempty"`
 	// +optional
 	RunnerName string `json:"runnerName,omitempty"`
 
@@ -155,7 +155,7 @@ type EphemeralRunnerStatus struct {
 	Failures map[string]metav1.Time `json:"failures,omitempty"`
 
 	// +optional
-	JobRequestId int64 `json:"jobRequestId,omitempty"`
+	JobRequestID int64 `json:"jobRequestId,omitempty"`
 
 	// +optional
 	JobID string `json:"jobId,omitempty"`
@@ -167,7 +167,7 @@ type EphemeralRunnerStatus struct {
 	JobWorkflowRef string `json:"jobWorkflowRef,omitempty"`
 
 	// +optional
-	WorkflowRunId int64 `json:"workflowRunId,omitempty"`
+	WorkflowRunID int64 `json:"workflowRunId,omitempty"`
 
 	// +optional
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
@@ -192,7 +192,7 @@ func (s *EphemeralRunnerStatus) LastFailure() metav1.Time {
 // EphemeralRunnerList contains a list of EphemeralRunner
 type EphemeralRunnerList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []EphemeralRunner `json:"items"`
 }
 

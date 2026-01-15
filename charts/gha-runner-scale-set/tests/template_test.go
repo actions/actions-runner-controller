@@ -403,7 +403,7 @@ func TestTemplateRenderedAutoScalingRunnerSet(t *testing.T) {
 	assert.Equal(t, "autoscaling-runner-set", ars.Labels["app.kubernetes.io/component"])
 	assert.NotEmpty(t, ars.Labels["app.kubernetes.io/version"])
 
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
@@ -456,7 +456,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	assert.Equal(t, nameOverride, ars.Labels["actions.github.com/scale-set-name"])
 	assert.Equal(t, namespaceName, ars.Labels["actions.github.com/scale-set-namespace"])
 	assert.Equal(t, "gha-rs", ars.Labels["app.kubernetes.io/part-of"])
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 	assert.Equal(t, nameOverride+"-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 	assert.Equal(t, "test-runner-scale-set-name", ars.Spec.RunnerScaleSetName)
 
@@ -913,7 +913,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
@@ -1000,7 +1000,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T)
 
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
@@ -1058,7 +1058,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume(t *te
 
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 	assert.Equal(t, "test-runners-gha-rs-github-secret", ars.Spec.GitHubConfigSecret)
 
 	assert.Empty(t, ars.Spec.RunnerGroup, "RunnerGroup should be empty")
@@ -1160,7 +1160,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_UsePredefinedSecret(t *testing.T) 
 
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/name"])
 	assert.Equal(t, "test-runners", ars.Labels["app.kubernetes.io/instance"])
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 	assert.Equal(t, "pre-defined-secrets", ars.Spec.GitHubConfigSecret)
 }
 
@@ -1224,11 +1224,11 @@ func TestTemplateRenderedWithProxy(t *testing.T) {
 
 	require.NotNil(t, ars.Spec.Proxy)
 	require.NotNil(t, ars.Spec.Proxy.HTTP)
-	assert.Equal(t, "http://proxy.example.com", ars.Spec.Proxy.HTTP.Url)
+	assert.Equal(t, "http://proxy.example.com", ars.Spec.Proxy.HTTP.URL)
 	assert.Equal(t, "http-secret", ars.Spec.Proxy.HTTP.CredentialSecretRef)
 
 	require.NotNil(t, ars.Spec.Proxy.HTTPS)
-	assert.Equal(t, "https://proxy.example.com", ars.Spec.Proxy.HTTPS.Url)
+	assert.Equal(t, "https://proxy.example.com", ars.Spec.Proxy.HTTPS.URL)
 	assert.Equal(t, "https-secret", ars.Spec.Proxy.HTTPS.CredentialSecretRef)
 
 	require.NotNil(t, ars.Spec.Proxy.NoProxy)
@@ -1803,7 +1803,7 @@ func TestTemplateRenderedGitHubConfigUrlEndsWIthSlash(t *testing.T) {
 
 	assert.Equal(t, namespaceName, ars.Namespace)
 	assert.Equal(t, "test-runners", ars.Name)
-	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigUrl)
+	assert.Equal(t, "https://github.com/actions", ars.Spec.GitHubConfigURL)
 }
 
 func TestTemplate_CreateManagerRole(t *testing.T) {

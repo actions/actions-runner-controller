@@ -27,7 +27,7 @@ type EphemeralRunnerSetSpec struct {
 	// PatchID is the unique identifier for the patch issued by the listener app
 	PatchID int `json:"patchID"`
 	// EphemeralRunnerSpec is the spec of the ephemeral runner
-	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
+	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec"`
 }
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
@@ -54,18 +54,18 @@ type EphemeralRunnerSetStatus struct {
 // EphemeralRunnerSet is the Schema for the ephemeralrunnersets API
 type EphemeralRunnerSet struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   EphemeralRunnerSetSpec   `json:"spec,omitempty"`
-	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
+	Spec   EphemeralRunnerSetSpec   `json:"spec"`
+	Status EphemeralRunnerSetStatus `json:"status"`
 }
 
 func (ers *EphemeralRunnerSet) GitHubConfigSecret() string {
 	return ers.Spec.EphemeralRunnerSpec.GitHubConfigSecret
 }
 
-func (ers *EphemeralRunnerSet) GitHubConfigUrl() string {
-	return ers.Spec.EphemeralRunnerSpec.GitHubConfigUrl
+func (ers *EphemeralRunnerSet) GitHubConfigURL() string {
+	return ers.Spec.EphemeralRunnerSpec.GitHubConfigURL
 }
 
 func (ers *EphemeralRunnerSet) GitHubProxy() *ProxyConfig {
@@ -91,7 +91,7 @@ func (ers *EphemeralRunnerSet) VaultProxy() *ProxyConfig {
 // +kubebuilder:object:root=true
 type EphemeralRunnerSetList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []EphemeralRunnerSet `json:"items"`
 }
 

@@ -41,9 +41,9 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.EphemeralRunnerSpec{
-			GitHubConfigUrl:    "https://github.com/owner/repo",
+			GitHubConfigURL:    "https://github.com/owner/repo",
 			GitHubConfigSecret: configSecretName,
-			RunnerScaleSetId:   1,
+			RunnerScaleSetID:   1,
 			PodTemplateSpec: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -667,7 +667,7 @@ var _ = Describe("EphemeralRunner", func() {
 					if err != nil {
 						return 0, err
 					}
-					return updatedEphemeralRunner.Status.RunnerId, nil
+					return updatedEphemeralRunner.Status.RunnerID, nil
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
@@ -1234,10 +1234,10 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
-			ephemeralRunner.Spec.GitHubConfigUrl = "http://example.com/org/repo"
+			ephemeralRunner.Spec.GitHubConfigURL = "http://example.com/org/repo"
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
-					Url:                 proxy.URL,
+					URL:                 proxy.URL,
 					CredentialSecretRef: "proxy-credentials",
 				},
 			}
@@ -1258,10 +1258,10 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
-					Url: "http://proxy.example.com:8080",
+					URL: "http://proxy.example.com:8080",
 				},
 				HTTPS: &v1alpha1.ProxyServerConfig{
-					Url: "http://proxy.example.com:8080",
+					URL: "http://proxy.example.com:8080",
 				},
 				NoProxy: []string{"example.com"},
 			}
@@ -1398,7 +1398,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
-			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
+			ephemeralRunner.Spec.GitHubConfigURL = server.ConfigURLForOrg("my-org")
 			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{

@@ -66,7 +66,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
@@ -92,9 +92,9 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -482,7 +482,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
@@ -508,9 +508,9 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -740,7 +740,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
@@ -767,9 +767,9 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -823,11 +823,11 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 
 		proxy := &v1alpha1.ProxyConfig{
 			HTTP: &v1alpha1.ProxyServerConfig{
-				Url:                 "http://localhost:8080",
+				URL:                 "http://localhost:8080",
 				CredentialSecretRef: "proxy-credentials",
 			},
 			HTTPS: &v1alpha1.ProxyServerConfig{
-				Url:                 "https://localhost:8443",
+				URL:                 "https://localhost:8443",
 				CredentialSecretRef: "proxy-credentials",
 			},
 			NoProxy: []string{
@@ -942,7 +942,7 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
@@ -969,9 +969,9 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -1137,7 +1137,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1173,7 +1173,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1185,7 +1185,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 						},
 					},
 				},
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",

@@ -167,7 +167,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	)
 
 	if r.PublishMetrics {
-		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigUrl
+		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigURL
 		parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
 		if err != nil {
 			log.Error(err, "Github Config URL is invalid", "URL", githubConfigURL)
@@ -448,7 +448,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 	for runners.next() {
 		ephemeralRunner := runners.object()
 		isDone := ephemeralRunner.IsDone()
-		if !isDone && ephemeralRunner.Status.RunnerId == 0 {
+		if !isDone && ephemeralRunner.Status.RunnerID == 0 {
 			log.Info("Skipping ephemeral runner since it is not registered yet", "name", ephemeralRunner.Name)
 			continue
 		}
@@ -457,7 +457,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 			log.Info(
 				"Skipping ephemeral runner since it is running a job",
 				"name", ephemeralRunner.Name,
-				"workflowRunId", ephemeralRunner.Status.WorkflowRunId,
+				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
 				"jobId", ephemeralRunner.Status.JobID,
 			)
 			continue
@@ -482,28 +482,28 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient actions.ActionsService, log logr.Logger) (bool, error) {
-	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
+	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID)); err != nil {
 		actionsError := &actions.ActionsError{}
 		if !errors.As(err, &actionsError) {
-			log.Error(err, "failed to remove runner from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
+			log.Error(err, "failed to remove runner from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 			return false, err
 		}
 
 		if actionsError.StatusCode == http.StatusBadRequest &&
 			actionsError.IsException("JobStillRunningException") {
-			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
+			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 			return false, nil
 		}
 
 		return false, err
 	}
 
-	log.Info("Deleting ephemeral runner after removing from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
+	log.Info("Deleting ephemeral runner after removing from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 	if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
 		return false, err
 	}
 
-	log.Info("Deleted ephemeral runner", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
+	log.Info("Deleted ephemeral runner", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 	return true, nil
 }
 

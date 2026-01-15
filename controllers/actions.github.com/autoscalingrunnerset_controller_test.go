@@ -90,7 +90,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
@@ -734,7 +734,7 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigURL:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
 					MaxRunners:         &max,
 					MinRunners:         &min,
@@ -854,7 +854,7 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl: "https://github.com/owner/repo",
+					GitHubConfigURL: "https://github.com/owner/repo",
 					MaxRunners:      &max,
 					MinRunners:      &min,
 					RunnerGroup:     "testgroup",
@@ -992,14 +992,14 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl:    "http://example.com/org/repo",
+					GitHubConfigURL:    "http://example.com/org/repo",
 					GitHubConfigSecret: configSecret.Name,
 					MaxRunners:         &max,
 					MinRunners:         &min,
 					RunnerGroup:        "testgroup",
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url: proxy.URL,
+							URL: proxy.URL,
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -1071,14 +1071,14 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl:    "http://example.com/org/repo",
+					GitHubConfigURL:    "http://example.com/org/repo",
 					GitHubConfigSecret: configSecret.Name,
 					MaxRunners:         &max,
 					MinRunners:         &min,
 					RunnerGroup:        "testgroup",
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 proxy.URL,
+							URL:                 proxy.URL,
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},
@@ -1198,7 +1198,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigURL:    server.ConfigURLForOrg("my-org"),
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1251,7 +1251,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigURL:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1315,7 +1315,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigURL:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1419,7 +1419,7 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,
@@ -1583,7 +1583,7 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl: "https://github.com/owner/repo",
+				GitHubConfigURL: "https://github.com/owner/repo",
 				MaxRunners:      &max,
 				MinRunners:      &min,
 				RunnerGroup:     "testgroup",
@@ -1799,7 +1799,7 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 				},
 			},
 			Spec: v1alpha1.AutoscalingRunnerSetSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				MaxRunners:         &max,
 				MinRunners:         &min,

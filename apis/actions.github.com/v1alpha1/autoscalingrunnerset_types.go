@@ -46,16 +46,16 @@ import (
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   AutoscalingRunnerSetSpec   `json:"spec,omitempty"`
-	Status AutoscalingRunnerSetStatus `json:"status,omitempty"`
+	Spec   AutoscalingRunnerSetSpec   `json:"spec"`
+	Status AutoscalingRunnerSetStatus `json:"status"`
 }
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
 	// Required
-	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
+	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
 	// Required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
@@ -76,7 +76,7 @@ type AutoscalingRunnerSetSpec struct {
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
 	// Required
-	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+	Template corev1.PodTemplateSpec `json:"template"`
 
 	// +optional
 	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
@@ -152,9 +152,9 @@ func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	}
 
 	if c.HTTP != nil {
-		u, err := url.Parse(c.HTTP.Url)
+		u, err := url.Parse(c.HTTP.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.Url, err)
+			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.URL, err)
 		}
 
 		if c.HTTP.CredentialSecretRef != "" {
@@ -177,9 +177,9 @@ func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	}
 
 	if c.HTTPS != nil {
-		u, err := url.Parse(c.HTTPS.Url)
+		u, err := url.Parse(c.HTTPS.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.Url, err)
+			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.URL, err)
 		}
 
 		if c.HTTPS.CredentialSecretRef != "" {
@@ -233,7 +233,7 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 
 type ProxyServerConfig struct {
 	// Required
-	Url string `json:"url,omitempty"`
+	URL string `json:"url,omitempty"`
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
@@ -313,8 +313,8 @@ func (ars *AutoscalingRunnerSet) GitHubConfigSecret() string {
 	return ars.Spec.GitHubConfigSecret
 }
 
-func (ars *AutoscalingRunnerSet) GitHubConfigUrl() string {
-	return ars.Spec.GitHubConfigUrl
+func (ars *AutoscalingRunnerSet) GitHubConfigURL() string {
+	return ars.Spec.GitHubConfigURL
 }
 
 func (ars *AutoscalingRunnerSet) GitHubProxy() *ProxyConfig {
@@ -338,7 +338,7 @@ func (ars *AutoscalingRunnerSet) VaultProxy() *ProxyConfig {
 
 func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	type runnerSetSpec struct {
-		GitHubConfigUrl    string
+		GitHubConfigURL    string
 		GitHubConfigSecret string
 		RunnerGroup        string
 		RunnerScaleSetName string
@@ -347,7 +347,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 		Template           corev1.PodTemplateSpec
 	}
 	spec := &runnerSetSpec{
-		GitHubConfigUrl:    ars.Spec.GitHubConfigUrl,
+		GitHubConfigURL:    ars.Spec.GitHubConfigURL,
 		GitHubConfigSecret: ars.Spec.GitHubConfigSecret,
 		RunnerGroup:        ars.Spec.RunnerGroup,
 		RunnerScaleSetName: ars.Spec.RunnerScaleSetName,
@@ -363,7 +363,7 @@ func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 // AutoscalingRunnerSetList contains a list of AutoscalingRunnerSet
 type AutoscalingRunnerSetList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []AutoscalingRunnerSet `json:"items"`
 }
 

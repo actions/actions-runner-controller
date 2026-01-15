@@ -668,7 +668,7 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 }
 
 func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListener *v1alpha1.AutoscalingListener, isUp bool) error {
-	githubConfigURL := autoscalingListener.Spec.GitHubConfigUrl
+	githubConfigURL := autoscalingListener.Spec.GitHubConfigURL
 	parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
 	if err != nil {
 		return err

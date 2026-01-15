@@ -33,7 +33,7 @@ func TestLabelPropagation(t *testing.T) {
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl: "https://github.com/org/repo",
+			GitHubConfigURL: "https://github.com/org/repo",
 		},
 	}
 
@@ -133,7 +133,7 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 	t.Run("org/repo", func(t *testing.T) {
 		autoscalingRunnerSet := autoscalingRunnerSet.DeepCopy()
 		autoscalingRunnerSet.Spec = v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
+			GitHubConfigURL: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
 		}
 
 		var b ResourceBuilder
@@ -157,7 +157,7 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 	t.Run("enterprise", func(t *testing.T) {
 		autoscalingRunnerSet := autoscalingRunnerSet.DeepCopy()
 		autoscalingRunnerSet.Spec = v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
+			GitHubConfigURL: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
 		}
 
 		var b ResourceBuilder
@@ -196,7 +196,7 @@ func TestOwnershipRelationships(t *testing.T) {
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl: "https://github.com/org/repo",
+			GitHubConfigURL: "https://github.com/org/repo",
 		},
 	}
 
