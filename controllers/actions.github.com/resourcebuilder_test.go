@@ -241,4 +241,19 @@ func TestOwnershipRelationships(t *testing.T) {
 	assert.Equal(t, ephemeralRunner.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunner UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
 	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+
+	// Create AutoScalingListener in AutoScalingRunnerSet namespace
+	autoscalingListener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+	require.Len(t, autoscalingListener.OwnerReferences, 1, "AutoScalingListener should have exactly one owner reference")
+	ownerRef = autoscalingListener.OwnerReferences[0]
+	assert.Equal(t, autoscalingRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match AutoscalingRunnerSet name")
+	assert.Equal(t, autoscalingRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match AutoscalingRunnerSet UID")
+	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
+	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+
+	// Create AutoScalingListener in external controller namespace
+	autoscalingListener, err = b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, "controller-ns", "test:latest", nil)
+	require.NoError(t, err)
+	require.Len(t, autoscalingListener.OwnerReferences, 0, "AutoScalingListener should not have any owner references")
 }
