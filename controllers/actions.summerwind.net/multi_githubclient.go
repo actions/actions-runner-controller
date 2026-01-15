@@ -2,7 +2,7 @@ package actionssummerwindnet
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -176,7 +176,7 @@ func (c *MultiGitHubClient) initClientForSecret(secret *corev1.Secret, dependent
 
 	sort.SliceStable(ks, func(i, j int) bool { return ks[i] < ks[j] })
 
-	hash := sha1.New()
+	hash := sha256.New()
 	for _, k := range ks {
 		hash.Write(secret.Data[k])
 	}
