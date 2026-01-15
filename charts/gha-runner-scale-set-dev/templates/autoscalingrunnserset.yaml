@@ -5,6 +5,9 @@ metadata:
   namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
   labels:
     {{- include "autoscaling-runner-set.labels" . | nindent 4 }}
+  annotations:
+    {{- include "autoscaling-runner-set.annotations" . | nindent 4 }}
+    actions.github.com/values-hash: {{ toJson .Values | sha256sum | trunc 63 }}
 
 spec:
   githubConfigUrl: {{ required ".Values.auth.url is required" (trimSuffix "/" .Values.auth.url) | quote }}
@@ -36,7 +39,7 @@ spec:
       certificatePath: {{ .Values.secretResolution.azureKeyVault.certificatePath }}
       secretKey: {{ .Values.secretResolution.azureKeyVault.secretKey }}
     {{- else }}
-        {{- fail "Unsupported keyVault type: " .Values.secretResolution.type }}
+    {{- fail (printf "Unsupported keyVault type: %s" .Values.secretResolution.type) }}
     {{- end }}
   {{- end }}
 
@@ -94,4 +97,3 @@ spec:
   template:
     spec:
       containers:
-        # {{- include "container-spec.runner" . | nindent 8 }}

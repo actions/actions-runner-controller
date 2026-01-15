@@ -64,6 +64,41 @@ Takes a map of user labels and removes the ones with "actions.github.com/" prefi
 {{- end }}
 
 {{/*
+Takes a map of user annotations and removes reserved ones.
+
+Reserved annotations are managed by ARC/controllers and should not be set by users:
+- actions.github.com/cleanup-*
+- actions.github.com/values-hash
+*/}}
+{{- define "gha-process-annotations" -}}
+{{- $userAnnotations := . -}}
+{{- $processed := dict -}}
+{{- range $key, $value := $userAnnotations -}}
+  {{- if not (or (hasPrefix "actions.github.com/cleanup-" $key) (eq $key "actions.github.com/values-hash")) -}}
+    {{- $_ := set $processed $key $value -}}
+  {{- end -}}
+{{- end -}}
+{{- $processed | toYaml -}}
+{{- end }}
+
+{{/*
+Create the annotations for the autoscaling runner set.
+
+Order of precedence:
+1) resource.all.metadata.annotations
+2) resource.autoscalingRunnerSet.metadata.annotations
+Reserved annotations are excluded from both levels.
+*/}}
+{{- define "autoscaling-runner-set.annotations" -}}
+{{- $global := include "gha-process-annotations" (.Values.resource.all.metadata.annotations | default (dict)) | fromYaml -}}
+{{- $resource := include "gha-process-annotations" (.Values.resource.autoscalingRunnerSet.metadata.annotations | default (dict)) | fromYaml -}}
+{{- $annotations := mergeOverwrite $global $resource -}}
+{{- range $k, $v := $annotations }}
+{{ $k }}: {{ $v | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "gha-runner-scale-set.chart" -}}
