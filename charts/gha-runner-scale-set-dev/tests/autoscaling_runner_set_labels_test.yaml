@@ -260,9 +260,8 @@ tests:
       - equal:
           path: metadata.labels["team"]
           value: "backend"
-      - equal:
+      - notExists:
           path: metadata.labels["actions.github.com/custom-label"]
-          value: "user-value"
       - equal:
           path: metadata.labels["actions.github.com/scale-set-name"]
           value: "test-name"
@@ -287,9 +286,8 @@ tests:
       - equal:
           path: metadata.labels["owner"]
           value: "devops"
-      - equal:
+      - notExists:
           path: metadata.labels["actions.github.com/global-custom"]
-          value: "global-value"
       - equal:
           path: metadata.labels["actions.github.com/scale-set-name"]
           value: "test-name"

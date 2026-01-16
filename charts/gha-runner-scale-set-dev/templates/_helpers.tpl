@@ -29,8 +29,8 @@ Create the labels for the autoscaling runner set.
 {{- define "autoscaling-runner-set.labels" -}}
 {{- $resourceLabels := dict "app.kubernetes.io/component" "autoscaling-runner-set" -}}
 {{- $commonLabels := include "gha-common-labels" . | fromYaml -}}
-{{- $userLabels := include "gha-process-labels" (.Values.resource.autoscalingRunnerSet.metadata.labels | default (dict)) | fromYaml -}}
-{{- $global := include "gha-process-labels" (.Values.resource.all.metadata.labels | default (dict)) | fromYaml -}}
+{{- $userLabels := include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.autoscalingRunnerSet.metadata.labels | default (dict)) | fromYaml -}}
+{{- $global := include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.labels | default (dict)) | fromYaml -}}
 {{- toYaml (mergeOverwrite $global $userLabels $resourceLabels $commonLabels) }}
 {{- end }}
 
@@ -52,33 +52,17 @@ actions.github.com/scale-set-namespace: {{ include "autoscaling-runner-set.names
 {{/*
 Takes a map of user labels and removes the ones with "actions.github.com/" prefix
 */}}
-{{- define "gha-process-labels" -}}
+{{- define "apply-non-reserved-gha-labels-and-annotations" -}}
 {{- $userLabels := . -}}
 {{- $processed := dict -}}
 {{- range $key, $value := $userLabels -}}
-  {{- if not (hasPrefix $key "actions.github.com/") -}}
+  {{- if not (hasPrefix "actions.github.com/" $key) -}}
     {{- $_ := set $processed $key $value -}}
   {{- end -}}
 {{- end -}}
-{{- $processed | toYaml -}}
+{{- if not (empty $processed) -}}
+  {{- $processed | toYaml }}
 {{- end }}
-
-{{/*
-Takes a map of user annotations and removes reserved ones.
-
-Reserved annotations are managed by ARC/controllers and should not be set by users:
-- actions.github.com/cleanup-*
-- actions.github.com/values-hash
-*/}}
-{{- define "gha-process-annotations" -}}
-{{- $userAnnotations := . -}}
-{{- $processed := dict -}}
-{{- range $key, $value := $userAnnotations -}}
-  {{- if not (or (hasPrefix "actions.github.com/cleanup-" $key) (eq $key "actions.github.com/values-hash")) -}}
-    {{- $_ := set $processed $key $value -}}
-  {{- end -}}
-{{- end -}}
-{{- $processed | toYaml -}}
 {{- end }}
 
 {{/*
@@ -90,11 +74,11 @@ Order of precedence:
 Reserved annotations are excluded from both levels.
 */}}
 {{- define "autoscaling-runner-set.annotations" -}}
-{{- $global := include "gha-process-annotations" (.Values.resource.all.metadata.annotations | default (dict)) | fromYaml -}}
-{{- $resource := include "gha-process-annotations" (.Values.resource.autoscalingRunnerSet.metadata.annotations | default (dict)) | fromYaml -}}
+{{- $global := (include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.annotations | default (dict))) | fromYaml -}}
+{{- $resource := (include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.autoscalingRunnerSet.metadata.annotations | default (dict))) | fromYaml -}}
 {{- $annotations := mergeOverwrite $global $resource -}}
-{{- range $k, $v := $annotations }}
-{{ $k }}: {{ $v | quote }}
+{{- if not (empty $annotations) -}}
+{{- toYaml $annotations }}
 {{- end }}
 {{- end }}
 

@@ -97,3 +97,6 @@ spec:
   template:
     spec:
       containers:
+        - name: runner
+          image: {{ .Values.runner.container.image | default "ghcr.io/actions/actions-runner:latest" | quote }}
+          command: {{ toJson (default (list "/home/runner/run.sh") .Values.runner.container.command) }}
