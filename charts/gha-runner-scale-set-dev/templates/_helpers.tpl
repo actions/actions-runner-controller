@@ -12,6 +12,43 @@
 {{- end }}
 
 {{/*
+The name of the manager Role.
+*/}}
+{{- define "manager-role.name" -}}
+{{- printf "%s-manager-role" (include "autoscaling-runner-set.name" .) -}}
+{{- end }}
+
+
+{{/*
+Create the labels for the manager Role.
+*/}}
+{{- define "manager-role.labels" -}}
+{{- $resourceLabels := dict "app.kubernetes.io/component" "manager-role" -}}
+{{- $commonLabels := include "gha-common-labels" . | fromYaml -}}
+{{- $userLabels := include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.managerRole.metadata.labels | default (dict)) | fromYaml -}}
+{{- $global := include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.labels | default (dict)) | fromYaml -}}
+{{- toYaml (mergeOverwrite $global $userLabels $resourceLabels $commonLabels) }}
+{{- end }}
+
+
+{{/*
+Create the annotations for the manager Role.
+
+Order of precedence:
+1) resource.all.metadata.annotations
+2) resource.managerRole.metadata.annotations
+Reserved annotations are excluded from both levels.
+*/}}
+{{- define "manager-role.annotations" -}}
+{{- $global := (include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.annotations | default (dict))) | fromYaml -}}
+{{- $resource := (include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.managerRole.metadata.annotations | default (dict))) | fromYaml -}}
+{{- $annotations := mergeOverwrite $global $resource -}}
+{{- if not (empty $annotations) -}}
+{{- toYaml $annotations }}
+{{- end }}
+{{- end }}
+
+{{/*
 The name of the GitHub secret used for authentication.
 */}}
 {{- define "github-secret.name" -}}

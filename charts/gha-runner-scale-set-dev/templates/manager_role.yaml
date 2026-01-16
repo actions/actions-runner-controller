@@ -1,0 +1,85 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "manager-role.name" . | quote }}
+  namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+  labels:
+    {{- include "manager-role.labels" . | nindent 4 }}
+  annotations:
+    {{- include "manager-role.annotations" . | nindent 4 }}
+  finalizers:
+    - actions.github.com/cleanup-protection
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+{{- if .Values.githubServerTLS }}
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+{{- end }}
+
+{{- with .Values.resource.managerRole.extraRules }}
+  {{- if not (empty .) }}
+    {{- if not (kindIs "slice" .) -}}
+      {{- fail ".Values.resource.managerRole.extraRules must be a list of RBAC policy rules" -}}
+    {{- end }}
+{{ toYaml . }}
+  {{- end }}
+{{- end }}
