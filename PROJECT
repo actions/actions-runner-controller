@@ -1,25 +1,277 @@
-domain: summerwind.dev
-repo: github.com/actions/actions-runner-controller
-resources:
-- group: actions
-  kind: Runner
-  version: v1alpha1
-- group: actions
-  kind: RunnerReplicaSet
-  version: v1alpha1
-- group: actions
-  kind: RunnerDeployment
-  version: v1alpha1
-- group: actions
-  kind: AutoscalingRunnerSet
-  version: v1alpha1
-- group: actions
-  kind: EphemeralRunnerSet
-  version: v1alpha1
-- group: actions
-  kind: EphemeralRunner
-  version: v1alpha1
-- group: actions
-  kind: AutoscalingListener
-  version: v1alpha1
-version: "2"
+please I want to create a app with building websites so help me summarize and make an overview of the using this components below as context to match my application as Hollywood stars affiliated platform ( Johnny Depp, Sandra Bullock, Keanu Reeves, Jennifer Aniston) 
+with a 4 different page segments for stars to receive messages from the fans and respond, and ensure that I have an admin account manager or secret policies and privacy 🔏 team regulating the website and application 
+
+# Modes
+
+> Understanding Anything's different modes and capabilities
+
+Anything offers several modes to help you build, test, and refine your applications. Each mode serves a specific purpose in your development workflow.
+
+## Mode Switcher
+
+<img src="https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=1fd8e587b8b16fa9220ac8423966efc8" alt="Mode Switcher" data-og-width="809" width="809" data-og-height="557" height="557" data-path="images/modes3.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?w=280&fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=520e2a23d86c4aee242aa0ee1d70e28a 280w, https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?w=560&fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=443bd98fb49c7d49afe0e47bf9922a31 560w, https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?w=840&fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=9d5a9d49445c7a8ee571921b1e3dec02 840w, https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?w=1100&fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=13400ef6c7751084e461adb1a107d236 1100w, https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?w=1650&fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=75cc8c285ae31010fc7f09a5b2002cd4 1650w, https://mintcdn.com/create/4JgPpk4C_uq3P283/images/modes3.png?w=2500&fit=max&auto=format&n=4JgPpk4C_uq3P283&q=85&s=585d99ebf7f2f0c9e173f1f24aeaaf89 2500w" />
+
+### AI Modes
+
+* **Auto** - Our default mode that intelligently chooses the best model for you based on the tasks given
+* **[Thinking Mode](#thinking-mode)** - Our primary building agent with reasoning capability for quality code work
+* **[Discussion Mode](#discussion-mode)** - chat without making edits. It can be important at times to prevent edits to your work and be able to ask questions of the builder about status, approach or specific features without allowing it to alter your current design.
+* **[Max](/max)** - Max is our most powerful AI agent, an autonomous software engineer that builds, tests, and fixes your applications automatically. Give it a goal, and Max will work through your app like a real user, writing code and tests until the task is complete.
+* **Fast Mode** - Built for speed at the expense of quality, this mode is designed to get you results quickly. It is inferior to Thinking Mode in many ways, but uses less credits to generate code.
+
+## Thinking Mode
+
+Our primary mode to enhance the builder experience. The AI agent works beyond just coding to investigate, research, and access internal and external resources to build the best application possible.
+
+<img src="https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=02ef21ba341e27b88d5bf9a3e362c5e5" alt="Thinking1" data-og-width="1998" width="1998" data-og-height="1243" height="1243" data-path="images/thinking1.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?w=280&fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=559e17694d51b55b42f2dc756902ed94 280w, https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?w=560&fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=005a3ea4c5f6afbd4d691b745914b302 560w, https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?w=840&fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=179906265041a2c15465a70765a741c1 840w, https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?w=1100&fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=4fc64ed16e67dd887ec567654fb9e981 1100w, https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?w=1650&fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=5c7d50ce3ac467f1d24fbca2e3aab3eb 1650w, https://mintcdn.com/create/gRjeYBLWcrADikTp/images/thinking1.png?w=2500&fit=max&auto=format&n=gRjeYBLWcrADikTp&q=85&s=21622efd455bdc91872d36d5e3e2c691 2500w" />
+
+### Example queries
+
+* "Can you redesign this page to match the style of \[website URL]?"
+* "Make this app look like Instagram's design but for \[your use case]"
+* "I pasted a screenshot of a design I like - can you implement something similar?"
+
+## Discussion Mode
+
+Enable discussion mode to receive input, feedback, and best practices directly from the AI.
+
+<Warning>
+  Discussion mode intentionally prevents the builder from making changes to your project but it can do important work on your behalf to shape prompts, research API documentation and a lot more.
+</Warning>
+
+<div style={{position: 'relative', paddingBottom: '56.25%', height: 0}}>
+  <iframe src="https://www.loom.com/embed/e8f4e6ebbc0945cd9e01a67221b71e73?sid=9bb404b9-3b34-4af4-a316-f0af3d4e1b51" title="Discussion Mode Demo" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen webkitallowfullscreen="true" mozallowfullscreen="true" style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%'}} />
+</div>
+
+### Use cases
+
+* Ask questions and receive suggestions from the builder
+* Help inquire about a feature you want but don't know how to prompt around
+* Debug issues with your application by providing a detailed description of the problem
+* Inquire about functionality or mobile compatibility
+* Plan [External API integrations](/quick-tips/external-apis) with the builder
+
+## View Modes
+
+Switch between different modes to work on your application:
+
+* **Demo mode** - Default view for building and testing your application
+* **Code mode** - View and edit the underlying code
+* **Preview** - Live sandbox to test your site as a public user, including functions, authentication, and payment systems
+
+<div style={{position: 'relative', paddingBottom: '56.25%', height: 0}}>
+  <iframe src="https://www.loom.com/embed/8d3a851174d941e9be0aa6ea3619b8ef" title="Mode Switcher: Demo, Code, and Preview" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen webkitallowfullscreen="true" mozallowfullscreen="true" style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%'}} />
+</div>
+
+## Code Generation
+
+When you send a message, Anything uses your input, message history, and application code history to generate new versions.
+
+During generation, you'll see a **code stream** or **building icon**. Once complete, test your application in **Preview or Demo Mode.**
+
+<Tip>
+  [Pro members](https://create.xyz/pricing) receive enhanced generations with more context and history for smarter changes.
+</Tip>
+
+<Tip>
+  Read our [prompting guide](/prompting) to learn effective communication techniques.
+</Tip>
+
+## Stopping Generation
+
+* Click the stop icon in the builder chat to halt unwanted changes or cancel requests
+
+<img src="https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=ae005b6ac1e88e93acefc56f0d9b577b" alt="Stop Pn" data-og-width="1602" width="1602" data-og-height="1034" height="1034" data-path="images/stop.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?w=280&fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=7e23156f13af65b5163cbd1a7f1e0317 280w, https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?w=560&fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=182567c4a0cd992eef6f4c7250dedc9d 560w, https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?w=840&fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=74a11327685ced084ff9bf217b9b1578 840w, https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?w=1100&fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=c147934b9abbc7e2dc305277829b4416 1100w, https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?w=1650&fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=77bfff9d24146c3a1af8d6b70d24d48b 1650w, https://mintcdn.com/create/KG4vmDcLA3klmcBl/images/stop.png?w=2500&fit=max&auto=format&n=KG4vmDcLA3klmcBl&q=85&s=cfa7d84c21d10a420f83ac9b39e55a62 2500w" />
+
+## Refreshing Preview
+
+If changes aren't appearing, use the refresh button in the upper toolbar to update demo mode.
+
+<img src="https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=18899e2d170fc7798ede4b483ab4780f" alt="Refresh Pn" data-og-width="1951" width="1951" data-og-height="1031" height="1031" data-path="images/refresh.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?w=280&fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=8b683d3b0168ed0bbd2b2d3b502b7358 280w, https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?w=560&fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=7b8c785d8c392438a43558927e98b322 560w, https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?w=840&fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=5186c38200bd022f8ecc87db7610f220 840w, https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?w=1100&fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=620769a9b4ca1261f7847bfc6a75ec00 1100w, https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?w=1650&fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=49bda65a96a7d8da71b9754779fb0d60 1650w, https://mintcdn.com/create/-FyrzxgKR6I2JC9B/images/refresh.png?w=2500&fit=max&auto=format&n=-FyrzxgKR6I2JC9B&q=85&s=113b3a3df856f05bbe26025d41cb7cc6 2500w" />
+
+
+---
+
+> To find navigation and other pages in this documentation, fetch the llms.txt file at: https://www.create.xyz/docs/llms.txt
+
+
+# Pages
+
+> The Anything builder will automatically generate pages for you as you instruct it. Pages are the screens of your site or app. You start with a blank page when you open a new project.
+
+You can build powerful applications using a single page. As your project grows, you may want to split different sections into separate pages for better organization.
+
+## Create pages
+
+You start with a blank page. To create a new one, instruct the builder:
+
+```
+add a new page called Contact.
+```
+
+<img src="https://mintcdn.com/create/VE4G9m6I567_bcO7/images/newpage.gif?s=953b03c44fd429c9a4fbbda77816c765" alt="Newpage Gi" data-og-width="2324" width="2324" data-og-height="998" height="998" data-path="images/newpage.gif" data-optimize="true" data-opv="3" />
+
+Pages are automatically named based on their content. Rename them by instructing the builder:
+
+```
+Rename bio to biography in the URL structure
+```
+
+<img src="https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=a1930cc7af0a03199955cc65279773bd" alt="Linkchanges Pn" data-og-width="1743" width="1743" data-og-height="812" height="812" data-path="images/linkchanges.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?w=280&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=cdb335e63aca3f988e4cb371bb1e9042 280w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?w=560&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=b13a7f14bc039d0137cdd18df2cbd97a 560w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?w=840&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=2241a6994d1efd890e5720d717ee6520 840w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?w=1100&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=375bc00244118644b7a242c87889625d 1100w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?w=1650&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=54ee00755714586e9cf696c138069fad 1650w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linkchanges.png?w=2500&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=8d78436286ab0e1525f36f59a4850847 2500w" />
+
+## Manage multiple pages
+
+```
+Move the "About" section from the Contact Us Page to its own Page titled "About."
+```
+
+Consider splitting your application into multiple pages when:
+
+* Different sections serve distinct purposes (e.g., home, about, contact)
+* You want separate views for different user types (e.g., customer-facing vs admin pages)
+* You need to [restrict access to certain users](/builder/user-accounts)
+
+<Tip>
+  A single page can include many [components](/builder/components) and complex logic. Many applications work well with just one page.
+</Tip>
+
+## Style your pages
+
+Transform page appearance using simple prompts:
+
+```
+Update the look of this entire application with a modern glass theme, style fonts similar to Apple.com
+```
+
+### Styling options
+
+* **Screenshots** pasted in chat - see our [prompting guide](/prompting)
+* **URLs** in chat - Anything screenshots any URL and adds it to context
+* [**Components**](/builder/components) for reusable elements
+
+## Add elements
+
+Use the `/` command menu to add:
+
+* [**Components**](/builder/components) - UI elements
+* [**Integrations**](/builder/integrations) - AI services
+* [**Databases**](/builder/databases) - Data storage
+* [**Functions**](/builder/functions) - Backend logic
+
+Learn more about all available elements in our [overview](/builder/overview).
+
+## Publishing
+
+<Info>
+  Keep pages private by not publishing them. If you need to test or preview, use our [demo or preview modes](/essentials).
+</Info>
+
+### Publish web applications
+
+* Click Publish in the top right
+* Read more about publishing in our [publishing guide](/publish-and-share/publish)
+
+### Publish mobile applications
+
+To publish to the iOS or Android App Stores, see our [Mobile Guide](/builder/mobile)
+
+## Manage links
+
+Instruct the builder on where to link and it will handle the rest:
+
+```
+Link the bio page to the biography link at the homepage
+```
+
+* Modify links at any time with new instructions
+
+<img src="https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=9dde13f644d17d86de270e12ce8be3fb" alt="Linking Pn" data-og-width="2040" width="2040" data-og-height="1028" height="1028" data-path="images/linking.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?w=280&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=12668ad5f0c2c3b67e7ca3ebcf1d980d 280w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?w=560&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=accafaa00119c2f72d61b15dbe2c1c83 560w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?w=840&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=99d10879d6b5eaf48aa713c4345af66a 840w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?w=1100&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=2ab58bf681d24c87873eb00dc72b949e 1100w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?w=1650&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=1c749a9c514612555537db1c4287417b 1650w, https://mintcdn.com/create/dPp8LRxEG75nRlMj/images/linking.png?w=2500&fit=max&auto=format&n=dPp8LRxEG75nRlMj&q=85&s=fab51f6742dc19a55de16f39b3c75e12 2500w" />
+
+## Require authentication
+
+You can restrict page access to signed-in users:
+
+```
+Enable user accounts, require a user be signed in to view the following pages...
+```
+
+Users will:
+
+* See content when signed in
+* Be redirected to login when not authenticated
+
+Learn more about [User Accounts](/builder/user-accounts).
+
+## Delete pages
+
+Simply ask the builder:
+
+```
+Delete my biography page
+```
+
+<img src="https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=702a42378a870d938c99329d573a8423" alt="Deleteapage Pn" data-og-width="1554" width="1554" data-og-height="1061" height="1061" data-path="images/deleteapage.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?w=280&fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=b2b108edb92a92b4b9251bf9581ac720 280w, https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?w=560&fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=41b9b5e23d937518bb72ffae2732e20c 560w, https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?w=840&fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=1760644011f61ec90c066f91de69262c 840w, https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?w=1100&fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=3bafd76321e28ec210df8bb065f4c4aa 1100w, https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?w=1650&fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=89ea4d0767f7720448acc4f39876e63e 1650w, https://mintcdn.com/create/FQ38N__i9RkapQvc/images/deleteapage.png?w=2500&fit=max&auto=format&n=FQ38N__i9RkapQvc&q=85&s=91311dbd907283472b197eb6c95c11c2 2500w" />
+
+
+---
+
+> To find navigation and other pages in this documentation, fetch the llms.txt file at: https://www.create.xyz/docs/llms.txt
+
+
+# Integrations
+
+> Add powerful capabilities to your apps with our built-in integrations
+
+<Warning>
+  As we transition to our new builder integrations may be temporarily unavailable. We are working to improve their functionality and compatibility with the new system. If you have questions on specific integrations please email us at [hello@createanything.com](mailto:hello@createanything.com). Thank you!
+</Warning>
+
+Anything offers 30+ built-in integrations (and growing!) to give your apps superpowers. Build AI-powered features, generate PDFs, display maps, or enhance your UI with component libraries.
+
+<Tip>
+  Missing an integration? Email us at [hello@createanything.com](mailto:hello@createanything.com) with your suggestion. Meanwhile, you can connect to any external API using our [External API integration guide](/quick-tips/external-apis) to add custom functionality to your app.
+</Tip>
+
+## Adding Integrations
+
+Add integrations by:
+
+* Type `/` in chat or select "Add-ons" menu
+* Select the integration
+* Write a prompt on how you want to use the integration. Send the message.
+
+You can add integrations to your [Pages](/builder/pages), [Components](/builder/components), or [Functions](/builder/functions). When you add an integration, you'll see a special chip in your chat. Anything adds the integration code to your page/component/function.
+
+<Tip>
+  You need to include the integration in your prompt. You'll know it's referenced correctly if you see a chip in your chat.
+</Tip>
+
+<Info>
+  Some integrations use credits to run. Learn more about [Credits](/account/credits).
+</Info>
+
+## Using AI Integrations
+
+Build powerful AI apps with our integrated models. Each integration comes with support out of box for:
+
+* **Streaming** - AI-generated text appears word by word, real time. You can tell Anything not to stream when you use the integration if you'd rather have it load.
+* **Flexible Prompting** - Let Anything guess the best prompt or specify the exact prompt
+* **Structured Outputs** - Get JSON responses to build dynamic UIs and drive application logic
+
+Adding AI is simple - just use a slash command, describe how you want to use the AI, and Anything handles hooking it up to your app.
+
+### Streaming
+
+By default, responses appear word-by-word as they're generated, creating an engaging real-time experience. This works great for chatbots and interactive experiences.
+
+If you prefer to show a loading spinner and display the complete response at once, simply tell Anything "don't stream the response" in your prompt. This is useful for:
+
+* Applications that process the full response
+* UIs that need to wait for complete data
+* Situations where immediate partial results aren't helpful
+
+### Prompting
+
+Anything offers multiple ways to handle AI prompts:
+
+1. **Basic In
