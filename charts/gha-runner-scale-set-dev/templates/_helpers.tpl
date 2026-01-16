@@ -15,10 +15,35 @@
 The name of the GitHub secret used for authentication.
 */}}
 {{- define "github-secret.name" -}}
-{{- if not (empty .Values.auth.secretName) }}
-{{- quote .Values.auth.secretName }}
-{{- else }}
+{{- if not (empty .Values.auth.secretName) -}}
+{{- .Values.auth.secretName -}}
+{{- else -}}
 {{- include "autoscaling-runner-set.name" . }}-github-secret
+{{- end -}}
+{{- end }}
+
+
+{{/*
+Create the labels for the GitHub auth secret.
+*/}}
+{{- define "github-secret.labels" -}}
+{{- $resourceLabels := dict "app.kubernetes.io/component" "github-secret" -}}
+{{- $commonLabels := include "gha-common-labels" . | fromYaml -}}
+{{- $global := include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.labels | default (dict)) | fromYaml -}}
+{{- toYaml (mergeOverwrite $global $resourceLabels $commonLabels) }}
+{{- end }}
+
+
+{{/*
+Create the annotations for the GitHub auth secret.
+
+Only global annotations are applied.
+Reserved annotations are excluded.
+*/}}
+{{- define "github-secret.annotations" -}}
+{{- $annotations := (include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.annotations | default (dict))) | fromYaml -}}
+{{- if not (empty $annotations) -}}
+{{- toYaml $annotations }}
 {{- end }}
 {{- end }}
 

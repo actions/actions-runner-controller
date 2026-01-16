@@ -74,7 +74,7 @@ tests:
     asserts:
       - equal:
           path: spec.githubConfigSecret
-          value: '"custom-github-secret"'
+          value: "custom-github-secret"
 
   - it: should render default runnerGroup when not configured
     set:
@@ -230,7 +230,7 @@ tests:
           value: "https://github.com/myorg"
       - equal:
           path: spec.githubConfigSecret
-          value: '"gh-token-secret"'
+          value: "gh-token-secret"
       - equal:
           path: spec.runnerGroup
           value: "prod-group"
