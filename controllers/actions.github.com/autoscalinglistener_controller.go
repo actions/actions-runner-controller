@@ -445,8 +445,12 @@ func needsMetadataUpdate(current map[string]string, desired map[string]string) b
 		return false
 	}
 
+	if current == nil {
+		return true
+	}
+
 	for key, value := range desired {
-		if current == nil || current[key] != value {
+		if current[key] != value {
 			return true
 		}
 	}
