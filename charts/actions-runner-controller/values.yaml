@@ -121,9 +121,9 @@ metrics:
     image:
       repository: quay.io/brancz/kube-rbac-proxy
       tag: v0.13.1
+    resources: {}
 
-resources:
-  {}
+resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
@@ -323,6 +323,7 @@ actionsMetrics:
     image:
       repository: quay.io/brancz/kube-rbac-proxy
       tag: v0.13.1
+    resources: {}
   # specify additional environment variables for the webhook server pod.
   # It's possible to specify either key vale pairs e.g.:
   # my_env_var: "some value"
