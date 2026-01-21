@@ -12,7 +12,7 @@ import (
 )
 
 // New returns a new httptest.Server that handles the
-// authentication requests neeeded to create a new client. Any requests not
+// authentication requests needed to create a new client. Any requests not
 // made to the /actions/runners/registration-token or
 // /actions/runner-registration endpoints will be handled by the provided
 // handler. The returned server is started and will be automatically closed

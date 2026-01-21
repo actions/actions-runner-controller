@@ -72,7 +72,7 @@ spec:
       repository: mumoshu/actions-runner-controller-ci
 ```
 
-- `kind: RunnerDeployment`: indicates its a kind of custom resource RunnerDeployment.
+- `kind: RunnerDeployment`: indicates it's a kind of custom resource RunnerDeployment.
 - `replicas: 1` : will deploy one replica. Multiple replicas can also be deployed ( more on that later).
 - `repository: mumoshu/actions-runner-controller-ci` : is the repository to link to when the pod comes up with the Actions runner (Note, this can be configured to link at the Enterprise or Organization level also).
 
@@ -101,7 +101,7 @@ ARC also allows for scaling the runners dynamically. There are two mechanisms fo
 
 You can enable scaling with 3 steps
 1) Enable `HorizontalRunnerAutoscaler` - Create a `deployment.yaml` file of type `HorizontalRunnerAutoscaler`. The schema for this file is defined below.
-2) Scaling parameters - `minReplicas` and `maxReplicas` indicates the min and max number of replicas to scale to.
+2) Scaling parameters - `minReplicas` and `maxReplicas` indicate the min and max number of replicas to scale to.
 3) Scaling metrics - ARC currently supports `PercentageRunnersBusy` as a metric type. The `PercentageRunnersBusy` will poll GitHub for the number of runners in the `busy` state in the RunnerDeployment's namespace, it will then scale depending on how you have configured the scale factors.
 
 ### Pull Driven Scaling Schema
