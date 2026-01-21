@@ -363,15 +363,18 @@ metadata:
   name: actions-runner-controller-github-webhook-server
   namespace: actions-runner-system
   annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Depending on your configuration of cert-manager
+    # Cf https://cert-manager.io/docs/configuration/
+    cert-manager.io/cluster-issuer: letsencrypt-http01
 spec:
+  ingressClassName: nginx
   tls:
   - hosts:
     - your.domain.com
     secretName: your-tls-secret-name
   rules:
-    - http:
+    - host: your.domain.com
+      http:
         paths:
           - path: /actions-runner-controller-github-webhook-server
             pathType: Prefix
