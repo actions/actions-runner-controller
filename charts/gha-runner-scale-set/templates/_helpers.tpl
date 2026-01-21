@@ -101,6 +101,13 @@ args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+{{- /* Append extra args only if containerMode.dind.extraDockerDaemonArgs exists and is a list */ -}}
+{{- if and (kindIs "map" .Values.containerMode) (kindIs "map" (get .Values.containerMode "dind")) -}}
+  {{- $extra := (get (get .Values.containerMode "dind") "extraDockerDaemonArgs") | default (list) -}}
+  {{- range $extra }}
+  - {{ . | quote }}
+  {{- end }}
+{{- end }}
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
