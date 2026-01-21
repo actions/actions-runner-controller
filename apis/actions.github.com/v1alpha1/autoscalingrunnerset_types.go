@@ -85,6 +85,9 @@ type AutoscalingRunnerSetSpec struct {
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
 
 	// +optional
+	ListenerServiceAccount *ListenerServiceAccount `json:"listenerServiceAccount,omitempty"`
+
+	// +optional
 	// +kubebuilder:validation:Minimum:=0
 	MaxRunners *int `json:"maxRunners,omitempty"`
 

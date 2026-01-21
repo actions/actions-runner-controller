@@ -109,6 +109,45 @@ func TestLabelPropagation(t *testing.T) {
 	}
 }
 
+func TestListenerServiceAccountMetadata(t *testing.T) {
+	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyKubernetesVersion: "0.2.0",
+			},
+			Annotations: map[string]string{
+				runnerScaleSetIDAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
+			},
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: "https://github.com/org/repo",
+			ListenerServiceAccount: &v1alpha1.ListenerServiceAccount{
+				Annotations: map[string]string{
+					"example.com/annotation": "test-value",
+				},
+				Labels: map[string]string{
+					"example.com/label": "label-value",
+				},
+			},
+		},
+	}
+
+	var b ResourceBuilder
+	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
+	require.NoError(t, err)
+
+	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+
+	serviceAccount := b.newScaleSetListenerServiceAccount(listener)
+	assert.Equal(t, "test-value", serviceAccount.Annotations["example.com/annotation"])
+	assert.Equal(t, "label-value", serviceAccount.Labels["example.com/label"])
+}
+
 func TestGitHubURLTrimLabelValues(t *testing.T) {
 	enterprise := strings.Repeat("a", 64)
 	organization := strings.Repeat("b", 64)

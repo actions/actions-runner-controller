@@ -63,7 +63,7 @@ type AutoscalingListenerReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get;list;watch;update
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
@@ -156,7 +156,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.createServiceAccountForListener(ctx, autoscalingListener, log)
 	}
 
-	// TODO: make sure the service account is up to date
+	desiredServiceAccount := r.newScaleSetListenerServiceAccount(autoscalingListener)
+	if listenerServiceAccountNeedsUpdate(serviceAccount, desiredServiceAccount) {
+		log.Info("Updating listener service account", "namespace", serviceAccount.Namespace, "name", serviceAccount.Name)
+		if err := r.updateServiceAccountForListener(ctx, serviceAccount, desiredServiceAccount); err != nil {
+			log.Error(err, "Unable to update listener service account", "namespace", serviceAccount.Namespace, "name", serviceAccount.Name)
+			return ctrl.Result{}, err
+		}
+	}
 
 	// Make sure the runner scale set listener role is created in the AutoscalingRunnerSet namespace
 	listenerRole := new(rbacv1.Role)
@@ -423,6 +430,48 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 
 	logger.Info("Created listener service accounts", "namespace", newServiceAccount.Namespace, "name", newServiceAccount.Name)
 	return ctrl.Result{}, nil
+}
+
+func listenerServiceAccountNeedsUpdate(current *corev1.ServiceAccount, desired *corev1.ServiceAccount) bool {
+	if needsMetadataUpdate(current.Labels, desired.Labels) {
+		return true
+	}
+
+	return needsMetadataUpdate(current.Annotations, desired.Annotations)
+}
+
+func needsMetadataUpdate(current map[string]string, desired map[string]string) bool {
+	if len(desired) == 0 {
+		return false
+	}
+
+	for key, value := range desired {
+		if current == nil || current[key] != value {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *AutoscalingListenerReconciler) updateServiceAccountForListener(ctx context.Context, serviceAccount *corev1.ServiceAccount, desired *corev1.ServiceAccount) error {
+	return patch(ctx, r.Client, serviceAccount, func(obj *corev1.ServiceAccount) {
+		if obj.Labels == nil {
+			obj.Labels = map[string]string{}
+		}
+		for key, value := range desired.Labels {
+			obj.Labels[key] = value
+		}
+
+		if len(desired.Annotations) > 0 {
+			if obj.Annotations == nil {
+				obj.Annotations = map[string]string{}
+			}
+			for key, value := range desired.Annotations {
+				obj.Annotations[key] = value
+			}
+		}
+	})
 }
 
 func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, appConfig *appconfig.AppConfig, logger logr.Logger) (ctrl.Result, error) {
