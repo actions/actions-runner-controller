@@ -274,6 +274,10 @@ func (c *Client) Identifier() string {
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	resp, err := c.Client.Do(req)
 	if err != nil {
+		// If we have a response even with an error, include the status code
+		if resp != nil {
+			return nil, fmt.Errorf("client request failed with status code %d: %w", resp.StatusCode, err)
+		}
 		return nil, fmt.Errorf("client request failed: %w", err)
 	}
 
@@ -856,7 +860,8 @@ func (c *Client) GenerateJitRunnerConfig(ctx context.Context, jitRunnerSetting *
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to issue the request: %w", err)
+		// Include the URL and method in the error for better debugging
+		return nil, fmt.Errorf("failed to issue the request %s %s: %w", req.Method, req.URL.String(), err)
 	}
 
 	if resp.StatusCode != http.StatusOK {

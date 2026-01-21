@@ -58,4 +58,31 @@ func TestGenerateJitRunnerConfig(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
 	})
+
+	t.Run("Error includes HTTP method and URL when request fails", func(t *testing.T) {
+		runnerSettings := &actions.RunnerScaleSetJitRunnerSetting{}
+
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+
+		client, err := actions.NewClient(
+			server.configURLForOrg("my-org"),
+			auth,
+			actions.WithRetryMax(0), // No retries to get immediate error
+			actions.WithRetryWaitMax(1*time.Millisecond),
+		)
+		require.NoError(t, err)
+
+		_, err = client.GenerateJitRunnerConfig(ctx, runnerSettings, 1)
+		require.NotNil(t, err)
+		// Verify error message includes HTTP method and URL for better debugging
+		assert.Contains(t, err.Error(), "POST")
+		assert.Contains(t, err.Error(), "generatejitconfig")
+		// The status code will be included through ParseActionsErrorFromResponse
+		var actionsErr *actions.ActionsError
+		if assert.ErrorAs(t, err, &actionsErr) {
+			assert.Equal(t, http.StatusInternalServerError, actionsErr.StatusCode)
+		}
+	})
 }
