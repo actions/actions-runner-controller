@@ -1,0 +1,23 @@
+{{- if hasKey .Values "metrics" }}
+{{- if and (hasKey .Values.metrics "podMonitor") .Values.metrics.podMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  labels:
+    {{- include "gha-runner-scale-set-controller.labels" . | nindent 4 }}
+  name: {{ include "gha-runner-scale-set-controller.managerPodMonitor" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  podMetricsEndpoints:
+  {{- with .Values.metrics }}
+  - path: {{ .listenerEndpoint }}
+    port: metrics
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
