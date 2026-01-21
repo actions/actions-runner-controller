@@ -8199,6 +8199,18 @@ spec:
                         - containers
                       type: object
                   type: object
+                listenerServiceAccount:
+                  description: ListenerServiceAccount defines metadata to apply to the listener service account.
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
                 maxRunners:
                   minimum: 0
                   type: integer

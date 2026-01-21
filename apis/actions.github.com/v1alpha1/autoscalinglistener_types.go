@@ -21,6 +21,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ListenerServiceAccount defines metadata to apply to the listener service account.
+type ListenerServiceAccount struct {
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
 	// Required
@@ -69,6 +78,9 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
+
+	// +optional
+	ListenerServiceAccount *ListenerServiceAccount `json:"listenerServiceAccount,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
