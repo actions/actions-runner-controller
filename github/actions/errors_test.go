@@ -22,7 +22,7 @@ func TestActionsError(t *testing.T) {
 
 		s := err.Error()
 		assert.Contains(t, s, "StatusCode 404")
-		assert.Contains(t, s, "AcivityId \"activity-id\"")
+		assert.Contains(t, s, "ActivityId \"activity-id\"")
 		assert.Contains(t, s, "example error description")
 	})
 

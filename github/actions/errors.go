@@ -36,7 +36,7 @@ type ActionsError struct {
 }
 
 func (e *ActionsError) Error() string {
-	return fmt.Sprintf("actions error: StatusCode %d, AcivityId %q: %v", e.StatusCode, e.ActivityID, e.Err)
+	return fmt.Sprintf("actions error: StatusCode %d, ActivityId %q: %v", e.StatusCode, e.ActivityID, e.Err)
 }
 
 func (e *ActionsError) Unwrap() error {
@@ -112,7 +112,7 @@ type MessageQueueTokenExpiredError struct {
 }
 
 func (e *MessageQueueTokenExpiredError) Error() string {
-	return fmt.Sprintf("MessageQueueTokenExpiredError: AcivityId %q, StatusCode %d: %s", e.activityID, e.statusCode, e.msg)
+	return fmt.Sprintf("MessageQueueTokenExpiredError: ActivityId %q, StatusCode %d: %s", e.activityID, e.statusCode, e.msg)
 }
 
 type HttpClientSideError struct {
