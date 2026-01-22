@@ -34,7 +34,7 @@ If you don't have a K8s cluster, you can install a local environment using minik
 :one: Install cert-manager in your cluster. For more information, see "[cert-manager](https://cert-manager.io/docs/installation/)."
 
 ```shell
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
 ```
 
 <sub> *note:- This command uses v1.8.2. Please replace with a later version, if available.</sub>
