@@ -31,7 +31,7 @@ In addition to the increased reliability of the automatic scaling, we have worke
 
 [![Watch the walkthrough](thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
 
-> Will take you to Youtube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
+> Will take you to YouTube for a short walkthrough of the Autoscaling Runner Scale Sets mode.
 
 ## Setup
 
@@ -42,6 +42,103 @@ You can follow [this quickstart guide](https://docs.github.com/en/actions/hostin
 You can follow [this troubleshooting guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/troubleshooting-actions-runner-controller-errors) for troubleshooting steps.
 
 ## Changelog
+
+### 0.13.1
+
+1. Make restart pod more flexible to different failure scenarios [#4340](https://github.com/actions/actions-runner-controller/pull/4340)
+1. Bump golangci/golangci-lint-action from 9.1.0 to 9.2.0 in the actions group [#4335](https://github.com/actions/actions-runner-controller/pull/4335)
+1. Bump the gomod group across 1 directory with 10 updates [#4338](https://github.com/actions/actions-runner-controller/pull/4338)
+1. Re-schedule if the failed reason starts with OutOf [#4336](https://github.com/actions/actions-runner-controller/pull/4336)
+1. Restart the listener if pod is evicted [#4332](https://github.com/actions/actions-runner-controller/pull/4332)
+1. Typo in test name caused test to not execute [#4330](https://github.com/actions/actions-runner-controller/pull/4330)
+1. Bump the actions group with 3 updates [#4328](https://github.com/actions/actions-runner-controller/pull/4328)
+1. Remove old e2e tests [#4325](https://github.com/actions/actions-runner-controller/pull/4325)
+1. Bump the actions group across 1 directory with 4 updates [#4309](https://github.com/actions/actions-runner-controller/pull/4309)
+1. Bump golang.org/x/crypto from 0.43.0 to 0.45.0 [#4318](https://github.com/actions/actions-runner-controller/pull/4318)
+1. Add support for giving kubernetes mode scaleset service account additional permissions [#4282](https://github.com/actions/actions-runner-controller/pull/4282)
+1. Bump the gomod group across 1 directory with 11 updates [#4317](https://github.com/actions/actions-runner-controller/pull/4317)
+1. Code style changes on the controller [#4324](https://github.com/actions/actions-runner-controller/pull/4324)
+1. Add ephemeral runner finalizer during creation and check finalizer without requeue [#4320](https://github.com/actions/actions-runner-controller/pull/4320)
+1. e2e: move from deprecated openebs charts to new registry [#4321](https://github.com/actions/actions-runner-controller/pull/4321)
+1. Create e2e test suite [#3136](https://github.com/actions/actions-runner-controller/pull/3136)
+1. Handle resource quota on status forbidden by retrying [#4305](https://github.com/actions/actions-runner-controller/pull/4305)
+1. Use combination of namespace, GitHub URL, and runner group when hashing the listener name [#4299](https://github.com/actions/actions-runner-controller/pull/4299)
+1. Bump kubebuilder tools in the workflow [#4300](https://github.com/actions/actions-runner-controller/pull/4300)
+1. Bump timeout for min runners workflow to 30s [#4306](https://github.com/actions/actions-runner-controller/pull/4306)
+1. Fix for code scanning alert no. 5: Workflow does not contain permissions [#4292](https://github.com/actions/actions-runner-controller/pull/4292)
+1. Delete listener resources without requeueing on each call [#4289](https://github.com/actions/actions-runner-controller/pull/4289)
+1. Fix first interaction action [#4290](https://github.com/actions/actions-runner-controller/pull/4290)
+1. Bump github/codeql-action from 3 to 4 in the actions group [#4281](https://github.com/actions/actions-runner-controller/pull/4281)
+
+### 0.13.0
+
+1. Remove workflow actions version comments since upgrades are done via dependabot [#4161](https://github.com/actions/actions-runner-controller/pull/4161)
+1. Fix image pull secrets list arguments in the chart [#4164](https://github.com/actions/actions-runner-controller/pull/4164)
+1. Update example GitHub URLs in values.yaml to include an example for enterprise account-level runners [#4181](https://github.com/actions/actions-runner-controller/pull/4181)
+1. docs: fix repo path typo [#4229](https://github.com/actions/actions-runner-controller/pull/4229)
+1. Remove deprecated preserveUnknownFields from CRDs [#4135](https://github.com/actions/actions-runner-controller/pull/4135)
+1. Add workflow name and target labels [#4240](https://github.com/actions/actions-runner-controller/pull/4240)
+1. docs: fix broken Grafana dashboard JSON path [#4270](https://github.com/actions/actions-runner-controller/pull/4270)
+1. Ensure ephemeral runner is deleted from the service on exit != 0 [#4260](https://github.com/actions/actions-runner-controller/pull/4260)
+1. Remove JIT config from ephemeral runner status field [#4191](https://github.com/actions/actions-runner-controller/pull/4191)
+1. Remove ephemeral runner when exit code != 0 and is patched with the job [#4239](https://github.com/actions/actions-runner-controller/pull/4239)
+1. Bump the gomod group across 1 directory with 4 updates [#4277](https://github.com/actions/actions-runner-controller/pull/4277)
+1. Bump all dependencies [#4266](https://github.com/actions/actions-runner-controller/pull/4266)
+
+### 0.12.1
+
+1. Fix indentation of startupProbe attributes in dind sidecar [#4126](https://github.com/actions/actions-runner-controller/pull/4126)
+1. Remove duplicate float64 call [#4139](https://github.com/actions/actions-runner-controller/pull/4139)
+1. Fix dind sidecar template [#4128](https://github.com/actions/actions-runner-controller/pull/4128)
+1. Remove check if runner exists after exit code 0 [#4142](https://github.com/actions/actions-runner-controller/pull/4142)
+1. Explicitly requeue during backoff ephemeral runner [#4152](https://github.com/actions/actions-runner-controller/pull/4152)
+
+### 0.12.0
+
+1. Allow use of client id as an app id [#4057](https://github.com/actions/actions-runner-controller/pull/4057)
+1. Relax version requirements to allow patch version mismatch [#4080](https://github.com/actions/actions-runner-controller/pull/4080)
+1. Refactor resource naming removing unnecessary calculations [#4076](https://github.com/actions/actions-runner-controller/pull/4076)
+1. Fix busy runners metric [#4016](https://github.com/actions/actions-runner-controller/pull/4016)
+1. Include more context to errors raised by github/actions client [#4032](https://github.com/actions/actions-runner-controller/pull/4032)
+1. Revised dashboard [#4022](https://github.com/actions/actions-runner-controller/pull/4022)
+1. feat(helm): move dind to sidecar [#3842](https://github.com/actions/actions-runner-controller/pull/3842)
+1. Pin third party actions [#3981](https://github.com/actions/actions-runner-controller/pull/3981)
+1. Fix docker lint warnings [#4074](https://github.com/actions/actions-runner-controller/pull/4074)
+1. Bump the gomod group across 1 directory with 7 updates [#4008](https://github.com/actions/actions-runner-controller/pull/4008)
+1. Bump go version [#4075](https://github.com/actions/actions-runner-controller/pull/4075)
+1. Add job_workflow_ref label to listener metrics [#4054](https://github.com/actions/actions-runner-controller/pull/4054)
+1. Bump github.com/cloudflare/circl from 1.6.0 to 1.6.1 [#4118](https://github.com/actions/actions-runner-controller/pull/4118)
+1. Avoid nil point when config.Metrics is nil and expose all metrics if none are configured [#4101](https://github.com/actions/actions-runner-controller/pull/4101)
+1. Bump github.com/golang-jwt/jwt/v5 from 5.2.1 to 5.2.2 [#4120](https://github.com/actions/actions-runner-controller/pull/4120)
+1. Add startup probe to dind side-car [#4117](https://github.com/actions/actions-runner-controller/pull/4117)
+1. Delete config secret when listener pod gets deleted [#4033](https://github.com/actions/actions-runner-controller/pull/4033)
+1. Add response body to error when fetching access token [#4005](https://github.com/actions/actions-runner-controller/pull/4005)
+1. Azure Key Vault integration to resolve secrets [#4090](https://github.com/actions/actions-runner-controller/pull/4090)
+1. Create backoff mechanism for failed runners and allow re-creation of failed ephemeral runners [#4059](https://github.com/actions/actions-runner-controller/pull/4059)
+
+### 0.11.0
+
+1. Add events role permission to leader_election_role [#3988](https://github.com/actions/actions-runner-controller/pull/3988)
+1. Bump github.com/golang-jwt/jwt/v4 from 4.5.1 to 4.5.2 [#3984](https://github.com/actions/actions-runner-controller/pull/3984)
+1. Create configurable metrics [#3975](https://github.com/actions/actions-runner-controller/pull/3975)
+1. Wrap errors in controller helper methods and swap logic in cleanups [#3960](https://github.com/actions/actions-runner-controller/pull/3960)
+1. Rename log from target/actual to build/autoscalingRunnerSet version [#3957](https://github.com/actions/actions-runner-controller/pull/3957)
+1. Update all dependencies, conforming to the new controller-runtime API [#3949](https://github.com/actions/actions-runner-controller/pull/3949)
+1. Clean up as much as possible in a single pass for the EphemeralRunner reconciler [#3941](https://github.com/actions/actions-runner-controller/pull/3941)
+1. Remove old githubrunnerscalesetlistener, remove warning and fix config bug [#3937](https://github.com/actions/actions-runner-controller/pull/3937)
+1. Include custom annotations and labels to all resources created by gha-runner-scale-set chart [#3934](https://github.com/actions/actions-runner-controller/pull/3934)
+1. Use Ready from the pod conditions when setting it to the EphemeralRunner [#3891](https://github.com/actions/actions-runner-controller/pull/3891)
+1. Fix template tests and add go test on gha-validate-chart [#3886](https://github.com/actions/actions-runner-controller/pull/3886)
+1. Update dependabot config to group packages (& include actions eco) [#3880](https://github.com/actions/actions-runner-controller/pull/3880)
+1. cmd/ghalistener/config: export Validate [#3870](https://github.com/actions/actions-runner-controller/pull/3870)
+1. AutoscalingRunnerSet env: not Rendering correctly [#3826](https://github.com/actions/actions-runner-controller/pull/3826)
+1. Clarify syntax for githubConfigSecret [#3812](https://github.com/actions/actions-runner-controller/pull/3812)
+1. Trim volume and container helpers in gha-runner-scale-set [#3807](https://github.com/actions/actions-runner-controller/pull/3807)
+1. Drop verbose flag from runner scale set init-dind-externals copy [#3805](https://github.com/actions/actions-runner-controller/pull/3805)
+1. Use gha-runner-scale-set-controller.chart instead of .Chart.Version [#3729](https://github.com/actions/actions-runner-controller/pull/3729)
+1. metrics cardinality for ghalistener [#3671](https://github.com/actions/actions-runner-controller/pull/3671)
+1. Sanitize labels ending in hyphen, underscore, and dot [#3664](https://github.com/actions/actions-runner-controller/pull/3664)
+1. chore: Added OwnerReferences during resource creation for EphemeralRunnerSet, EphemeralRunner, and EphemeralRunnerPod [#3575](https://github.com/actions/actions-runner-controller/pull/3575)
 
 ### 0.10.1
 
@@ -201,7 +298,7 @@ Please evaluate these changes carefully before upgrading.
 1. Document customization for containerModes [#2777](https://github.com/actions/actions-runner-controller/pull/2777)
 1. Bump github.com/cloudflare/circl from 1.1.0 to 1.3.3 [#2628](https://github.com/actions/actions-runner-controller/pull/2628)
 1. chore(deps): bump github.com/stretchr/testify from 1.8.2 to 1.8.4 [#2716](https://github.com/actions/actions-runner-controller/pull/2716)
-1. Move gha-* docs out of preview [#2779](https://github.com/actions/actions-runner-controller/pull/2779)
+1. Move gha-\* docs out of preview [#2779](https://github.com/actions/actions-runner-controller/pull/2779)
 1. Prepare 0.5.0 release [#2783](https://github.com/actions/actions-runner-controller/pull/2783)
 1. Security fix [#2676](https://github.com/actions/actions-runner-controller/pull/2676)
 

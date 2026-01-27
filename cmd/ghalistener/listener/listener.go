@@ -361,7 +361,7 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, fmt.Errorf("failed to decode job available: %w", err)
 			}
 
-			l.logger.Info("Job available message received", "jobId", jobAvailable.RunnerRequestId)
+			l.logger.Info("Job available message received", "jobId", jobAvailable.JobID)
 			parsedMsg.jobsAvailable = append(parsedMsg.jobsAvailable, &jobAvailable)
 
 		case messageTypeJobAssigned:
@@ -370,14 +370,14 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, fmt.Errorf("failed to decode job assigned: %w", err)
 			}
 
-			l.logger.Info("Job assigned message received", "jobId", jobAssigned.RunnerRequestId)
+			l.logger.Info("Job assigned message received", "jobId", jobAssigned.JobID)
 
 		case messageTypeJobStarted:
 			var jobStarted actions.JobStarted
 			if err := json.Unmarshal(msg, &jobStarted); err != nil {
 				return nil, fmt.Errorf("could not decode job started message. %w", err)
 			}
-			l.logger.Info("Job started message received.", "RequestId", jobStarted.RunnerRequestId, "RunnerId", jobStarted.RunnerId)
+			l.logger.Info("Job started message received.", "JobID", jobStarted.JobID, "RunnerId", jobStarted.RunnerID)
 			parsedMsg.jobsStarted = append(parsedMsg.jobsStarted, &jobStarted)
 
 		case messageTypeJobCompleted:
@@ -386,7 +386,13 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 				return nil, fmt.Errorf("failed to decode job completed: %w", err)
 			}
 
-			l.logger.Info("Job completed message received.", "RequestId", jobCompleted.RunnerRequestId, "Result", jobCompleted.Result, "RunnerId", jobCompleted.RunnerId, "RunnerName", jobCompleted.RunnerName)
+			l.logger.Info(
+				"Job completed message received.",
+				"JobID", jobCompleted.JobID,
+				"Result", jobCompleted.Result,
+				"RunnerId", jobCompleted.RunnerId,
+				"RunnerName", jobCompleted.RunnerName,
+			)
 			parsedMsg.jobsCompleted = append(parsedMsg.jobsCompleted, &jobCompleted)
 
 		default:
@@ -400,7 +406,7 @@ func (l *Listener) parseMessage(ctx context.Context, msg *actions.RunnerScaleSet
 func (l *Listener) acquireAvailableJobs(ctx context.Context, jobsAvailable []*actions.JobAvailable) ([]int64, error) {
 	ids := make([]int64, 0, len(jobsAvailable))
 	for _, job := range jobsAvailable {
-		ids = append(ids, job.RunnerRequestId)
+		ids = append(ids, job.RunnerRequestID)
 	}
 
 	l.logger.Info("Acquiring jobs", "count", len(ids), "requestIds", fmt.Sprint(ids))

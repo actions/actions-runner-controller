@@ -124,7 +124,7 @@ func main() {
 	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
 	flag.StringVar(&runnerPodDefaults.RunnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
 	flag.StringVar(&runnerPodDefaults.DockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
-	flag.StringVar(&runnerPodDefaults.DockerGID, "docker-gid", defaultDockerGID, "The default GID of docker group in the docker sidecar container. Use 1001 for dockerd sidecars of Ubuntu 20.04 runners 121 for Ubuntu 22.04.")
+	flag.StringVar(&runnerPodDefaults.DockerGID, "docker-gid", defaultDockerGID, "The default GID of docker group in the docker sidecar container. Use 1001 for dockerd sidecars of Ubuntu 20.04 runners 121 for Ubuntu 22.04 and 24.04.")
 	flag.Var(&runnerImagePullSecrets, "runner-image-pull-secret", "The default image-pull secret name for self-hosted runner container.")
 	flag.StringVar(&runnerPodDefaults.DockerRegistryMirror, "docker-registry-mirror", "", "The default Docker Registry Mirror used by runners.")
 	flag.StringVar(&c.Token, "github-token", c.Token, "The personal access token of GitHub.")
@@ -274,9 +274,17 @@ func main() {
 			log.WithName("actions-clients"),
 		)
 
+		secretResolver := actionsgithubcom.NewSecretResolver(
+			mgr.GetClient(),
+			actionsMultiClient,
+		)
+
 		rb := actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
+			SecretResolver:                  secretResolver,
 		}
+
+		log.Info("Resource builder initializing")
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
@@ -297,7 +305,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
@@ -308,7 +315,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			ActionsClient:   actionsMultiClient,
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr); err != nil {

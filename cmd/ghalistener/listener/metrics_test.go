@@ -123,9 +123,9 @@ func TestHandleMessageMetrics(t *testing.T) {
 				JobMessageType: actions.JobMessageType{
 					MessageType: messageTypeJobStarted,
 				},
-				RunnerRequestId: 8,
+				RunnerRequestID: 8,
 			},
-			RunnerId:   3,
+			RunnerID:   3,
 			RunnerName: "runner3",
 		},
 	}
@@ -139,7 +139,7 @@ func TestHandleMessageMetrics(t *testing.T) {
 				JobMessageType: actions.JobMessageType{
 					MessageType: messageTypeJobCompleted,
 				},
-				RunnerRequestId: 6,
+				RunnerRequestID: 6,
 			},
 			Result:     "success",
 			RunnerId:   1,
@@ -150,7 +150,7 @@ func TestHandleMessageMetrics(t *testing.T) {
 				JobMessageType: actions.JobMessageType{
 					MessageType: messageTypeJobCompleted,
 				},
-				RunnerRequestId: 7,
+				RunnerRequestID: 7,
 			},
 			Result:     "success",
 			RunnerId:   2,

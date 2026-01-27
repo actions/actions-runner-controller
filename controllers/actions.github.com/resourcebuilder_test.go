@@ -1,7 +1,6 @@
 package actionsgithubcom
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -28,7 +27,7 @@ func TestLabelPropagation(t *testing.T) {
 				"directly.excluded.org/arbitrary": "not-excluded-value",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:         "1",
+				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 			},
@@ -82,12 +81,7 @@ func TestLabelPropagation(t *testing.T) {
 			Name: "test",
 		},
 	}
-	listenerSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
-		},
-	}
-	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, listenerSecret, nil)
+	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
 
@@ -109,7 +103,7 @@ func TestLabelPropagation(t *testing.T) {
 			Name: "test",
 		},
 	}
-	pod := b.newEphemeralRunnerPod(context.TODO(), ephemeralRunner, runnerSecret)
+	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
 	for key := range ephemeralRunner.Labels {
 		assert.Equal(t, ephemeralRunner.Labels[key], pod.Labels[key])
 	}
@@ -129,7 +123,7 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 				LabelKeyKubernetesVersion: "0.2.0",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:         "1",
+				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 			},
@@ -181,4 +175,70 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 		assert.Len(t, listener.Labels[LabelKeyGitHubOrganization], 0)
 		assert.Len(t, listener.Labels[LabelKeyGitHubRepository], 0)
 	})
+}
+
+func TestOwnershipRelationships(t *testing.T) {
+	// Create an AutoscalingRunnerSet
+	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			UID:       "test-autoscaling-runner-set-uid",
+			Labels: map[string]string{
+				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion: "0.2.0",
+			},
+			Annotations: map[string]string{
+				runnerScaleSetIDAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
+				annotationKeyValuesHash:               "test-hash",
+			},
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: "https://github.com/org/repo",
+		},
+	}
+
+	// Initialize ResourceBuilder
+	b := ResourceBuilder{}
+
+	// Create EphemeralRunnerSet
+	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
+	require.NoError(t, err)
+
+	// Test EphemeralRunnerSet ownership
+	require.Len(t, ephemeralRunnerSet.OwnerReferences, 1, "EphemeralRunnerSet should have exactly one owner reference")
+	ownerRef := ephemeralRunnerSet.OwnerReferences[0]
+	assert.Equal(t, autoscalingRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match AutoscalingRunnerSet name")
+	assert.Equal(t, autoscalingRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match AutoscalingRunnerSet UID")
+	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
+	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+
+	// Create EphemeralRunner
+	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)
+
+	// Test EphemeralRunner ownership
+	require.Len(t, ephemeralRunner.OwnerReferences, 1, "EphemeralRunner should have exactly one owner reference")
+	ownerRef = ephemeralRunner.OwnerReferences[0]
+	assert.Equal(t, ephemeralRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match EphemeralRunnerSet name")
+	assert.Equal(t, ephemeralRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunnerSet UID")
+	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
+	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+
+	// Create EphemeralRunnerPod
+	runnerSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-secret",
+		},
+	}
+	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
+
+	// Test EphemeralRunnerPod ownership
+	require.Len(t, pod.OwnerReferences, 1, "EphemeralRunnerPod should have exactly one owner reference")
+	ownerRef = pod.OwnerReferences[0]
+	assert.Equal(t, ephemeralRunner.GetName(), ownerRef.Name, "Owner reference name should match EphemeralRunner name")
+	assert.Equal(t, ephemeralRunner.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunner UID")
+	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
+	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
 }

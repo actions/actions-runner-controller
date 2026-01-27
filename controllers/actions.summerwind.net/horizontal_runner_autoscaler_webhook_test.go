@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -419,9 +420,14 @@ func TestGetValidCapacityReservations(t *testing.T) {
 func installTestLogger(webhook *HorizontalRunnerAutoscalerGitHubWebhook) *bytes.Buffer {
 	logs := &bytes.Buffer{}
 
+	// Wrap the buffer with a synchronized writer to prevent race conditions
+	syncWriter := &syncWriter{
+		writer: logs,
+	}
+
 	sink := &testLogSink{
 		name:   "testlog",
-		writer: logs,
+		writer: syncWriter,
 	}
 
 	log := logr.New(sink)
@@ -515,6 +521,18 @@ func sendWebhook(server *httptest.Server, eventType string, event interface{}) (
 	}
 
 	return http.DefaultClient.Do(req)
+}
+
+// syncWriter wraps an io.Writer with a mutex for thread-safe writes
+type syncWriter struct {
+	writer io.Writer
+	mu     sync.Mutex
+}
+
+func (sw *syncWriter) Write(p []byte) (n int, err error) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	return sw.writer.Write(p)
 }
 
 // testLogSink is a sample logr.Logger that logs in-memory.

@@ -71,7 +71,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !hra.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !hra.DeletionTimestamp.IsZero() {
 		r.GitHubClient.DeinitForHRA(&hra)
 
 		return ctrl.Result{}, nil
@@ -91,7 +91,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 
-		if !rd.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !rd.DeletionTimestamp.IsZero() {
 			return ctrl.Result{}, nil
 		}
 
@@ -120,14 +120,14 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 					copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
 				}
 
-				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
+				if err := r.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
 					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
 				}
 			} else if ephemeral && effectiveTime != nil {
 				copy := rd.DeepCopy()
 				copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
 
-				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
+				if err := r.Patch(ctx, copy, client.MergeFrom(&rd)); err != nil {
 					return fmt.Errorf("patching runnerdeployment to have %d replicas: %w", newDesiredReplicas, err)
 				}
 			}
@@ -142,7 +142,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 
-		if !rs.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !rs.DeletionTimestamp.IsZero() {
 			return ctrl.Result{}, nil
 		}
 
@@ -160,7 +160,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 			org:        rs.Spec.Organization,
 			repo:       rs.Spec.Repository,
 			replicas:   replicas,
-			labels:     rs.Spec.RunnerConfig.Labels,
+			labels:     rs.Spec.Labels,
 			getRunnerMap: func() (map[string]struct{}, error) {
 				// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 				var runnerPodList corev1.PodList
@@ -224,14 +224,14 @@ func (r *HorizontalRunnerAutoscalerReconciler) Reconcile(ctx context.Context, re
 					copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
 				}
 
-				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
+				if err := r.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
 					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
 				}
 			} else if ephemeral && effectiveTime != nil {
 				copy := rs.DeepCopy()
 				copy.Spec.EffectiveTime = &metav1.Time{Time: *effectiveTime}
 
-				if err := r.Client.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
+				if err := r.Patch(ctx, copy, client.MergeFrom(&rs)); err != nil {
 					return fmt.Errorf("patching runnerset to have %d replicas: %w", newDesiredReplicas, err)
 				}
 			}
@@ -253,7 +253,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) scaleTargetFromRD(ctx context.Con
 		org:        rd.Spec.Template.Spec.Organization,
 		repo:       rd.Spec.Template.Spec.Repository,
 		replicas:   rd.Spec.Replicas,
-		labels:     rd.Spec.Template.Spec.RunnerConfig.Labels,
+		labels:     rd.Spec.Template.Spec.Labels,
 		getRunnerMap: func() (map[string]struct{}, error) {
 			// return the list of runners in namespace. Horizontal Runner Autoscaler should only be responsible for scaling resources in its own ns.
 			var runnerList v1alpha1.RunnerList
@@ -484,7 +484,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(ghc *arc
 	var reserved int
 
 	for _, reservation := range hra.Spec.CapacityReservations {
-		if reservation.ExpirationTime.Time.After(now) {
+		if reservation.ExpirationTime.After(now) {
 			reserved += reservation.Replicas
 		}
 	}

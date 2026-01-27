@@ -8,9 +8,11 @@ import (
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -40,15 +42,18 @@ func createNamespace(t ginkgo.GinkgoTInterface, client client.Client) (*corev1.N
 		ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
 	}
 
-	err := k8sClient.Create(context.Background(), ns)
+	err := client.Create(context.Background(), ns)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		err := k8sClient.Delete(context.Background(), ns)
+		err := client.Delete(context.Background(), ns)
 		require.NoError(t, err)
 	})
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Controller: config.Controller{
+			SkipNameValidation: ptr.To(true),
+		},
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
 				ns.Name: {},

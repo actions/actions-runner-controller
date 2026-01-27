@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
@@ -107,12 +108,12 @@ func (r *RunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if runner.ObjectMeta.DeletionTimestamp.IsZero() {
-		finalizers, added := addFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
+	if runner.DeletionTimestamp.IsZero() {
+		finalizers, added := addFinalizer(runner.Finalizers, finalizerName)
 
 		if added {
 			newRunner := runner.DeepCopy()
-			newRunner.ObjectMeta.Finalizers = finalizers
+			newRunner.Finalizers = finalizers
 
 			if err := r.Update(ctx, newRunner); err != nil {
 				log.Error(err, "Failed to update runner")
@@ -271,11 +272,11 @@ func ephemeralRunnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
 }
 
 func (r *RunnerReconciler) processRunnerDeletion(runner v1alpha1.Runner, ctx context.Context, log logr.Logger, pod *corev1.Pod) (reconcile.Result, error) {
-	finalizers, removed := removeFinalizer(runner.ObjectMeta.Finalizers, finalizerName)
+	finalizers, removed := removeFinalizer(runner.Finalizers, finalizerName)
 
 	if removed {
 		newRunner := runner.DeepCopy()
-		newRunner.ObjectMeta.Finalizers = finalizers
+		newRunner.Finalizers = finalizers
 
 		if err := r.Patch(ctx, newRunner, client.MergeFrom(&runner)); err != nil {
 			log.Error(err, "Unable to remove finalizer")
@@ -305,8 +306,8 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 	if needsServiceAccount {
 		serviceAccount := &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      runner.ObjectMeta.Name,
-				Namespace: runner.ObjectMeta.Namespace,
+				Name:      runner.Name,
+				Namespace: runner.Namespace,
 			},
 		}
 		if res := r.createObject(ctx, serviceAccount, serviceAccount.ObjectMeta, &runner, log); res != nil {
@@ -321,7 +322,7 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 					APIGroups:     []string{"actions.summerwind.dev"},
 					Resources:     []string{"runners/status"},
 					Verbs:         []string{"get", "update", "patch"},
-					ResourceNames: []string{runner.ObjectMeta.Name},
+					ResourceNames: []string{runner.Name},
 				},
 			}...)
 		}
@@ -359,8 +360,8 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 
 		role := &rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      runner.ObjectMeta.Name,
-				Namespace: runner.ObjectMeta.Namespace,
+				Name:      runner.Name,
+				Namespace: runner.Namespace,
 			},
 			Rules: rules,
 		}
@@ -370,19 +371,19 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 
 		roleBinding := &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      runner.ObjectMeta.Name,
-				Namespace: runner.ObjectMeta.Namespace,
+				Name:      runner.Name,
+				Namespace: runner.Namespace,
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",
 				Kind:     "Role",
-				Name:     runner.ObjectMeta.Name,
+				Name:     runner.Name,
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      runner.ObjectMeta.Name,
-					Namespace: runner.ObjectMeta.Namespace,
+					Name:      runner.Name,
+					Namespace: runner.Namespace,
 				},
 			},
 		}
@@ -482,7 +483,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 
 	labels := map[string]string{}
 
-	for k, v := range runner.ObjectMeta.Labels {
+	for k, v := range runner.Labels {
 		labels[k] = v
 	}
 
@@ -511,8 +512,8 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	//
 	//     See https://github.com/actions/actions-runner-controller/issues/143 for more context.
 	labels[LabelKeyPodTemplateHash] = hash.FNVHashStringObjects(
-		filterLabels(runner.ObjectMeta.Labels, LabelKeyRunnerTemplateHash),
-		runner.ObjectMeta.Annotations,
+		filterLabels(runner.Labels, LabelKeyRunnerTemplateHash),
+		runner.Annotations,
 		runner.Spec,
 		ghc.GithubBaseURL,
 		// Token change should trigger replacement.
@@ -523,10 +524,10 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	)
 
 	objectMeta := metav1.ObjectMeta{
-		Name:        runner.ObjectMeta.Name,
-		Namespace:   runner.ObjectMeta.Namespace,
+		Name:        runner.Name,
+		Namespace:   runner.Namespace,
 		Labels:      labels,
-		Annotations: runner.ObjectMeta.Annotations,
+		Annotations: runner.Annotations,
 	}
 
 	template.ObjectMeta = objectMeta
@@ -649,7 +650,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 	if runnerSpec.ServiceAccountName != "" {
 		pod.Spec.ServiceAccountName = runnerSpec.ServiceAccountName
 	} else if r.RunnerPodDefaults.UseRunnerStatusUpdateHook || runner.Spec.ContainerMode == "kubernetes" {
-		pod.Spec.ServiceAccountName = runner.ObjectMeta.Name
+		pod.Spec.ServiceAccountName = runner.Name
 	}
 
 	if runnerSpec.AutomountServiceAccountToken != nil {
@@ -704,7 +705,7 @@ func (r *RunnerReconciler) newPod(runner v1alpha1.Runner) (corev1.Pod, error) {
 		pod.Spec.RuntimeClassName = runnerSpec.RuntimeClassName
 	}
 
-	pod.ObjectMeta.Name = runner.ObjectMeta.Name
+	pod.Name = runner.Name
 
 	// Inject the registration token and the runner name
 	updated := mutatePod(&pod, runner.Status.Registration.Token)
@@ -720,7 +721,7 @@ func mutatePod(pod *corev1.Pod, token string) *corev1.Pod {
 	updated := pod.DeepCopy()
 
 	if getRunnerEnv(pod, EnvVarRunnerName) == "" {
-		setRunnerEnv(updated, EnvVarRunnerName, pod.ObjectMeta.Name)
+		setRunnerEnv(updated, EnvVarRunnerName, pod.Name)
 	}
 
 	if getRunnerEnv(pod, EnvVarRunnerToken) == "" {
@@ -770,11 +771,11 @@ func runnerHookEnvs(pod *corev1.Pod) ([]corev1.EnvVar, error) {
 
 func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, runnerSpec v1alpha1.RunnerConfig, githubBaseURL string, d RunnerPodDefaults) (corev1.Pod, error) {
 	var (
-		privileged                bool = true
-		dockerdInRunner           bool = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
-		dockerEnabled             bool = runnerSpec.DockerEnabled == nil || *runnerSpec.DockerEnabled
-		ephemeral                 bool = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
-		dockerdInRunnerPrivileged bool = dockerdInRunner
+		privileged                = true
+		dockerdInRunner           = runnerSpec.DockerdWithinRunnerContainer != nil && *runnerSpec.DockerdWithinRunnerContainer
+		dockerEnabled             = runnerSpec.DockerEnabled == nil || *runnerSpec.DockerEnabled
+		ephemeral                 = runnerSpec.Ephemeral == nil || *runnerSpec.Ephemeral
+		dockerdInRunnerPrivileged = dockerdInRunner
 
 		defaultRunnerImage            = d.RunnerImage
 		defaultRunnerImagePullSecrets = d.RunnerImagePullSecrets
@@ -797,10 +798,10 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 	template = *template.DeepCopy()
 
 	// This label selector is used by default when rd.Spec.Selector is empty.
-	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyRunner, "")
-	template.ObjectMeta.Labels = CloneAndAddLabel(template.ObjectMeta.Labels, LabelKeyPodMutation, LabelValuePodMutation)
+	template.Labels = CloneAndAddLabel(template.Labels, LabelKeyRunner, "")
+	template.Labels = CloneAndAddLabel(template.Labels, LabelKeyPodMutation, LabelValuePodMutation)
 	if runnerSpec.GitHubAPICredentialsFrom != nil {
-		template.ObjectMeta.Annotations = CloneAndAddLabel(template.ObjectMeta.Annotations, annotationKeyGitHubAPICredsSecret, runnerSpec.GitHubAPICredentialsFrom.SecretRef.Name)
+		template.Annotations = CloneAndAddLabel(template.Annotations, annotationKeyGitHubAPICredsSecret, runnerSpec.GitHubAPICredentialsFrom.SecretRef.Name)
 	}
 
 	workDir := runnerSpec.WorkDir
@@ -887,10 +888,11 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 	for i := range template.Spec.Containers {
 		c := template.Spec.Containers[i]
-		if c.Name == containerName {
+		switch c.Name {
+		case containerName:
 			runnerContainerIndex = i
 			runnerContainer = &c
-		} else if c.Name == "docker" {
+		case "docker":
 			dockerdContainerIndex = i
 			dockerdContainer = &c
 		}
@@ -1044,12 +1046,12 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		// overridden
 		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
 			gid := d.DockerGID
-			// We default to gid 121 for Ubuntu 22.04 images
+			// We default to gid 121 for Ubuntu 22.04 and 24.04 images
 			// See below for more details
 			// - https://github.com/actions/actions-runner-controller/issues/2490#issuecomment-1501561923
 			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-20.04.dockerfile#L14
 			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-22.04.dockerfile#L12
-			if strings.Contains(runnerContainer.Image, "22.04") {
+			if strings.Contains(runnerContainer.Image, "22.04") || strings.Contains(runnerContainer.Image, "24.04") {
 				gid = "121"
 			} else if strings.Contains(runnerContainer.Image, "20.04") {
 				gid = "1001"
@@ -1364,7 +1366,7 @@ func applyWorkVolumeClaimTemplateToPod(pod *corev1.Pod, workVolumeClaimTemplate 
 	}
 	for i := range pod.Spec.Volumes {
 		if pod.Spec.Volumes[i].Name == "work" {
-			return fmt.Errorf("Work volume should not be specified in container mode kubernetes. workVolumeClaimTemplate field should be used instead.")
+			return fmt.Errorf("work volume should not be specified in container mode kubernetes. workVolumeClaimTemplate field should be used instead")
 		}
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, workVolumeClaimTemplate.V1Volume())

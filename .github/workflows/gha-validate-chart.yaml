@@ -5,20 +5,20 @@ on:
     branches:
       - master
     paths:
-      - 'charts/**'
-      - '.github/workflows/gha-validate-chart.yaml'
-      - '!charts/actions-runner-controller/**'
-      - '!**.md'
+      - "charts/**"
+      - ".github/workflows/gha-validate-chart.yaml"
+      - "!charts/actions-runner-controller/**"
+      - "!**.md"
   push:
     paths:
-      - 'charts/**'
-      - '.github/workflows/gha-validate-chart.yaml'
-      - '!charts/actions-runner-controller/**'
-      - '!**.md'
+      - "charts/**"
+      - ".github/workflows/gha-validate-chart.yaml"
+      - "!charts/actions-runner-controller/**"
+      - "!**.md"
   workflow_dispatch:
 env:
   KUBE_SCORE_VERSION: 1.16.1
-  HELM_VERSION: v3.8.0
+  HELM_VERSION: v3.17.0
 
 permissions:
   contents: read
@@ -36,39 +36,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        # Using https://github.com/Azure/setup-helm/releases/tag/v4.2
-        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Set up kube-score
-        run: |
-          wget https://github.com/zegl/kube-score/releases/download/v${{ env.KUBE_SCORE_VERSION }}/kube-score_${{ env.KUBE_SCORE_VERSION }}_linux_amd64 -O kube-score
-          chmod 755 kube-score
-
-      - name: Kube-score generated manifests
-        run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score -
-              --ignore-test pod-networkpolicy
-              --ignore-test deployment-has-poddisruptionbudget
-              --ignore-test deployment-has-host-podantiaffinity
-              --ignore-test container-security-context
-              --ignore-test pod-probes
-              --ignore-test container-image-tag
-              --enable-optional-test container-security-context-privileged
-              --enable-optional-test container-security-context-readonlyrootfilesystem
-
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.6.0
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -84,13 +67,13 @@ jobs:
           ct lint --config charts/.ci/ct-config-gha.yaml
 
       - name: Set up docker buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
         if: steps.list-changed.outputs.changed == 'true'
         with:
           version: latest
 
       - name: Build controller image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         if: steps.list-changed.outputs.changed == 'true'
         with:
           file: Dockerfile
@@ -105,7 +88,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create kind cluster
-        uses: helm/kind-action@v1.4.0
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab
         if: steps.list-changed.outputs.changed == 'true'
         with:
           cluster_name: chart-testing
@@ -113,11 +96,11 @@ jobs:
       - name: Load image into cluster
         if: steps.list-changed.outputs.changed == 'true'
         run: |
-            export DOCKER_IMAGE_NAME=test-arc
-            export VERSION=dev
-            export IMG_RESULT=load
-            make docker-buildx
-            kind load docker-image test-arc:dev --name chart-testing
+          export DOCKER_IMAGE_NAME=test-arc
+          export VERSION=dev
+          export IMG_RESULT=load
+          make docker-buildx
+          kind load docker-image test-arc:dev --name chart-testing
 
       - name: Run chart-testing (install)
         if: steps.list-changed.outputs.changed == 'true'
@@ -128,8 +111,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+        uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false

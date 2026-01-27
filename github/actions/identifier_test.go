@@ -57,7 +57,7 @@ func TestClient_Identifier(t *testing.T) {
 		}
 		defaultAppCreds := &actions.ActionsAuth{
 			AppCreds: &actions.GitHubAppAuth{
-				AppID:             123,
+				AppID:             "123",
 				AppInstallationID: 123,
 				AppPrivateKey:     "private key",
 			},
@@ -90,7 +90,7 @@ func TestClient_Identifier(t *testing.T) {
 				old:  defaultAppCreds,
 				new: &actions.ActionsAuth{
 					AppCreds: &actions.GitHubAppAuth{
-						AppID:             456,
+						AppID:             "456",
 						AppInstallationID: 456,
 						AppPrivateKey:     "new private key",
 					},
@@ -140,7 +140,7 @@ func TestClient_Identifier(t *testing.T) {
 		chain, err := actions.NewClient(
 			configURL,
 			defaultCreds,
-			actions.WithRootCAs(poolFromCert(t, filepath.Join("testdata", "intermediate.pem"))),
+			actions.WithRootCAs(poolFromCert(t, filepath.Join("testdata", "intermediate.crt"))),
 		)
 		require.NoError(t, err)
 

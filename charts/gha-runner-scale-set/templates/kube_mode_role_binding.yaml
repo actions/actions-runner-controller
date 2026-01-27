@@ -1,10 +1,38 @@
 {{- $containerMode := .Values.containerMode }}
-{{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+{{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRoleBinding) }}
+{{- if and (or (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume")) (not .Values.template.spec.serviceAccountName) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleBindingName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set.namespace" . }}
+  labels:
+    {{- $base := include "gha-runner-scale-set.labels" . | fromYaml }}
+    {{- $extra := dict "app.kubernetes.io/component" "" }}
+    {{- $reserved := merge $base $extra }}
+    {{- with .Values.labels }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.kubernetesModeRoleBinding.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
+    {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
+
+  annotations:
+    {{- with .Values.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $hasCustomResourceMeta }}
+    {{- with .Values.resourceMeta.kubernetesModeRoleBinding.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
   finalizers:
     - actions.github.com/cleanup-protection
 roleRef:
@@ -14,5 +42,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: {{ include "gha-runner-scale-set.kubeModeServiceAccountName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set.namespace" . }}
 {{- end }}

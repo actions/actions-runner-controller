@@ -2,10 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "gha-runner-scale-set-controller.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
   labels:
     {{- include "gha-runner-scale-set-controller.labels" . | nindent 4 }}
-    actions.github.com/controller-service-account-namespace: {{ .Release.Namespace }}
+    actions.github.com/controller-service-account-namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
     actions.github.com/controller-service-account-name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
     {{- if .Values.flags.watchSingleNamespace }}
     actions.github.com/controller-watch-single-namespace: {{ .Values.flags.watchSingleNamespace }}
@@ -25,7 +25,7 @@ spec:
       labels:
         app.kubernetes.io/part-of: gha-rs-controller
         app.kubernetes.io/component: controller-manager
-        app.kubernetes.io/version: {{ .Chart.Version }}
+        app.kubernetes.io/version: {{ .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
         {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
           {{- toYaml . | nindent 8 }}
@@ -54,7 +54,9 @@ spec:
         - "--leader-election-id={{ include "gha-runner-scale-set-controller.fullname" . }}"
         {{- end }}
         {{- with .Values.imagePullSecrets }}
-        - "--auto-scaler-image-pull-secrets={{ include "gha-runner-scale-set-controller.imagePullSecretsNames" . }}"
+        {{- range . }}
+        - "--auto-scaler-image-pull-secrets={{- .name -}}"
+        {{- end }}
         {{- end }}
         {{- with .Values.flags.logLevel }}
         - "--log-level={{ . }}"

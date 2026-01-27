@@ -21,8 +21,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// EphemeralRunnerContainerName is the name of the runner container.
+// It represents the name of the container running the self-hosted runner image.
+const EphemeralRunnerContainerName = "runner"
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.runnerId",name=RunnerId,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
@@ -30,6 +34,7 @@ import (
 // +kubebuilder:printcolumn:JSONPath=".status.jobWorkflowRef",name=JobWorkflowRef,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.workflowRunId",name=WorkflowRunId,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.jobDisplayName",name=JobDisplayName,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.jobId",name=JobId,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
@@ -46,16 +51,64 @@ func (er *EphemeralRunner) IsDone() bool {
 	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
 }
 
+func (er *EphemeralRunner) HasJob() bool {
+	return len(er.Status.JobID) > 0
+}
+
+func (er *EphemeralRunner) HasContainerHookConfigured() bool {
+	for i := range er.Spec.Spec.Containers {
+		if er.Spec.Spec.Containers[i].Name != EphemeralRunnerContainerName {
+			continue
+		}
+
+		for _, env := range er.Spec.Spec.Containers[i].Env {
+			if env.Name == "ACTIONS_RUNNER_CONTAINER_HOOKS" {
+				return true
+			}
+		}
+
+		return false
+	}
+	return false
+}
+
+func (er *EphemeralRunner) GitHubConfigSecret() string {
+	return er.Spec.GitHubConfigSecret
+}
+
+func (er *EphemeralRunner) GitHubConfigUrl() string {
+	return er.Spec.GitHubConfigUrl
+}
+
+func (er *EphemeralRunner) GitHubProxy() *ProxyConfig {
+	return er.Spec.Proxy
+}
+
+func (er *EphemeralRunner) GitHubServerTLS() *TLSConfig {
+	return er.Spec.GitHubServerTLS
+}
+
+func (er *EphemeralRunner) VaultConfig() *VaultConfig {
+	return er.Spec.VaultConfig
+}
+
+func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
+	if er.Spec.VaultConfig != nil {
+		return er.Spec.VaultConfig.Proxy
+	}
+	return nil
+}
+
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// +required
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
 	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
+
+	// +optional
+	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +required
 	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
@@ -67,17 +120,13 @@ type EphemeralRunnerSpec struct {
 	ProxySecretRef string `json:"proxySecretRef,omitempty"`
 
 	// +optional
-	GitHubServerTLS *GitHubServerTLSConfig `json:"githubServerTLS,omitempty"`
+	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
-	// +required
 	corev1.PodTemplateSpec `json:",inline"`
 }
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
 type EphemeralRunnerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Turns true only if the runner is online.
 	// +optional
 	Ready bool `json:"ready"`
@@ -101,14 +150,15 @@ type EphemeralRunnerStatus struct {
 	RunnerId int `json:"runnerId,omitempty"`
 	// +optional
 	RunnerName string `json:"runnerName,omitempty"`
-	// +optional
-	RunnerJITConfig string `json:"runnerJITConfig,omitempty"`
 
 	// +optional
-	Failures map[string]bool `json:"failures,omitempty"`
+	Failures map[string]metav1.Time `json:"failures,omitempty"`
 
 	// +optional
 	JobRequestId int64 `json:"jobRequestId,omitempty"`
+
+	// +optional
+	JobID string `json:"jobId,omitempty"`
 
 	// +optional
 	JobRepositoryName string `json:"jobRepositoryName,omitempty"`
@@ -123,7 +173,21 @@ type EphemeralRunnerStatus struct {
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+func (s *EphemeralRunnerStatus) LastFailure() metav1.Time {
+	var maxTime metav1.Time
+	if len(s.Failures) == 0 {
+		return maxTime
+	}
+
+	for _, ts := range s.Failures {
+		if ts.After(maxTime.Time) {
+			maxTime = ts
+		}
+	}
+	return maxTime
+}
+
+// +kubebuilder:object:root=true
 
 // EphemeralRunnerList contains a list of EphemeralRunner
 type EphemeralRunnerList struct {
