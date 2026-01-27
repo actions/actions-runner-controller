@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gha-controller.manager-listener-role-name" . }}
-  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
+  namespace: {{ include "gha-controller.namespace" . }}
 rules:
 - apiGroups:
   - ""

@@ -5,7 +5,7 @@ Labels applied to the controller Pod template (spec.template.metadata.labels)
 {{- define "gha-controller-template.labels" -}}
 {{- $static := dict "app.kubernetes.io/part-of" "gha-rs-controller" "app.kubernetes.io/component" "controller-manager" -}}
 {{- $_ := set $static "app.kubernetes.io/version" (.Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-") -}}
-{{- $selector := include "gha-runner-scale-set-controller.selectorLabels" . | fromYaml -}}
+{{- $selector := include "gha-controller.selector-labels" . | fromYaml -}}
 {{- $podUser := include "apply-non-reserved-gha-labels-and-annotations" (.Values.controller.pod.metadata.labels | default (dict)) | fromYaml -}}
 {{- $labels := mergeOverwrite $podUser $selector $static -}}
 {{- toYaml $labels -}}
@@ -31,7 +31,7 @@ args:
   - "--auto-scaling-runner-set-only"
 {{- if gt (int (default 1 .Values.controller.replicaCount)) 1 }}
   - "--enable-leader-election"
-  - "--leader-election-id={{ include "gha-runner-scale-set-controller.fullname" . }}"
+  - "--leader-election-id={{ include "gha-controller.name" . }}"
 {{- end }}
 {{- with .Values.imagePullSecrets }}
 {{- range . }}

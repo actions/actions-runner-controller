@@ -15,8 +15,8 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 If release name contains chart name it will be used as a full name.
 */}}
 {{- define "gha-controller.name" -}}
-{{- if .Values.fullnameOverride }}
-  {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- if .Values.nameOverride }}
+  {{- .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
   {{- $name := default (include "gha-base-name" .) .Values.nameOverride }}
   {{- if contains $name .Release.Name }}
@@ -56,7 +56,7 @@ Create the name of the service account to use
   {{- fail "serviceAccount.name cannot be set to 'default'" }}
 {{- end }}
 {{- if .Values.controller.serviceAccount.create }}
-  {{- default (include "gha-controller.fullname" .) .Values.controller.serviceAccount.name }}
+  {{- default (include "gha-controller.name" .) .Values.controller.serviceAccount.name }}
 {{- else }}
   {{- if not .Values.controller.serviceAccount.name }}
     {{- fail "serviceAccount.name must be set if serviceAccount.create is false" }}

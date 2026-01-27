@@ -9,7 +9,7 @@ spec:
   replicas: {{ default 1 .Values.controller.replicaCount }}
   selector:
     matchLabels:
-      {{- include "gha-runner-scale-set-controller.selectorLabels" . | nindent 6 }}
+      {{- include "gha-controller.selector-labels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -21,7 +21,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+      serviceAccountName: {{ include "gha-controller.service-account-name" . }}
       containers:
         -
       {{- include "gha-controller-template.manager-container" . | nindent 10 }}

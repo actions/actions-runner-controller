@@ -2,14 +2,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "gha-runner-scale-set-controller.managerSingleNamespaceRoleBinding" . }}
-  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
+  name: {{ include "gha-controller.manager-single-namespace-role-binding" . }}
+  namespace: {{ include "gha-controller.namespace" . }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "gha-controller.manager-single-namespace-role-name" . }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
-  namespace: {{ include "gha-runner-scale-set-controller.namespace" . }}
+  name: {{ include "gha-controller.service-account-name" . }}
+  namespace: {{ include "gha-controller.namespace" . }}
 {{- end }}

@@ -10,6 +10,6 @@ roleRef:
   name: {{ include "gha-controller.leader-election-role-name" . }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "gha-runner-scale-set-controller.serviceAccountName" . }}
+  name: {{ include "gha-controller.service-account-name" . }}
   namespace: {{ include "gha-controller.namespace" . }}
 {{- end }}
