@@ -101,6 +101,7 @@ args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+  - --mtu=1460
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
