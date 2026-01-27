@@ -1,0 +1,56 @@
+{{- $runner := (.Values.runner | default dict) -}}
+{{- $runnerMode := (index $runner "mode" | default "") -}}
+{{- $kubeMode := (index $runner "kubernetesMode" | default dict) -}}
+{{- $extensionRef := (index $kubeMode "extensionRef" | default "") -}}
+{{- if not (kindIs "string" $extensionRef) -}}
+  {{- fail "runner.kubernetesMode.extensionRef must be a string" -}}
+{{- end -}}
+
+{{- if and (eq $runnerMode "kubernetes") (empty $extensionRef) -}}
+  {{- $extension := (index $kubeMode "extension" | default dict) -}}
+  {{- if and (hasKey $kubeMode "extension") (not (kindIs "map" $extension)) -}}
+    {{- fail "runner.kubernetesMode.extension must be an object" -}}
+  {{- end -}}
+
+  {{- $extensionMeta := dict -}}
+  {{- $extensionName := "" -}}
+  {{- $extensionNamespace := "" -}}
+  {{- $extensionYaml := "" -}}
+  {{- if kindIs "map" $extension -}}
+    {{- $extensionMeta = (index $extension "metadata" | default dict) -}}
+    {{- if not (kindIs "map" $extensionMeta) -}}
+      {{- fail "runner.kubernetesMode.extension.metadata must be an object" -}}
+    {{- end -}}
+    {{- $extensionName = (index $extensionMeta "name" | default "") -}}
+    {{- $extensionNamespace = (index $extensionMeta "namespace" | default "") -}}
+    {{- $extensionYaml = (index $extension "yaml" | default "") -}}
+  {{- end -}}
+
+  {{- if not (kindIs "string" $extensionName) -}}
+    {{- fail "runner.kubernetesMode.extension.metadata.name must be a string" -}}
+  {{- end -}}
+  {{- if not (kindIs "string" $extensionNamespace) -}}
+    {{- fail "runner.kubernetesMode.extension.metadata.namespace must be a string" -}}
+  {{- end -}}
+  {{- if not (kindIs "string" $extensionYaml) -}}
+    {{- fail "runner.kubernetesMode.extension.yaml must be a string" -}}
+  {{- end -}}
+
+  {{- if not (empty $extensionYaml) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ default (printf "%s-hook-extension" (include "autoscaling-runner-set.name" .) | trunc 63 | trimSuffix "-") $extensionName | quote }}
+  namespace: {{ default (include "autoscaling-runner-set.namespace" .) $extensionNamespace | quote }}
+  labels:
+    {{- include "kube-mode-extension.labels" . | nindent 4 }}
+  {{- $annotations := (include "apply-non-reserved-gha-labels-and-annotations" (.Values.resource.all.metadata.annotations | default (dict))) | fromYaml -}}
+  {{- if not (empty $annotations) }}
+  annotations:
+    {{- toYaml $annotations | nindent 4 }}
+  {{- end }}
+data:
+  extension: |-
+{{ $extensionYaml | indent 4 }}
+  {{- end -}}
+{{- end -}}

@@ -1,0 +1,89 @@
+suite: "Hook extension ConfigMap"
+templates:
+  - hook_extension.yaml
+tests:
+  - it: should render ConfigMap with data.extension from extension.yaml
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extension:
+            metadata:
+              name: "my-hook-extension"
+              namespace: "test-namespace"
+            yaml: |
+              foo: bar
+              nested:
+                a: 1
+    release:
+      name: "test-name"
+      namespace: "ignored-by-test" # overridden by extension.metadata.namespace above
+    asserts:
+      - equal:
+          path: apiVersion
+          value: v1
+      - equal:
+          path: kind
+          value: ConfigMap
+      - equal:
+          path: metadata.name
+          value: my-hook-extension
+      - equal:
+          path: metadata.namespace
+          value: test-namespace
+      - equal:
+          path: data.extension
+          value: |-
+            foo: bar
+            nested:
+              a: 1
+
+  - it: should not render when extension.yaml is empty
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extension:
+            metadata:
+              name: "my-hook-extension"
+              namespace: "test-namespace"
+            yaml: ""
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when extensionRef is set
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extensionRef: "existing-hook-extension"
+          extension:
+            metadata:
+              name: "my-hook-extension"
+              namespace: "test-namespace"
+            yaml: |
+              foo: bar
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not require inline extension when extensionRef is set
+    set:
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extensionRef: "existing-hook-extension"
+          extension: "not-a-map"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - hasDocuments:
+          count: 0

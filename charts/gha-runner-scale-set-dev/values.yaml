@@ -196,9 +196,12 @@ runner:
     serviceAccountName: ""
     hookPath: "/home/runner/k8s/index.js"
     requireJobContainer: true
-    extension: {}
-  
-
+    extensionRef: ""
+    extension:
+      metadata:
+        name: ""
+        namespace: ""
+      yaml: ""
 
 ## A self-signed CA certificate for communication with the GitHub server can be
 ## provided using a config map key selector. If `runnerMountPath` is set, for

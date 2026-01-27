@@ -1,0 +1,101 @@
+suite: "AutoscalingRunnerSet kubernetes mode hook extension wiring"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should mount hook extension ConfigMap when inline extension.yaml is set
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          hookPath: "/home/runner/k8s/index.js"
+          extension:
+            metadata:
+              name: "my-hook-extension"
+              namespace: "test-namespace"
+            yaml: "foo: bar"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE
+            value: /home/runner/k8s/hook-template.yaml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: hook-extension
+            configMap:
+              name: my-hook-extension
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: hook-extension
+            mountPath: /home/runner/k8s/hook-template.yaml
+            subPath: extension
+            readOnly: true
+
+  - it: should mount hook extension ConfigMap when extensionRef is set
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extensionRef: "existing-hook-extension"
+          hookPath: "/home/runner/k8s/index.js"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE
+            value: /home/runner/k8s/hook-template.yaml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: hook-extension
+            configMap:
+              name: existing-hook-extension
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: hook-extension
+            mountPath: /home/runner/k8s/hook-template.yaml
+            subPath: extension
+            readOnly: true
+
+  - it: should allow using extensionRef without defining inline extension
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extensionRef: "existing-hook-extension"
+          extension: "not-a-map"
+          hookPath: "/home/runner/k8s/index.js"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: hook-extension
+            configMap:
+              name: existing-hook-extension
