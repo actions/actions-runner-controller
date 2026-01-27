@@ -182,6 +182,10 @@ chart-crds:
 	cp config/crd/bases/actions.github.com_autoscalinglisteners.yaml charts/gha-runner-scale-set-controller/crds/
 	cp config/crd/bases/actions.github.com_ephemeralrunnersets.yaml charts/gha-runner-scale-set-controller/crds/
 	cp config/crd/bases/actions.github.com_ephemeralrunners.yaml charts/gha-runner-scale-set-controller/crds/
+	cp config/crd/bases/actions.github.com_autoscalingrunnersets.yaml charts/gha-runner-scale-set-controller-experimental/crds/
+	cp config/crd/bases/actions.github.com_autoscalinglisteners.yaml charts/gha-runner-scale-set-controller-experimental/crds/
+	cp config/crd/bases/actions.github.com_ephemeralrunnersets.yaml charts/gha-runner-scale-set-controller-experimental/crds/
+	cp config/crd/bases/actions.github.com_ephemeralrunners.yaml charts/gha-runner-scale-set-controller-experimental/crds/
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalingrunnersets.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_autoscalinglisteners.yaml
 	rm charts/actions-runner-controller/crds/actions.github.com_ephemeralrunnersets.yaml

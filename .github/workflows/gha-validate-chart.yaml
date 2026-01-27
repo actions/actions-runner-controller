@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 env:
   KUBE_SCORE_VERSION: 1.16.1
-  HELM_VERSION: v3.17.0
+  HELM_VERSION: v3.19.4
 
 permissions:
   contents: read
@@ -66,14 +66,13 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Install helm-unittest
-        if: contains(steps.list-changed.outputs.changed_charts, 'charts/gha-runner-scale-set-controller-dev')
+        if: contains(steps.list-changed.outputs.changed_charts, 'charts/gha-runner-scale-set-controller-experimental')
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.6.3
-
-      - name: Run helm-unittest (gha-runner-scale-set-controller-dev)
-        if: contains(steps.list-changed.outputs.changed_charts, 'charts/gha-runner-scale-set-controller-dev')
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+      - name: Run helm-unittest (gha-runner-scale-set-controller-experimental)
+        if: contains(steps.list-changed.outputs.changed_charts, 'charts/gha-runner-scale-set-controller-experimental')
         run: |
-          helm unittest ./charts/gha-runner-scale-set-controller-dev/
+          helm unittest ./charts/gha-runner-scale-set-controller-experimental/
 
       - name: Run chart-testing (lint)
         run: |
