@@ -136,6 +136,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
 			Metrics:                       autoscalingRunnerSet.Spec.ListenerMetrics,
 			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
+			ListenerServiceAccount:        autoscalingRunnerSet.Spec.ListenerServiceAccount,
 		},
 	}
 
@@ -425,14 +426,33 @@ func mergeListenerContainer(base, from *corev1.Container) {
 }
 
 func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
+	labels := b.mergeLabels(autoscalingListener.Labels, map[string]string{
+		LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+		LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+	})
+
+	var annotations map[string]string
+	if autoscalingListener.Spec.ListenerServiceAccount != nil {
+		if len(autoscalingListener.Spec.ListenerServiceAccount.Labels) > 0 {
+			for k, v := range autoscalingListener.Spec.ListenerServiceAccount.Labels {
+				if _, ok := labels[k]; !ok {
+					labels[k] = v
+				}
+			}
+		}
+
+		if len(autoscalingListener.Spec.ListenerServiceAccount.Annotations) > 0 {
+			annotations = make(map[string]string, len(autoscalingListener.Spec.ListenerServiceAccount.Annotations))
+			maps.Copy(annotations, autoscalingListener.Spec.ListenerServiceAccount.Annotations)
+		}
+	}
+
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
-			Labels: b.mergeLabels(autoscalingListener.Labels, map[string]string{
-				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
-			}),
+			Labels:      labels,
+			Annotations: annotations,
 		},
 	}
 }
