@@ -2,6 +2,7 @@ package actions_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -57,5 +58,38 @@ func TestGenerateJitRunnerConfig(t *testing.T) {
 		_, err = client.GenerateJitRunnerConfig(ctx, runnerSettings, 1)
 		assert.NotNil(t, err)
 		assert.Equalf(t, actualRetry, expectedRetry, "A retry was expected after the first request but got: %v", actualRetry)
+	})
+
+	t.Run("Error includes HTTP method and URL when request fails", func(t *testing.T) {
+		runnerSettings := &actions.RunnerScaleSetJitRunnerSetting{}
+
+		server := newActionsServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+
+		client, err := actions.NewClient(
+			server.configURLForOrg("my-org"),
+			auth,
+			actions.WithRetryMax(0), // No retries to get immediate error
+			actions.WithRetryWaitMax(1*time.Millisecond),
+		)
+		require.NoError(t, err)
+
+		_, err = client.GenerateJitRunnerConfig(ctx, runnerSettings, 1)
+		require.NotNil(t, err)
+		// Verify error message includes HTTP method and URL for better debugging
+		errMsg := err.Error()
+		assert.Contains(t, errMsg, "POST", "Error message should include HTTP method")
+		assert.Contains(t, errMsg, "generatejitconfig", "Error message should include URL path")
+
+		// The error might be an ActionsError (if response was received) or a wrapped error (if Do() failed)
+		// In either case, the error message should include request details
+		var actionsErr *actions.ActionsError
+		if errors.As(err, &actionsErr) {
+			// If we got an ActionsError, verify the status code is included
+			assert.Equal(t, http.StatusInternalServerError, actionsErr.StatusCode)
+		}
+		// If it's a wrapped error from Do(), the error message already includes the method and URL
+		// which is what we're testing for
 	})
 }
