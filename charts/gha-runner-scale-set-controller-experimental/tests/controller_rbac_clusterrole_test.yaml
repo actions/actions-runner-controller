@@ -27,8 +27,9 @@ tests:
   - it: should not render manager ClusterRole when watchSingleNamespace is set
     set:
       controller:
-        flags:
-          watchSingleNamespace: "demo"
+        manager:
+          config:
+            watchSingleNamespace: "demo"
     release:
       name: "test-arc"
       namespace: "test-ns"

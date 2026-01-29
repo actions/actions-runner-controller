@@ -26,8 +26,9 @@ tests:
   - it: should not render when watchSingleNamespace is set
     set:
       controller:
-        flags:
-          watchSingleNamespace: "my-ns"
+        manager:
+          config:
+            watchSingleNamespace: "my-ns"
     release:
       name: "test-name"
       namespace: "test-namespace"

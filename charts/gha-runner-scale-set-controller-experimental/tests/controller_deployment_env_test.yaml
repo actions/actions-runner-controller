@@ -16,9 +16,10 @@ tests:
     set:
       controller:
         manager:
-          env:
-            - name: "FOO"
-              value: "bar"
+          container:
+            env:
+              - name: "FOO"
+                value: "bar"
     release:
       name: "test-name"
       namespace: "test-namespace"

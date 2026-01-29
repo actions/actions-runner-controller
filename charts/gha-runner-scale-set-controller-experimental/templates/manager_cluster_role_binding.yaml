@@ -1,4 +1,4 @@
-{{- if empty .Values.controller.flags.watchSingleNamespace }}
+{{- if empty .Values.controller.manager.config.watchSingleNamespace }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

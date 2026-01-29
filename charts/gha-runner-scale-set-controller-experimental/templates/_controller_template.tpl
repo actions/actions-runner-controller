@@ -23,8 +23,8 @@ Annotations applied to the controller Pod template (spec.template.metadata.annot
 
 {{- define "gha-controller-template.manager-container" -}}
 name: manager
-image: "{{ .Values.controller.manager.image }}"
-imagePullPolicy: {{ default .Values.controller.manager.pullPolicy "IfNotPresent" }}
+image: "{{ .Values.controller.manager.container.image }}"
+imagePullPolicy: {{ default .Values.controller.manager.container.pullPolicy "IfNotPresent" }}
 command:
   - "/manager"
 args:
@@ -38,19 +38,19 @@ args:
   - "--auto-scaler-image-pull-secrets={{- .name -}}"
 {{- end }}
 {{- end }}
-{{- with .Values.controller.flags.logLevel }}
+{{- with .Values.controller.manager.config.logLevel }}
   - "--log-level={{ . }}"
 {{- end }}
-{{- with .Values.controller.flags.logFormat }}
+{{- with .Values.controller.manager.config.logFormat }}
   - "--log-format={{ . }}"
 {{- end }}
-{{- with .Values.controller.flags.watchSingleNamespace }}
+{{- with .Values.controller.manager.config.watchSingleNamespace }}
   - "--watch-single-namespace={{ . }}"
 {{- end }}
-{{- with .Values.controller.flags.runnerMaxConcurrentReconciles }}
+{{- with .Values.controller.manager.config.runnerMaxConcurrentReconciles }}
   - "--runner-max-concurrent-reconciles={{ . }}"
 {{- end }}
-{{- with .Values.controller.flags.updateStrategy }}
+{{- with .Values.controller.manager.config.updateStrategy }}
   - "--update-strategy={{ . }}"
 {{- end }}
 {{- if .Values.controller.metrics }}
@@ -64,49 +64,62 @@ args:
   - "--listener-metrics-endpoint="
   - "--metrics-addr=0"
 {{- end }}
-{{- range .Values.controller.flags.excludeLabelPropagationPrefixes }}
+{{- range .Values.controller.manager.config.excludeLabelPropagationPrefixes }}
   - "--exclude-label-propagation-prefix={{ . }}"
 {{- end }}
-{{- with .Values.controller.flags.k8sClientRateLimiterQPS }}
+{{- with .Values.controller.manager.config.k8sClientRateLimiterQPS }}
   - "--k8s-client-rate-limiter-qps={{ . }}"
 {{- end }}
-{{- with .Values.controller.flags.k8sClientRateLimiterBurst }}
+{{- with .Values.controller.manager.config.k8sClientRateLimiterBurst }}
   - "--k8s-client-rate-limiter-burst={{ . }}"
 {{- end }}
-{{- with .Values.controller.manager.extraArgs }}
+{{- with .Values.controller.manager.container.extraArgs }}
 {{- range . }}
   - "{{ . }}"
 {{- end }}
 {{- end }}
-{{- with .Values.controller.metrics }}
+{{- $ports := list -}}
+{{- if .Values.controller.metrics }}
+{{- $metricsPort := dict "containerPort" ((regexReplaceAll ":([0-9]+)" .Values.controller.metrics.controllerManagerAddr "${1}") | int) "protocol" "TCP" "name" "metrics" -}}
+{{- $ports = append $ports $metricsPort -}}
+{{- end }}
+{{- with .Values.controller.manager.container.extraPorts }}
+{{- if kindIs "slice" . }}
+{{- $ports = concat $ports . -}}
+{{- end }}
+{{- end }}
+{{- if gt (len $ports) 0 }}
 ports:
-  - containerPort: {{ regexReplaceAll ":([0-9]+)" .controllerManagerAddr "${1}" }}
-    protocol: TCP
-    name: metrics
+{{- toYaml $ports | nindent 2 }}
 {{- end }}
 env:
   - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
-    value: "{{ .Values.controller.manager.image }}"
+    value: "{{ .Values.controller.manager.container.image }}"
   - name: CONTROLLER_MANAGER_POD_NAMESPACE
     valueFrom:
       fieldRef:
         fieldPath: metadata.namespace
-  {{- with .Values.controller.manager.env }}
+  {{- with .Values.controller.manager.container.env }}
   {{- if kindIs "slice" . }}
 {{- toYaml . | nindent 2 }}
   {{- end }}
   {{- end }}
-{{- with .Values.controller.manager.resources }}
+{{- with .Values.controller.manager.container.resources }}
 resources:
 {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.controller.manager.securityContext }}
+{{- with .Values.controller.manager.container.securityContext }}
 securityContext:
 {{- toYaml . | nindent 2 }}
 {{- end }}
 volumeMounts:
   - mountPath: /tmp
     name: tmp
+  {{- with .Values.controller.manager.container.extraVolumeMounts }}
+  {{- range . }}
+  - {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
   {{- range .Values.controller.pod.extraVolumeMounts }}
   - {{- toYaml . | nindent 4 }}
   {{- end }}

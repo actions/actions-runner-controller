@@ -40,7 +40,7 @@ Labels applied to the controller deployment
 {{- /* Reserved actions.github.com/* labels owned by the chart itself */ -}}
 {{- $_ := set $labels "actions.github.com/controller-service-account-namespace" (include "gha-controller.namespace" .) -}}
 {{- $_ := set $labels "actions.github.com/controller-service-account-name" (include "gha-controller.service-account-name" .) -}}
-{{- with .Values.controller.flags.watchSingleNamespace }}
+{{- with .Values.controller.manager.config.watchSingleNamespace }}
   {{- $_ := set $labels "actions.github.com/controller-watch-single-namespace" . -}}
 {{- end }}
 

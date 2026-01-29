@@ -1,9 +1,9 @@
-{{- if .Values.controller.flags.watchSingleNamespace }}
+{{- if .Values.controller.manager.config.watchSingleNamespace }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "gha-controller.manager-single-namespace-watch-role-name" . }}
-  namespace: {{ .Values.controller.flags.watchSingleNamespace }}
+  namespace: {{ .Values.controller.manager.config.watchSingleNamespace }}
 rules:
 - apiGroups:
   - actions.github.com

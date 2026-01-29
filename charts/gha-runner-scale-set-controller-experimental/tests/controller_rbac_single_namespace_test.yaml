@@ -8,8 +8,9 @@ tests:
   - it: should not render single-namespace roles when watchSingleNamespace is empty
     set:
       controller:
-        flags:
-          watchSingleNamespace: ""
+        manager:
+          config:
+            watchSingleNamespace: ""
     release:
       name: "test-arc"
       namespace: "test-ns"
@@ -30,8 +31,9 @@ tests:
   - it: should render roles in controller namespace and watch namespace
     set:
       controller:
-        flags:
-          watchSingleNamespace: "demo"
+        manager:
+          config:
+            watchSingleNamespace: "demo"
     release:
       name: "test-arc"
       namespace: "ctrl-ns"
