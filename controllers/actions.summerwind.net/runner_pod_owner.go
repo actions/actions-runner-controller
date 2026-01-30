@@ -238,17 +238,17 @@ type result struct {
 	currentObjects []*podsForOwner
 }
 
-// Why `create` must be a function rather than a client.Object? That's becase we use it to create one or more objects on scale up.
+// Why `create` must be a function rather than a client.Object? That's because we use it to create one or more objects on scale up.
 //
 // We use client.Create to create a necessary number of client.Object. client.Create mutates the passed object on a successful creation.
 // It seems to set .Revision at least, and the existence of .Revision let client.Create fail due to K8s restriction that an object being just created
 // can't have .Revision.
 // Now, imagine that you are to add 2 runner replicas on scale up.
 // We create one resource object per a replica that ends up calling 2 client.Create calls.
-// If we were reusing client.Object to be passed to client.Create calls, only the first call suceeeds.
+// If we were reusing client.Object to be passed to client.Create calls, only the first call succeeds.
 // The second call fails due to the first call mutated the client.Object to have .Revision.
 // Passing a factory function of client.Object and creating a brand-new client.Object per a client.Create call resolves this issue,
-// allowing us to create two or more replicas in one reconcilation loop without being rejected by K8s.
+// allowing us to create two or more replicas in one reconciliation loop without being rejected by K8s.
 func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger, effectiveTime *metav1.Time, newDesiredReplicas int, create func() client.Object, ephemeral bool, owners []client.Object) (*result, error) {
 	state, err := collectPodsForOwners(ctx, c, log, owners)
 	if err != nil || state == nil {
@@ -351,7 +351,7 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 		// This is our special handling of the situation for ephemeral runners only.
 		//
 		// Handling static runners this way results in scale-up to not work at all,
-		// because then any scale up attempts for static runenrs fall within this condition, for two reasons.
+		// because then any scale up attempts for static runners fall within this condition, for two reasons.
 		// First, static(persistent) runners will never restart on their own.
 		// Second, we don't update EffectiveTime for static runners.
 		//
@@ -422,7 +422,7 @@ func syncRunnerPodsOwners(ctx context.Context, c client.Client, log logr.Logger,
 			for _, ss := range delete {
 				log := log.WithValues("owner", types.NamespacedName{Namespace: ss.owner.GetNamespace(), Name: ss.owner.GetName()})
 				// Statefulset termination process 1/4: Set unregistrationRequestTimestamp only after all the pods managed by the statefulset have
-				// started unregistreation process.
+				// started the unregistration process.
 				//
 				// NOTE: We just mark it instead of immediately starting the deletion process.
 				// Otherwise, the runner pod may hit termiationGracePeriod before the unregistration completes(the max terminationGracePeriod is limited to 1h by K8s and a job can be run for more than that),
@@ -511,7 +511,7 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 		// Statefulset termination process 4/4: Let Kubernetes cascade-delete the statefulset and the pods.
 		//
 		// If the runner is already marked for deletion(=has a non-zero deletion timestamp) by the runner controller (can be caused by an ephemeral runner completion)
-		// or by this controller (in case it was deleted in the previous reconcilation loop),
+		// or by this controller (in case it was deleted in the previous reconciliation loop),
 		// we don't need to bother calling GitHub API to re-mark the runner for deletion.
 		// Just hold on, and runners will disappear as long as the runner controller is up and running.
 		if !res.owner.GetDeletionTimestamp().IsZero() {
@@ -588,7 +588,7 @@ func collectPodsForOwners(ctx context.Context, c client.Client, log logr.Logger,
 		}
 
 		if !res.synced {
-			log.V(1).Info("Skipped reconcilation because owner is not synced yet", "pods", res.pods)
+			log.V(1).Info("Skipped reconciliation because owner is not synced yet", "pods", res.pods)
 
 			return nil, nil
 		}
