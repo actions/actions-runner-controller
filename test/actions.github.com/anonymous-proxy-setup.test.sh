@@ -8,6 +8,8 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
+
 SCALE_SET_NAME="anonymous-proxy-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"

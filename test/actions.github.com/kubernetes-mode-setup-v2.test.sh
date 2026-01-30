@@ -8,6 +8,8 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
+
 SCALE_SET_NAME="kubernetes-mode-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-kubernetes-workflow.yaml"
@@ -42,14 +44,15 @@ function install_scale_set() {
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set containerMode.type="kubernetes" \
-        --set containerMode.kubernetesModeWorkVolumeClaim.accessModes={"ReadWriteOnce"} \
-        --set containerMode.kubernetesModeWorkVolumeClaim.storageClassName="openebs-hostpath" \
-        --set containerMode.kubernetesModeWorkVolumeClaim.resources.requests.storage="1Gi" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
-        --debug
+        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
+        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
+        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set runner.mode="kubernetes" \
+        --set runner.kubernetesMode.workVolumeClaim.accessModes={"ReadWriteOnce"} \
+        --set runner.kubernetesMode.workVolumeClaim.storageClassName="openebs-hostpath" \
+        --set runner.kubernetesMode.workVolumeClaim.resources.requests.storage="1Gi" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental"
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
         NAMESPACE="${ARC_NAMESPACE}" log_arc

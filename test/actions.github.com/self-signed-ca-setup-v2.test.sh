@@ -11,6 +11,8 @@ source "${DIR}/helper.sh" || {
     exit 1
 }
 
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
+
 TEMP_DIR=$(mktemp -d)
 LOCAL_CERT_PATH="${TEMP_DIR}/mitmproxy-ca-cert.crt"
 MITM_CERT_PATH="/root/.mitmproxy/mitmproxy-ca-cert.pem"
@@ -53,15 +55,16 @@ function install_scale_set() {
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
+        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
+        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
+        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set auth.githubToken="${GITHUB_TOKEN}" \
         --set proxy.https.url="http://mitmproxy.mitmproxy.svc.cluster.local:8080" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
         --set "githubServerTLS.certificateFrom.configMapKeyRef.name=ca-cert" \
         --set "githubServerTLS.certificateFrom.configMapKeyRef.key=mitmproxy-ca-cert.crt" \
         --set "githubServerTLS.runnerMountPath=/usr/local/share/ca-certificates/" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
-        --debug
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental"
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
         NAMESPACE="${ARC_NAMESPACE}" log_arc

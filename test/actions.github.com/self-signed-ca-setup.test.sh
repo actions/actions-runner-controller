@@ -11,6 +11,8 @@ source "${DIR}/helper.sh" || {
     exit 1
 }
 
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
+
 TEMP_DIR=$(mktemp -d)
 LOCAL_CERT_PATH="${TEMP_DIR}/mitmproxy-ca-cert.crt"
 MITM_CERT_PATH="/root/.mitmproxy/mitmproxy-ca-cert.pem"

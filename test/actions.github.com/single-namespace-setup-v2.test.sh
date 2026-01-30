@@ -8,6 +8,8 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
+
 SCALE_SET_NAME="default-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"
@@ -23,7 +25,7 @@ function install_arc() {
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
         --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
-        --set controller.manager.flags.watchSingleNamespace="${ARC_NAMESPACE}" \
+        --set controller.manager.config.watchSingleNamespace="${ARC_NAMESPACE}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 
@@ -38,11 +40,12 @@ function install_scale_set() {
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
+        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
+        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
+        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set auth.githubToken="${GITHUB_TOKEN}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
-        --version="${VERSION}" \
-        --debug
+        --version="${VERSION}"
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
         NAMESPACE="${ARC_NAMESPACE}" log_arc

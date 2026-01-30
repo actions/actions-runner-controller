@@ -18,5 +18,5 @@ subjects:
     {{- fail "controllerServiceAccount must be set" -}}
   {{- end }}
   - kind: ServiceAccount
-    name: {{ required .Values.controllerServiceAccount.name "controllerServiceAccount.name must be set" | quote }}
-    namespace: {{ required .Values.controllerServiceAccount.namespace "controllerServiceAccount.namespace must be set" | quote }}
+    name: {{ required "controllerServiceAccount.name must be set" .Values.controllerServiceAccount.name | quote }}
+    namespace: {{ required "controllerServiceAccount.namespace must be set" .Values.controllerServiceAccount.namespace | quote }}
