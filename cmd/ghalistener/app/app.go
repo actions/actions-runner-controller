@@ -2,28 +2,31 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/worker"
 	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/go-logr/logr"
+	"github.com/actions/scaleset"
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 )
 
 // App is responsible for initializing required components and running the app.
 type App struct {
 	// configured fields
-	config *config.Config
-	logger logr.Logger
+	config   *config.Config
+	ghConfig *actions.GitHubConfig
+	logger   *slog.Logger
 
 	// initialized fields
-	listener Listener
-	worker   Worker
-	metrics  metrics.ServerExporter
+	scalesetClient *scaleset.Client
+	hostname       string
+	metrics        metrics.ServerExporter
 }
 
 //go:generate mockery
@@ -50,19 +53,19 @@ func New(config config.Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse GitHub config from URL: %w", err)
 	}
+	app.ghConfig = ghConfig
 
-	{
-		logger, err := config.Logger()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create logger: %w", err)
-		}
-		app.logger = logger.WithName("listener-app")
+	logger, err := config.Logger()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
+	app.logger = logger
 
-	actionsClient, err := config.ActionsClient(app.logger)
+	scalesetClient, err := config.ActionsClient(*logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create actions client: %w", err)
 	}
+	app.scalesetClient = scalesetClient
 
 	if config.MetricsAddr != "" {
 		app.metrics = metrics.NewExporter(metrics.ExporterConfig{
@@ -74,52 +77,54 @@ func New(config config.Config) (*App, error) {
 			ServerAddr:        config.MetricsAddr,
 			ServerEndpoint:    config.MetricsEndpoint,
 			Metrics:           config.Metrics,
-			Logger:            app.logger.WithName("metrics exporter"),
+			Logger:            logger.With("component", "metrics exporter"),
 		})
 	}
 
-	worker, err := worker.New(
-		worker.Config{
-			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
-			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
-			MaxRunners:                  config.MaxRunners,
-			MinRunners:                  config.MinRunners,
-		},
-		worker.WithLogger(app.logger.WithName("worker")),
-	)
+	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new kubernetes worker: %w", err)
+		hostname = uuid.NewString()
+		logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
 	}
-	app.worker = worker
-
-	listener, err := listener.New(listener.Config{
-		Client:     actionsClient,
-		ScaleSetID: app.config.RunnerScaleSetId,
-		MinRunners: app.config.MinRunners,
-		MaxRunners: app.config.MaxRunners,
-		Logger:     app.logger.WithName("listener"),
-		Metrics:    app.metrics,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new listener: %w", err)
-	}
-	app.listener = listener
-
-	app.logger.Info("app initialized")
+	app.hostname = hostname
 
 	return app, nil
 }
 
 func (app *App) Run(ctx context.Context) error {
-	var errs []error
-	if app.worker == nil {
-		errs = append(errs, fmt.Errorf("worker not initialized"))
+	sessionClient, err := app.scalesetClient.MessageSessionClient(
+		ctx,
+		app.config.RunnerScaleSetID,
+		app.hostname,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create actions message session client: %w", err)
 	}
-	if app.listener == nil {
-		errs = append(errs, fmt.Errorf("listener not initialized"))
+	defer sessionClient.Close(context.Background())
+
+	listener, err := listener.New(listener.Config{
+		Client:     sessionClient,
+		ScaleSetID: app.config.RunnerScaleSetID,
+		MinRunners: app.config.MinRunners,
+		MaxRunners: app.config.MaxRunners,
+		Logger:     *app.logger.With("component", "listener"),
+		Metrics:    app.metrics,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create new listener: %w", err)
 	}
-	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("app not initialized: %w", err)
+
+	worker, err := worker.New(
+		worker.Config{
+			EphemeralRunnerSetNamespace: app.config.EphemeralRunnerSetNamespace,
+			EphemeralRunnerSetName:      app.config.EphemeralRunnerSetName,
+			MaxRunners:                  app.config.MaxRunners,
+			MinRunners:                  app.config.MinRunners,
+		},
+		worker.WithLogger(app.logger.With("component", "worker")),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create new kubernetes worker: %w", err)
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -127,7 +132,7 @@ func (app *App) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		app.logger.Info("Starting listener")
-		listnerErr := app.listener.Listen(ctx, app.worker)
+		listnerErr := listener.Listen(ctx, worker)
 		cancelMetrics(fmt.Errorf("Listener exited: %w", listnerErr))
 		return listnerErr
 	})

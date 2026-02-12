@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -158,7 +159,7 @@ type ExporterConfig struct {
 	Repository        string
 	ServerAddr        string
 	ServerEndpoint    string
-	Logger            logr.Logger
+	Logger            *slog.Logger
 	Metrics           *v1alpha1.MetricsConfig
 }
 

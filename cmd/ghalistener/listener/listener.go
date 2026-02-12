@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 )
@@ -27,15 +29,14 @@ const (
 	messageTypeJobCompleted = "JobCompleted"
 )
 
-//go:generate mockery
+// Client defines the interface for communicating with the scaleset API.
+// In most cases, it should be scaleset.Client from the scaleset package.
+// This interface is defined to allow for easier testing and mocking, as well
+// as allowing wrappers around the scaleset client if needed.
 type Client interface {
-	GetAcquirableJobs(ctx context.Context, runnerScaleSetId int) (*actions.AcquirableJobList, error)
-	CreateMessageSession(ctx context.Context, runnerScaleSetId int, owner string) (*actions.RunnerScaleSetSession, error)
-	GetMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, lastMessageId int64, maxCapacity int) (*actions.RunnerScaleSetMessage, error)
-	DeleteMessage(ctx context.Context, messageQueueUrl, messageQueueAccessToken string, messageId int64) error
-	AcquireJobs(ctx context.Context, runnerScaleSetId int, messageQueueAccessToken string, requestIds []int64) ([]int64, error)
-	RefreshMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) (*actions.RunnerScaleSetSession, error)
-	DeleteMessageSession(ctx context.Context, runnerScaleSetId int, sessionId *uuid.UUID) error
+	GetMessage(ctx context.Context, lastMessageID, maxCapacity int) (*scaleset.RunnerScaleSetMessage, error)
+	DeleteMessage(ctx context.Context, messageID int) error
+	Session() scaleset.RunnerScaleSetSession
 }
 
 type Config struct {
@@ -43,7 +44,7 @@ type Config struct {
 	ScaleSetID int
 	MinRunners int
 	MaxRunners int
-	Logger     logr.Logger
+	Logger     slog.Logger
 	Metrics    metrics.Publisher
 }
 

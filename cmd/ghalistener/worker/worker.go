@@ -4,27 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/logging"
 	jsonpatch "github.com/evanphx/json-patch"
-	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
-const workerName = "kubernetesworker"
-
 type Option func(*Worker)
 
-func WithLogger(logger logr.Logger) Option {
+func WithLogger(logger *slog.Logger) Option {
 	return func(w *Worker) {
-		logger = logger.WithName(workerName)
-		w.logger = &logger
+		w.logger = logger
 	}
 }
 
@@ -42,7 +39,7 @@ type Worker struct {
 	config    Config
 	lastPatch int
 	patchSeq  int
-	logger    *logr.Logger
+	logger    *slog.Logger
 }
 
 var _ listener.Handler = (*Worker)(nil)
