@@ -5,7 +5,6 @@ import (
 	"io"
 )
 
-//go:generate mockery
 type SessionService interface {
 	GetMessage(ctx context.Context, lastMessageId int64, maxCapacity int) (*RunnerScaleSetMessage, error)
 	DeleteMessage(ctx context.Context, messageId int64) error

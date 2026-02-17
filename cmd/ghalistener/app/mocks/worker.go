@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,8 +39,8 @@ func (_m *MockWorker) EXPECT() *MockWorker_Expecter {
 }
 
 // HandleDesiredRunnerCount provides a mock function for the type MockWorker
-func (_mock *MockWorker) HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error) {
-	ret := _mock.Called(ctx, count, jobsCompleted)
+func (_mock *MockWorker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
+	ret := _mock.Called(ctx, count)
 
 	if len(ret) == 0 {
 		panic("no return value specified for HandleDesiredRunnerCount")
@@ -48,16 +48,16 @@ func (_mock *MockWorker) HandleDesiredRunnerCount(ctx context.Context, count int
 
 	var r0 int
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) (int, error)); ok {
-		return returnFunc(ctx, count, jobsCompleted)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) (int, error)); ok {
+		return returnFunc(ctx, count)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, int, int) int); ok {
-		r0 = returnFunc(ctx, count, jobsCompleted)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int) int); ok {
+		r0 = returnFunc(ctx, count)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
-		r1 = returnFunc(ctx, count, jobsCompleted)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = returnFunc(ctx, count)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -72,12 +72,11 @@ type MockWorker_HandleDesiredRunnerCount_Call struct {
 // HandleDesiredRunnerCount is a helper method to define mock.On call
 //   - ctx context.Context
 //   - count int
-//   - jobsCompleted int
-func (_e *MockWorker_Expecter) HandleDesiredRunnerCount(ctx interface{}, count interface{}, jobsCompleted interface{}) *MockWorker_HandleDesiredRunnerCount_Call {
-	return &MockWorker_HandleDesiredRunnerCount_Call{Call: _e.mock.On("HandleDesiredRunnerCount", ctx, count, jobsCompleted)}
+func (_e *MockWorker_Expecter) HandleDesiredRunnerCount(ctx interface{}, count interface{}) *MockWorker_HandleDesiredRunnerCount_Call {
+	return &MockWorker_HandleDesiredRunnerCount_Call{Call: _e.mock.On("HandleDesiredRunnerCount", ctx, count)}
 }
 
-func (_c *MockWorker_HandleDesiredRunnerCount_Call) Run(run func(ctx context.Context, count int, jobsCompleted int)) *MockWorker_HandleDesiredRunnerCount_Call {
+func (_c *MockWorker_HandleDesiredRunnerCount_Call) Run(run func(ctx context.Context, count int)) *MockWorker_HandleDesiredRunnerCount_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -87,14 +86,9 @@ func (_c *MockWorker_HandleDesiredRunnerCount_Call) Run(run func(ctx context.Con
 		if args[1] != nil {
 			arg1 = args[1].(int)
 		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
 		run(
 			arg0,
 			arg1,
-			arg2,
 		)
 	})
 	return _c
@@ -105,13 +99,70 @@ func (_c *MockWorker_HandleDesiredRunnerCount_Call) Return(n int, err error) *Mo
 	return _c
 }
 
-func (_c *MockWorker_HandleDesiredRunnerCount_Call) RunAndReturn(run func(ctx context.Context, count int, jobsCompleted int) (int, error)) *MockWorker_HandleDesiredRunnerCount_Call {
+func (_c *MockWorker_HandleDesiredRunnerCount_Call) RunAndReturn(run func(ctx context.Context, count int) (int, error)) *MockWorker_HandleDesiredRunnerCount_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// HandleJobCompleted provides a mock function for the type MockWorker
+func (_mock *MockWorker) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.JobCompleted) error {
+	ret := _mock.Called(ctx, jobInfo)
+
+	if len(ret) == 0 {
+		panic("no return value specified for HandleJobCompleted")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *scaleset.JobCompleted) error); ok {
+		r0 = returnFunc(ctx, jobInfo)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockWorker_HandleJobCompleted_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HandleJobCompleted'
+type MockWorker_HandleJobCompleted_Call struct {
+	*mock.Call
+}
+
+// HandleJobCompleted is a helper method to define mock.On call
+//   - ctx context.Context
+//   - jobInfo *scaleset.JobCompleted
+func (_e *MockWorker_Expecter) HandleJobCompleted(ctx interface{}, jobInfo interface{}) *MockWorker_HandleJobCompleted_Call {
+	return &MockWorker_HandleJobCompleted_Call{Call: _e.mock.On("HandleJobCompleted", ctx, jobInfo)}
+}
+
+func (_c *MockWorker_HandleJobCompleted_Call) Run(run func(ctx context.Context, jobInfo *scaleset.JobCompleted)) *MockWorker_HandleJobCompleted_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *scaleset.JobCompleted
+		if args[1] != nil {
+			arg1 = args[1].(*scaleset.JobCompleted)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockWorker_HandleJobCompleted_Call) Return(err error) *MockWorker_HandleJobCompleted_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockWorker_HandleJobCompleted_Call) RunAndReturn(run func(ctx context.Context, jobInfo *scaleset.JobCompleted) error) *MockWorker_HandleJobCompleted_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // HandleJobStarted provides a mock function for the type MockWorker
-func (_mock *MockWorker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
+func (_mock *MockWorker) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	ret := _mock.Called(ctx, jobInfo)
 
 	if len(ret) == 0 {
@@ -119,7 +170,7 @@ func (_mock *MockWorker) HandleJobStarted(ctx context.Context, jobInfo *actions.
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *actions.JobStarted) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *scaleset.JobStarted) error); ok {
 		r0 = returnFunc(ctx, jobInfo)
 	} else {
 		r0 = ret.Error(0)
@@ -134,20 +185,20 @@ type MockWorker_HandleJobStarted_Call struct {
 
 // HandleJobStarted is a helper method to define mock.On call
 //   - ctx context.Context
-//   - jobInfo *actions.JobStarted
+//   - jobInfo *scaleset.JobStarted
 func (_e *MockWorker_Expecter) HandleJobStarted(ctx interface{}, jobInfo interface{}) *MockWorker_HandleJobStarted_Call {
 	return &MockWorker_HandleJobStarted_Call{Call: _e.mock.On("HandleJobStarted", ctx, jobInfo)}
 }
 
-func (_c *MockWorker_HandleJobStarted_Call) Run(run func(ctx context.Context, jobInfo *actions.JobStarted)) *MockWorker_HandleJobStarted_Call {
+func (_c *MockWorker_HandleJobStarted_Call) Run(run func(ctx context.Context, jobInfo *scaleset.JobStarted)) *MockWorker_HandleJobStarted_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *actions.JobStarted
+		var arg1 *scaleset.JobStarted
 		if args[1] != nil {
-			arg1 = args[1].(*actions.JobStarted)
+			arg1 = args[1].(*scaleset.JobStarted)
 		}
 		run(
 			arg0,
@@ -162,7 +213,7 @@ func (_c *MockWorker_HandleJobStarted_Call) Return(err error) *MockWorker_Handle
 	return _c
 }
 
-func (_c *MockWorker_HandleJobStarted_Call) RunAndReturn(run func(ctx context.Context, jobInfo *actions.JobStarted) error) *MockWorker_HandleJobStarted_Call {
+func (_c *MockWorker_HandleJobStarted_Call) RunAndReturn(run func(ctx context.Context, jobInfo *scaleset.JobStarted) error) *MockWorker_HandleJobStarted_Call {
 	_c.Call.Return(run)
 	return _c
 }

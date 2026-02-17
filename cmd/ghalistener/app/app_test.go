@@ -3,29 +3,34 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	appmocks "github.com/actions/actions-runner-controller/cmd/ghalistener/app/mocks"
-	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
 	metricsMocks "github.com/actions/actions-runner-controller/cmd/ghalistener/metrics/mocks"
-	"github.com/actions/actions-runner-controller/cmd/ghalistener/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+var discardLogger = slog.New(slog.DiscardHandler)
 
 func TestApp_Run(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ListenerWorkerGuard", func(t *testing.T) {
-		invalidApps := []*App{
-			{},
-			{worker: &worker.Worker{}},
-			{listener: &listener.Listener{}},
+		listener := appmocks.NewMockListener(t)
+		worker := appmocks.NewMockWorker(t)
+
+		listener.On("Listen", mock.Anything, mock.Anything).Return(nil).Once()
+
+		app := &App{
+			logger:   discardLogger,
+			listener: listener,
+			worker:   worker,
 		}
 
-		for _, app := range invalidApps {
-			assert.Error(t, app.Run(context.Background()))
-		}
+		err := app.Run(context.Background())
+		assert.NoError(t, err)
 	})
 
 	t.Run("ExitsOnListenerError", func(t *testing.T) {
@@ -35,6 +40,7 @@ func TestApp_Run(t *testing.T) {
 		listener.On("Listen", mock.Anything, mock.Anything).Return(errors.New("listener error")).Once()
 
 		app := &App{
+			logger:   discardLogger,
 			listener: listener,
 			worker:   worker,
 		}
@@ -50,6 +56,7 @@ func TestApp_Run(t *testing.T) {
 		listener.On("Listen", mock.Anything, mock.Anything).Return(nil).Once()
 
 		app := &App{
+			logger:   discardLogger,
 			listener: listener,
 			worker:   worker,
 		}
@@ -74,6 +81,7 @@ func TestApp_Run(t *testing.T) {
 		metrics.On("ListenAndServe", mock.Anything).Return(errors.New("metrics server error")).Once()
 
 		app := &App{
+			logger:   discardLogger,
 			listener: listener,
 			worker:   worker,
 			metrics:  metrics,

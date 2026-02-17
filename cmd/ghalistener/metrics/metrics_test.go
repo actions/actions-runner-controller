@@ -1,14 +1,16 @@
 package metrics
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var discardLogger = slog.New(slog.DiscardHandler)
 
 func TestInstallMetrics(t *testing.T) {
 	metricsConfig := v1alpha1.MetricsConfig{
@@ -74,7 +76,7 @@ func TestInstallMetrics(t *testing.T) {
 	}
 	reg := prometheus.NewRegistry()
 
-	got := installMetrics(metricsConfig, reg, logr.Discard())
+	got := installMetrics(metricsConfig, reg, discardLogger)
 	assert.Len(t, got.counters, 1)
 	assert.Len(t, got.gauges, 1)
 	assert.Len(t, got.histograms, 2)
@@ -98,7 +100,7 @@ func TestNewExporter(t *testing.T) {
 			Repository:        "repo",
 			ServerAddr:        ":6060",
 			ServerEndpoint:    "/metrics",
-			Logger:            logr.Discard(),
+			Logger:            discardLogger,
 			Metrics:           nil, // when metrics is nil, all default metrics should be registered
 		}
 
@@ -140,7 +142,7 @@ func TestNewExporter(t *testing.T) {
 			Repository:        "repo",
 			ServerAddr:        "", // empty ServerAddr should default to ":8080"
 			ServerEndpoint:    "",
-			Logger:            logr.Discard(),
+			Logger:            discardLogger,
 			Metrics:           nil, // when metrics is nil, all default metrics should be registered
 		}
 
@@ -201,7 +203,7 @@ func TestNewExporter(t *testing.T) {
 			Repository:        "repo",
 			ServerAddr:        ":6060",
 			ServerEndpoint:    "/metrics",
-			Logger:            logr.Discard(),
+			Logger:            discardLogger,
 			Metrics:           &metricsConfig,
 		}
 
@@ -244,7 +246,7 @@ func TestExporterConfigDefaults(t *testing.T) {
 		Repository:        "repo",
 		ServerAddr:        "",
 		ServerEndpoint:    "",
-		Logger:            logr.Discard(),
+		Logger:            discardLogger,
 		Metrics:           nil, // when metrics is nil, all default metrics should be registered
 	}
 
@@ -257,7 +259,7 @@ func TestExporterConfigDefaults(t *testing.T) {
 		Repository:        "repo",
 		ServerAddr:        ":8080",    // default server address
 		ServerEndpoint:    "/metrics", // default server endpoint
-		Logger:            logr.Discard(),
+		Logger:            discardLogger,
 		Metrics:           &defaultMetrics, // when metrics is nil, all default metrics should be registered
 	}
 

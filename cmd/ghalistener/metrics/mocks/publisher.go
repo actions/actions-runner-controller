@@ -5,7 +5,7 @@
 package mocks
 
 import (
-	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -77,7 +77,7 @@ func (_c *MockPublisher_PublishDesiredRunners_Call) RunAndReturn(run func(count 
 }
 
 // PublishJobCompleted provides a mock function for the type MockPublisher
-func (_mock *MockPublisher) PublishJobCompleted(msg *actions.JobCompleted) {
+func (_mock *MockPublisher) PublishJobCompleted(msg *scaleset.JobCompleted) {
 	_mock.Called(msg)
 	return
 }
@@ -88,16 +88,16 @@ type MockPublisher_PublishJobCompleted_Call struct {
 }
 
 // PublishJobCompleted is a helper method to define mock.On call
-//   - msg *actions.JobCompleted
+//   - msg *scaleset.JobCompleted
 func (_e *MockPublisher_Expecter) PublishJobCompleted(msg interface{}) *MockPublisher_PublishJobCompleted_Call {
 	return &MockPublisher_PublishJobCompleted_Call{Call: _e.mock.On("PublishJobCompleted", msg)}
 }
 
-func (_c *MockPublisher_PublishJobCompleted_Call) Run(run func(msg *actions.JobCompleted)) *MockPublisher_PublishJobCompleted_Call {
+func (_c *MockPublisher_PublishJobCompleted_Call) Run(run func(msg *scaleset.JobCompleted)) *MockPublisher_PublishJobCompleted_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *actions.JobCompleted
+		var arg0 *scaleset.JobCompleted
 		if args[0] != nil {
-			arg0 = args[0].(*actions.JobCompleted)
+			arg0 = args[0].(*scaleset.JobCompleted)
 		}
 		run(
 			arg0,
@@ -111,13 +111,13 @@ func (_c *MockPublisher_PublishJobCompleted_Call) Return() *MockPublisher_Publis
 	return _c
 }
 
-func (_c *MockPublisher_PublishJobCompleted_Call) RunAndReturn(run func(msg *actions.JobCompleted)) *MockPublisher_PublishJobCompleted_Call {
+func (_c *MockPublisher_PublishJobCompleted_Call) RunAndReturn(run func(msg *scaleset.JobCompleted)) *MockPublisher_PublishJobCompleted_Call {
 	_c.Run(run)
 	return _c
 }
 
 // PublishJobStarted provides a mock function for the type MockPublisher
-func (_mock *MockPublisher) PublishJobStarted(msg *actions.JobStarted) {
+func (_mock *MockPublisher) PublishJobStarted(msg *scaleset.JobStarted) {
 	_mock.Called(msg)
 	return
 }
@@ -128,16 +128,16 @@ type MockPublisher_PublishJobStarted_Call struct {
 }
 
 // PublishJobStarted is a helper method to define mock.On call
-//   - msg *actions.JobStarted
+//   - msg *scaleset.JobStarted
 func (_e *MockPublisher_Expecter) PublishJobStarted(msg interface{}) *MockPublisher_PublishJobStarted_Call {
 	return &MockPublisher_PublishJobStarted_Call{Call: _e.mock.On("PublishJobStarted", msg)}
 }
 
-func (_c *MockPublisher_PublishJobStarted_Call) Run(run func(msg *actions.JobStarted)) *MockPublisher_PublishJobStarted_Call {
+func (_c *MockPublisher_PublishJobStarted_Call) Run(run func(msg *scaleset.JobStarted)) *MockPublisher_PublishJobStarted_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *actions.JobStarted
+		var arg0 *scaleset.JobStarted
 		if args[0] != nil {
-			arg0 = args[0].(*actions.JobStarted)
+			arg0 = args[0].(*scaleset.JobStarted)
 		}
 		run(
 			arg0,
@@ -151,7 +151,7 @@ func (_c *MockPublisher_PublishJobStarted_Call) Return() *MockPublisher_PublishJ
 	return _c
 }
 
-func (_c *MockPublisher_PublishJobStarted_Call) RunAndReturn(run func(msg *actions.JobStarted)) *MockPublisher_PublishJobStarted_Call {
+func (_c *MockPublisher_PublishJobStarted_Call) RunAndReturn(run func(msg *scaleset.JobStarted)) *MockPublisher_PublishJobStarted_Call {
 	_c.Run(run)
 	return _c
 }
@@ -203,7 +203,7 @@ func (_c *MockPublisher_PublishStatic_Call) RunAndReturn(run func(min int, max i
 }
 
 // PublishStatistics provides a mock function for the type MockPublisher
-func (_mock *MockPublisher) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
+func (_mock *MockPublisher) PublishStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	_mock.Called(stats)
 	return
 }
@@ -214,16 +214,16 @@ type MockPublisher_PublishStatistics_Call struct {
 }
 
 // PublishStatistics is a helper method to define mock.On call
-//   - stats *actions.RunnerScaleSetStatistic
+//   - stats *scaleset.RunnerScaleSetStatistic
 func (_e *MockPublisher_Expecter) PublishStatistics(stats interface{}) *MockPublisher_PublishStatistics_Call {
 	return &MockPublisher_PublishStatistics_Call{Call: _e.mock.On("PublishStatistics", stats)}
 }
 
-func (_c *MockPublisher_PublishStatistics_Call) Run(run func(stats *actions.RunnerScaleSetStatistic)) *MockPublisher_PublishStatistics_Call {
+func (_c *MockPublisher_PublishStatistics_Call) Run(run func(stats *scaleset.RunnerScaleSetStatistic)) *MockPublisher_PublishStatistics_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *actions.RunnerScaleSetStatistic
+		var arg0 *scaleset.RunnerScaleSetStatistic
 		if args[0] != nil {
-			arg0 = args[0].(*actions.RunnerScaleSetStatistic)
+			arg0 = args[0].(*scaleset.RunnerScaleSetStatistic)
 		}
 		run(
 			arg0,
@@ -237,7 +237,7 @@ func (_c *MockPublisher_PublishStatistics_Call) Return() *MockPublisher_PublishS
 	return _c
 }
 
-func (_c *MockPublisher_PublishStatistics_Call) RunAndReturn(run func(stats *actions.RunnerScaleSetStatistic)) *MockPublisher_PublishStatistics_Call {
+func (_c *MockPublisher_PublishStatistics_Call) RunAndReturn(run func(stats *scaleset.RunnerScaleSetStatistic)) *MockPublisher_PublishStatistics_Call {
 	_c.Run(run)
 	return _c
 }

@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
-	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/scaleset"
+	"github.com/actions/scaleset/listener"
 	jsonpatch "github.com/evanphx/json-patch"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,20 +35,22 @@ type Config struct {
 // The Worker's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
 type Worker struct {
-	clientset *kubernetes.Clientset
-	config    Config
-	lastPatch int
-	patchSeq  int
-	logger    *slog.Logger
+	clientset     *kubernetes.Clientset
+	config        Config
+	targetRunners int
+	patchSeq      int
+	// dirty is set when there are any events handled before the desired count is called.
+	dirty  bool
+	logger *slog.Logger
 }
 
-var _ listener.Handler = (*Worker)(nil)
+var _ listener.Scaler = (*Worker)(nil)
 
 func New(config Config, options ...Option) (*Worker, error) {
 	w := &Worker{
-		config:    config,
-		lastPatch: -1,
-		patchSeq:  -1,
+		config:        config,
+		targetRunners: -1,
+		patchSeq:      -1,
 	}
 
 	conf, err := rest.InClusterConfig()
@@ -76,12 +78,7 @@ func New(config Config, options ...Option) (*Worker, error) {
 
 func (w *Worker) applyDefaults() error {
 	if w.logger == nil {
-		logger, err := logging.NewLogger(logging.LogLevelDebug, logging.LogFormatJSON)
-		if err != nil {
-			return fmt.Errorf("NewLogger failed: %w", err)
-		}
-		logger = logger.WithName(workerName)
-		w.logger = &logger
+		w.logger = slog.New(slog.DiscardHandler)
 	}
 
 	return nil
@@ -92,7 +89,7 @@ func (w *Worker) applyDefaults() error {
 // This update marks the ephemeral runner so that the controller would have more context
 // about the ephemeral runner that should not be deleted when scaling down.
 // It returns an error if there is any issue with updating the job information.
-func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error {
+func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
@@ -102,6 +99,8 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 		"workflowRunId", jobInfo.WorkflowRunID,
 		"jobDisplayName", jobInfo.JobDisplayName,
 		"requestId", jobInfo.RunnerRequestID)
+
+	w.dirty = true
 
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
 	if err != nil {
@@ -155,6 +154,11 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 	return nil
 }
 
+func (w *Worker) HandleJobCompleted(ctx context.Context, msg *scaleset.JobCompleted) error {
+	w.dirty = true
+	return nil
+}
+
 // HandleDesiredRunnerCount handles the desired runner count by scaling the ephemeral runner set.
 // The function calculates the target runner count based on the minimum and maximum runner count configuration.
 // If the target runner count is the same as the last patched count, it skips patching and returns nil.
@@ -162,8 +166,8 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *actions.JobStart
 // The function then scales the ephemeral runner set by applying the merge patch.
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
-func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsCompleted int) (int, error) {
-	patchID := w.setDesiredWorkerState(count, jobsCompleted)
+func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
+	patchID := w.setDesiredWorkerState(count)
 
 	original, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
@@ -180,13 +184,13 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 	patch, err := json.Marshal(
 		&v1alpha1.EphemeralRunnerSet{
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
-				Replicas: w.lastPatch,
+				Replicas: w.targetRunners,
 				PatchID:  patchID,
 			},
 		},
 	)
 	if err != nil {
-		w.logger.Error(err, "could not marshal patch ephemeral runner set")
+		w.logger.Error("could not marshal patch ephemeral runner set", "error", err.Error())
 		return 0, err
 	}
 
@@ -217,30 +221,31 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count, jobsComple
 		"name", w.config.EphemeralRunnerSetName,
 		"replicas", patchedEphemeralRunnerSet.Spec.Replicas,
 	)
-	return w.lastPatch, nil
+	return w.targetRunners, nil
 }
 
 // calculateDesiredState calculates the desired state of the worker based on the desired count and the the number of jobs completed.
-func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
-	// Max runners should always be set by the resource builder either to the configured value,
-	// or the maximum int32 (resourcebuilder.newAutoScalingListener()).
-	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
-	w.patchSeq++
-	desiredPatchID := w.patchSeq
+func (w *Worker) setDesiredWorkerState(count int) int {
+	dirty := w.dirty
+	w.dirty = false
 
-	if count == 0 && jobsCompleted == 0 { // empty batch
-		targetRunnerCount = max(w.lastPatch, targetRunnerCount)
-		if targetRunnerCount == w.config.MinRunners {
-			// We have an empty batch, and the last patch was the min runners.
-			// Since this is an empty batch, and we are at the min runners, they should all be idle.
-			// If controller created few more pods on accident (during scale down events),
-			// this situation allows the controller to scale down to the min runners.
-			// However, it is important to keep the patch sequence increasing so we don't ignore one batch.
-			desiredPatchID = 0
-		}
+	if w.patchSeq == math.MaxInt32 {
+		w.patchSeq = 0
 	}
+	w.patchSeq++
 
-	w.lastPatch = targetRunnerCount
+	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
+	oldTargetRunners := w.targetRunners
+	w.targetRunners = targetRunnerCount
+
+	desiredPatchID := w.patchSeq
+	if !dirty && targetRunnerCount == oldTargetRunners && targetRunnerCount == w.config.MinRunners {
+		// If there were no events sent, and the target runner count
+		// is the same as the last patched count, we can force the state.
+		//
+		// TODO: see to remove w.config.MinRunenrs from the equation, as it is not relevant to the decision of whether to patch or not.
+		desiredPatchID = 0
+	}
 
 	w.logger.Info(
 		"Calculated target runner count",
@@ -248,8 +253,7 @@ func (w *Worker) setDesiredWorkerState(count, jobsCompleted int) int {
 		"decision", targetRunnerCount,
 		"min", w.config.MinRunners,
 		"max", w.config.MaxRunners,
-		"currentRunnerCount", w.lastPatch,
-		"jobsCompleted", jobsCompleted,
+		"currentRunnerCount", w.targetRunners,
 	)
 
 	return desiredPatchID

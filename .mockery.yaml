@@ -1,11 +1,12 @@
-all: false
 packages:
   github.com/actions/actions-runner-controller/github/actions:
-    config:
-      inpackage: true
     interfaces:
       ActionsService:
+        config:
+          inpackage: true
       SessionService:
+        config:
+          inpackage: true
 
   github.com/actions/actions-runner-controller/cmd/ghalistener/metrics:
     config:

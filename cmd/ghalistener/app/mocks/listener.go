@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/actions/actions-runner-controller/cmd/ghalistener/listener"
+	"github.com/actions/scaleset/listener"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,16 +39,16 @@ func (_m *MockListener) EXPECT() *MockListener_Expecter {
 }
 
 // Listen provides a mock function for the type MockListener
-func (_mock *MockListener) Listen(ctx context.Context, handler listener.Handler) error {
-	ret := _mock.Called(ctx, handler)
+func (_mock *MockListener) Listen(ctx context.Context, scaler listener.Scaler) error {
+	ret := _mock.Called(ctx, scaler)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Listen")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, listener.Handler) error); ok {
-		r0 = returnFunc(ctx, handler)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, listener.Scaler) error); ok {
+		r0 = returnFunc(ctx, scaler)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -62,20 +62,20 @@ type MockListener_Listen_Call struct {
 
 // Listen is a helper method to define mock.On call
 //   - ctx context.Context
-//   - handler listener.Handler
-func (_e *MockListener_Expecter) Listen(ctx interface{}, handler interface{}) *MockListener_Listen_Call {
-	return &MockListener_Listen_Call{Call: _e.mock.On("Listen", ctx, handler)}
+//   - scaler listener.Scaler
+func (_e *MockListener_Expecter) Listen(ctx interface{}, scaler interface{}) *MockListener_Listen_Call {
+	return &MockListener_Listen_Call{Call: _e.mock.On("Listen", ctx, scaler)}
 }
 
-func (_c *MockListener_Listen_Call) Run(run func(ctx context.Context, handler listener.Handler)) *MockListener_Listen_Call {
+func (_c *MockListener_Listen_Call) Run(run func(ctx context.Context, scaler listener.Scaler)) *MockListener_Listen_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 listener.Handler
+		var arg1 listener.Scaler
 		if args[1] != nil {
-			arg1 = args[1].(listener.Handler)
+			arg1 = args[1].(listener.Scaler)
 		}
 		run(
 			arg0,
@@ -90,7 +90,7 @@ func (_c *MockListener_Listen_Call) Return(err error) *MockListener_Listen_Call 
 	return _c
 }
 
-func (_c *MockListener_Listen_Call) RunAndReturn(run func(ctx context.Context, handler listener.Handler) error) *MockListener_Listen_Call {
+func (_c *MockListener_Listen_Call) RunAndReturn(run func(ctx context.Context, scaler listener.Scaler) error) *MockListener_Listen_Call {
 	_c.Call.Return(run)
 	return _c
 }

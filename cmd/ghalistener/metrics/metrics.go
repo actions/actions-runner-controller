@@ -2,15 +2,13 @@ package metrics
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/go-logr/logr"
+	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -77,7 +75,7 @@ var metricsHelp = metricsHelpRegistry{
 	},
 }
 
-func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels {
+func (e *exporter) jobLabels(jobBase *scaleset.JobMessageBase) prometheus.Labels {
 	workflowRefInfo := ParseWorkflowRef(jobBase.JobWorkflowRef)
 	return prometheus.Labels{
 		labelKeyEnterprise:        e.scaleSetLabels[labelKeyEnterprise],
@@ -91,26 +89,25 @@ func (e *exporter) jobLabels(jobBase *actions.JobMessageBase) prometheus.Labels 
 	}
 }
 
-func (e *exporter) completedJobLabels(msg *actions.JobCompleted) prometheus.Labels {
+func (e *exporter) completedJobLabels(msg *scaleset.JobCompleted) prometheus.Labels {
 	l := e.jobLabels(&msg.JobMessageBase)
 	l[labelKeyJobResult] = msg.Result
 	return l
 }
 
-func (e *exporter) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
+func (e *exporter) startedJobLabels(msg *scaleset.JobStarted) prometheus.Labels {
 	return e.jobLabels(&msg.JobMessageBase)
 }
 
 //go:generate mockery
 type Publisher interface {
 	PublishStatic(min, max int)
-	PublishStatistics(stats *actions.RunnerScaleSetStatistic)
-	PublishJobStarted(msg *actions.JobStarted)
-	PublishJobCompleted(msg *actions.JobCompleted)
+	PublishStatistics(stats *scaleset.RunnerScaleSetStatistic)
+	PublishJobStarted(msg *scaleset.JobStarted)
+	PublishJobCompleted(msg *scaleset.JobCompleted)
 	PublishDesiredRunners(count int)
 }
 
-//go:generate mockery
 type ServerExporter interface {
 	Publisher
 	ListenAndServe(ctx context.Context) error
@@ -124,7 +121,7 @@ var (
 var Discard Publisher = &discard{}
 
 type exporter struct {
-	logger         logr.Logger
+	logger         *slog.Logger
 	scaleSetLabels prometheus.Labels
 	*metrics
 	srv *http.Server
@@ -310,7 +307,7 @@ func NewExporter(config ExporterConfig) ServerExporter {
 	)
 
 	return &exporter{
-		logger: config.Logger.WithName("metrics"),
+		logger: config.Logger.With("component", "metrics exporter"),
 		scaleSetLabels: prometheus.Labels{
 			labelKeyRunnerScaleSetName:      config.ScaleSetName,
 			labelKeyRunnerScaleSetNamespace: config.ScaleSetNamespace,
@@ -326,9 +323,7 @@ func NewExporter(config ExporterConfig) ServerExporter {
 	}
 }
 
-var errUnknownMetricName = errors.New("unknown metric name")
-
-func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, logger logr.Logger) *metrics {
+func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, logger *slog.Logger) *metrics {
 	logger.Info(
 		"Registering metrics",
 		"gauges",
@@ -346,7 +341,11 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 	for name, cfg := range config.Gauges {
 		help, ok := metricsHelp.gauges[name]
 		if !ok {
-			logger.Error(errUnknownMetricName, "name", name, "kind", "gauge")
+			logger.Error(
+				"unknown metric name",
+				slog.String("name", name),
+				slog.String("kind", "gauge"),
+			)
 			continue
 		}
 
@@ -368,7 +367,11 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 	for name, cfg := range config.Counters {
 		help, ok := metricsHelp.counters[name]
 		if !ok {
-			logger.Error(errUnknownMetricName, "name", name, "kind", "counter")
+			logger.Error(
+				"unknown metric name",
+				slog.String("name", name),
+				slog.String("kind", "counter"),
+			)
 			continue
 		}
 		c := prometheus.V2.NewCounterVec(prometheus.CounterVecOpts{
@@ -389,7 +392,11 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 	for name, cfg := range config.Histograms {
 		help, ok := metricsHelp.histograms[name]
 		if !ok {
-			logger.Error(errUnknownMetricName, "name", name, "kind", "histogram")
+			logger.Error(
+				"unknown metric name",
+				slog.String("name", name),
+				slog.String("kind", "histogram"),
+			)
 			continue
 		}
 
@@ -470,7 +477,7 @@ func (e *exporter) PublishStatic(min, max int) {
 	e.setGauge(MetricMinRunners, e.scaleSetLabels, float64(min))
 }
 
-func (e *exporter) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
+func (e *exporter) PublishStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
 	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
 	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))
@@ -478,7 +485,7 @@ func (e *exporter) PublishStatistics(stats *actions.RunnerScaleSetStatistic) {
 	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 
-func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
+func (e *exporter) PublishJobStarted(msg *scaleset.JobStarted) {
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
 
@@ -486,7 +493,7 @@ func (e *exporter) PublishJobStarted(msg *actions.JobStarted) {
 	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
 }
 
-func (e *exporter) PublishJobCompleted(msg *actions.JobCompleted) {
+func (e *exporter) PublishJobCompleted(msg *scaleset.JobCompleted) {
 	l := e.completedJobLabels(msg)
 	e.incCounter(MetricCompletedJobsTotal, l)
 
@@ -500,11 +507,11 @@ func (e *exporter) PublishDesiredRunners(count int) {
 
 type discard struct{}
 
-func (*discard) PublishStatic(int, int)                             {}
-func (*discard) PublishStatistics(*actions.RunnerScaleSetStatistic) {}
-func (*discard) PublishJobStarted(*actions.JobStarted)              {}
-func (*discard) PublishJobCompleted(*actions.JobCompleted)          {}
-func (*discard) PublishDesiredRunners(int)                          {}
+func (*discard) PublishStatic(int, int)                              {}
+func (*discard) PublishStatistics(*scaleset.RunnerScaleSetStatistic) {}
+func (*discard) PublishJobStarted(*scaleset.JobStarted)              {}
+func (*discard) PublishJobCompleted(*scaleset.JobCompleted)          {}
+func (*discard) PublishDesiredRunners(int)                           {}
 
 var defaultRuntimeBuckets []float64 = []float64{
 	0.01,
