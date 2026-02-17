@@ -136,6 +136,9 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			GitHubServerTLS:               autoscalingRunnerSet.Spec.GitHubServerTLS,
 			Metrics:                       autoscalingRunnerSet.Spec.ListenerMetrics,
 			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
+			ServiceAccountMetadata:        autoscalingRunnerSet.Spec.ListenerServiceAccountMetadata,
+			RoleMetadata:                  autoscalingRunnerSet.Spec.ListenerRoleMetadata,
+			RoleBindingMetadata:           autoscalingRunnerSet.Spec.ListenerRoleMetadata,
 		},
 	}
 
@@ -425,7 +428,7 @@ func mergeListenerContainer(base, from *corev1.Container) {
 }
 
 func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
+	base := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
@@ -435,6 +438,13 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 			}),
 		},
 	}
+
+	if autoscalingListener.Spec.ServiceAccountMetadata != nil {
+		base.Labels = b.mergeLabels(autoscalingListener.Spec.ServiceAccountMetadata.Labels, base.Labels)
+		base.Annotations = b.mergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, base.Annotations)
+	}
+
+	return base
 }
 
 func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.Role {
@@ -453,6 +463,11 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 			}),
 		},
 		Rules: rules,
+	}
+
+	for autoscalingListener.Spec.RoleMetadata != nil {
+		newRole.Labels = b.mergeLabels(autoscalingListener.Spec.RoleMetadata.Labels, newRole.Labels)
+		newRole.Annotations = b.mergeAnnotations(autoscalingListener.Spec.RoleMetadata.Annotations, newRole.Annotations)
 	}
 
 	return newRole
@@ -489,6 +504,11 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 		},
 		RoleRef:  roleRef,
 		Subjects: subjects,
+	}
+
+	for autoscalingListener.Spec.RoleBindingMetadata != nil {
+		newRoleBinding.Labels = b.mergeLabels(autoscalingListener.Spec.RoleBindingMetadata.Labels, newRoleBinding.Labels)
+		newRoleBinding.Annotations = b.mergeAnnotations(autoscalingListener.Spec.RoleBindingMetadata.Annotations, newRoleBinding.Annotations)
 	}
 
 	return newRoleBinding
@@ -751,8 +771,11 @@ func trimLabelValue(val string) string {
 }
 
 func (b *ResourceBuilder) mergeLabels(base, overwrite map[string]string) map[string]string {
-	mergedLabels := make(map[string]string, len(base))
+	if len(overwrite) == 0 {
+		return maps.Clone(base)
+	}
 
+	mergedLabels := make(map[string]string, len(base))
 base:
 	for k, v := range base {
 		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
@@ -774,4 +797,12 @@ overwrite:
 	}
 
 	return mergedLabels
+}
+
+func (b *ResourceBuilder) mergeAnnotations(base, overwrite map[string]string) map[string]string {
+	base = maps.Clone(base)
+	for k, v := range overwrite {
+		base[k] = v
+	}
+	return base
 }

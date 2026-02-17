@@ -99,6 +99,51 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                   type: object
+                listener_role_binding_metadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
+                listener_role_metadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
+                listener_service_account_metadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
                 listenerMetrics:
                   description: MetricsConfig holds configuration parameters for each metric type
                   properties:
