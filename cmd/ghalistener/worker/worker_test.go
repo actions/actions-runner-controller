@@ -120,6 +120,7 @@ func TestSetDesiredWorkerState_MinSet(t *testing.T) {
 		patchID := w.setDesiredWorkerState(2)
 		assert.False(t, w.dirty)
 		assert.Equal(t, 0, patchID)
+		w.dirty = true
 		patchID = w.setDesiredWorkerState(0)
 		assert.False(t, w.dirty)
 		assert.Equal(t, 1, patchID)
