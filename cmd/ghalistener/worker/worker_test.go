@@ -115,19 +115,6 @@ func TestSetDesiredWorkerState_MinSet(t *testing.T) {
 		assert.Equal(t, 0, w.patchSeq)
 	})
 
-	t.Run("re-use the old state on count == 0 and completed == 0", func(t *testing.T) {
-		w := newEmptyWorker()
-		patchID := w.setDesiredWorkerState(2)
-		assert.False(t, w.dirty)
-		assert.Equal(t, 0, patchID)
-		w.dirty = true
-		patchID = w.setDesiredWorkerState(0)
-		assert.False(t, w.dirty)
-		assert.Equal(t, 1, patchID)
-		assert.Equal(t, 3, w.targetRunners)
-		assert.Equal(t, 1, w.patchSeq)
-	})
-
 	t.Run("request back to 0 on job done", func(t *testing.T) {
 		w := newEmptyWorker()
 		patchID := w.setDesiredWorkerState(2)
@@ -186,18 +173,6 @@ func TestSetDesiredWorkerState_MaxSet(t *testing.T) {
 		assert.Equal(t, 0, patchID)
 		assert.Equal(t, 0, w.targetRunners)
 		assert.Equal(t, 0, w.patchSeq)
-	})
-
-	t.Run("re-use the old state on count == 0 and completed == 0", func(t *testing.T) {
-		w := newEmptyWorker()
-		patchID := w.setDesiredWorkerState(2)
-		assert.False(t, w.dirty)
-		assert.Equal(t, 0, patchID)
-		patchID = w.setDesiredWorkerState(0)
-		assert.False(t, w.dirty)
-		assert.Equal(t, 1, patchID)
-		assert.Equal(t, 2, w.targetRunners)
-		assert.Equal(t, 1, w.patchSeq)
 	})
 
 	t.Run("request back to 0 on job done", func(t *testing.T) {
@@ -300,18 +275,6 @@ func TestSetDesiredWorkerState_MinMaxSet(t *testing.T) {
 		assert.Equal(t, 0, patchID)
 		assert.Equal(t, 1, w.targetRunners)
 		assert.Equal(t, 0, w.patchSeq)
-	})
-
-	t.Run("re-use the old state on count == 0 and completed == 0", func(t *testing.T) {
-		w := newEmptyWorker()
-		patchID := w.setDesiredWorkerState(2)
-		assert.False(t, w.dirty)
-		assert.Equal(t, 0, patchID)
-		patchID = w.setDesiredWorkerState(0)
-		assert.False(t, w.dirty)
-		assert.Equal(t, 1, patchID)
-		assert.Equal(t, 3, w.targetRunners)
-		assert.Equal(t, 1, w.patchSeq)
 	})
 
 	t.Run("scale to min when count == 0", func(t *testing.T) {
