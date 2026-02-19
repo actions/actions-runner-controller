@@ -10,9 +10,8 @@ import (
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
-	"github.com/actions/actions-runner-controller/cmd/ghalistener/worker"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/scaler"
 	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/actions/scaleset"
 	"github.com/actions/scaleset/listener"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -96,10 +95,10 @@ func run(ctx context.Context, config *config.Config) error {
 		listenerOptions = append(
 			listenerOptions,
 			listener.WithMetricsRecorder(
-				&metricsRecorder{metrics: metricsExporter},
+				metricsExporter,
 			),
 		)
-		metricsExporter.PublishStatic(config.MinRunners, config.MaxRunners)
+		metricsExporter.RecordStatic(config.MinRunners, config.MaxRunners)
 	}
 
 	listener, err := listener.New(
@@ -115,14 +114,14 @@ func run(ctx context.Context, config *config.Config) error {
 		return fmt.Errorf("failed to create new listener: %w", err)
 	}
 
-	scaler, err := worker.New(
-		worker.Config{
+	scaler, err := scaler.New(
+		scaler.Config{
 			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
 			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
 			MaxRunners:                  config.MaxRunners,
 			MinRunners:                  config.MinRunners,
 		},
-		worker.WithLogger(logger.With("component", "worker")),
+		scaler.WithLogger(logger.With("component", "worker")),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)
@@ -146,31 +145,4 @@ func run(ctx context.Context, config *config.Config) error {
 	}
 
 	return g.Wait()
-}
-
-type metricsRecorder struct {
-	metrics metrics.Publisher // The publisher used to publish metrics.
-}
-
-// TODO: refactor
-var _ listener.MetricsRecorder = (*metricsRecorder)(nil)
-
-// RecordDesiredRunners implements [listener.MetricsRecorder].
-func (m *metricsRecorder) RecordDesiredRunners(count int) {
-	m.metrics.PublishDesiredRunners(count)
-}
-
-// RecordJobCompleted implements [listener.MetricsRecorder].
-func (m *metricsRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
-	m.metrics.PublishJobCompleted(msg)
-}
-
-// RecordJobStarted implements [listener.MetricsRecorder].
-func (m *metricsRecorder) RecordJobStarted(msg *scaleset.JobStarted) {
-	m.metrics.PublishJobStarted(msg)
-}
-
-// RecordStatistics implements [listener.MetricsRecorder].
-func (m *metricsRecorder) RecordStatistics(statistics *scaleset.RunnerScaleSetStatistic) {
-	m.metrics.PublishStatistics(statistics)
 }

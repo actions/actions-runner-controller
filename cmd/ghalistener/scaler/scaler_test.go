@@ -1,4 +1,4 @@
-package worker
+package scaler
 
 import (
 	"log/slog"
@@ -11,8 +11,8 @@ import (
 var discardLogger = slog.New(slog.DiscardHandler)
 
 func TestSetDesiredWorkerState_MinMaxDefaults(t *testing.T) {
-	newEmptyWorker := func() *Worker {
-		return &Worker{
+	newEmptyWorker := func() *Scaler {
+		return &Scaler{
 			config: Config{
 				MinRunners: 0,
 				MaxRunners: math.MaxInt32,
@@ -93,8 +93,8 @@ func TestSetDesiredWorkerState_MinMaxDefaults(t *testing.T) {
 }
 
 func TestSetDesiredWorkerState_MinSet(t *testing.T) {
-	newEmptyWorker := func() *Worker {
-		return &Worker{
+	newEmptyWorker := func() *Scaler {
+		return &Scaler{
 			config: Config{
 				MinRunners: 1,
 				MaxRunners: math.MaxInt32,
@@ -154,8 +154,8 @@ func TestSetDesiredWorkerState_MinSet(t *testing.T) {
 }
 
 func TestSetDesiredWorkerState_MaxSet(t *testing.T) {
-	newEmptyWorker := func() *Worker {
-		return &Worker{
+	newEmptyWorker := func() *Scaler {
+		return &Scaler{
 			config: Config{
 				MinRunners: 0,
 				MaxRunners: 5,
@@ -256,8 +256,8 @@ func TestSetDesiredWorkerState_MaxSet(t *testing.T) {
 }
 
 func TestSetDesiredWorkerState_MinMaxSet(t *testing.T) {
-	newEmptyWorker := func() *Worker {
-		return &Worker{
+	newEmptyWorker := func() *Scaler {
+		return &Scaler{
 			config: Config{
 				MinRunners: 1,
 				MaxRunners: 3,

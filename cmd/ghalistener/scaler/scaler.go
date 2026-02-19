@@ -1,4 +1,4 @@
-package worker
+package scaler
 
 import (
 	"context"
@@ -17,10 +17,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-type Option func(*Worker)
+type Option func(*Scaler)
 
 func WithLogger(logger *slog.Logger) Option {
-	return func(w *Worker) {
+	return func(w *Scaler) {
 		w.logger = logger
 	}
 }
@@ -32,9 +32,9 @@ type Config struct {
 	MinRunners                  int
 }
 
-// The Worker's role is to process the messages it receives from the listener.
+// The Scaler's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
-type Worker struct {
+type Scaler struct {
 	clientset     *kubernetes.Clientset
 	config        Config
 	targetRunners int
@@ -44,10 +44,10 @@ type Worker struct {
 	logger *slog.Logger
 }
 
-var _ listener.Scaler = (*Worker)(nil)
+var _ listener.Scaler = (*Scaler)(nil)
 
-func New(config Config, options ...Option) (*Worker, error) {
-	w := &Worker{
+func New(config Config, options ...Option) (*Scaler, error) {
+	w := &Scaler{
 		config:        config,
 		targetRunners: -1,
 		patchSeq:      -1,
@@ -76,7 +76,7 @@ func New(config Config, options ...Option) (*Worker, error) {
 	return w, nil
 }
 
-func (w *Worker) applyDefaults() error {
+func (w *Scaler) applyDefaults() error {
 	if w.logger == nil {
 		w.logger = slog.New(slog.DiscardHandler)
 	}
@@ -89,7 +89,7 @@ func (w *Worker) applyDefaults() error {
 // This update marks the ephemeral runner so that the controller would have more context
 // about the ephemeral runner that should not be deleted when scaling down.
 // It returns an error if there is any issue with updating the job information.
-func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
+func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
@@ -154,7 +154,7 @@ func (w *Worker) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 	return nil
 }
 
-func (w *Worker) HandleJobCompleted(ctx context.Context, msg *scaleset.JobCompleted) error {
+func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobCompleted) error {
 	w.dirty = true
 	return nil
 }
@@ -166,7 +166,7 @@ func (w *Worker) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 // The function then scales the ephemeral runner set by applying the merge patch.
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
-func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
+func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
 	patchID := w.setDesiredWorkerState(count)
 
 	original, err := json.Marshal(
@@ -225,7 +225,7 @@ func (w *Worker) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 }
 
 // calculateDesiredState calculates the desired state of the worker based on the desired count and the the number of jobs completed.
-func (w *Worker) setDesiredWorkerState(count int) int {
+func (w *Scaler) setDesiredWorkerState(count int) int {
 	dirty := w.dirty
 	w.dirty = false
 

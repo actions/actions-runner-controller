@@ -100,25 +100,25 @@ func (e *exporter) startedJobLabels(msg *scaleset.JobStarted) prometheus.Labels 
 }
 
 //go:generate mockery
-type Publisher interface {
-	PublishStatic(min, max int)
-	PublishStatistics(stats *scaleset.RunnerScaleSetStatistic)
-	PublishJobStarted(msg *scaleset.JobStarted)
-	PublishJobCompleted(msg *scaleset.JobCompleted)
-	PublishDesiredRunners(count int)
+type Recorder interface {
+	RecordStatic(min, max int)
+	RecordStatistics(stats *scaleset.RunnerScaleSetStatistic)
+	RecordJobStarted(msg *scaleset.JobStarted)
+	RecordJobCompleted(msg *scaleset.JobCompleted)
+	RecordDesiredRunners(count int)
 }
 
 type ServerExporter interface {
-	Publisher
+	Recorder
 	ListenAndServe(ctx context.Context) error
 }
 
 var (
-	_ Publisher      = &discard{}
+	_ Recorder       = &discard{}
 	_ ServerExporter = &exporter{}
 )
 
-var Discard Publisher = &discard{}
+var Discard Recorder = &discard{}
 
 type exporter struct {
 	logger         *slog.Logger
@@ -472,12 +472,12 @@ func (e *exporter) observeHistogram(name string, allLabels prometheus.Labels, va
 	m.histogram.With(labels).Observe(val)
 }
 
-func (e *exporter) PublishStatic(min, max int) {
+func (e *exporter) RecordStatic(min, max int) {
 	e.setGauge(MetricMaxRunners, e.scaleSetLabels, float64(max))
 	e.setGauge(MetricMinRunners, e.scaleSetLabels, float64(min))
 }
 
-func (e *exporter) PublishStatistics(stats *scaleset.RunnerScaleSetStatistic) {
+func (e *exporter) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
 	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
 	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))
@@ -485,7 +485,7 @@ func (e *exporter) PublishStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 
-func (e *exporter) PublishJobStarted(msg *scaleset.JobStarted) {
+func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
 
@@ -493,7 +493,7 @@ func (e *exporter) PublishJobStarted(msg *scaleset.JobStarted) {
 	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
 }
 
-func (e *exporter) PublishJobCompleted(msg *scaleset.JobCompleted) {
+func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
 	l := e.completedJobLabels(msg)
 	e.incCounter(MetricCompletedJobsTotal, l)
 
@@ -501,17 +501,17 @@ func (e *exporter) PublishJobCompleted(msg *scaleset.JobCompleted) {
 	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(executionDuration))
 }
 
-func (e *exporter) PublishDesiredRunners(count int) {
+func (e *exporter) RecordDesiredRunners(count int) {
 	e.setGauge(MetricDesiredRunners, e.scaleSetLabels, float64(count))
 }
 
 type discard struct{}
 
-func (*discard) PublishStatic(int, int)                              {}
-func (*discard) PublishStatistics(*scaleset.RunnerScaleSetStatistic) {}
-func (*discard) PublishJobStarted(*scaleset.JobStarted)              {}
-func (*discard) PublishJobCompleted(*scaleset.JobCompleted)          {}
-func (*discard) PublishDesiredRunners(int)                           {}
+func (*discard) RecordStatic(int, int)                              {}
+func (*discard) RecordStatistics(*scaleset.RunnerScaleSetStatistic) {}
+func (*discard) RecordJobStarted(*scaleset.JobStarted)              {}
+func (*discard) RecordJobCompleted(*scaleset.JobCompleted)          {}
+func (*discard) RecordDesiredRunners(int)                           {}
 
 var defaultRuntimeBuckets []float64 = []float64{
 	0.01,
