@@ -99,7 +99,6 @@ func (e *exporter) startedJobLabels(msg *scaleset.JobStarted) prometheus.Labels 
 	return e.jobLabels(&msg.JobMessageBase)
 }
 
-//go:generate mockery
 type Recorder interface {
 	RecordStatic(min, max int)
 	RecordStatistics(stats *scaleset.RunnerScaleSetStatistic)
