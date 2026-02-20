@@ -170,7 +170,7 @@ func (c *Config) Logger() (*slog.Logger, error) {
 	return logger.With("app", appName), nil
 }
 
-func (c *Config) ActionsClient(logger slog.Logger, clientOptions ...scaleset.HTTPOption) (*scaleset.Client, error) {
+func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HTTPOption) (*scaleset.Client, error) {
 	systemInfo := scaleset.SystemInfo{
 		System:     "actions-runner-controller",
 		Version:    build.Version,

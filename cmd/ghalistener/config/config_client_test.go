@@ -61,7 +61,7 @@ func TestCustomerServerRootCA(t *testing.T) {
 		},
 	}
 
-	client, err := config.ActionsClient(*discardLogger)
+	client, err := config.ActionsClient(discardLogger)
 	require.NoError(t, err)
 	_, err = client.GetRunnerScaleSet(ctx, 1, "test")
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestProxySettings(t *testing.T) {
 			},
 		}
 
-		client, err := config.ActionsClient(*discardLogger)
+		client, err := config.ActionsClient(discardLogger)
 		require.NoError(t, err)
 
 		assertHasProxy(t, client.DebugInfo(), true)
@@ -110,7 +110,7 @@ func TestProxySettings(t *testing.T) {
 		}
 
 		client, err := config.ActionsClient(
-			*discardLogger,
+			discardLogger,
 			scaleset.WithRetryMax(0),
 		)
 		require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestProxySettings(t *testing.T) {
 			},
 		}
 
-		client, err := config.ActionsClient(*discardLogger)
+		client, err := config.ActionsClient(discardLogger)
 		require.NoError(t, err)
 
 		assertHasProxy(t, client.DebugInfo(), true)

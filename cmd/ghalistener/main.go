@@ -71,7 +71,7 @@ func run(ctx context.Context, config *config.Config) error {
 		logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
 	}
 
-	scalesetClient, err := config.ActionsClient(*logger)
+	scalesetClient, err := config.ActionsClient(logger)
 	if err != nil {
 		return fmt.Errorf("failed to create actions client: %w", err)
 	}
