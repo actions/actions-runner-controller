@@ -66,6 +66,19 @@ jobs:
       - name: Check diff
         run: git diff --exit-code
 
+  mocks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+      - name: "Run mockery"
+        run: go tool github.com/vektra/mockery/v3
+      - name: Check diff
+        run: git diff --exit-code
+
   test:
     runs-on: ubuntu-latest
     steps:
