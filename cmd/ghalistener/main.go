@@ -133,7 +133,7 @@ func run(ctx context.Context, config *config.Config) error {
 	g.Go(func() error {
 		logger.Info("Starting listener")
 		listnerErr := listener.Run(ctx, scaler)
-		cancelMetrics(fmt.Errorf("Listener exited: %w", listnerErr))
+		cancelMetrics(fmt.Errorf("listener exited: %w", listnerErr))
 		return listnerErr
 	})
 
