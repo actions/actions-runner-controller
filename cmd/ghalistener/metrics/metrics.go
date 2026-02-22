@@ -100,7 +100,7 @@ func (e *exporter) startedJobLabels(msg *actions.JobStarted) prometheus.Labels {
 	return e.jobLabels(&msg.JobMessageBase)
 }
 
-//go:generate mockery --name Publisher --output ./mocks --outpkg mocks --case underscore
+//go:generate mockery
 type Publisher interface {
 	PublishStatic(min, max int)
 	PublishStatistics(stats *actions.RunnerScaleSetStatistic)
@@ -109,7 +109,7 @@ type Publisher interface {
 	PublishDesiredRunners(count int)
 }
 
-//go:generate mockery --name ServerPublisher --output ./mocks --outpkg mocks --case underscore
+//go:generate mockery
 type ServerExporter interface {
 	Publisher
 	ListenAndServe(ctx context.Context) error

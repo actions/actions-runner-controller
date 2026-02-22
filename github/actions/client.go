@@ -34,7 +34,7 @@ const (
 // Header used to propagate capacity information to the back-end
 const HeaderScaleSetMaxCapacity = "X-ScaleSetMaxCapacity"
 
-//go:generate mockery --inpackage --name=ActionsService
+//go:generate mockery
 type ActionsService interface {
 	GetRunnerScaleSet(ctx context.Context, runnerGroupId int, runnerScaleSetName string) (*RunnerScaleSet, error)
 	GetRunnerScaleSetById(ctx context.Context, runnerScaleSetId int) (*RunnerScaleSet, error)

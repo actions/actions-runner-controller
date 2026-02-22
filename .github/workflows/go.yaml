@@ -76,13 +76,11 @@ jobs:
       - run: make manifests
       - name: Check diff
         run: git diff --exit-code
-      - name: Install kubebuilder
+      - name: Setup envtest
         run: |
-          curl -D headers.txt -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.30.0-linux-amd64.tar.gz" -o kubebuilder-tools
-          echo "$(grep -i etag headers.txt -m 1 | cut -d'"' -f2) kubebuilder-tools" > sum
-          md5sum -c sum
-          tar -zvxf kubebuilder-tools
-          sudo mv kubebuilder /usr/local/
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(go list -m -f '{{ .Version }}' sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $2, $3}')
+          ENVTEST_K8S_VERSION=$(go list -m -f '{{ .Version }}' k8s.io/api | awk -F'[v.]' '{printf "1.%d", $3}')
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${ENVTEST_K8S_VERSION} -p path)" >> $GITHUB_ENV
       - name: Run go tests
         run: |
           go test -short `go list ./... | grep -v ./test_e2e_arc`

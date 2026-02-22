@@ -1,0 +1,29 @@
+all: false
+packages:
+  github.com/actions/actions-runner-controller/github/actions:
+    config:
+      inpackage: true
+    interfaces:
+      ActionsService:
+      SessionService:
+
+  github.com/actions/actions-runner-controller/cmd/ghalistener/metrics:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: mocks
+      filename: "{{.InterfaceName|snakecase}}.go"
+    interfaces:
+      Publisher:
+      ServerExporter:
+        config:
+          structname: ServerPublisher
+          filename: server_publisher.go
+
+  github.com/actions/actions-runner-controller/cmd/ghalistener/app:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: mocks
+      filename: "{{.InterfaceName|snakecase}}.go"
+    interfaces:
+      Listener:
+      Worker:

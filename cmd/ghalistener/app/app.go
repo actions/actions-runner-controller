@@ -26,12 +26,12 @@ type App struct {
 	metrics  metrics.ServerExporter
 }
 
-//go:generate mockery --name Listener --output ./mocks --outpkg mocks --case underscore
+//go:generate mockery
 type Listener interface {
 	Listen(ctx context.Context, handler listener.Handler) error
 }
 
-//go:generate mockery --name Worker --output ./mocks --outpkg mocks --case underscore
+//go:generate mockery
 type Worker interface {
 	HandleJobStarted(ctx context.Context, jobInfo *actions.JobStarted) error
 	HandleDesiredRunnerCount(ctx context.Context, count int, jobsCompleted int) (int, error)

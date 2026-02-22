@@ -32,21 +32,15 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-TEST_ASSETS=$(PWD)/test-assets
 TOOLS_PATH=$(PWD)/.tools
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 
-# The etcd packages that coreos maintain use different extensions for each *nix OS on their github release page.
-# ETCD_EXTENSION: the storage format file extension listed on the release page.
-# EXTRACT_COMMAND: the  appropriate CLI command for extracting this file format.
-ifeq ($(OS_NAME), darwin)
-ETCD_EXTENSION:=zip
-EXTRACT_COMMAND:=unzip
-else
-ETCD_EXTENSION:=tar.gz
-EXTRACT_COMMAND:=tar -xzf
-endif
+# ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script
+ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+# ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries
+ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
+ENVTEST ?= $(GOBIN)/setup-envtest
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
@@ -72,17 +66,18 @@ lint:
 
 GO_TEST_ARGS ?= -short
 
-# Run tests
-test: generate fmt vet manifests shellcheck
-	go test $(GO_TEST_ARGS) `go list ./... | grep -v ./test_e2e_arc` -coverprofile cover.out
-	go test -fuzz=Fuzz -fuzztime=10s -run=Fuzz* ./controllers/actions.summerwind.net
 
-test-with-deps: kube-apiserver etcd kubectl
-	# See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest#pkg-constants
-	TEST_ASSET_KUBE_APISERVER=$(KUBE_APISERVER_BIN) \
-	TEST_ASSET_ETCD=$(ETCD_BIN) \
-	TEST_ASSET_KUBECTL=$(KUBECTL_BIN) \
+# Run tests
+test: generate fmt vet manifests shellcheck setup-envtest
+	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path)" \
+	  go test $(GO_TEST_ARGS) `go list ./... | grep -v ./test_e2e_arc` -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path)" \
+	  go test -fuzz=Fuzz -fuzztime=10s -run=Fuzz* ./controllers/actions.summerwind.net
+
+test-with-deps: setup-envtest
+	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path)" \
 	  make test
+
 
 # Build manager binary
 manager: generate fmt vet
@@ -364,68 +359,29 @@ ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
 endif
 SHELLCHECK=$(TOOLS_PATH)/shellcheck
 
-# find or download etcd
-etcd:
-ifeq (, $(shell which etcd))
-ifeq (, $(wildcard $(TEST_ASSETS)/etcd))
+# find or download envtest
+envtest:
+ifeq (, $(shell which setup-envtest))
+ifeq (, $(wildcard $(GOBIN)/setup-envtest))
 	@{ \
-	set -xe ;\
-	INSTALL_TMP_DIR=$$(mktemp -d) ;\
-	cd $$INSTALL_TMP_DIR ;\
-	wget https://github.com/coreos/etcd/releases/download/v3.4.22/etcd-v3.4.22-$(OS_NAME)-amd64.$(ETCD_EXTENSION);\
-	mkdir -p $(TEST_ASSETS) ;\
-	$(EXTRACT_COMMAND) etcd-v3.4.22-$(OS_NAME)-amd64.$(ETCD_EXTENSION) ;\
-	mv etcd-v3.4.22-$(OS_NAME)-amd64/etcd $(TEST_ASSETS)/etcd ;\
-	rm -rf $$INSTALL_TMP_DIR ;\
+	set -e ;\
+	ENVTEST_TMP_DIR=$$(mktemp -d) ;\
+	cd $$ENVTEST_TMP_DIR ;\
+	go mod init tmp ;\
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION) ;\
+	rm -rf $$ENVTEST_TMP_DIR ;\
 	}
-ETCD_BIN=$(TEST_ASSETS)/etcd
-else
-ETCD_BIN=$(TEST_ASSETS)/etcd
 endif
+ENVTEST=$(GOBIN)/setup-envtest
 else
-ETCD_BIN=$(shell which etcd)
+ENVTEST=$(shell which setup-envtest)
 endif
 
-# find or download kube-apiserver
-kube-apiserver:
-ifeq (, $(shell which kube-apiserver))
-ifeq (, $(wildcard $(TEST_ASSETS)/kube-apiserver))
-	@{ \
-	set -xe ;\
-	INSTALL_TMP_DIR=$$(mktemp -d) ;\
-	cd $$INSTALL_TMP_DIR ;\
-	wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mkdir -p $(TEST_ASSETS) ;\
-	tar zxvf kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kube-apiserver $(TEST_ASSETS)/kube-apiserver ;\
-	rm -rf $$INSTALL_TMP_DIR ;\
+.PHONY: setup-envtest
+setup-envtest: envtest
+	@echo "Setting up envtest binaries for Kubernetes version $(ENVTEST_K8S_VERSION)..."
+	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path || { \
+		echo "Error: Failed to set up envtest binaries for version $(ENVTEST_K8S_VERSION)."; \
+		exit 1; \
 	}
-KUBE_APISERVER_BIN=$(TEST_ASSETS)/kube-apiserver
-else
-KUBE_APISERVER_BIN=$(TEST_ASSETS)/kube-apiserver
-endif
-else
-KUBE_APISERVER_BIN=$(shell which kube-apiserver)
-endif
 
-# find or download kubectl
-kubectl:
-ifeq (, $(shell which kubectl))
-ifeq (, $(wildcard $(TEST_ASSETS)/kubectl))
-	@{ \
-	set -xe ;\
-	INSTALL_TMP_DIR=$$(mktemp -d) ;\
-	cd $$INSTALL_TMP_DIR ;\
-	wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.3.2/kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mkdir -p $(TEST_ASSETS) ;\
-	tar zxvf kubebuilder_2.3.2_$(OS_NAME)_amd64.tar.gz ;\
-	mv kubebuilder_2.3.2_$(OS_NAME)_amd64/bin/kubectl $(TEST_ASSETS)/kubectl ;\
-	rm -rf $$INSTALL_TMP_DIR ;\
-	}
-KUBECTL_BIN=$(TEST_ASSETS)/kubectl
-else
-KUBECTL_BIN=$(TEST_ASSETS)/kubectl
-endif
-else
-KUBECTL_BIN=$(shell which kubectl)
-endif

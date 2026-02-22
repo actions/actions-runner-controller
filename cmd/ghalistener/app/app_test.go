@@ -29,8 +29,8 @@ func TestApp_Run(t *testing.T) {
 	})
 
 	t.Run("ExitsOnListenerError", func(t *testing.T) {
-		listener := appmocks.NewListener(t)
-		worker := appmocks.NewWorker(t)
+		listener := appmocks.NewMockListener(t)
+		worker := appmocks.NewMockWorker(t)
 
 		listener.On("Listen", mock.Anything, mock.Anything).Return(errors.New("listener error")).Once()
 
@@ -44,8 +44,8 @@ func TestApp_Run(t *testing.T) {
 	})
 
 	t.Run("ExitsOnListenerNil", func(t *testing.T) {
-		listener := appmocks.NewListener(t)
-		worker := appmocks.NewWorker(t)
+		listener := appmocks.NewMockListener(t)
+		worker := appmocks.NewMockWorker(t)
 
 		listener.On("Listen", mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -59,8 +59,8 @@ func TestApp_Run(t *testing.T) {
 	})
 
 	t.Run("CancelListenerOnMetricsServerError", func(t *testing.T) {
-		listener := appmocks.NewListener(t)
-		worker := appmocks.NewWorker(t)
+		listener := appmocks.NewMockListener(t)
+		worker := appmocks.NewMockWorker(t)
 		metrics := metricsMocks.NewServerPublisher(t)
 		ctx := context.Background()
 

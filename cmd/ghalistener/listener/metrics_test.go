@@ -20,7 +20,7 @@ func TestInitialMetrics(t *testing.T) {
 	t.Run("SetStaticMetrics", func(t *testing.T) {
 		t.Parallel()
 
-		metrics := metricsmocks.NewPublisher(t)
+		metrics := metricsmocks.NewMockPublisher(t)
 
 		minRunners := 5
 		maxRunners := 10
@@ -64,7 +64,7 @@ func TestInitialMetrics(t *testing.T) {
 			Statistics:              sessionStatistics,
 		}
 
-		metrics := metricsmocks.NewPublisher(t)
+		metrics := metricsmocks.NewMockPublisher(t)
 		metrics.On("PublishStatic", mock.Anything, mock.Anything).Once()
 		metrics.On("PublishStatistics", sessionStatistics).Once()
 		metrics.On("PublishDesiredRunners", sessionStatistics.TotalAssignedJobs).
@@ -168,7 +168,7 @@ func TestHandleMessageMetrics(t *testing.T) {
 
 	desiredResult := 4
 
-	metrics := metricsmocks.NewPublisher(t)
+	metrics := metricsmocks.NewMockPublisher(t)
 	metrics.On("PublishStatic", 0, 0).Once()
 	metrics.On("PublishStatistics", msg.Statistics).Once()
 	metrics.On("PublishJobCompleted", jobsCompleted[0]).Once()
