@@ -67,13 +67,13 @@ jobs:
           ct lint --config charts/.ci/ct-config-gha.yaml
 
       - name: Set up docker buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
         if: steps.list-changed.outputs.changed == 'true'
         with:
           version: latest
 
       - name: Build controller image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         if: steps.list-changed.outputs.changed == 'true'
         with:
           file: Dockerfile
@@ -88,7 +88,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create kind cluster
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc
         if: steps.list-changed.outputs.changed == 'true'
         with:
           cluster_name: chart-testing
