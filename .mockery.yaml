@@ -1,0 +1,20 @@
+packages:
+  github.com/actions/actions-runner-controller/github/actions:
+    config:
+      inpackage: true
+      dir: "{{.InterfaceDir}}"
+      filename: "mocks_test.go"
+      pkgname: "actions"
+    interfaces:
+      ActionsService:
+      SessionService:
+
+  github.com/actions/actions-runner-controller/cmd/ghalistener/metrics:
+    config:
+      inpackage: true
+      dir: "{{.InterfaceDir}}"
+      filename: "mocks_test.go"
+      pkgname: "metrics"
+    interfaces:
+      Recorder:
+      ServerExporter:
