@@ -62,6 +62,9 @@ env:
         fieldPath: metadata.name
   - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
     value: {{ ternary "true" "false" $requireJobContainer | quote }}
+  {{- if not $requireJobContainer -}}
+    {{- printf "# WARNING: runner.kubernetesMode.requireJobContainer is set to false. This means that the runner container will be used to execute jobs, which may lead to security risks if the runner is compromised. It is recommended to set runner.kubernetesMode.requireJobContainer to true in production environments." }}
+  {{- end -}}
   {{- if and $hasExtension $setHookTemplateEnv }}
   - name: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE
     value: {{ $hookTemplatePath | quote }}
