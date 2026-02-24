@@ -54,7 +54,7 @@ func TestCustomerServerRootCA(t *testing.T) {
 	certsString = certsString + string(intermediate)
 
 	config := config.Config{
-		ConfigureUrl: server.ConfigURLForOrg("myorg"),
+		ConfigureURL: server.ConfigURLForOrg("myorg"),
 		ServerRootCA: certsString,
 		AppConfig: &appconfig.AppConfig{
 			Token: "token",
@@ -85,7 +85,7 @@ func TestProxySettings(t *testing.T) {
 		defer os.Setenv("http_proxy", prevProxy)
 
 		config := config.Config{
-			ConfigureUrl: "https://github.com/org/repo",
+			ConfigureURL: "https://github.com/org/repo",
 			AppConfig: &appconfig.AppConfig{
 				Token: "token",
 			},
@@ -103,7 +103,7 @@ func TestProxySettings(t *testing.T) {
 		defer os.Setenv("https_proxy", prevProxy)
 
 		config := config.Config{
-			ConfigureUrl: "https://github.com/org/repo",
+			ConfigureURL: "https://github.com/org/repo",
 			AppConfig: &appconfig.AppConfig{
 				Token: "token",
 			},
@@ -124,7 +124,7 @@ func TestProxySettings(t *testing.T) {
 		defer os.Setenv("no_proxy", prevNoProxy)
 
 		config := config.Config{
-			ConfigureUrl: "https://github.com/org/repo",
+			ConfigureURL: "https://github.com/org/repo",
 			AppConfig: &appconfig.AppConfig{
 				Token: "token",
 			},

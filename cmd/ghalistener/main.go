@@ -40,7 +40,7 @@ func main() {
 }
 
 func run(ctx context.Context, config *config.Config) error {
-	ghConfig, err := actions.ParseGitHubConfigFromURL(config.ConfigureUrl)
+	ghConfig, err := actions.ParseGitHubConfigFromURL(config.ConfigureURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse GitHub config from URL: %w", err)
 	}

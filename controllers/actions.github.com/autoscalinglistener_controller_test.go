@@ -15,7 +15,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
-	"github.com/actions/actions-runner-controller/github/actions/fake"
+	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,7 +44,10 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
-		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+		secretResolver := secretresolver.New(
+			mgr.GetClient(),
+			scalefake.NewMultiClient(),
+		)
 
 		rb := ResourceBuilder{
 			SecretResolver: secretResolver,
@@ -459,7 +463,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
-		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
 			SecretResolver: secretResolver,
@@ -788,7 +792,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		ctx = context.Background()
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
-		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
 			SecretResolver: secretResolver,
@@ -991,7 +995,7 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
-		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
 			SecretResolver: secretResolver,
@@ -1094,7 +1098,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
-		secretResolver := NewSecretResolver(mgr.GetClient(), fake.NewMultiClient())
+		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
 			SecretResolver: secretResolver,

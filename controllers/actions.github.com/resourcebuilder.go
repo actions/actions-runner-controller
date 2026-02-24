@@ -2,6 +2,7 @@ package actionsgithubcom
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -14,10 +15,13 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
 	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
+	"github.com/actions/scaleset"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -71,9 +75,14 @@ func SetListenerEntrypoint(entrypoint string) {
 	}
 }
 
+type SecretResolver interface {
+	GetAppConfig(ctx context.Context, obj object.ActionsGitHubObject) (*appconfig.AppConfig, error)
+	GetActionsService(ctx context.Context, obj object.ActionsGitHubObject) (multiclient.Client, error)
+}
+
 type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
-	*SecretResolver
+	SecretResolver
 }
 
 // boolPtr returns a pointer to a bool value
@@ -183,7 +192,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	}
 
 	config := ghalistenerconfig.Config{
-		ConfigureUrl:                autoscalingListener.Spec.GitHubConfigUrl,
+		ConfigureURL:                autoscalingListener.Spec.GitHubConfigUrl,
 		EphemeralRunnerSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		EphemeralRunnerSetName:      autoscalingListener.Spec.EphemeralRunnerSetName,
 		MaxRunners:                  autoscalingListener.Spec.MaxRunners,
@@ -599,7 +608,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			Replicas: 0,
 			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-				RunnerScaleSetId:                    runnerScaleSetID,
+				RunnerScaleSetID:                    runnerScaleSetID,
 				GitHubConfigUrl:                     autoscalingRunnerSet.Spec.GitHubConfigUrl,
 				GitHubConfigSecret:                  autoscalingRunnerSet.Spec.GitHubConfigSecret,
 				Proxy:                               autoscalingRunnerSet.Spec.Proxy,
@@ -722,7 +731,7 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 	return &newPod
 }
 
-func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner, jitConfig *actions.RunnerScaleSetJitRunnerConfig) *corev1.Secret {
+func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner, jitConfig *scaleset.RunnerScaleSetJitRunnerConfig) *corev1.Secret {
 	var (
 		labels      map[string]string
 		annotations map[string]string
@@ -743,8 +752,8 @@ func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 		Data: map[string][]byte{
 			jitTokenKey:  []byte(jitConfig.EncodedJITConfig),
 			"runnerName": []byte(jitConfig.Runner.Name),
-			"runnerId":   []byte(strconv.Itoa(jitConfig.Runner.Id)),
-			"scaleSetId": []byte(strconv.Itoa(jitConfig.Runner.RunnerScaleSetId)),
+			"runnerId":   []byte(strconv.Itoa(jitConfig.Runner.ID)),
+			"scaleSetId": []byte(strconv.Itoa(jitConfig.Runner.RunnerScaleSetID)),
 		},
 	}
 }

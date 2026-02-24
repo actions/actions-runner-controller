@@ -28,9 +28,11 @@ import (
 	"github.com/actions/actions-runner-controller/build"
 	actionsgithubcom "github.com/actions/actions-runner-controller/controllers/actions.github.com"
 	actionsgithubcommetrics "github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	actionssummerwindnet "github.com/actions/actions-runner-controller/controllers/actions.summerwind.net"
 	"github.com/actions/actions-runner-controller/github"
-	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/logger"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
@@ -85,7 +87,7 @@ func main() {
 		enableLeaderElection     bool
 		disableAdmissionWebhook  bool
 		updateStrategy           string
-		leaderElectionId         string
+		leaderElectionID         string
 		port                     int
 		syncPeriod               time.Duration
 
@@ -121,7 +123,7 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&leaderElectionId, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
+	flag.StringVar(&leaderElectionID, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
 	flag.StringVar(&runnerPodDefaults.RunnerImage, "runner-image", defaultRunnerImage, "The image name of self-hosted runner container to use by default if one isn't defined in yaml.")
 	flag.StringVar(&runnerPodDefaults.DockerImage, "docker-image", defaultDockerImage, "The image name of docker sidecar container to use by default if one isn't defined in yaml.")
 	flag.StringVar(&runnerPodDefaults.DockerGID, "docker-gid", defaultDockerGID, "The default GID of docker group in the docker sidecar container. Use 1001 for dockerd sidecars of Ubuntu 20.04 runners 121 for Ubuntu 22.04 and 24.04.")
@@ -239,7 +241,7 @@ func main() {
 		},
 		WebhookServer:    webhookServer,
 		LeaderElection:   enableLeaderElection,
-		LeaderElectionID: leaderElectionId,
+		LeaderElectionID: leaderElectionID,
 		Client: client.Options{
 			Cache: &client.CacheOptions{
 				DisableFor: []client.Object{
@@ -270,13 +272,18 @@ func main() {
 			actionsgithubcommetrics.RegisterMetrics()
 		}
 
-		actionsMultiClient := actions.NewMultiClient(
-			log.WithName("actions-clients"),
-		)
+		slogLogger, err := logger.New(logLevel, logFormat)
+		if err != nil {
+			log.Error(err, "unable to create logger for secret resolver")
+			os.Exit(1)
+		}
 
-		secretResolver := actionsgithubcom.NewSecretResolver(
+		scalesetMultiClient := multiclient.NewScaleset()
+
+		secretResolver := secretresolver.New(
 			mgr.GetClient(),
-			actionsMultiClient,
+			scalesetMultiClient,
+			secretresolver.WithLogger(slogLogger),
 		)
 
 		rb := actionsgithubcom.ResourceBuilder{
@@ -292,7 +299,6 @@ func main() {
 			Scheme:                             mgr.GetScheme(),
 			ControllerNamespace:                managerNamespace,
 			DefaultRunnerScaleSetListenerImage: managerImage,
-			ActionsClient:                      actionsMultiClient,
 			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 			ResourceBuilder: rb,
@@ -399,7 +405,7 @@ func main() {
 			"default-docker-gid", runnerPodDefaults.DockerGID,
 			"common-runnner-labels", commonRunnerLabels,
 			"leader-election-enabled", enableLeaderElection,
-			"leader-election-id", leaderElectionId,
+			"leader-election-id", leaderElectionID,
 			"watch-namespace", namespace,
 		)
 
@@ -489,7 +495,7 @@ func (s *commaSeparatedStringSlice) String() string {
 }
 
 func (s *commaSeparatedStringSlice) Set(value string) error {
-	for _, v := range strings.Split(value, ",") {
+	for v := range strings.SplitSeq(value, ",") {
 		if v == "" {
 			continue
 		}

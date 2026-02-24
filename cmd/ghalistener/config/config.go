@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/logger"
 	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"github.com/actions/scaleset"
@@ -23,7 +23,7 @@ import (
 const appName = "ghalistener"
 
 type Config struct {
-	ConfigureUrl   string          `json:"configure_url"`
+	ConfigureURL   string          `json:"configure_url"`
 	VaultType      vault.VaultType `json:"vault_type"`
 	VaultLookupKey string          `json:"vault_lookup_key"`
 	// If the VaultType is set to "azure_key_vault", this field must be populated.
@@ -102,7 +102,7 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
-	if len(c.ConfigureUrl) == 0 {
+	if len(c.ConfigureURL) == 0 {
 		return fmt.Errorf("GitHubConfigUrl is not provided")
 	}
 
@@ -137,37 +137,7 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) Logger() (*slog.Logger, error) {
-	var lvl slog.Level
-	switch strings.ToLower(c.LogLevel) {
-	case "debug":
-		lvl = slog.LevelDebug
-	case "info":
-		lvl = slog.LevelInfo
-	case "warn":
-		lvl = slog.LevelWarn
-	case "error":
-		lvl = slog.LevelError
-	default:
-		return nil, fmt.Errorf("invalid log level: %s", c.LogLevel)
-	}
-
-	var logger *slog.Logger
-	switch c.LogFormat {
-	case "json":
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			AddSource: true,
-			Level:     lvl,
-		}))
-	case "text":
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			AddSource: true,
-			Level:     lvl,
-		}))
-	default:
-		return nil, fmt.Errorf("invalid log format: %s", c.LogFormat)
-	}
-
-	return logger.With("app", appName), nil
+	return logger.New(c.LogLevel, c.LogFormat)
 }
 
 func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HTTPOption) (*scaleset.Client, error) {
@@ -207,7 +177,7 @@ func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HT
 	case "":
 		c, err := scaleset.NewClientWithGitHubApp(
 			scaleset.ClientWithGitHubAppConfig{
-				GitHubConfigURL: c.ConfigureUrl,
+				GitHubConfigURL: c.ConfigureURL,
 				GitHubAppAuth: scaleset.GitHubAppAuth{
 					ClientID:       c.AppConfig.AppID,
 					InstallationID: c.AppConfig.AppInstallationID,
@@ -224,7 +194,7 @@ func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HT
 	default:
 		c, err := scaleset.NewClientWithPersonalAccessToken(
 			scaleset.NewClientWithPersonalAccessTokenConfig{
-				GitHubConfigURL:     c.ConfigureUrl,
+				GitHubConfigURL:     c.ConfigureURL,
 				PersonalAccessToken: c.Token,
 				SystemInfo:          systemInfo,
 			},
