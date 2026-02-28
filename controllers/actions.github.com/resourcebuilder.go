@@ -108,6 +108,12 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 		annotationKeyRunnerSpecHash: autoscalingRunnerSet.ListenerSpecHash(),
 		annotationKeyValuesHash:     autoscalingRunnerSet.Annotations[annotationKeyValuesHash],
 	}
+	// Propagate custom annotations from AutoscalingRunnerSet, skipping reserved ones
+	for k, v := range autoscalingRunnerSet.Annotations {
+		if !strings.HasPrefix(k, "actions.github.com/") {
+			annotations[k] = v
+		}
+	}
 
 	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
@@ -283,15 +289,23 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 	labels := make(map[string]string, len(autoscalingListener.Labels))
 	maps.Copy(labels, autoscalingListener.Labels)
 
+	annotations := make(map[string]string)
+	for k, v := range autoscalingListener.Annotations {
+		if !strings.HasPrefix(k, "actions.github.com/") {
+			annotations[k] = v
+		}
+	}
+
 	newRunnerScaleSetListenerPod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      autoscalingListener.Name,
-			Namespace: autoscalingListener.Namespace,
-			Labels:    labels,
+			Name:        autoscalingListener.Name,
+			Namespace:   autoscalingListener.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         autoscalingListener.GetObjectKind().GroupVersionKind().GroupVersion().String(),

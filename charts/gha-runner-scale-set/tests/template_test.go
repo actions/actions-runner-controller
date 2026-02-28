@@ -2797,3 +2797,40 @@ func TestAutoscalingRunnerSetCustomAnnotationsAndLabelsApplied(t *testing.T) {
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Annotations["actions.github.com/cleanup-manager-role-name"])
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Labels["app.kubernetes.io/component"])
 }
+
+func TestTemplateRenderedRunnerSetWithTemplateMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+			"template.metadata.labels.my-label":  "my-value",
+		},
+		// Use SetStrValues (--set-string) to ensure boolean-like values are treated as strings
+		SetStrValues: map[string]string{
+			"template.metadata.annotations.karpenter\\.sh/do-not-disrupt": "true",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, "true", ars.Spec.Template.ObjectMeta.Annotations["karpenter.sh/do-not-disrupt"],
+		"karpenter do-not-disrupt annotation should be set on runner pod template")
+	assert.Equal(t, "my-value", ars.Spec.Template.ObjectMeta.Labels["my-label"],
+		"custom label should be set on runner pod template")
+}

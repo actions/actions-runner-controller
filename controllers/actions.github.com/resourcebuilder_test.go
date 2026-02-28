@@ -30,6 +30,8 @@ func TestLabelPropagation(t *testing.T) {
 				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
+				"karpenter.sh/do-not-disrupt":         "true",
+				"my-company.io/team":                  "platform",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -76,6 +78,13 @@ func TestLabelPropagation(t *testing.T) {
 	assert.NotContains(t, listener.Labels, "directly.excluded.org/label")
 	assert.Equal(t, "not-excluded-value", listener.Labels["directly.excluded.org/arbitrary"])
 
+	// Custom annotations should be propagated to the listener
+	assert.Equal(t, "true", listener.Annotations["karpenter.sh/do-not-disrupt"])
+	assert.Equal(t, "platform", listener.Annotations["my-company.io/team"])
+	// Reserved actions.github.com/ annotations must not be propagated
+	assert.NotContains(t, listener.Annotations, AnnotationKeyGitHubRunnerGroupName)
+	assert.NotContains(t, listener.Annotations, AnnotationKeyGitHubRunnerScaleSetName)
+
 	listenerServiceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -84,6 +93,9 @@ func TestLabelPropagation(t *testing.T) {
 	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
+	// Custom annotations must also reach the listener pod itself
+	assert.Equal(t, "true", listenerPod.Annotations["karpenter.sh/do-not-disrupt"])
+	assert.Equal(t, "platform", listenerPod.Annotations["my-company.io/team"])
 
 	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
