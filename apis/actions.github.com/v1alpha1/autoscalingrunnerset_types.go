@@ -315,7 +315,7 @@ type AutoscalingRunnerSetStatus struct {
 	CurrentRunners int `json:"currentRunners"`
 
 	// +optional
-	State string `json:"state"`
+	Phase AutoscalingRunnerSetPhase `json:"phase"`
 
 	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
 
@@ -325,6 +325,32 @@ type AutoscalingRunnerSetStatus struct {
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
 	// +optional
 	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
+}
+
+type AutoscalingRunnerSetPhase string
+
+const (
+	// AutoscalingRunnerSetPhasePending phase means that the listener is not
+	// yet started
+	AutoscalingRunnerSetPhasePending  AutoscalingRunnerSetPhase = "Pending"
+	AutoscalingRunnerSetPhaseRunning  AutoscalingRunnerSetPhase = "Running"
+	AutoscalingRunnerSetPhaseOutdated AutoscalingRunnerSetPhase = "Outdated"
+)
+
+func (ars *AutoscalingRunnerSet) Hash() string {
+	type data struct {
+		Spec   *AutoscalingRunnerSetSpec
+		Labels map[string]string
+		Phase  AutoscalingRunnerSetPhase
+	}
+
+	d := &data{
+		Spec:   ars.Spec.DeepCopy(),
+		Labels: ars.Labels,
+		Phase:  ars.Status.Phase,
+	}
+
+	return hash.ComputeTemplateHash(d)
 }
 
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {

@@ -159,10 +159,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					// Set status to simulate a configured EphemeralRunner
 					refetch := false
 					for i, runner := range runnerList.Items {
-						if runner.Status.RunnerId == 0 {
+						if runner.Status.RunnerID == 0 {
 							updatedRunner := runner.DeepCopy()
-							updatedRunner.Status.Phase = corev1.PodRunning
-							updatedRunner.Status.RunnerId = i + 100
+							updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+							updatedRunner.Status.RunnerID = i + 100
 							err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 							Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 							refetch = true
@@ -219,10 +219,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					// Set status to simulate a configured EphemeralRunner
 					refetch := false
 					for i, runner := range runnerList.Items {
-						if runner.Status.RunnerId == 0 {
+						if runner.Status.RunnerID == 0 {
 							updatedRunner := runner.DeepCopy()
-							updatedRunner.Status.Phase = corev1.PodRunning
-							updatedRunner.Status.RunnerId = i + 100
+							updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+							updatedRunner.Status.RunnerID = i + 100
 							err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 							Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 							refetch = true
@@ -382,12 +382,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -460,12 +460,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodPending
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -512,12 +512,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
@@ -547,7 +547,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					for _, runner := range runnerList.Items {
-						if runner.Status.Phase == corev1.PodSucceeded {
+						if runner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
 							return fmt.Errorf("Runner %s is in Succeeded phase", runner.Name)
 						}
 					}
@@ -586,12 +586,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodPending
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -607,9 +607,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					succeeded := 0
 					for _, runner := range runnerList.Items {
 						switch runner.Status.Phase {
-						case corev1.PodSucceeded:
+						case v1alpha1.EphemeralRunnerPhaseSucceeded:
 							succeeded++
-						case corev1.PodPending:
+						case v1alpha1.EphemeralRunnerPhasePending:
 							pending++
 						}
 					}
@@ -649,7 +649,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						return fmt.Errorf("Expected 1 runner, got %d", len(runnerList.Items))
 					}
 
-					if runnerList.Items[0].Status.Phase != corev1.PodPending {
+					if runnerList.Items[0].Status.Phase != v1alpha1.EphemeralRunnerPhasePending {
 						return fmt.Errorf("Expected runner to be in Pending, got %s", runnerList.Items[0].Status.Phase)
 					}
 
@@ -661,7 +661,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// Now, the ephemeral runner finally is done and we can scale down to 0
 			updatedRunner = runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -707,12 +707,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// Put one runner in Pending and one in Running
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodPending
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -730,9 +730,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 					for _, runner := range runnerList.Items {
 						switch runner.Status.Phase {
-						case corev1.PodPending:
+						case v1alpha1.EphemeralRunnerPhasePending:
 							pending++
-						case corev1.PodRunning:
+						case v1alpha1.EphemeralRunnerPhaseRunning:
 							running++
 
 						}
@@ -777,12 +777,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Now, let's say ephemeral runner controller patched these ephemeral runners with the registration.
 
 			updatedRunner = runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.RunnerId = 1
+			updatedRunner.Status.RunnerID = 1
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.RunnerId = 2
+			updatedRunner.Status.RunnerID = 2
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -830,12 +830,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// Put one runner in Succeeded and one in Running
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -854,9 +854,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 					for _, runner := range runnerList.Items {
 						switch runner.Status.Phase {
-						case corev1.PodSucceeded:
+						case v1alpha1.EphemeralRunnerPhaseSucceeded:
 							succeeded++
-						case corev1.PodRunning:
+						case v1alpha1.EphemeralRunnerPhaseRunning:
 							running++
 						}
 					}
@@ -898,7 +898,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					for _, runner := range runnerList.Items {
-						if runner.Status.Phase == corev1.PodSucceeded {
+						if runner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
 							return fmt.Errorf("Expected no runners in Succeeded phase, got one")
 						}
 					}
@@ -943,7 +943,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					var failedOriginal *v1alpha1.EphemeralRunner
 					var empty []*v1alpha1.EphemeralRunner
 					for _, runner := range runnerList.Items {
-						switch runner.Status.RunnerId {
+						switch runner.Status.RunnerID {
 						case 101:
 							pendingOriginal = runner.DeepCopy()
 						case 102:
@@ -962,8 +962,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						empty = empty[1:]
 
 						pending := pendingOriginal.DeepCopy()
-						pending.Status.RunnerId = 101
-						pending.Status.Phase = corev1.PodPending
+						pending.Status.RunnerID = 101
+						pending.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 
 						err = k8sClient.Status().Patch(ctx, pending, client.MergeFrom(pendingOriginal))
 						if err != nil {
@@ -976,8 +976,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						runningOriginal = empty[0]
 						empty = empty[1:]
 						running := runningOriginal.DeepCopy()
-						running.Status.RunnerId = 102
-						running.Status.Phase = corev1.PodRunning
+						running.Status.RunnerID = 102
+						running.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 
 						err = k8sClient.Status().Patch(ctx, running, client.MergeFrom(runningOriginal))
 						if err != nil {
@@ -990,8 +990,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						failedOriginal = empty[0]
 
 						failed := pendingOriginal.DeepCopy()
-						failed.Status.RunnerId = 103
-						failed.Status.Phase = corev1.PodFailed
+						failed.Status.RunnerID = 103
+						failed.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
 
 						err = k8sClient.Status().Patch(ctx, failed, client.MergeFrom(failedOriginal))
 						if err != nil {
@@ -1006,6 +1006,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeTrue(), "Failed to eventually update to one pending, one running and one failed")
 
 			desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
 				CurrentReplicas:         3,
 				PendingEphemeralRunners: 1,
 				RunningEphemeralRunners: 1,
@@ -1052,6 +1053,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				PendingEphemeralRunners: 0,
 				RunningEphemeralRunners: 0,
 				FailedEphemeralRunners:  1,
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 
 			Eventually(
@@ -1070,7 +1072,13 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			err = k8sClient.Delete(ctx, &runnerList.Items[0])
 			Expect(err).To(BeNil(), "Failed to delete failed ephemeral runner")
 
-			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{} // empty
+			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
+				CurrentReplicas:         0,
+				PendingEphemeralRunners: 0,
+				RunningEphemeralRunners: 0,
+				FailedEphemeralRunners:  0,
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+			}
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
 					updated := new(v1alpha1.EphemeralRunnerSet)
@@ -1222,10 +1230,10 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				// Set status to simulate a configured EphemeralRunner
 				refetch := false
 				for i, runner := range runnerList.Items {
-					if runner.Status.RunnerId == 0 {
+					if runner.Status.RunnerID == 0 {
 						updatedRunner := runner.DeepCopy()
-						updatedRunner.Status.Phase = corev1.PodSucceeded
-						updatedRunner.Status.RunnerId = i + 100
+						updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+						updatedRunner.Status.RunnerID = i + 100
 						err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 						Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 						refetch = true
@@ -1355,8 +1363,8 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
 
 		runner := runnerList.Items[0].DeepCopy()
-		runner.Status.Phase = corev1.PodRunning
-		runner.Status.RunnerId = 100
+		runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		runner.Status.RunnerID = 100
 		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
 		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
 

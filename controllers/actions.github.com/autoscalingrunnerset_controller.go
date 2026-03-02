@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
@@ -46,6 +47,7 @@ const (
 	// This is used to determine if the values have changed, so we can
 	// re-create listener.
 	annotationKeyValuesHash = "actions.github.com/values-hash"
+	annotationKeyChangeHash = "actions.github.com/change-hash"
 
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIDAnnotationKey     = "runner-scale-set-id"
@@ -104,32 +106,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
+		done, err := r.cleanUpResources(ctx, autoscalingRunnerSet, nil, log)
 		if err != nil {
-			log.Error(err, "Failed to clean up listener")
+			log.Error(err, "Failed to clean up resources during deletion")
 			return ctrl.Result{}, err
 		}
 		if !done {
-			// we are going to get notified anyway to proceed with rest of the
-			// cleanup. No need to re-queue
-			log.Info("Waiting for listener to be deleted")
-			return ctrl.Result{}, nil
-		}
-
-		done, err = r.cleanupEphemeralRunnerSets(ctx, autoscalingRunnerSet, log)
-		if err != nil {
-			log.Error(err, "Failed to clean up ephemeral runner sets")
-			return ctrl.Result{}, err
-		}
-		if !done {
-			log.Info("Waiting for ephemeral runner sets to be deleted")
-			return ctrl.Result{}, nil
-		}
-
-		err = r.deleteRunnerScaleSet(ctx, autoscalingRunnerSet, log)
-		if err != nil {
-			log.Error(err, "Failed to delete runner scale set")
-			return ctrl.Result{}, err
+			log.Info("Waiting for resources to be cleaned up before removing finalizer")
+			return ctrl.Result{
+				RequeueAfter: 5 * time.Second,
+			}, nil
 		}
 
 		if err := r.removeFinalizersFromDependentResources(ctx, autoscalingRunnerSet, log); err != nil {
@@ -176,34 +162,54 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		log.Info("Successfully added finalizer")
-		return ctrl.Result{}, nil
 	}
 
-	scaleSetIDRaw, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
-	if !ok {
-		// Need to create a new runner scale set on Actions service
-		log.Info("Runner scale set id annotation does not exist. Creating a new runner scale set.")
-		return r.createRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[annotationKeyChangeHash] != targetHash {
+		if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+			if obj.Annotations == nil {
+				obj.Annotations = map[string]string{}
+			}
+			obj.Annotations[annotationKeyChangeHash] = targetHash
+		}); err != nil {
+			log.Error(err, "Failed to update autoscaling runner set with change hash annotation")
+			return ctrl.Result{}, err
+		}
+
+		if err := r.updateStatus(ctx, autoscalingRunnerSet, nil, v1alpha1.AutoscalingRunnerSetPhasePending, log); err != nil {
+			log.Error(err, "Failed to update autoscaling runner set status to pending")
+			return ctrl.Result{}, err
+		}
 	}
 
-	if id, err := strconv.Atoi(scaleSetIDRaw); err != nil || id <= 0 {
-		log.Info("Runner scale set id annotation is not an id, or is <= 0. Creating a new runner scale set.")
-		// something modified the scaleSetId. Try to create one
-		return r.createRunnerScaleSet(ctx, autoscalingRunnerSet, log)
-	}
+	outdated := autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseOutdated
 
-	// Make sure the runner group of the scale set is up to date
-	currentRunnerGroupName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName]
-	if !ok || (len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 && !strings.EqualFold(currentRunnerGroupName, autoscalingRunnerSet.Spec.RunnerGroup)) {
-		log.Info("AutoScalingRunnerSet runner group changed. Updating the runner scale set.")
-		return r.updateRunnerScaleSetRunnerGroup(ctx, autoscalingRunnerSet, log)
-	}
+	if !outdated {
+		scaleSetIDRaw, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
+		if !ok {
+			// Need to create a new runner scale set on Actions service
+			log.Info("Runner scale set id annotation does not exist. Creating a new runner scale set.")
+			return r.createRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+		}
 
-	// Make sure the runner scale set name is up to date
-	currentRunnerScaleSetName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName]
-	if !ok || (len(autoscalingRunnerSet.Spec.RunnerScaleSetName) > 0 && !strings.EqualFold(currentRunnerScaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetName)) {
-		log.Info("AutoScalingRunnerSet runner scale set name changed. Updating the runner scale set.")
-		return r.updateRunnerScaleSetName(ctx, autoscalingRunnerSet, log)
+		if id, err := strconv.Atoi(scaleSetIDRaw); err != nil || id <= 0 {
+			log.Info("Runner scale set id annotation is not an id, or is <= 0. Creating a new runner scale set.")
+			// something modified the scaleSetId. Try to create one
+			return r.createRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+		}
+
+		// Make sure the runner group of the scale set is up to date
+		currentRunnerGroupName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName]
+		if !ok || (len(autoscalingRunnerSet.Spec.RunnerGroup) > 0 && !strings.EqualFold(currentRunnerGroupName, autoscalingRunnerSet.Spec.RunnerGroup)) {
+			log.Info("AutoScalingRunnerSet runner group changed. Updating the runner scale set.")
+			return r.updateRunnerScaleSetRunnerGroup(ctx, autoscalingRunnerSet, log)
+		}
+
+		// Make sure the runner scale set name is up to date
+		currentRunnerScaleSetName, ok := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName]
+		if !ok || (len(autoscalingRunnerSet.Spec.RunnerScaleSetName) > 0 && !strings.EqualFold(currentRunnerScaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetName)) {
+			log.Info("AutoScalingRunnerSet runner scale set name changed. Updating the runner scale set.")
+			return r.updateRunnerScaleSetName(ctx, autoscalingRunnerSet, log)
+		}
 	}
 
 	existingRunnerSets, err := r.listEphemeralRunnerSets(ctx, autoscalingRunnerSet)
@@ -213,7 +219,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	latestRunnerSet := existingRunnerSets.latest()
-	if latestRunnerSet == nil {
+	if latestRunnerSet == nil && !outdated {
 		log.Info("Latest runner set does not exist. Creating a new runner set.")
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
 	}
@@ -221,6 +227,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	for _, runnerSet := range existingRunnerSets.all() {
 		log.Info("Find existing ephemeral runner set", "name", runnerSet.Name, "specHash", runnerSet.Annotations[annotationKeyRunnerSpecHash])
 	}
+
+	outdated = outdated || (latestRunnerSet != nil && latestRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated)
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
 	listener := new(v1alpha1.AutoscalingListener)
@@ -233,6 +241,30 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 		listenerFound = false
 		log.Info("AutoscalingListener does not exist.")
+	}
+
+	if outdated {
+		log.Info("Ephemeral runner set is outdated")
+		if autoscalingRunnerSet.Status.Phase != v1alpha1.AutoscalingRunnerSetPhaseOutdated {
+			if err := r.updateStatus(ctx, autoscalingRunnerSet, latestRunnerSet, v1alpha1.AutoscalingRunnerSetPhaseOutdated, log); err != nil {
+				log.Error(err, "Failed to update autoscaling runner set status to outdated")
+				return ctrl.Result{}, err
+			}
+		}
+
+		done, err := r.cleanUpResources(ctx, autoscalingRunnerSet, latestRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up resources for outdated runner set")
+			return ctrl.Result{}, err
+		}
+		if done {
+			return ctrl.Result{}, nil
+		}
+
+		log.Info("Waiting for resources to be cleaned up for outdated runner set")
+		return ctrl.Result{
+			RequeueAfter: 5 * time.Second,
+		}, nil
 	}
 
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
@@ -291,20 +323,69 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return r.createAutoScalingListenerForRunnerSet(ctx, autoscalingRunnerSet, latestRunnerSet, log)
 	}
 
-	// Update the status of autoscaling runner set.
-	if latestRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners {
-		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-			obj.Status.CurrentRunners = latestRunnerSet.Status.CurrentReplicas
-			obj.Status.PendingEphemeralRunners = latestRunnerSet.Status.PendingEphemeralRunners
-			obj.Status.RunningEphemeralRunners = latestRunnerSet.Status.RunningEphemeralRunners
-			obj.Status.FailedEphemeralRunners = latestRunnerSet.Status.FailedEphemeralRunners
-		}); err != nil {
-			log.Error(err, "Failed to update autoscaling runner set status with current runner count")
-			return ctrl.Result{}, err
-		}
+	if err := r.updateStatus(ctx, autoscalingRunnerSet, latestRunnerSet, v1alpha1.AutoscalingRunnerSetPhaseRunning, log); err != nil {
+		log.Error(err, "Failed to update autoscaling runner set status to running")
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, latestRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
+	log.Info("Deleting the listener")
+	done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
+	if err != nil {
+		log.Error(err, "Failed to clean up listener")
+		return false, err
+	}
+
+	if !done {
+		log.Info("Waiting for listener to be deleted")
+		return false, nil
+	}
+
+	log.Info("deleting ephemeral runner sets")
+	done, err = r.cleanupEphemeralRunnerSets(ctx, autoscalingRunnerSet, log)
+	if err != nil {
+		log.Error(err, "Failed to clean up ephemeral runner sets")
+		return false, err
+	}
+	if !done {
+		log.Info("Waiting for ephemeral runner sets to be deleted")
+		return false, nil
+	}
+
+	log.Info("deleting runner scale set")
+	err = r.deleteRunnerScaleSet(ctx, autoscalingRunnerSet, log)
+	if err != nil {
+		log.Error(err, "Failed to delete runner scale set")
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Update the status of autoscaling runner set if necessary
+func (r *AutoscalingRunnerSetReconciler) updateStatus(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, phase v1alpha1.AutoscalingRunnerSetPhase, log logr.Logger) error {
+	countDiff := ephemeralRunnerSet != nil && ephemeralRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners
+	phaseDiff := phase != autoscalingRunnerSet.Status.Phase
+	if countDiff || phaseDiff {
+		if err := patchSubResource(ctx, r.Status(), autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+			obj.Status.Phase = phase
+			var ephemeralRunnerSetStatus v1alpha1.EphemeralRunnerSetStatus
+			if ephemeralRunnerSet != nil {
+				ephemeralRunnerSetStatus = ephemeralRunnerSet.Status
+			}
+			obj.Status.CurrentRunners = ephemeralRunnerSetStatus.CurrentReplicas
+			obj.Status.PendingEphemeralRunners = ephemeralRunnerSetStatus.PendingEphemeralRunners
+			obj.Status.RunningEphemeralRunners = ephemeralRunnerSetStatus.RunningEphemeralRunners
+			obj.Status.FailedEphemeralRunners = ephemeralRunnerSetStatus.FailedEphemeralRunners
+		}); err != nil {
+			log.Error(err, "Failed to update autoscaling runner set status with current runner count")
+			return err
+		}
+	}
+	return nil
 }
 
 // Prevents overprovisioning of runners.

@@ -171,10 +171,18 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 						return "", nil
 					}
 
-					return fmt.Sprintf("%s_%s", created.Annotations[runnerScaleSetIDAnnotationKey], created.Annotations[AnnotationKeyGitHubRunnerGroupName]), nil
+					return fmt.Sprintf(
+						"%s_%s",
+						created.Annotations[runnerScaleSetIDAnnotationKey],
+						created.Annotations[AnnotationKeyGitHubRunnerGroupName],
+					), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("1_testgroup"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation")
+				autoscalingRunnerSetTestInterval,
+			).Should(
+				BeEquivalentTo("1_testgroup"),
+				"RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's annotation",
+			)
 
 			Eventually(
 				func() (string, error) {
@@ -548,7 +556,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 
 			desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
 				CurrentRunners:          activeRunnerSet.Status.CurrentReplicas,
-				State:                   "",
+				Phase:                   v1alpha1.AutoscalingRunnerSetPhaseRunning,
 				PendingEphemeralRunners: activeRunnerSet.Status.PendingEphemeralRunners,
 				RunningEphemeralRunners: activeRunnerSet.Status.RunningEphemeralRunners,
 				FailedEphemeralRunners:  activeRunnerSet.Status.FailedEphemeralRunners,
@@ -654,7 +662,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 
 		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
 			CurrentRunners:          statusUpdate.Status.CurrentReplicas,
-			State:                   "",
+			Phase:                   v1alpha1.AutoscalingRunnerSetPhaseRunning,
 			PendingEphemeralRunners: statusUpdate.Status.PendingEphemeralRunners,
 			RunningEphemeralRunners: statusUpdate.Status.RunningEphemeralRunners,
 			FailedEphemeralRunners:  statusUpdate.Status.FailedEphemeralRunners,
