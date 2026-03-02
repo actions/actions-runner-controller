@@ -266,4 +266,4 @@ type HorizontalRunnerAutoscalerList struct {
 
 func init() {
 	SchemeBuilder.Register(&HorizontalRunnerAutoscaler{}, &HorizontalRunnerAutoscalerList{})
-}
+} 
