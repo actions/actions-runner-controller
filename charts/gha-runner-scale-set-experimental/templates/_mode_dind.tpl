@@ -20,31 +20,73 @@ volumeMounts:
 
 {{- define "runner-mode-dind.dind-container" -}}
 {{- $dind := .Values.runner.dind | default dict -}}
-name: {{ $dind.container.name | default "dind" }}
-image: {{ $dind.container.image | default "docker:dind" | quote }}
+{{- $dindContainer := ($dind.container | default dict) -}}
+{{- if and (hasKey $dind "container") (not (kindIs "map" $dindContainer)) -}}
+  {{- fail "runner.dind.container must be a map/object" -}}
+{{- end -}}
+{{- if and (hasKey $dindContainer "env") (not (kindIs "slice" $dindContainer.env)) -}}
+  {{- fail "runner.dind.container.env must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $dindContainer "volumeMounts") (not (kindIs "slice" $dindContainer.volumeMounts)) -}}
+  {{- fail "runner.dind.container.volumeMounts must be a list" -}}
+{{- end -}}
+{{- if hasKey $dindContainer "volumes" -}}
+  {{- fail "runner.dind.container.volumes is not supported; use runner.pod.spec.volumes" -}}
+{{- end -}}
+{{- if and (hasKey $dindContainer "args") (not (kindIs "slice" $dindContainer.args)) -}}
+  {{- fail "runner.dind.container.args must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $dindContainer "securityContext") (not (kindIs "map" $dindContainer.securityContext)) -}}
+  {{- fail "runner.dind.container.securityContext must be a map/object" -}}
+{{- end -}}
+{{- if and (hasKey $dindContainer "startupProbe") (not (kindIs "map" $dindContainer.startupProbe)) -}}
+  {{- fail "runner.dind.container.startupProbe must be a map/object" -}}
+{{- end -}}
+
+name: {{ $dindContainer.name | default "dind" }}
+image: {{ $dindContainer.image | default "docker:dind" | quote }}
 args:
+  {{- if $dindContainer.args }}
+  {{- toYaml $dindContainer.args | nindent 2 }}
+  {{- else }}
   {{- include "runner-mode-dind.args" . | nindent 2 }}
+  {{- end }}
 env:
   - name: DOCKER_GROUP_GID
     value: {{ ($dind.dockerGroupId | default "123") | quote }}
-securityContext: 
-{{- if $dind.container.securityContext }}
-  {{- toYaml $dind.container.securityContext | nindent 2 }}
+  {{- with $dindContainer.env }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+securityContext:
+{{- if $dindContainer.securityContext }}
+  {{- toYaml $dindContainer.securityContext | nindent 2 }}
 {{ else }}
   {{- toYaml (dict "privileged" true) | nindent 2 }}
 {{- end }}
 restartPolicy: Always
 startupProbe:
+  {{- if $dindContainer.startupProbe }}
+  {{- toYaml $dindContainer.startupProbe | nindent 2 }}
+  {{- else }}
   {{- include "runner-mode-dind.startup-probe" . | nindent 2 }}
+  {{- end }}
 volumeMounts:
   - name: work
     mountPath: /home/runner/_work
   - name: dind-sock
     mountPath: {{ include "runner-mode-dind.sock-mount-dir" . | quote }}
+  {{- with $dindContainer.volumeMounts }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
 {{- if $dind.copyExternals }}
   - name: dind-externals
     mountPath: /home/runner/externals
-{{- end }}
+{{ end }}
+
+{{- $extra := omit $dindContainer "name" "image" "args" "env" "securityContext" "startupProbe" "volumeMounts" -}}
+{{- if not (empty $extra) -}}
+{{ toYaml $extra }}
+{{- end -}}
 {{- end }}
 
 {{- define "runner-mode-dind.pod-volumes" -}}

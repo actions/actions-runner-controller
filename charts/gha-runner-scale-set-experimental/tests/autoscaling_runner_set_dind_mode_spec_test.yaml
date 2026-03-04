@@ -340,3 +340,83 @@ tests:
           content:
             name: cache
             emptyDir: {}
+
+  - it: should apply dind.container passthrough container fields
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        dind:
+          container:
+            imagePullPolicy: IfNotPresent
+            tty: true
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            env:
+              - name: EXTRA_ENV
+                value: EXTRA_VALUE
+            volumeMounts:
+              - name: cache
+                mountPath: /cache
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].imagePullPolicy
+          value: IfNotPresent
+      - equal:
+          path: spec.template.spec.initContainers[1].tty
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.requests.memory
+          value: 128Mi
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.initContainers[1].resources.limits.memory
+          value: 512Mi
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: EXTRA_ENV
+            value: EXTRA_VALUE
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: cache
+            mountPath: /cache
+
+  - it: should fail when runner.dind.container.volumes is provided
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        dind:
+          container:
+            volumes:
+              - name: cache
+                emptyDir: {}
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.dind.container.volumes is not supported; use runner.pod.spec.volumes

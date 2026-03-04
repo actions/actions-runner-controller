@@ -185,12 +185,21 @@ runner:
     command: ["/home/runner/run.sh"]
 
   dind:
+    # If official runner image is used, or the dind image doesn't contain
+    # assets from the /home/runner/externals directory, copy externals
+    # starts the init container whose purpose is to prepare the environment
+    # for the dind container.
     copyExternals: true
     dockerGroupId: "123"
     dockerSock: "unix:///var/run/docker.sock"
     waitForDockerInSeconds: 120
     container:
       image: "docker:dind"
+      # Additional container fields are passed through as-is (e.g. resources, imagePullPolicy, ports, etc.)
+      # env: []
+      # volumeMounts: []
+      # args: [] # overrides the chart-generated dockerd args
+      # startupProbe: {} # overrides the chart-generated startupProbe
 
   kubernetesMode:
     serviceAccountName: ""
