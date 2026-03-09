@@ -356,6 +356,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 			return ctrl.Result{}, err
 		}
+
+		// Check if runner's GitHub registration is still valid
+		healthy, err := r.checkRunnerRegistration(ctx, ephemeralRunner, log)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !healthy {
+			if err := r.markAsFailed(ctx, ephemeralRunner, "Runner registration no longer exists on GitHub", "RegistrationInvalidated", log); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
 		return ctrl.Result{}, nil
 
 	case cs.State.Terminated.ExitCode != 0: // failed
@@ -804,6 +817,43 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	return nil
 }
 
+// checkRunnerRegistration verifies the runner's GitHub-side registration is still valid.
+// Returns true if the runner is healthy or we can't determine status (API errors).
+// Returns false if the registration is confirmed gone (404).
+func (r *EphemeralRunnerReconciler) checkRunnerRegistration(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (bool, error) {
+	// Only check runners that have been registered (have a RunnerId)
+	if ephemeralRunner.Status.RunnerId == 0 {
+		return true, nil
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+	if err != nil {
+		log.Error(err, "Failed to get actions client for health check, skipping")
+		return true, nil
+	}
+
+	_, err = actionsClient.GetRunner(ctx, int64(ephemeralRunner.Status.RunnerId))
+	if err == nil {
+		return true, nil
+	}
+
+	var actionsErr *actions.ActionsError
+	if errors.As(err, &actionsErr) && actionsErr.StatusCode == 404 {
+		log.Info("Runner registration not found on GitHub, marking as failed",
+			"runnerId", ephemeralRunner.Status.RunnerId,
+			"runnerName", ephemeralRunner.Status.RunnerName,
+		)
+		return false, nil
+	}
+
+	// For non-404 errors (transient API issues), don't take action
+	log.Info("Health check API call failed, will retry on next reconciliation",
+		"runnerId", ephemeralRunner.Status.RunnerId,
+		"error", err.Error(),
+	)
+	return true, nil
+}
+
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	client, err := r.GetActionsService(ctx, ephemeralRunner)
 	if err != nil {
@@ -813,6 +863,11 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 	log.Info("Removing runner from the service", "runnerId", ephemeralRunner.Status.RunnerId)
 	err = client.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId))
 	if err != nil {
+		var actionsErr *actions.ActionsError
+		if errors.As(err, &actionsErr) && actionsErr.StatusCode == 404 {
+			log.Info("Runner already removed from service", "runnerId", ephemeralRunner.Status.RunnerId)
+			return nil
+		}
 		return fmt.Errorf("failed to remove runner from the service: %w", err)
 	}
 
