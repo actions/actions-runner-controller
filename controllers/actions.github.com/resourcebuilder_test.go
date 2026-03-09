@@ -319,3 +319,111 @@ func TestOwnershipRelationships(t *testing.T) {
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
 	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
 }
+
+func TestListenerPodNodeSelector(t *testing.T) {
+	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion: "0.2.0",
+			},
+			Annotations: map[string]string{
+				runnerScaleSetIDAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
+			},
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: "https://github.com/org/repo",
+		},
+	}
+
+	b := ResourceBuilder{}
+	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
+	require.NoError(t, err)
+
+	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+
+	listenerServiceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+	}
+
+	t.Run("default listener pod has linux nodeSelector", func(t *testing.T) {
+		pod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector)
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS],
+			"listener pod should default to linux nodeSelector")
+	})
+
+	t.Run("nil listenerTemplate preserves linux nodeSelector", func(t *testing.T) {
+		listenerNoTemplate := listener.DeepCopy()
+		listenerNoTemplate.Spec.Template = nil
+
+		pod, err := b.newScaleSetListenerPod(listenerNoTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector)
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS],
+			"listener pod should keep linux nodeSelector when no template is provided")
+	})
+
+	t.Run("listenerTemplate with nil nodeSelector preserves linux default", func(t *testing.T) {
+		listenerWithTemplate := listener.DeepCopy()
+		listenerWithTemplate.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				// NodeSelector intentionally nil
+				Tolerations: []corev1.Toleration{
+					{Key: "example.com/test", Operator: corev1.TolerationOpExists},
+				},
+			},
+		}
+
+		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector,
+			"linux nodeSelector should not be cleared by template with nil nodeSelector")
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS])
+		assert.Len(t, pod.Spec.Tolerations, 1, "other template fields should still be applied")
+	})
+
+	t.Run("listenerTemplate with explicit nodeSelector overrides default", func(t *testing.T) {
+		listenerWithTemplate := listener.DeepCopy()
+		listenerWithTemplate.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				NodeSelector: map[string]string{
+					LabelKeyKubernetesOS: "linux",
+					"custom-label/pool":  "listeners",
+				},
+			},
+		}
+
+		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector)
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS])
+		assert.Equal(t, "listeners", pod.Spec.NodeSelector["custom-label/pool"],
+			"explicit template nodeSelector should be applied")
+	})
+
+	t.Run("listenerTemplate with empty nodeSelector overrides default", func(t *testing.T) {
+		listenerWithTemplate := listener.DeepCopy()
+		listenerWithTemplate.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				NodeSelector: map[string]string{},
+			},
+		}
+
+		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		// An explicitly set empty map is non-nil, so it overrides the default.
+		// This is intentional: the user explicitly opted out of nodeSelector constraints.
+		assert.NotNil(t, pod.Spec.NodeSelector)
+		assert.Empty(t, pod.Spec.NodeSelector,
+			"explicitly empty nodeSelector should override the linux default")
+	})
+}

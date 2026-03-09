@@ -3,7 +3,7 @@ package metrics
 import (
 	"testing"
 
-	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 )
@@ -22,13 +22,13 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		jobBase    actions.JobMessageBase
+		jobBase    scaleset.JobMessageBase
 		wantName   string
 		wantTarget string
 	}{
 		{
 			name: "main branch workflow",
-			jobBase: actions.JobMessageBase{
+			jobBase: scaleset.JobMessageBase{
 				OwnerName:      "actions",
 				RepositoryName: "runner",
 				JobDisplayName: "Build and Test",
@@ -40,7 +40,7 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 		},
 		{
 			name: "feature branch workflow",
-			jobBase: actions.JobMessageBase{
+			jobBase: scaleset.JobMessageBase{
 				OwnerName:      "myorg",
 				RepositoryName: "myrepo",
 				JobDisplayName: "CI/CD Pipeline",
@@ -52,7 +52,7 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 		},
 		{
 			name: "pull request workflow",
-			jobBase: actions.JobMessageBase{
+			jobBase: scaleset.JobMessageBase{
 				OwnerName:      "actions",
 				RepositoryName: "runner",
 				JobDisplayName: "PR Checks",
@@ -64,7 +64,7 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 		},
 		{
 			name: "tag workflow",
-			jobBase: actions.JobMessageBase{
+			jobBase: scaleset.JobMessageBase{
 				OwnerName:      "actions",
 				RepositoryName: "runner",
 				JobDisplayName: "Release",

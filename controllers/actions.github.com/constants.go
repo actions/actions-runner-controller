@@ -28,6 +28,9 @@ const (
 	LabelKeyKubernetesComponent = "app.kubernetes.io/component"
 	LabelKeyKubernetesVersion   = "app.kubernetes.io/version"
 
+	// Well-known Kubernetes node labels
+	LabelKeyKubernetesOS = "kubernetes.io/os"
+
 	// Github labels
 	LabelKeyGitHubScaleSetName      = "actions.github.com/scale-set-name"
 	LabelKeyGitHubScaleSetNamespace = "actions.github.com/scale-set-namespace"

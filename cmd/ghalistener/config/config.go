@@ -5,20 +5,22 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
-	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/actions/actions-runner-controller/logging"
 	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
-	"github.com/go-logr/logr"
+	"github.com/actions/scaleset"
 	"golang.org/x/net/http/httpproxy"
 )
+
+const appName = "ghalistener"
 
 type Config struct {
 	ConfigureUrl   string          `json:"configure_url"`
@@ -34,7 +36,7 @@ type Config struct {
 	EphemeralRunnerSetName      string                  `json:"ephemeral_runner_set_name"`
 	MaxRunners                  int                     `json:"max_runners"`
 	MinRunners                  int                     `json:"min_runners"`
-	RunnerScaleSetId            int                     `json:"runner_scale_set_id"`
+	RunnerScaleSetID            int                     `json:"runner_scale_set_id"`
 	RunnerScaleSetName          string                  `json:"runner_scale_set_name"`
 	ServerRootCA                string                  `json:"server_root_ca"`
 	LogLevel                    string                  `json:"log_level"`
@@ -108,8 +110,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("EphemeralRunnerSetNamespace %q or EphemeralRunnerSetName %q is missing", c.EphemeralRunnerSetNamespace, c.EphemeralRunnerSetName)
 	}
 
-	if c.RunnerScaleSetId == 0 {
-		return fmt.Errorf(`RunnerScaleSetId "%d" is missing`, c.RunnerScaleSetId)
+	if c.RunnerScaleSetID == 0 {
+		return fmt.Errorf(`RunnerScaleSetId "%d" is missing`, c.RunnerScaleSetID)
 	}
 
 	if c.MaxRunners < c.MinRunners {
@@ -134,40 +136,51 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *Config) Logger() (logr.Logger, error) {
-	logLevel := string(logging.LogLevelDebug)
-	if c.LogLevel != "" {
-		logLevel = c.LogLevel
+func (c *Config) Logger() (*slog.Logger, error) {
+	var lvl slog.Level
+	switch strings.ToLower(c.LogLevel) {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "info":
+		lvl = slog.LevelInfo
+	case "warn":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		return nil, fmt.Errorf("invalid log level: %s", c.LogLevel)
 	}
 
-	logFormat := string(logging.LogFormatText)
-	if c.LogFormat != "" {
-		logFormat = c.LogFormat
+	var logger *slog.Logger
+	switch c.LogFormat {
+	case "json":
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+			Level:     lvl,
+		}))
+	case "text":
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+			Level:     lvl,
+		}))
+	default:
+		return nil, fmt.Errorf("invalid log format: %s", c.LogFormat)
 	}
 
-	logger, err := logging.NewLogger(logLevel, logFormat)
-	if err != nil {
-		return logr.Logger{}, fmt.Errorf("NewLogger failed: %w", err)
-	}
-
-	return logger, nil
+	return logger.With("app", appName), nil
 }
 
-func (c *Config) ActionsClient(logger logr.Logger, clientOptions ...actions.ClientOption) (*actions.Client, error) {
-	var creds actions.ActionsAuth
-	switch c.Token {
-	case "":
-		creds.AppCreds = &actions.GitHubAppAuth{
-			AppID:             c.AppID,
-			AppInstallationID: c.AppInstallationID,
-			AppPrivateKey:     c.AppPrivateKey,
-		}
-	default:
-		creds.Token = c.Token
+func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HTTPOption) (*scaleset.Client, error) {
+	systemInfo := scaleset.SystemInfo{
+		System:     "actions-runner-controller",
+		Version:    build.Version,
+		CommitSHA:  build.CommitSHA,
+		ScaleSetID: c.RunnerScaleSetID,
+		Subsystem:  appName,
 	}
 
-	options := append([]actions.ClientOption{
-		actions.WithLogger(logger),
+	options := append([]scaleset.HTTPOption{
+		scaleset.WithLogger(logger),
 	}, clientOptions...)
 
 	if c.ServerRootCA != "" {
@@ -181,31 +194,47 @@ func (c *Config) ActionsClient(logger logr.Logger, clientOptions ...actions.Clie
 			return nil, fmt.Errorf("failed to parse root certificate")
 		}
 
-		options = append(options, actions.WithRootCAs(pool))
+		options = append(options, scaleset.WithRootCAs(pool))
 	}
 
 	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
-	options = append(options, actions.WithProxy(func(req *http.Request) (*url.URL, error) {
+	options = append(options, scaleset.WithProxy(func(req *http.Request) (*url.URL, error) {
 		return proxyFunc(req.URL)
 	}))
 
-	client, err := actions.NewClient(c.ConfigureUrl, &creds, options...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create actions client: %w", err)
+	var client *scaleset.Client
+	switch c.Token {
+	case "":
+		c, err := scaleset.NewClientWithGitHubApp(
+			scaleset.ClientWithGitHubAppConfig{
+				GitHubConfigURL: c.ConfigureUrl,
+				GitHubAppAuth: scaleset.GitHubAppAuth{
+					ClientID:       c.AppConfig.AppID,
+					InstallationID: c.AppConfig.AppInstallationID,
+					PrivateKey:     c.AppConfig.AppPrivateKey,
+				},
+				SystemInfo: systemInfo,
+			},
+			options...,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to instantiate client with GitHub App auth: %w", err)
+		}
+		client = c
+	default:
+		c, err := scaleset.NewClientWithPersonalAccessToken(
+			scaleset.NewClientWithPersonalAccessTokenConfig{
+				GitHubConfigURL:     c.ConfigureUrl,
+				PersonalAccessToken: c.Token,
+				SystemInfo:          systemInfo,
+			},
+			options...,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to instantiate client with PAT auth: %w", err)
+		}
+		client = c
 	}
 
-	client.SetUserAgent(actions.UserAgentInfo{
-		Version:    build.Version,
-		CommitSHA:  build.CommitSHA,
-		ScaleSetID: c.RunnerScaleSetId,
-		HasProxy:   hasProxy(),
-		Subsystem:  "ghalistener",
-	})
-
 	return client, nil
-}
-
-func hasProxy() bool {
-	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
-	return proxyFunc != nil
 }
