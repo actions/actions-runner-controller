@@ -71,6 +71,9 @@ type AutoscalingListenerSpec struct {
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
+	ListenerConfigSecretMetadata *ResourceMeta `json:"listener_config_secret_metadata,omitempty"`
+
+	// +optional
 	ServiceAccountMetadata *ResourceMeta `json:"service_account_metadata,omitempty"`
 
 	// +optional

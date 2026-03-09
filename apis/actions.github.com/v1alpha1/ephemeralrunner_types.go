@@ -122,6 +122,9 @@ type EphemeralRunnerSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
+	// +optional
+	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
+
 	corev1.PodTemplateSpec `json:",inline"`
 }
 

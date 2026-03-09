@@ -79,6 +79,9 @@ type AutoscalingRunnerSetSpec struct {
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
+	AutoscalingListenerMetadata *ResourceMeta `json:"autoscalingListener,omitempty"`
+
+	// +optional
 	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
 
 	// +optional
@@ -92,6 +95,18 @@ type AutoscalingRunnerSetSpec struct {
 
 	// +optional
 	ListenerRoleBindingMetadata *ResourceMeta `json:"listener_role_binding_metadata,omitempty"`
+
+	// +optional
+	ListenerConfigSecretMetadata *ResourceMeta `json:"listener_config_secret_metadata,omitempty"`
+
+	// +optional
+	EphemeralRunnerSetMetadata *ResourceMeta `json:"ephemeralRunnerSetMetadata,omitempty"`
+
+	// +optional
+	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
+
+	// +optional
+	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
 	// +optional
 	// +kubebuilder:validation:Minimum:=0

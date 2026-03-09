@@ -70,6 +70,21 @@ spec:
             spec:
               description: EphemeralRunnerSpec defines the desired state of EphemeralRunner
               properties:
+                ephemeralRunnerConfigSecretMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
                 githubConfigSecret:
                   type: string
                 githubConfigUrl:

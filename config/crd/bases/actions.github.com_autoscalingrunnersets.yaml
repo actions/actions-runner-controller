@@ -64,6 +64,66 @@ spec:
             spec:
               description: AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
               properties:
+                autoscalingListener:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
+                ephemeralRunnerConfigSecretMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
+                ephemeralRunnerMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
+                ephemeralRunnerSetMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
+                  type: object
                 githubConfigSecret:
                   description: Required
                   type: string
@@ -98,6 +158,21 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                       type: object
+                  type: object
+                listener_config_secret_metadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  required:
+                    - annotations
+                    - labels
                   type: object
                 listener_role_binding_metadata:
                   description: ResourceMeta carries metadata common to all internal resources
