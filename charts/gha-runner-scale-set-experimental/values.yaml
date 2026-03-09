@@ -189,7 +189,7 @@ runner:
     # assets from the /home/runner/externals directory, copy externals
     # starts the init container whose purpose is to prepare the environment
     # for the dind container.
-    copyExternals: true
+    copyRunnerExternals: true
     dockerGroupId: "123"
     dockerSock: "unix:///var/run/docker.sock"
     waitForDockerInSeconds: 120

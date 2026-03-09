@@ -114,7 +114,7 @@ tests:
             name: dind-externals
             emptyDir: {}
 
-  - it: should omit init-dind-externals and dind-externals volume when copyExternals is false
+  - it: should omit init-dind-externals and dind-externals volume when copyRunnerExternals is false
     set:
       scaleset.name: "test"
       auth.url: "https://github.com/org"
@@ -124,7 +124,7 @@ tests:
       runner:
         mode: "dind"
         dind:
-          copyExternals: false
+          copyRunnerExternals: false
     release:
       name: "test-name"
       namespace: "test-namespace"

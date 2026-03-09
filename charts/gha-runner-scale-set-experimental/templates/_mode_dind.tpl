@@ -78,7 +78,7 @@ volumeMounts:
   {{- with $dindContainer.volumeMounts }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
-{{- if $dind.copyExternals }}
+{{- if $dind.copyRunnerExternals }}
   - name: dind-externals
     mountPath: /home/runner/externals
 {{ end }}
@@ -95,7 +95,7 @@ volumeMounts:
 - name: dind-sock
   emptyDir: {}
 {{ include "githubServerTLS.podVolumeItem" . }}
-{{- if .Values.runner.dind.copyExternals }}
+{{- if .Values.runner.dind.copyRunnerExternals }}
 - name: dind-externals
   emptyDir: {}
 {{- end }} 

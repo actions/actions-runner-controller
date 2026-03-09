@@ -181,7 +181,7 @@ spec:
       serviceAccountName: {{ include "autoscaling-runner-set.template-service-account" . | quote }}
       {{- if $hasInitContainers }}
       initContainers:
-        {{- if and (eq $runnerMode "dind") $dind.copyExternals }}
+        {{- if and (eq $runnerMode "dind") $dind.copyRunnerExternals }}
         - {{ include "runner-mode-dind.copy-externals" . | nindent 10 }}
         {{- end }}
         {{- range $extraInitContainers }}
