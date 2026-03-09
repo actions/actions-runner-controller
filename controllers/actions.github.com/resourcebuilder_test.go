@@ -37,66 +37,66 @@ func TestMetadataPropagation(t *testing.T) {
 			GitHubConfigUrl: "https://github.com/org/repo",
 			AutoscalingListenerMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "autoscaling-listener-label",
+					"test.com/autoscaling-listener-label": "autoscaling-listener-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "autoscaling-listener-annotation",
+					"test.com/autoscaling-listener-annotation": "autoscaling-listener-annotation",
 				},
 			},
 			ListenerServiceAccountMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "listener-service-account-label",
+					"test.com/listener-service-account-label": "listener-service-account-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "listener-service-account-annotation",
+					"test.com/listener-service-account-annotation": "listener-service-account-annotation",
 				},
 			},
 			ListenerRoleMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "listener-pod-label",
+					"test.com/listener-role-label": "listener-role-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "listener-pod-annotation",
+					"test.com/listener-role-annotation": "listener-role-annotation",
 				},
 			},
 			ListenerRoleBindingMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "listener-role-binding-label",
+					"test.com/listener-role-binding-label": "listener-role-binding-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "listener-role-binding-annotation",
+					"test.com/listener-role-binding-annotation": "listener-role-binding-annotation",
 				},
 			},
 			ListenerConfigSecretMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "listener-config-secret-label",
+					"test.com/listener-config-secret-label": "listener-config-secret-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "listener-config-secret-annotation",
+					"test.com/listener-config-secret-annotation": "listener-config-secret-annotation",
 				},
 			},
 			EphemeralRunnerSetMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "ephemeral-runner-set-label",
+					"test.com/ephemeral-runner-set-label": "ephemeral-runner-set-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "ephemeral-runner-set-annotation",
+					"test.com/ephemeral-runner-set-annotation": "ephemeral-runner-set-annotation",
 				},
 			},
 			EphemeralRunnerMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "ephemeral-runner-label",
+					"test.com/ephemeral-runner-label": "ephemeral-runner-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "ephemeral-runner-annotation",
+					"test.com/ephemeral-runner-annotation": "ephemeral-runner-annotation",
 				},
 			},
 			EphemeralRunnerConfigSecretMetadata: &v1alpha1.ResourceMeta{
 				Labels: map[string]string{
-					"example.com/meta-label": "ephemeral-runner-config-secret-label",
+					"test.com/ephemeral-runner-config-secret-label": "ephemeral-runner-config-secret-label",
 				},
 				Annotations: map[string]string{
-					"example.com/meta-annotation": "ephemeral-runner-config-secret-annotation",
+					"test.com/ephemeral-runner-config-secret-annotation": "ephemeral-runner-config-secret-annotation",
 				},
 			},
 		},
@@ -122,8 +122,8 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
-	assert.Equal(t, "ephemeral-runner-set-label", ephemeralRunnerSet.Labels["example.com/meta-label"])
-	assert.Equal(t, "ephemeral-runner-set-annotation", ephemeralRunnerSet.Annotations["example.com/meta-annotation"])
+	assert.Equal(t, "ephemeral-runner-set-label", ephemeralRunnerSet.Labels["test.com/ephemeral-runner-set-label"])
+	assert.Equal(t, "ephemeral-runner-set-annotation", ephemeralRunnerSet.Annotations["test.com/ephemeral-runner-set-annotation"])
 
 	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
@@ -137,8 +137,8 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "org", listener.Labels[LabelKeyGitHubOrganization])
 	assert.Equal(t, "repo", listener.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], listener.Labels["arbitrary-label"])
-	assert.Equal(t, "autoscaling-listener-label", listener.Labels["example.com/meta-label"])
-	assert.Equal(t, "autoscaling-listener-annotation", listener.Annotations["example.com/meta-annotation"])
+	assert.Equal(t, "autoscaling-listener-label", listener.Labels["test.com/autoscaling-listener-label"])
+	assert.Equal(t, "autoscaling-listener-annotation", listener.Annotations["test.com/autoscaling-listener-annotation"])
 
 	assert.NotContains(t, listener.Labels, "example.com/label")
 	assert.NotContains(t, listener.Labels, "example.com/example")
@@ -146,16 +146,16 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "not-excluded-value", listener.Labels["directly.excluded.org/arbitrary"])
 
 	listenerServiceAccount := b.newScaleSetListenerServiceAccount(listener)
-	assert.Equal(t, "listener-service-account-label", listenerServiceAccount.Labels["example.com/meta-label"])
-	assert.Equal(t, "listener-service-account-annotation", listenerServiceAccount.Annotations["example.com/meta-annotation"])
+	assert.Equal(t, "listener-service-account-label", listenerServiceAccount.Labels["test.com/listener-service-account-label"])
+	assert.Equal(t, "listener-service-account-annotation", listenerServiceAccount.Annotations["test.com/listener-service-account-annotation"])
 
 	listenerRole := b.newScaleSetListenerRole(listener)
-	assert.Equal(t, "listener-pod-label", listenerRole.Labels["example.com/meta-label"])
-	assert.Equal(t, "listener-pod-annotation", listenerRole.Annotations["example.com/meta-annotation"])
+	assert.Equal(t, "listener-role-label", listenerRole.Labels["test.com/listener-role-label"])
+	assert.Equal(t, "listener-role-annotation", listenerRole.Annotations["test.com/listener-role-annotation"])
 
 	listenerRoleBinding := b.newScaleSetListenerRoleBinding(listener, listenerRole, listenerServiceAccount)
-	assert.Equal(t, "listener-role-binding-label", listenerRoleBinding.Labels["example.com/meta-label"])
-	assert.Equal(t, "listener-role-binding-annotation", listenerRoleBinding.Annotations["example.com/meta-annotation"])
+	assert.Equal(t, "listener-role-binding-label", listenerRoleBinding.Labels["test.com/listener-role-binding-label"])
+	assert.Equal(t, "listener-role-binding-annotation", listenerRoleBinding.Annotations["test.com/listener-role-binding-annotation"])
 
 	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
 	require.NoError(t, err)
@@ -173,12 +173,19 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "runner", ephemeralRunner.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunner.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
-	assert.Equal(t, "ephemeral-runner-label", ephemeralRunner.Labels["example.com/meta-label"])
-	assert.Equal(t, "ephemeral-runner-annotation", ephemeralRunner.Annotations["example.com/meta-annotation"])
+	assert.Equal(t, "ephemeral-runner-label", ephemeralRunner.Labels["test.com/ephemeral-runner-label"])
+	assert.Equal(t, "ephemeral-runner-annotation", ephemeralRunner.Annotations["test.com/ephemeral-runner-annotation"])
 
-	runnerSecret := b.newEphemeralRunnerJitSecret(ephemeralRunner, &actions.RunnerScaleSetJitRunnerConfig{})
-	assert.Equal(t, "ephemeral-runner-config-secret-label", runnerSecret.Labels["example.com/meta-label"])
-	assert.Equal(t, "ephemeral-runner-config-secret-annotation", runnerSecret.Annotations["example.com/meta-annotation"])
+	runnerSecret := b.newEphemeralRunnerJitSecret(ephemeralRunner, &actions.RunnerScaleSetJitRunnerConfig{
+		Runner: &actions.RunnerReference{
+			Id:               1,
+			Name:             "test",
+			RunnerScaleSetId: 1,
+		},
+		EncodedJITConfig: "",
+	})
+	assert.Equal(t, "ephemeral-runner-config-secret-label", runnerSecret.Labels["test.com/ephemeral-runner-config-secret-label"])
+	assert.Equal(t, "ephemeral-runner-config-secret-annotation", runnerSecret.Annotations["test.com/ephemeral-runner-config-secret-annotation"])
 
 	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
 	for key := range ephemeralRunner.Labels {

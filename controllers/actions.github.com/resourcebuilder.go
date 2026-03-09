@@ -143,8 +143,8 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			Template:                      autoscalingRunnerSet.Spec.ListenerTemplate,
 			ServiceAccountMetadata:        autoscalingRunnerSet.Spec.ListenerServiceAccountMetadata,
 			RoleMetadata:                  autoscalingRunnerSet.Spec.ListenerRoleMetadata,
-			RoleBindingMetadata:           autoscalingRunnerSet.Spec.ListenerRoleMetadata,
-			ListenerConfigSecretMetadata:  autoscalingRunnerSet.Spec.ListenerConfigSecretMetadata,
+			RoleBindingMetadata:           autoscalingRunnerSet.Spec.ListenerRoleBindingMetadata,
+			ConfigSecretMetadata:          autoscalingRunnerSet.Spec.ListenerConfigSecretMetadata,
 		},
 	}
 
@@ -222,13 +222,13 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	}
 
 	var labels map[string]string
-	if autoscalingListener.Spec.ListenerConfigSecretMetadata != nil && len(autoscalingListener.Spec.ListenerConfigSecretMetadata.Labels) > 0 {
-		labels = b.filterAndMergeLabels(autoscalingListener.Spec.ListenerConfigSecretMetadata.Labels, nil)
+	if autoscalingListener.Spec.ConfigSecretMetadata != nil && len(autoscalingListener.Spec.ConfigSecretMetadata.Labels) > 0 {
+		labels = b.filterAndMergeLabels(autoscalingListener.Spec.ConfigSecretMetadata.Labels, nil)
 	}
 
 	var annotations map[string]string
-	if autoscalingListener.Spec.ListenerConfigSecretMetadata != nil && len(autoscalingListener.Spec.ListenerConfigSecretMetadata.Annotations) > 0 {
-		annotations = autoscalingListener.Spec.ListenerConfigSecretMetadata.Annotations
+	if autoscalingListener.Spec.ConfigSecretMetadata != nil && len(autoscalingListener.Spec.ConfigSecretMetadata.Annotations) > 0 {
+		annotations = autoscalingListener.Spec.ConfigSecretMetadata.Annotations
 	}
 
 	return &corev1.Secret{
@@ -529,7 +529,7 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 
 	var annotations map[string]string
 
-	for autoscalingListener.Spec.RoleBindingMetadata != nil {
+	if autoscalingListener.Spec.RoleBindingMetadata != nil {
 		labels = b.filterAndMergeLabels(autoscalingListener.Spec.RoleBindingMetadata.Labels, labels)
 		annotations = autoscalingListener.Spec.RoleBindingMetadata.Annotations
 	}

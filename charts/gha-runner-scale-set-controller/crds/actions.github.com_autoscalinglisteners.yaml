@@ -56,6 +56,22 @@ spec:
               autoscalingRunnerSetNamespace:
                 description: Required
                 type: string
+              config_secret_metadata:
+                description: ResourceMeta carries metadata common to all internal
+                  resources
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                required:
+                - annotations
+                - labels
+                type: object
               ephemeralRunnerSetName:
                 description: Required
                 type: string
@@ -117,22 +133,6 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              listener_config_secret_metadata:
-                description: ResourceMeta carries metadata common to all internal
-                  resources
-                properties:
-                  annotations:
-                    additionalProperties:
-                      type: string
-                    type: object
-                  labels:
-                    additionalProperties:
-                      type: string
-                    type: object
-                required:
-                - annotations
-                - labels
-                type: object
               maxRunners:
                 description: Required
                 minimum: 0

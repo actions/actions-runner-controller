@@ -118,8 +118,8 @@ func (in *AutoscalingListenerSpec) DeepCopyInto(out *AutoscalingListenerSpec) {
 		*out = new(v1.PodTemplateSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ListenerConfigSecretMetadata != nil {
-		in, out := &in.ListenerConfigSecretMetadata, &out.ListenerConfigSecretMetadata
+	if in.ConfigSecretMetadata != nil {
+		in, out := &in.ConfigSecretMetadata, &out.ConfigSecretMetadata
 		*out = new(ResourceMeta)
 		(*in).DeepCopyInto(*out)
 	}
