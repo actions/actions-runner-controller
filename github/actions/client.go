@@ -256,7 +256,7 @@ func (c *Client) Identifier() string {
 		identifier += fmt.Sprintf(
 			"appID:%q,installationID:%q,key:%q",
 			c.creds.AppCreds.AppID,
-			c.creds.AppCreds.AppInstallationID,
+			strconv.FormatInt(c.creds.AppCreds.AppInstallationID, 10),
 			c.creds.AppCreds.AppPrivateKey,
 		)
 	}
