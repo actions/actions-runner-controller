@@ -199,6 +199,18 @@ spec:
               runnerScaleSetId:
                 description: Required
                 type: integer
+              listenerServiceAccount:
+                description: ListenerServiceAccount defines metadata to apply to the listener service account.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               template:
                 description: PodTemplateSpec describes the data a pod should have
                   when created from a template
