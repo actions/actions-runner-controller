@@ -833,9 +833,6 @@ func (b *ResourceBuilder) filterAndMergeLabels(base, overwrite map[string]string
 	if base == nil && overwrite == nil {
 		return nil
 	}
-	if len(overwrite) == 0 {
-		return maps.Clone(base)
-	}
 
 	mergedLabels := make(map[string]string, len(base))
 base:
