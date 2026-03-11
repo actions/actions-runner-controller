@@ -69,9 +69,6 @@ spec:
                       additionalProperties:
                         type: string
                       type: object
-                  required:
-                    - annotations
-                    - labels
                   type: object
                 ephemeralRunnerSpec:
                   description: EphemeralRunnerSpec is the spec of the ephemeral runner
@@ -87,9 +84,6 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
-                      required:
-                        - annotations
-                        - labels
                       type: object
                     githubConfigSecret:
                       type: string

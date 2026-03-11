@@ -81,9 +81,6 @@ spec:
                       additionalProperties:
                         type: string
                       type: object
-                  required:
-                    - annotations
-                    - labels
                   type: object
                 githubConfigSecret:
                   type: string
