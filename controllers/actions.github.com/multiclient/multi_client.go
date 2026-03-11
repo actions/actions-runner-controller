@@ -91,7 +91,7 @@ func (m *Scaleset) GetClientFor(ctx context.Context, opts *ClientForOptions) (Cl
 
 type ClientForOptions struct {
 	GithubConfigURL string
-	AppConfig       *appconfig.AppConfig
+	AppConfig       appconfig.AppConfig
 	Namespace       string
 	RootCAs         *x509.CertPool
 	ProxyFunc       func(*http.Request) (*url.URL, error)

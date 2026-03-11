@@ -150,7 +150,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 		ctx,
 		&multiclient.ClientForOptions{
 			GithubConfigURL: obj.GitHubConfigUrl(),
-			AppConfig:       appConfig,
+			AppConfig:       *appConfig,
 			Namespace:       obj.GetNamespace(),
 			RootCAs:         rootCAs,
 			ProxyFunc:       proxyFunc,
