@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
@@ -29,11 +30,11 @@ type Scaleset struct {
 type multiClientEntry struct {
 	client  *scaleset.Client
 	rootCAs *x509.CertPool
+	logger  *slog.Logger
 }
 
 func NewScaleset() *Scaleset {
 	return &Scaleset{
-		mu:      sync.Mutex{},
 		clients: make(map[string]*multiClientEntry),
 	}
 }
@@ -71,6 +72,7 @@ func (m *Scaleset) GetClientFor(ctx context.Context, opts *ClientForOptions) (Cl
 
 	entry, ok := m.clients[identifier]
 	if ok && entry.rootCAs.Equal(opts.RootCAs) {
+		entry.logger.Debug("using cached client")
 		return entry.client, nil
 	}
 
@@ -93,8 +95,6 @@ type ClientForOptions struct {
 	Namespace       string
 	RootCAs         *x509.CertPool
 	ProxyFunc       func(*http.Request) (*url.URL, error)
-
-	logger *slog.Logger
 }
 
 func (o *ClientForOptions) identifier() (string, error) {
@@ -107,15 +107,15 @@ func (o *ClientForOptions) identifier() (string, error) {
 	if o.Namespace == "" {
 		return "", fmt.Errorf("namespace is required to generate client identifier")
 	}
-	identifier := fmt.Sprintf("configURL:%q,namespace:%q", o.GithubConfigURL, o.Namespace)
+	identifier := fmt.Sprintf("configURL:%q,namespace:%q,proxy:%t", o.GithubConfigURL, o.Namespace, o.ProxyFunc != nil)
 
 	if o.AppConfig.Token != "" {
-		identifier += fmt.Sprintf("token:%q,", o.AppConfig.Token)
+		identifier += fmt.Sprintf(",token:%q,", o.AppConfig.Token)
 	} else {
 		identifier += fmt.Sprintf(
-			"appID:%q,installationID:%q,key:%q",
+			",appID:%q,installationID:%q,key:%q",
 			o.AppConfig.AppID,
-			o.AppConfig.AppInstallationID,
+			strconv.FormatInt(o.AppConfig.AppInstallationID, 10),
 			o.AppConfig.AppPrivateKey,
 		)
 	}
@@ -123,7 +123,7 @@ func (o *ClientForOptions) identifier() (string, error) {
 	if o.RootCAs != nil {
 		// ignoring because this cert pool is intended not to come from SystemCertPool
 		// nolint:staticcheck
-		identifier += fmt.Sprintf("rootCAs:%q", o.RootCAs.Subjects())
+		identifier += fmt.Sprintf(",rootCAs:%q", o.RootCAs.Subjects())
 	}
 
 	return uuid.NewHash(sha256.New(), uuid.NameSpaceOID, []byte(identifier), 6).String(), nil
@@ -138,9 +138,7 @@ func (o *ClientForOptions) newClient() (*scaleset.Client, error) {
 		Subsystem:  "gha-scale-set-controller",
 	}
 
-	options := []scaleset.HTTPOption{
-		scaleset.WithLogger(o.logger),
-	}
+	var options []scaleset.HTTPOption
 	if o.RootCAs != nil {
 		options = append(options, scaleset.WithRootCAs(o.RootCAs))
 	}
