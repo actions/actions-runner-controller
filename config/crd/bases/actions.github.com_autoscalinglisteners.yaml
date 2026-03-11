@@ -56,7 +56,7 @@ spec:
               autoscalingRunnerSetNamespace:
                 description: Required
                 type: string
-              config_secret_metadata:
+              configSecretMetadata:
                 description: ResourceMeta carries metadata common to all internal
                   resources
                 properties:
@@ -209,7 +209,7 @@ spec:
                       type: string
                     type: array
                 type: object
-              role_binding_metadata:
+              roleBindingMetadata:
                 description: ResourceMeta carries metadata common to all internal
                   resources
                 properties:
@@ -222,7 +222,7 @@ spec:
                       type: string
                     type: object
                 type: object
-              role_metadata:
+              roleMetadata:
                 description: ResourceMeta carries metadata common to all internal
                   resources
                 properties:
@@ -238,7 +238,7 @@ spec:
               runnerScaleSetId:
                 description: Required
                 type: integer
-              service_account_metadata:
+              serviceAccountMetadata:
                 description: ResourceMeta carries metadata common to all internal
                   resources
                 properties:

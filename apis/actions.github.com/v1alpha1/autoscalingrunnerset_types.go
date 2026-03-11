@@ -88,16 +88,16 @@ type AutoscalingRunnerSetSpec struct {
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
 
 	// +optional
-	ListenerServiceAccountMetadata *ResourceMeta `json:"listener_service_account_metadata,omitempty"`
+	ListenerServiceAccountMetadata *ResourceMeta `json:"listenerServiceAccountMetadata,omitempty"`
 
 	// +optional
-	ListenerRoleMetadata *ResourceMeta `json:"listener_role_metadata,omitempty"`
+	ListenerRoleMetadata *ResourceMeta `json:"listenerRoleMetadata,omitempty"`
 
 	// +optional
-	ListenerRoleBindingMetadata *ResourceMeta `json:"listener_role_binding_metadata,omitempty"`
+	ListenerRoleBindingMetadata *ResourceMeta `json:"listenerRoleBindingMetadata,omitempty"`
 
 	// +optional
-	ListenerConfigSecretMetadata *ResourceMeta `json:"listener_config_secret_metadata,omitempty"`
+	ListenerConfigSecretMetadata *ResourceMeta `json:"listenerConfigSecretMetadata,omitempty"`
 
 	// +optional
 	EphemeralRunnerSetMetadata *ResourceMeta `json:"ephemeralRunnerSetMetadata,omitempty"`

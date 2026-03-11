@@ -71,16 +71,16 @@ type AutoscalingListenerSpec struct {
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
-	ConfigSecretMetadata *ResourceMeta `json:"config_secret_metadata,omitempty"`
+	ConfigSecretMetadata *ResourceMeta `json:"configSecretMetadata,omitempty"`
 
 	// +optional
-	ServiceAccountMetadata *ResourceMeta `json:"service_account_metadata,omitempty"`
+	ServiceAccountMetadata *ResourceMeta `json:"serviceAccountMetadata,omitempty"`
 
 	// +optional
-	RoleMetadata *ResourceMeta `json:"role_metadata,omitempty"`
+	RoleMetadata *ResourceMeta `json:"roleMetadata,omitempty"`
 
 	// +optional
-	RoleBindingMetadata *ResourceMeta `json:"role_binding_metadata,omitempty"`
+	RoleBindingMetadata *ResourceMeta `json:"roleBindingMetadata,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener

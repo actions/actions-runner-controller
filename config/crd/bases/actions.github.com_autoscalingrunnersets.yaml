@@ -147,43 +147,7 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                   type: object
-                listener_config_secret_metadata:
-                  description: ResourceMeta carries metadata common to all internal resources
-                  properties:
-                    annotations:
-                      additionalProperties:
-                        type: string
-                      type: object
-                    labels:
-                      additionalProperties:
-                        type: string
-                      type: object
-                  type: object
-                listener_role_binding_metadata:
-                  description: ResourceMeta carries metadata common to all internal resources
-                  properties:
-                    annotations:
-                      additionalProperties:
-                        type: string
-                      type: object
-                    labels:
-                      additionalProperties:
-                        type: string
-                      type: object
-                  type: object
-                listener_role_metadata:
-                  description: ResourceMeta carries metadata common to all internal resources
-                  properties:
-                    annotations:
-                      additionalProperties:
-                        type: string
-                      type: object
-                    labels:
-                      additionalProperties:
-                        type: string
-                      type: object
-                  type: object
-                listener_service_account_metadata:
+                listenerConfigSecretMetadata:
                   description: ResourceMeta carries metadata common to all internal resources
                   properties:
                     annotations:
@@ -237,6 +201,42 @@ spec:
                         required:
                           - labels
                         type: object
+                      type: object
+                  type: object
+                listenerRoleBindingMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                listenerRoleMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                listenerServiceAccountMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
                       type: object
                   type: object
                 listenerTemplate:
