@@ -303,6 +303,17 @@ githubConfigSecret:
 ## template is the PodSpec for each runner Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:
+  ## template.metadata allows setting custom labels and annotations on runner pods.
+  ## Useful for integrations with tools like Karpenter, cost attribution, Dependabot, etc.
+  ## Labels and annotations set here will be propagated to each EphemeralRunner pod.
+  ##
+  ## Example - prevent Karpenter from evicting runner pods mid-job:
+  # metadata:
+  #   annotations:
+  #     karpenter.sh/do-not-disrupt: "true"
+  #   labels:
+  #     my-label: "my-value"
+  ##
   ## template.spec will be modified if you change the container mode
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
   ## template:

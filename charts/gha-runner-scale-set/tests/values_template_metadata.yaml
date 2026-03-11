@@ -1,0 +1,15 @@
+githubConfigUrl: "https://github.com/actions"
+githubConfigSecret:
+  github_token: "gh_token12345"
+
+template:
+  metadata:
+    annotations:
+      karpenter.sh/do-not-disrupt: "true"
+    labels:
+      my-label: "my-value"
+  spec:
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
