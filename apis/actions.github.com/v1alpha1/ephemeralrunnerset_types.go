@@ -28,6 +28,8 @@ type EphemeralRunnerSetSpec struct {
 	PatchID int `json:"patchID"`
 	// EphemeralRunnerSpec is the spec of the ephemeral runner
 	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
+	// +optional
+	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
 }
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
