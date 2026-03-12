@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -176,11 +176,11 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "ephemeral-runner-label", ephemeralRunner.Labels["test.com/ephemeral-runner-label"])
 	assert.Equal(t, "ephemeral-runner-annotation", ephemeralRunner.Annotations["test.com/ephemeral-runner-annotation"])
 
-	runnerSecret := b.newEphemeralRunnerJitSecret(ephemeralRunner, &actions.RunnerScaleSetJitRunnerConfig{
-		Runner: &actions.RunnerReference{
-			Id:               1,
+	runnerSecret := b.newEphemeralRunnerJitSecret(ephemeralRunner, &scaleset.RunnerScaleSetJitRunnerConfig{
+		Runner: &scaleset.RunnerReference{
+			ID:               1,
 			Name:             "test",
-			RunnerScaleSetId: 1,
+			RunnerScaleSetID: 1,
 		},
 		EncodedJITConfig: "",
 	})
