@@ -314,7 +314,7 @@ ifeq (, $(wildcard $(GOBIN)/controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 endif
