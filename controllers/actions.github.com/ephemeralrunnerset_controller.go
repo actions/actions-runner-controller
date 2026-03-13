@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
@@ -48,9 +48,8 @@ const (
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
 type EphemeralRunnerSetReconciler struct {
 	client.Client
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	ActionsClient actions.MultiClient
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 
 	PublishMetrics bool
 
@@ -484,14 +483,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerId)); err != nil {
-		actionsError := &actions.ActionsError{}
-		if !errors.As(err, &actionsError) {
-			log.Error(err, "failed to remove runner from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
-			return false, err
-		}
-
-		if actionsError.StatusCode == http.StatusBadRequest &&
-			actionsError.IsException("JobStillRunningException") {
+		if errors.Is(err, scaleset.JobStillRunningError) {
 			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerId)
 			return false, nil
 		}

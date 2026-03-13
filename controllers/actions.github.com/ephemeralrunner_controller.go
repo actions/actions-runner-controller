@@ -20,13 +20,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -410,12 +408,8 @@ func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Conte
 
 func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ok bool, err error) {
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
-		actionsError := &actions.ActionsError{}
-		if !errors.As(err, &actionsError) {
-			return false, err
-		}
-
-		if actionsError.StatusCode == http.StatusBadRequest && actionsError.IsException("JobStillRunningException") {
+		if errors.Is(err, scaleset.JobStillRunningError) {
+			log.Info("Runner job is still running, cannot remove the runner from the service yet")
 			return false, nil
 		}
 
@@ -625,14 +619,8 @@ func (r *EphemeralRunnerReconciler) createRunnerJitConfig(ctx context.Context, e
 		return jitConfig, nil
 	}
 
-	actionsError := &actions.ActionsError{}
-	if !errors.As(err, &actionsError) {
+	if !errors.Is(err, scaleset.RunnerExistsError) {
 		return nil, fmt.Errorf("failed to generate JIT config with generic error: %w", err)
-	}
-
-	if actionsError.StatusCode != http.StatusConflict ||
-		!actionsError.IsException("AgentExistsException") {
-		return nil, fmt.Errorf("failed to generate JIT config with Actions service error: %w", err)
 	}
 
 	// If the runner with the name we want already exists it means:
