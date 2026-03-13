@@ -85,11 +85,6 @@ type ResourceBuilder struct {
 	SecretResolver
 }
 
-// boolPtr returns a pointer to a bool value
-func boolPtr(v bool) *bool {
-	return &v
-}
-
 func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
@@ -328,8 +323,8 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 					Kind:               autoscalingListener.GetObjectKind().GroupVersionKind().Kind,
 					UID:                autoscalingListener.GetUID(),
 					Name:               autoscalingListener.GetName(),
-					Controller:         boolPtr(true),
-					BlockOwnerDeletion: boolPtr(true),
+					Controller:         new(true),
+					BlockOwnerDeletion: new(true),
 				},
 			},
 		},
@@ -600,8 +595,8 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 					Kind:               autoscalingRunnerSet.GetObjectKind().GroupVersionKind().Kind,
 					UID:                autoscalingRunnerSet.GetUID(),
 					Name:               autoscalingRunnerSet.GetName(),
-					Controller:         boolPtr(true),
-					BlockOwnerDeletion: boolPtr(true),
+					Controller:         new(true),
+					BlockOwnerDeletion: new(true),
 				},
 			},
 		},
@@ -654,8 +649,8 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 					Kind:               ephemeralRunnerSet.GetObjectKind().GroupVersionKind().Kind,
 					UID:                ephemeralRunnerSet.GetUID(),
 					Name:               ephemeralRunnerSet.GetName(),
-					Controller:         boolPtr(true),
-					BlockOwnerDeletion: boolPtr(true),
+					Controller:         new(true),
+					BlockOwnerDeletion: new(true),
 				},
 			},
 		},
@@ -692,8 +687,8 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 				Kind:               runner.GetObjectKind().GroupVersionKind().Kind,
 				UID:                runner.GetUID(),
 				Name:               runner.GetName(),
-				Controller:         boolPtr(true),
-				BlockOwnerDeletion: boolPtr(true),
+				Controller:         new(true),
+				BlockOwnerDeletion: new(true),
 			},
 		},
 	}

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,7 +29,6 @@ type Scaleset struct {
 type multiClientEntry struct {
 	client  *scaleset.Client
 	rootCAs *x509.CertPool
-	logger  *slog.Logger
 }
 
 func NewScaleset() *Scaleset {
@@ -72,7 +70,6 @@ func (m *Scaleset) GetClientFor(ctx context.Context, opts *ClientForOptions) (Cl
 
 	entry, ok := m.clients[identifier]
 	if ok && entry.rootCAs.Equal(opts.RootCAs) {
-		entry.logger.Debug("using cached client")
 		return entry.client, nil
 	}
 
