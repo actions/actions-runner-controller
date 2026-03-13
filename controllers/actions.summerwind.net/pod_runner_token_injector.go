@@ -10,7 +10,7 @@ import (
 	"gomodules.xyz/jsonpatch/v2"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -27,7 +27,7 @@ type PodRunnerTokenInjector struct {
 
 	Name         string
 	Log          logr.Logger
-	Recorder     record.EventRecorder
+	Recorder     events.EventRecorder
 	GitHubClient *MultiGitHubClient
 	decoder      admission.Decoder
 }
@@ -126,7 +126,7 @@ func (r *PodRunnerTokenInjector) SetupWithManager(mgr ctrl.Manager) error {
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	mgr.GetWebhookServer().Register("/mutate-runner-set-pod", &admission.Webhook{Handler: r})
 

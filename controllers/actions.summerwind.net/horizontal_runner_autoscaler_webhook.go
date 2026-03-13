@@ -27,12 +27,12 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
 	gogithub "github.com/google/go-github/v52/github"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -55,7 +55,7 @@ const (
 type HorizontalRunnerAutoscalerGitHubWebhook struct {
 	client.Client
 	Log      logr.Logger
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 	Scheme   *runtime.Scheme
 
 	// SecretKeyBytes is the byte representation of the Webhook secret token
@@ -361,7 +361,6 @@ type ScaleTarget struct {
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetForRepoOrOrg(
 	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, labels []string,
 ) (*ScaleTarget, error) {
-
 	scaleTarget := func(value string) (*ScaleTarget, error) {
 		return autoscaler.getJobScaleTarget(ctx, value, labels)
 	}
@@ -369,8 +368,8 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getJobScaleUpTargetFo
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithFunction(
-	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, scaleTarget func(value string) (*ScaleTarget, error)) (*ScaleTarget, error) {
-
+	ctx context.Context, log logr.Logger, repo, owner, ownerType, enterprise string, scaleTarget func(value string) (*ScaleTarget, error),
+) (*ScaleTarget, error) {
 	repositoryRunnerKey := owner + "/" + repo
 
 	// Search for repository HRAs
@@ -698,7 +697,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) SetupWithManager(mgr 
 		name = autoscaler.Name
 	}
 
-	autoscaler.Recorder = mgr.GetEventRecorderFor(name)
+	autoscaler.Recorder = mgr.GetEventRecorder(name)
 
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, autoscaler.indexer); err != nil {
 		return err

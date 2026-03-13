@@ -23,13 +23,13 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/events"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -49,7 +49,7 @@ type HorizontalRunnerAutoscalerReconciler struct {
 	client.Client
 	GitHubClient          *MultiGitHubClient
 	Log                   logr.Logger
-	Recorder              record.EventRecorder
+	Recorder              events.EventRecorder
 	Scheme                *runtime.Scheme
 	DefaultScaleDownDelay time.Duration
 	Name                  string
@@ -318,7 +318,14 @@ func (r *HorizontalRunnerAutoscalerReconciler) reconcile(ctx context.Context, re
 
 	newDesiredReplicas, err := r.computeReplicasWithCache(ghc, log, now, st, hra, minReplicas)
 	if err != nil {
-		r.Recorder.Event(&hra, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+		r.Recorder.Eventf(
+			&hra,
+			nil,
+			corev1.EventTypeNormal,
+			"RunnerAutoscalingFailure",
+			"",
+			err.Error(),
+		)
 
 		log.Error(err, "Could not compute replicas")
 
@@ -381,7 +388,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.HorizontalRunnerAutoscaler{}).
@@ -514,7 +521,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(ghc *arc
 	if hra.Status.DesiredReplicas == nil ||
 		*hra.Status.DesiredReplicas < newDesiredReplicas ||
 		hra.Status.LastSuccessfulScaleOutTime == nil {
-
 	} else if hra.Status.LastSuccessfulScaleOutTime != nil {
 		t := hra.Status.LastSuccessfulScaleOutTime.Add(scaleDownDelay)
 
