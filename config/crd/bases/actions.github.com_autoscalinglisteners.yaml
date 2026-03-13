@@ -56,6 +56,19 @@ spec:
               autoscalingRunnerSetNamespace:
                 description: Required
                 type: string
+              configSecretMetadata:
+                description: ResourceMeta carries metadata common to all internal
+                  resources
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               ephemeralRunnerSetName:
                 description: Required
                 type: string
@@ -196,9 +209,48 @@ spec:
                       type: string
                     type: array
                 type: object
+              roleBindingMetadata:
+                description: ResourceMeta carries metadata common to all internal
+                  resources
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
+              roleMetadata:
+                description: ResourceMeta carries metadata common to all internal
+                  resources
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               runnerScaleSetId:
                 description: Required
                 type: integer
+              serviceAccountMetadata:
+                description: ResourceMeta carries metadata common to all internal
+                  resources
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               template:
                 description: PodTemplateSpec describes the data a pod should have
                   when created from a template

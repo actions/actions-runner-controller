@@ -64,6 +64,54 @@ spec:
             spec:
               description: AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
               properties:
+                autoscalingListener:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                ephemeralRunnerConfigSecretMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                ephemeralRunnerMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                ephemeralRunnerSetMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
                 githubConfigSecret:
                   description: Required
                   type: string
@@ -97,6 +145,18 @@ spec:
                             - key
                           type: object
                           x-kubernetes-map-type: atomic
+                      type: object
+                  type: object
+                listenerConfigSecretMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
                       type: object
                   type: object
                 listenerMetrics:
@@ -141,6 +201,42 @@ spec:
                         required:
                           - labels
                         type: object
+                      type: object
+                  type: object
+                listenerRoleBindingMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                listenerRoleMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+                listenerServiceAccountMetadata:
+                  description: ResourceMeta carries metadata common to all internal resources
+                  properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    labels:
+                      additionalProperties:
+                        type: string
                       type: object
                   type: object
                 listenerTemplate:
