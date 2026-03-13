@@ -27,6 +27,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -599,7 +600,7 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	return nil
 }
 
-func (r *EphemeralRunnerReconciler) createRunnerJitConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (*actions.RunnerScaleSetJitRunnerConfig, error) {
+func (r *EphemeralRunnerReconciler) createRunnerJitConfig(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (*scaleset.RunnerScaleSetJitRunnerConfig, error) {
 	// Runner is not registered with the service. We need to register it first
 	log.Info("Creating ephemeral runner JIT config")
 	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
@@ -607,7 +608,7 @@ func (r *EphemeralRunnerReconciler) createRunnerJitConfig(ctx context.Context, e
 		return nil, fmt.Errorf("failed to get actions client for generating JIT config: %w", err)
 	}
 
-	jitSettings := &actions.RunnerScaleSetJitRunnerSetting{
+	jitSettings := &scaleset.RunnerScaleSetJitRunnerSetting{
 		Name: ephemeralRunner.Name,
 	}
 
@@ -618,9 +619,9 @@ func (r *EphemeralRunnerReconciler) createRunnerJitConfig(ctx context.Context, e
 		}
 	}
 
-	jitConfig, err := actionsClient.GenerateJitRunnerConfig(ctx, jitSettings, ephemeralRunner.Spec.RunnerScaleSetId)
+	jitConfig, err := actionsClient.GenerateJitRunnerConfig(ctx, jitSettings, ephemeralRunner.Spec.RunnerScaleSetID)
 	if err == nil { // if NO error
-		log.Info("Created ephemeral runner JIT config", "runnerId", jitConfig.Runner.Id)
+		log.Info("Created ephemeral runner JIT config", "runnerId", jitConfig.Runner.ID)
 		return jitConfig, nil
 	}
 
@@ -652,10 +653,10 @@ func (r *EphemeralRunnerReconciler) createRunnerJitConfig(ctx context.Context, e
 		return nil, fmt.Errorf("%w: runner existed, retry configuration", retryableError)
 	}
 
-	log.Info("Found the runner with the same name", "runnerId", existingRunner.Id, "runnerScaleSetId", existingRunner.RunnerScaleSetId)
-	if existingRunner.RunnerScaleSetId == ephemeralRunner.Spec.RunnerScaleSetId {
+	log.Info("Found the runner with the same name", "runnerId", existingRunner.ID, "runnerScaleSetId", existingRunner.RunnerScaleSetID)
+	if existingRunner.RunnerScaleSetID == ephemeralRunner.Spec.RunnerScaleSetID {
 		log.Info("Removing the runner with the same name")
-		err := actionsClient.RemoveRunner(ctx, int64(existingRunner.Id))
+		err := actionsClient.RemoveRunner(ctx, int64(existingRunner.ID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to remove runner from the service: %w", err)
 		}
@@ -731,7 +732,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Created ephemeral runner pod",
-		"runnerScaleSetId", runner.Spec.RunnerScaleSetId,
+		"runnerScaleSetId", runner.Spec.RunnerScaleSetID,
 		"runnerName", runner.Status.RunnerName,
 		"runnerId", runner.Status.RunnerId,
 		"configUrl", runner.Spec.GitHubConfigUrl,
@@ -740,7 +741,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, jitConfig *actions.RunnerScaleSetJitRunnerConfig, log logr.Logger) (*corev1.Secret, error) {
+func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, jitConfig *scaleset.RunnerScaleSetJitRunnerConfig, log logr.Logger) (*corev1.Secret, error) {
 	log.Info("Creating new secret for ephemeral runner")
 	jitSecret := r.newEphemeralRunnerJitSecret(runner, jitConfig)
 

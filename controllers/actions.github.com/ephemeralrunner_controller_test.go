@@ -14,10 +14,11 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/go-logr/logr"
 
-	"github.com/actions/actions-runner-controller/github/actions/fake"
-	"github.com/actions/actions-runner-controller/github/actions/testserver"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
+	"github.com/actions/scaleset"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -43,7 +44,7 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 		Spec: v1alpha1.EphemeralRunnerSpec{
 			GitHubConfigUrl:    "https://github.com/owner/repo",
 			GitHubConfigSecret: configSecretName,
-			RunnerScaleSetId:   1,
+			RunnerScaleSetID:   1,
 			PodTemplateSpec: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -111,10 +112,19 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					SecretResolver: &SecretResolver{
-						k8sClient:   mgr.GetClient(),
-						multiClient: fake.NewMultiClient(),
-					},
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGenerateJitRunnerConfig(
+									&scaleset.RunnerScaleSetJitRunnerConfig{
+										Runner:           &scaleset.RunnerReference{ID: 1, Name: "test-runner"},
+										EncodedJITConfig: "fake-jit-config",
+									},
+									nil,
+								),
+							),
+						),
+					)),
 				},
 			}
 
@@ -1096,12 +1106,12 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					SecretResolver: &SecretResolver{
-						k8sClient: mgr.GetClient(),
-						multiClient: fake.NewMultiClient(
-							fake.WithDefaultClient(
-								fake.NewFakeClient(
-									fake.WithGetRunner(
+					SecretResolver: secretresolver.New(
+						mgr.GetClient(),
+						scalefake.NewMultiClient(
+							scalefake.WithClient(
+								scalefake.NewClient(
+									scalefake.WithGetRunner(
 										nil,
 										&actions.ActionsError{
 											StatusCode: http.StatusNotFound,
@@ -1110,11 +1120,17 @@ var _ = Describe("EphemeralRunner", func() {
 											},
 										},
 									),
+									scalefake.WithGenerateJitRunnerConfig(
+										&scaleset.RunnerScaleSetJitRunnerConfig{
+											Runner:           &scaleset.RunnerReference{ID: 1, Name: "test-runner"},
+											EncodedJITConfig: "fake-jit-config",
+										},
+										nil,
+									),
 								),
-								nil,
 							),
 						),
-					},
+					),
 				},
 			}
 			err := controller.SetupWithManager(mgr)
@@ -1181,10 +1197,19 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					SecretResolver: &SecretResolver{
-						k8sClient:   mgr.GetClient(),
-						multiClient: fake.NewMultiClient(),
-					},
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGenerateJitRunnerConfig(
+									&scaleset.RunnerScaleSetJitRunnerConfig{
+										Runner:           &scaleset.RunnerReference{ID: 1, Name: "test-runner"},
+										EncodedJITConfig: "fake-jit-config",
+									},
+									nil,
+								),
+							),
+						),
+					)),
 				},
 			}
 			err := controller.SetupWithManager(mgr)
@@ -1196,10 +1221,10 @@ var _ = Describe("EphemeralRunner", func() {
 		It("uses an actions client with proxy transport", func() {
 			// Use an actual client
 			controller.ResourceBuilder = ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: actions.NewMultiClient(logr.Discard()),
-				},
+				SecretResolver: secretresolver.New(
+					mgr.GetClient(),
+					multiclient.NewScaleset(),
+				),
 			}
 
 			proxySuccessfulllyCalled := false
@@ -1355,10 +1380,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					SecretResolver: &SecretResolver{
-						k8sClient:   mgr.GetClient(),
-						multiClient: fake.NewMultiClient(),
-					},
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 				},
 			}
 
@@ -1379,7 +1401,7 @@ var _ = Describe("EphemeralRunner", func() {
 			keyPath := filepath.Join(certsFolder, "server.key")
 
 			serverSuccessfullyCalled := false
-			server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				serverSuccessfullyCalled = true
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -1388,17 +1410,18 @@ var _ = Describe("EphemeralRunner", func() {
 
 			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
 			server.StartTLS()
+			defer server.Close()
 
 			// Use an actual client
 			controller.ResourceBuilder = ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: actions.NewMultiClient(logr.Discard()),
-				},
+				SecretResolver: secretresolver.New(
+					mgr.GetClient(),
+					multiclient.NewScaleset(),
+				),
 			}
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
-			ephemeralRunner.Spec.GitHubConfigUrl = server.ConfigURLForOrg("my-org")
+			ephemeralRunner.Spec.GitHubConfigUrl = server.URL + "/my-org"
 			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{

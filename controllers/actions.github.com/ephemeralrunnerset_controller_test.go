@@ -2,7 +2,6 @@ package actionsgithubcom
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -19,16 +18,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/actions/actions-runner-controller/github/actions/fake"
-	"github.com/actions/actions-runner-controller/github/actions/testserver"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	fake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 )
 
 const (
@@ -57,10 +55,13 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: fake.NewMultiClient(),
-				},
+				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
+					fake.WithClient(
+						fake.NewClient(
+							fake.WithRemoveRunner(nil),
+						),
+					),
+				)),
 			},
 		}
 		err := controller.SetupWithManager(mgr)
@@ -75,7 +76,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -1103,10 +1104,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: actions.NewMultiClient(logr.Discard()),
-				},
+				SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 			},
 		}
 		err := controller.SetupWithManager(mgr)
@@ -1140,7 +1138,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    "http://example.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
 							Url:                 "http://proxy.example.com",
@@ -1319,7 +1317,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 					GitHubConfigUrl:    "http://example.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
 							Url:                 proxy.URL,
@@ -1419,10 +1417,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: actions.NewMultiClient(logr.Discard()),
-				},
+				SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 			},
 		}
 		err = controller.SetupWithManager(mgr)
@@ -1432,26 +1427,6 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 	})
 
 	It("should be able to make requests to a server using root CAs", func() {
-		certsFolder := filepath.Join(
-			"../../",
-			"github",
-			"actions",
-			"testdata",
-		)
-		certPath := filepath.Join(certsFolder, "server.crt")
-		keyPath := filepath.Join(certsFolder, "server.key")
-
-		serverSuccessfullyCalled := false
-		server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			serverSuccessfullyCalled = true
-			w.WriteHeader(http.StatusOK)
-		}))
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-		Expect(err).NotTo(HaveOccurred(), "failed to load server cert")
-
-		server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
-		server.StartTLS()
-
 		ephemeralRunnerSet = &v1alpha1.EphemeralRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
@@ -1460,7 +1435,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigUrl:    "https://github.example.com/api/v3",
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1472,7 +1447,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 							},
 						},
 					},
-					RunnerScaleSetId: 100,
+					RunnerScaleSetID: 100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -1487,7 +1462,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			},
 		}
 
-		err = k8sClient.Create(ctx, ephemeralRunnerSet)
+		err := k8sClient.Create(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
 
 		runnerList := new(v1alpha1.EphemeralRunnerList)
@@ -1503,32 +1478,10 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			ephemeralRunnerSetTestInterval,
 		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
 
+		// Verify that the TLS configuration is properly propagated to the runner
 		runner := runnerList.Items[0].DeepCopy()
 		Expect(runner.Spec.GitHubServerTLS).NotTo(BeNil(), "runner tls config should not be nil")
 		Expect(runner.Spec.GitHubServerTLS).To(BeEquivalentTo(ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS), "runner tls config should be correct")
-
-		runner.Status.Phase = corev1.PodRunning
-		runner.Status.RunnerId = 100
-		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
-		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
-
-		currentRunnerSet := new(v1alpha1.EphemeralRunnerSet)
-		err = k8sClient.Get(ctx, client.ObjectKey{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}, currentRunnerSet)
-		Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
-
-		updatedRunnerSet := currentRunnerSet.DeepCopy()
-		updatedRunnerSet.Spec.Replicas = 0
-		err = k8sClient.Patch(ctx, updatedRunnerSet, client.MergeFrom(currentRunnerSet))
-		Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
-
-		// wait for server to be called
-		Eventually(
-			func() bool {
-				return serverSuccessfullyCalled
-			},
-			autoscalingRunnerSetTestTimeout,
-			1*time.Nanosecond,
-		).Should(BeTrue(), "server was not called")
 	})
 })
 

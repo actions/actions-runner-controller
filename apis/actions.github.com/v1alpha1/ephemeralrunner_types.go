@@ -111,7 +111,7 @@ type EphemeralRunnerSpec struct {
 	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +required
-	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
+	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`

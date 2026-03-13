@@ -1,16 +1,18 @@
-package actionsgithubcom
+package secretresolver
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
-	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
 	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"golang.org/x/net/http/httpproxy"
@@ -21,19 +23,27 @@ import (
 
 type SecretResolver struct {
 	k8sClient   client.Client
-	multiClient actions.MultiClient
+	multiClient multiclient.MultiClient
+	logger      *slog.Logger
 }
 
-type SecretResolverOption func(*SecretResolver)
+type Option func(*SecretResolver)
 
-func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient, opts ...SecretResolverOption) *SecretResolver {
+func WithLogger(logger *slog.Logger) Option {
+	return func(sr *SecretResolver) {
+		sr.logger = logger
+	}
+}
+
+func New(k8sClient client.Client, scalesetMultiClient multiclient.MultiClient, opts ...Option) *SecretResolver {
 	if k8sClient == nil {
 		panic("k8sClient must not be nil")
 	}
 
 	secretResolver := &SecretResolver{
 		k8sClient:   k8sClient,
-		multiClient: multiClient,
+		multiClient: scalesetMultiClient,
+		logger:      slog.New(slog.DiscardHandler),
 	}
 
 	for _, opt := range opts {
@@ -43,17 +53,7 @@ func NewSecretResolver(k8sClient client.Client, multiClient actions.MultiClient,
 	return secretResolver
 }
 
-type ActionsGitHubObject interface {
-	client.Object
-	GitHubConfigUrl() string
-	GitHubConfigSecret() string
-	GitHubProxy() *v1alpha1.ProxyConfig
-	GitHubServerTLS() *v1alpha1.TLSConfig
-	VaultConfig() *v1alpha1.VaultConfig
-	VaultProxy() *v1alpha1.ProxyConfig
-}
-
-func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj ActionsGitHubObject) (*appconfig.AppConfig, error) {
+func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj object.ActionsGitHubObject) (*appconfig.AppConfig, error) {
 	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
@@ -67,7 +67,7 @@ func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj ActionsGitHubObj
 	return appConfig, nil
 }
 
-func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitHubObject) (actions.ActionsService, error) {
+func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.ActionsGitHubObject) (multiclient.Client, error) {
 	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
@@ -78,7 +78,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 		return nil, fmt.Errorf("failed to resolve app config: %v", err)
 	}
 
-	var clientOptions []actions.ClientOption
+	var proxyFunc func(req *http.Request) (*url.URL, error)
 	if proxy := obj.GitHubProxy(); proxy != nil {
 		config := &httpproxy.Config{
 			NoProxy: strings.Join(proxy.NoProxy, ","),
@@ -116,16 +116,14 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 			config.HTTPSProxy = u.String()
 		}
 
-		proxyFunc := func(req *http.Request) (*url.URL, error) {
+		proxyFunc = func(req *http.Request) (*url.URL, error) {
 			return config.ProxyFunc()(req.URL)
 		}
-
-		clientOptions = append(clientOptions, actions.WithProxy(proxyFunc))
 	}
 
-	tlsConfig := obj.GitHubServerTLS()
-	if tlsConfig != nil {
-		pool, err := tlsConfig.ToCertPool(func(name, key string) ([]byte, error) {
+	var rootCAs *x509.CertPool
+	if tc := obj.GitHubServerTLS(); tc != nil {
+		pool, err := tc.ToCertPool(func(name, key string) ([]byte, error) {
 			var configmap corev1.ConfigMap
 			err := sr.k8sClient.Get(
 				ctx,
@@ -145,19 +143,22 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj ActionsGitH
 			return nil, fmt.Errorf("failed to get tls config: %w", err)
 		}
 
-		clientOptions = append(clientOptions, actions.WithRootCAs(pool))
+		rootCAs = pool
 	}
 
 	return sr.multiClient.GetClientFor(
 		ctx,
-		obj.GitHubConfigUrl(),
-		appConfig,
-		obj.GetNamespace(),
-		clientOptions...,
+		&multiclient.ClientForOptions{
+			GithubConfigURL: obj.GitHubConfigUrl(),
+			AppConfig:       *appConfig,
+			Namespace:       obj.GetNamespace(),
+			RootCAs:         rootCAs,
+			ProxyFunc:       proxyFunc,
+		},
 	)
 }
 
-func (sr *SecretResolver) resolverForObject(ctx context.Context, obj ActionsGitHubObject) (resolver, error) {
+func (sr *SecretResolver) resolverForObject(ctx context.Context, obj object.ActionsGitHubObject) (resolver, error) {
 	vaultConfig := obj.VaultConfig()
 	if vaultConfig == nil || vaultConfig.Type == "" {
 		return &k8sResolver{
