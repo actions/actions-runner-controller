@@ -22,9 +22,9 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/client-go/tools/events"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -42,7 +42,7 @@ type RunnerSetReconciler struct {
 
 	client.Client
 	Log      logr.Logger
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 	Scheme   *runtime.Scheme
 
 	CommonRunnerLabels []string
@@ -69,7 +69,6 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	runnerSet := &v1alpha1.RunnerSet{}
 	if err := r.Get(ctx, req.NamespacedName, runnerSet); err != nil {
 		err = client.IgnoreNotFound(err)
-
 		if err != nil {
 			log.Error(err, "Could not get RunnerSet")
 		}
@@ -99,7 +98,14 @@ func (r *RunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	desiredStatefulSet, err := r.newStatefulSet(ctx, runnerSet)
 	if err != nil {
-		r.Recorder.Event(runnerSet, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+		r.Recorder.Eventf(
+			runnerSet,
+			nil,
+			corev1.EventTypeNormal,
+			"RunnerAutoscalingFailure",
+			"",
+			err.Error(),
+		)
 
 		log.Error(err, "Could not create statefulset")
 
@@ -182,8 +188,10 @@ func getRunnerSetSelector(runnerSet *v1alpha1.RunnerSet) *metav1.LabelSelector {
 	return selector
 }
 
-var LabelKeyPodMutation = "actions-runner-controller/inject-registration-token"
-var LabelValuePodMutation = "true"
+var (
+	LabelKeyPodMutation   = "actions-runner-controller/inject-registration-token"
+	LabelValuePodMutation = "true"
+)
 
 func (r *RunnerSetReconciler) newStatefulSet(ctx context.Context, runnerSet *v1alpha1.RunnerSet) (*appsv1.StatefulSet, error) {
 	runnerSetWithOverrides := *runnerSet.Spec.DeepCopy()
@@ -280,7 +288,7 @@ func (r *RunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &appsv1.StatefulSet{}, runnerSetOwnerKey, func(rawObj client.Object) []string {
 		set := rawObj.(*appsv1.StatefulSet)
