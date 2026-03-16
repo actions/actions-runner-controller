@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
 
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
@@ -1113,12 +1112,7 @@ var _ = Describe("EphemeralRunner", func() {
 								scalefake.NewClient(
 									scalefake.WithGetRunner(
 										nil,
-										&actions.ActionsError{
-											StatusCode: http.StatusNotFound,
-											Err: &actions.ActionsExceptionError{
-												ExceptionName: "AgentNotFoundException",
-											},
-										},
+										scaleset.RunnerNotFoundError,
 									),
 									scalefake.WithGenerateJitRunnerConfig(
 										&scaleset.RunnerScaleSetJitRunnerConfig{
