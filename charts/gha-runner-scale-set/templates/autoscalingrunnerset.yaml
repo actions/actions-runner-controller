@@ -74,6 +74,10 @@ spec:
   {{- with .Values.runnerScaleSetName }}
   runnerScaleSetName: {{ . }}
   {{- end }}
+  {{- if and .Values.scaleSetLabels (kindIs "slice" .Values.scaleSetLabels) }}
+  runnerScaleSetLabels:
+    {{- toYaml .Values.scaleSetLabels | nindent 4 }}
+  {{- end }}
 
   {{- if .Values.githubServerTLS }}
   githubServerTLS:

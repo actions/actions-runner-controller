@@ -474,6 +474,37 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_ScaleSetLabels(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"scaleSetLabels[0]":                  "linux",
+			"scaleSetLabels[1]":                  "x64",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, []string{"linux", "x64"}, ars.Spec.RunnerScaleSetLabels)
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
 	t.Parallel()
 

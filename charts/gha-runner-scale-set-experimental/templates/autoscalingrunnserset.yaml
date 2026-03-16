@@ -83,6 +83,10 @@ spec:
   githubConfigSecret: {{ include "github-secret.name" . | quote }}
   runnerGroup: {{ .Values.scaleset.runnerGroup | quote }}
   runnerScaleSetName: {{ .Values.scaleset.name | quote }}
+  {{- if and .Values.scaleset.labels (kindIs "slice" .Values.scaleset.labels) }}
+  runnerScaleSetLabels:
+    {{- toYaml .Values.scaleset.labels | nindent 4 }}
+  {{- end }}
 
   {{- if .Values.githubServerTLS }}
   githubServerTLS:

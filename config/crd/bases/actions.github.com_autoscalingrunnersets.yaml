@@ -8385,6 +8385,10 @@ spec:
                   type: object
                 runnerGroup:
                   type: string
+                runnerScaleSetLabels:
+                  items:
+                    type: string
+                  type: array
                 runnerScaleSetName:
                   type: string
                 template:

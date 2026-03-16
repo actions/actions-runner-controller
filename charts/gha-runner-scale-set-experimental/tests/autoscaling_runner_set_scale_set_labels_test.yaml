@@ -1,0 +1,24 @@
+suite: "AutoscalingRunnerSet scale set labels"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should apply scaleset labels slice as runnerScaleSetLabels
+    set:
+      scaleset.name: "test"
+      scaleset.labels:
+        - "linux"
+        - "x64"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerScaleSetLabels[0]
+          value: "linux"
+      - equal:
+          path: spec.runnerScaleSetLabels[1]
+          value: "x64"

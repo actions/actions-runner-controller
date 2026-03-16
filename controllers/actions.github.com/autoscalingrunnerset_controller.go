@@ -424,17 +424,35 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 	}
 
 	if runnerScaleSet == nil {
+		labels := []scaleset.Label{
+			{
+				Name: autoscalingRunnerSet.Spec.RunnerScaleSetName,
+				Type: "System",
+			},
+		}
+
+		if labelCount := len(autoscalingRunnerSet.Spec.RunnerScaleSetLabels); labelCount > 0 {
+			unique := make(map[string]bool, labelCount+1)
+			unique[autoscalingRunnerSet.Spec.RunnerScaleSetName] = true
+
+			for _, label := range autoscalingRunnerSet.Spec.RunnerScaleSetLabels {
+				if _, exists := unique[label]; exists {
+					logger.Info("Duplicate label found. Skipping adding duplicate label to runner scale set", "label", label)
+					continue
+				}
+				labels = append(labels, scaleset.Label{
+					Name: label,
+					Type: "System",
+				})
+				unique[label] = true
+			}
+		}
 		runnerScaleSet, err = actionsClient.CreateRunnerScaleSet(
 			ctx,
 			&scaleset.RunnerScaleSet{
 				Name:          autoscalingRunnerSet.Spec.RunnerScaleSetName,
 				RunnerGroupID: runnerGroupID,
-				Labels: []scaleset.Label{
-					{
-						Name: autoscalingRunnerSet.Spec.RunnerScaleSetName,
-						Type: "System",
-					},
-				},
+				Labels:        labels,
 				RunnerSetting: scaleset.RunnerSetting{
 					DisableUpdate: true,
 				},
