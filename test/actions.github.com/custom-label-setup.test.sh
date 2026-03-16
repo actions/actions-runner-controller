@@ -14,7 +14,6 @@ SCALE_SET_NAME="custom-label-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 SCALE_SET_LABEL="custom-$(date +'%s')${RANDOM}"
 WORKFLOW_FILE="arc-custom-label.yaml"
-WORKFLOW_REF="${WORKFLOW_REF:-nikola-jokic-patch-1}"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
@@ -70,7 +69,6 @@ function run_custom_label_workflow() {
     queue_time="$(date -u +%FT%TZ)"
 
     gh workflow run -R "${repo}" "${WORKFLOW_FILE}" \
-        --ref "${WORKFLOW_REF}" \
         -f scaleset-label="${SCALE_SET_LABEL}" || return 1
 
     local count=0
@@ -81,7 +79,7 @@ function run_custom_label_workflow() {
             return 1
         fi
 
-        run_id="$(gh run list -R "${repo}" --workflow "${WORKFLOW_FILE}" --branch "${WORKFLOW_REF}" --created ">${queue_time}" --json databaseId --jq '.[0].databaseId' | head -n1)"
+        run_id="$(gh run list -R "${repo}" --workflow "${WORKFLOW_FILE}" --created ">${queue_time}" --json databaseId --jq '.[0].databaseId' | head -n1)"
         if [[ -n "${run_id}" ]]; then
             break
         fi
