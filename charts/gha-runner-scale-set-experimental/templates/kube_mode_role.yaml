@@ -1,0 +1,42 @@
+{{- $runner := (.Values.runner | default dict) -}}
+{{- $runnerMode := (index $runner "mode" | default "") -}}
+{{- $kubeMode := (index $runner "kubernetesMode" | default dict) -}}
+{{- $kubeDefaults := (index $kubeMode "default" | default true) -}}
+{{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") -}}
+{{- if and (eq $runnerMode "kubernetes") $kubeDefaults (empty $kubeServiceAccountName) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kube-mode-role.name" . | quote }}
+  namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+  labels:
+    {{- include "kube-mode-role.labels" . | nindent 4 }}
+  annotations:
+    {{- include "kube-mode-role.annotations" . | nindent 4 }}
+  finalizers:
+    - actions.github.com/cleanup-protection
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "delete"]
+  {{- with .Values.resource.kubernetesModeRole.extraRules }}
+    {{- if not (empty .) }}
+      {{- if not (kindIs "slice" .) -}}
+        {{- fail ".Values.resource.kubernetesModeRole.extraRules must be a list of RBAC policy rules" -}}
+      {{- end }}
+{{ toYaml . | nindent 2 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

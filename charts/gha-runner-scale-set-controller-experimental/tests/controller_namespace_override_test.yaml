@@ -1,0 +1,24 @@
+suite: "Controller namespaceOverride"
+templates:
+  - deployment.yaml
+  - serviceaccount.yaml
+tests:
+  - it: should apply namespaceOverride to deployment and serviceaccount
+    set:
+      namespaceOverride: "override-ns"
+    release:
+      name: "test-name"
+      namespace: "release-ns"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "override-ns"
+        template: deployment.yaml
+      - equal:
+          path: metadata.labels["actions.github.com/controller-service-account-namespace"]
+          value: "override-ns"
+        template: deployment.yaml
+      - equal:
+          path: metadata.namespace
+          value: "override-ns"
+        template: serviceaccount.yaml

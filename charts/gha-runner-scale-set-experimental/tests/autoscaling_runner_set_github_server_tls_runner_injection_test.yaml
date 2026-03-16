@@ -1,0 +1,249 @@
+suite: "GitHub Server TLS (runner injection)"
+templates:
+  - autoscalingrunnserset.yaml
+
+tests:
+  - it: should inject CA env + volumeMount + volume in mode-empty when runnerMountPath is set
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+            key: "ca.crt"
+      runner:
+        mode: ""
+        container:
+          image: "ghcr.io/actions/actions-runner:latest"
+          command: ["sh", "-c", "echo hello"]
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: "/usr/local/share/ca-certificates/ca.crt"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUNNER_UPDATE_CA_CERTS
+            value: "1"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: github-server-tls-cert
+            mountPath: "/usr/local/share/ca-certificates/"
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-server-tls-cert
+            configMap:
+              name: "my-ca-config"
+              items:
+                - key: "ca.crt"
+                  path: "ca.crt"
+
+  - it: should not override user-provided CA env + volumeMount in mode-empty
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+            key: "ca.crt"
+      runner:
+        mode: ""
+        container:
+          image: "ghcr.io/actions/actions-runner:latest"
+          env:
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/custom/ca.crt"
+            - name: RUNNER_UPDATE_CA_CERTS
+              value: "0"
+          volumeMounts:
+            - name: github-server-tls-cert
+              mountPath: "/custom/mount/"
+              readOnly: true
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: "/custom/ca.crt"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: "/usr/local/share/ca-certificates/ca.crt"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUNNER_UPDATE_CA_CERTS
+            value: "0"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUNNER_UPDATE_CA_CERTS
+            value: "1"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: github-server-tls-cert
+            mountPath: "/custom/mount/"
+            readOnly: true
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: github-server-tls-cert
+            mountPath: "/usr/local/share/ca-certificates/"
+            readOnly: true
+
+  - it: should inject CA env + volumeMount + volume in dind mode when runnerMountPath is set
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+            key: "ca.crt"
+      runner:
+        mode: "dind"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: "/usr/local/share/ca-certificates/ca.crt"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUNNER_UPDATE_CA_CERTS
+            value: "1"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: github-server-tls-cert
+            mountPath: "/usr/local/share/ca-certificates/"
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-server-tls-cert
+            configMap:
+              name: "my-ca-config"
+              items:
+                - key: "ca.crt"
+                  path: "ca.crt"
+
+  - it: should inject CA env + volumeMount + volume in kubernetes mode when runnerMountPath is set
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+            key: "ca.crt"
+      runner:
+        mode: "kubernetes"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: "/usr/local/share/ca-certificates/ca.crt"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RUNNER_UPDATE_CA_CERTS
+            value: "1"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: github-server-tls-cert
+            mountPath: "/usr/local/share/ca-certificates/"
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-server-tls-cert
+            configMap:
+              name: "my-ca-config"
+              items:
+                - key: "ca.crt"
+                  path: "ca.crt"
+
+  - it: should fail when runnerMountPath is set but configMap key is missing
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+      runner:
+        mode: "dind"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "githubServerTLS.certificateFrom.configMapKeyRef.key is required when githubServerTLS.runnerMountPath is set"
+
+  - it: should fail when runnerMountPath is set but configMap name is missing
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            key: "ca.crt"
+      runner:
+        mode: ""
+        container:
+          image: "ghcr.io/actions/actions-runner:latest"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "githubServerTLS.certificateFrom.configMapKeyRef.name is required when githubServerTLS.runnerMountPath is set"

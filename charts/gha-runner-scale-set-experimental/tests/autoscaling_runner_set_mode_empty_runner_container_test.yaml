@@ -1,0 +1,112 @@
+suite: "AutoscalingRunnerSet mode-empty runner container"
+templates:
+  - autoscalingrunnserset.yaml
+
+tests:
+  - it: should fail when runner.container is not provided in mode-empty
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: ""
+        container: null
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "You must provide a runner container specification in values.runner.container"
+
+  - it: should default image and command when omitted, and include extra fields
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: ""
+        container:
+          image: null
+          command: null
+          env:
+            - name: FOO
+              value: BAR
+          securityContext:
+            runAsUser: 1000
+          resources:
+            limits:
+              cpu: "250m"
+              memory: "64Mi"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/actions/actions-runner:latest
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: /home/runner/run.sh
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: FOO
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: BAR
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.initContainers
+      - notExists:
+          path: spec.template.spec.volumes
+
+  - it: should not allow overriding runner container name
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: ""
+        container:
+          name: "not-runner"
+          image: "ghcr.io/actions/actions-runner:latest"
+          command: ["sh", "-c", "echo hi"]
+          args: ["--foo"]
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/actions/actions-runner:latest
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: sh
+      - equal:
+          path: spec.template.spec.containers[0].command[1]
+          value: -c
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: echo hi
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: --foo

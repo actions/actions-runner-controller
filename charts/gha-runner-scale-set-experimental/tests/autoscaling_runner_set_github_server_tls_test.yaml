@@ -1,0 +1,61 @@
+suite: "GitHub Server TLS"
+templates:
+  - autoscalingrunnserset.yaml
+  - manager_role.yaml
+tests:
+  - it: should render spec.githubServerTLS and allow manager role to read the configmap
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+            key: "ca.crt"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.githubServerTLS.certificateFrom.configMapKeyRef.name
+          value: my-ca-config
+        template: autoscalingrunnserset.yaml
+      - equal:
+          path: spec.githubServerTLS.certificateFrom.configMapKeyRef.key
+          value: ca.crt
+        template: autoscalingrunnserset.yaml
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+        template: manager_role.yaml
+
+  - it: should not include the manager role configmap rule when githubServerTLS is not configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notContains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+        template: manager_role.yaml

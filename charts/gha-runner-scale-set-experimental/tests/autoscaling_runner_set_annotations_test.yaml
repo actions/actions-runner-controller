@@ -1,0 +1,79 @@
+suite: "Test AutoscalingRunnerSet Annotations"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render values-hash annotation
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - exists:
+          path: metadata.annotations["actions.github.com/values-hash"]
+
+  - it: should merge global and resource annotations (resource overrides global)
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              a: "global"
+              shared: "global"
+        autoscalingRunnerSet:
+          metadata:
+            annotations:
+              b: "resource"
+              shared: "resource"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.annotations.a
+          value: "global"
+      - equal:
+          path: metadata.annotations.b
+          value: "resource"
+      - equal:
+          path: metadata.annotations.shared
+          value: "resource"
+
+  - it: should not allow overriding reserved values-hash annotation
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              actions.github.com/values-hash: "user-value"
+              ok: "ok"
+        autoscalingRunnerSet:
+          metadata:
+            annotations:
+              actions.github.com/cleanup-something: "should-not-render"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.annotations.ok
+          value: "ok"
+      - notEqual:
+          path: metadata.annotations["actions.github.com/values-hash"]
+          value: "user-value"
+      - notExists:
+          path: metadata.annotations["actions.github.com/cleanup-something"]

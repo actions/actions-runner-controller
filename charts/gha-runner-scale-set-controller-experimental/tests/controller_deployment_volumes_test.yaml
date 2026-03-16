@@ -1,0 +1,26 @@
+suite: "Controller Deployment volumes"
+templates:
+  - deployment.yaml
+tests:
+  - it: should append controller.pod.spec.volumes to pod spec volumes
+    set:
+      controller:
+        manager:
+          container:
+            image: "ghcr.io/actions/gha-runner-scale-set-controller:latest"
+        pod:
+          spec:
+            volumes:
+              - name: my-config
+                configMap:
+                  name: my-config
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: my-config
+            configMap:
+              name: my-config

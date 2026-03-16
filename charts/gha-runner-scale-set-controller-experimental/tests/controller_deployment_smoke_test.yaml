@@ -1,0 +1,27 @@
+suite: "Controller Deployment smoke"
+templates:
+  - deployment.yaml
+tests:
+  - it: should render deployment basics
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: apiVersion
+          value: "apps/v1"
+      - equal:
+          path: kind
+          value: "Deployment"
+      - equal:
+          path: metadata.name
+          value: "test-name-gha-rs-controller"
+      - equal:
+          path: metadata.namespace
+          value: "test-namespace"
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "manager"
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "/manager"

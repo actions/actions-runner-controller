@@ -1,0 +1,133 @@
+suite: "AutoscalingRunnerSet kubernetes mode podspec"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render the default kubernetes pod spec (runner container, ephemeral work volume)
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: test-name-kube-mode
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/actions/actions-runner:latest
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: ACTIONS_RUNNER_CONTAINER_HOOKS
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: /home/runner/k8s/index.js
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: ACTIONS_RUNNER_POD_NAME
+      - equal:
+          path: spec.template.spec.containers[0].env[1].valueFrom.fieldRef.fieldPath
+          value: metadata.name
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "true"
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: work
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /home/runner/_work
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[1]
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: work
+      - equal:
+          path: spec.template.spec.volumes[0].ephemeral.volumeClaimTemplate.spec.accessModes[0]
+          value: ReadWriteOnce
+      - equal:
+          path: spec.template.spec.volumes[0].ephemeral.volumeClaimTemplate.spec.storageClassName
+          value: local-path
+      - equal:
+          path: spec.template.spec.volumes[0].ephemeral.volumeClaimTemplate.spec.resources.requests.storage
+          value: 1Gi
+
+  - it: should allow overriding kubernetes mode hookPath, requireJobContainer, and workVolumeClaim
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          hookPath: "/home/runner/custom/k8s/index.js"
+          requireJobContainer: false
+          workVolumeClaim:
+            storageClassName: "fast-ssd"
+            resources:
+              requests:
+                storage: 10Gi
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: /home/runner/custom/k8s/index.js
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "false"
+      - equal:
+          path: spec.template.spec.volumes[0].ephemeral.volumeClaimTemplate.spec.storageClassName
+          value: fast-ssd
+      - equal:
+          path: spec.template.spec.volumes[0].ephemeral.volumeClaimTemplate.spec.resources.requests.storage
+          value: 10Gi
+
+  - it: should include extraVolumes in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            volumes:
+              - name: cache
+                emptyDir: {}
+              - name: custom-config
+                configMap:
+                  name: example-config
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cache
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-config
+            configMap:
+              name: example-config

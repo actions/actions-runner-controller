@@ -1,7 +1,6 @@
 #!/bin/bash
 
 DIR="$(dirname "${BASH_SOURCE[0]}")"
-
 DIR="$(realpath "${DIR}")"
 
 TEST_DIR="$(realpath "${DIR}/../test/actions.github.com")"

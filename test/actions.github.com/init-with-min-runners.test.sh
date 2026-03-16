@@ -11,6 +11,8 @@ source "${DIR}/helper.sh" || {
     exit 1
 }
 
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
+
 SCALE_SET_NAME="init-min-runners-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
 WORKFLOW_FILE="arc-test-workflow.yaml"

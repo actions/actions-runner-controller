@@ -1,0 +1,25 @@
+suite: "Namespace override"
+templates:
+  - autoscalingrunnserset.yaml
+  - githubsecret.yaml
+tests:
+  - it: should apply namespaceOverride to AutoscalingRunnerSet and GitHub Secret
+    set:
+      namespaceOverride: "override-ns"
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "release-ns"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "override-ns"
+        template: autoscalingrunnserset.yaml
+      - equal:
+          path: metadata.namespace
+          value: "override-ns"
+        template: githubsecret.yaml
