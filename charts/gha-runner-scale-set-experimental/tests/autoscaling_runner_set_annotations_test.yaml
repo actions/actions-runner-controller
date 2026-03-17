@@ -146,3 +146,4 @@ tests:
       - equal:
           path: spec.ephemeralRunnerConfigSecretMetadata.annotations.runner-secret
           value: "true"
+
