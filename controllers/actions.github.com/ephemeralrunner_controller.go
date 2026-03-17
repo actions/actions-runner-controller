@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -44,12 +45,22 @@ const (
 	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/runner-registration-finalizer"
 )
 
+const defaultHealthCheckInterval = 5 * time.Minute
+
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 	ResourceBuilder
+
+	// HealthCheckInterval controls how often the GitHub registration
+	// health check runs per runner. Defaults to defaultHealthCheckInterval.
+	HealthCheckInterval time.Duration
+
+	// healthCheckLastRun tracks the last time each runner's registration
+	// was checked, keyed by "namespace/name".
+	healthCheckLastRun sync.Map
 }
 
 // precompute backoff durations for failed ephemeral runners
@@ -82,6 +93,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	ephemeralRunner := new(v1alpha1.EphemeralRunner)
 	if err := r.Get(ctx, req.NamespacedName, ephemeralRunner); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			r.healthCheckLastRun.Delete(req.Namespace + "/" + req.Name)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -357,16 +371,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
-		// Check if runner's GitHub registration is still valid
-		healthy, err := r.checkRunnerRegistration(ctx, ephemeralRunner, log)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !healthy {
-			if err := r.markAsFailed(ctx, ephemeralRunner, "Runner registration no longer exists on GitHub", "RegistrationInvalidated", log); err != nil {
+		// Only check registration when the container is actually running
+		// (not in Waiting states like ImagePullBackOff or CrashLoopBackOff)
+		if cs.State.Running != nil {
+			healthy, err := r.checkRunnerRegistration(ctx, ephemeralRunner, log)
+			if err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, nil
+			if !healthy {
+				if err := r.markAsFailed(ctx, ephemeralRunner, "Runner registration no longer exists on GitHub", ReasonRegistrationInvalidated, log); err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
 		}
 
 		return ctrl.Result{}, nil
@@ -817,13 +834,29 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	return nil
 }
 
+func (r *EphemeralRunnerReconciler) healthCheckIntervalOrDefault() time.Duration {
+	if r.HealthCheckInterval > 0 {
+		return r.HealthCheckInterval
+	}
+	return defaultHealthCheckInterval
+}
+
 // checkRunnerRegistration verifies the runner's GitHub-side registration is still valid.
 // Returns true if the runner is healthy or we can't determine status (API errors).
 // Returns false if the registration is confirmed gone (404).
+// Calls are throttled to at most once per HealthCheckInterval per runner.
 func (r *EphemeralRunnerReconciler) checkRunnerRegistration(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (bool, error) {
 	// Only check runners that have been registered (have a RunnerId)
 	if ephemeralRunner.Status.RunnerId == 0 {
 		return true, nil
+	}
+
+	// Throttle: skip if we checked this runner recently
+	key := ephemeralRunner.Namespace + "/" + ephemeralRunner.Name
+	if lastRun, ok := r.healthCheckLastRun.Load(key); ok {
+		if time.Since(lastRun.(time.Time)) < r.healthCheckIntervalOrDefault() {
+			return true, nil
+		}
 	}
 
 	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
@@ -833,6 +866,7 @@ func (r *EphemeralRunnerReconciler) checkRunnerRegistration(ctx context.Context,
 	}
 
 	_, err = actionsClient.GetRunner(ctx, int64(ephemeralRunner.Status.RunnerId))
+	r.healthCheckLastRun.Store(key, time.Now())
 	if err == nil {
 		return true, nil
 	}
@@ -847,7 +881,7 @@ func (r *EphemeralRunnerReconciler) checkRunnerRegistration(ctx context.Context,
 	}
 
 	// For non-404 errors (transient API issues), don't take action
-	log.Info("Health check API call failed, will retry on next reconciliation",
+	log.Info("Health check API call failed, will retry after health check interval",
 		"runnerId", ephemeralRunner.Status.RunnerId,
 		"error", err.Error(),
 	)

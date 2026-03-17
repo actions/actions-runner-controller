@@ -1460,7 +1460,8 @@ var _ = Describe("EphemeralRunner", func() {
 				controller = &EphemeralRunnerReconciler{
 					Client: mgr.GetClient(),
 					Scheme: mgr.GetScheme(),
-					Log:    logf.Log,
+					Log:                 logf.Log,
+					HealthCheckInterval: 1 * time.Second,
 					ResourceBuilder: ResourceBuilder{
 						SecretResolver: &SecretResolver{
 							k8sClient:   mgr.GetClient(),
@@ -1557,7 +1558,8 @@ var _ = Describe("EphemeralRunner", func() {
 				controller = &EphemeralRunnerReconciler{
 					Client: mgr.GetClient(),
 					Scheme: mgr.GetScheme(),
-					Log:    logf.Log,
+					Log:                 logf.Log,
+					HealthCheckInterval: 1 * time.Second,
 					ResourceBuilder: ResourceBuilder{
 						SecretResolver: &SecretResolver{
 							k8sClient:   mgr.GetClient(),

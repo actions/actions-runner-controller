@@ -75,8 +75,9 @@ const DefaultScaleSetListenerLogFormat = string(logging.LogFormatText)
 // ownerKey is field selector matching the owner name of a particular resource
 const resourceOwnerKey = ".metadata.controller"
 
-// EphemeralRunner pod creation failure reasons
+// EphemeralRunner failure reasons
 const (
-	ReasonTooManyPodFailures = "TooManyPodFailures"
-	ReasonInvalidPodFailure  = "InvalidPod"
+	ReasonTooManyPodFailures       = "TooManyPodFailures"
+	ReasonInvalidPodFailure        = "InvalidPod"
+	ReasonRegistrationInvalidated  = "RegistrationInvalidated"
 )
