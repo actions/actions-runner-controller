@@ -291,3 +291,72 @@ tests:
       - equal:
           path: metadata.labels["actions.github.com/scale-set-name"]
           value: "test-name"
+
+  - it: should render internal resource metadata labels in autoscaling runner set spec
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingListener:
+          metadata:
+            labels:
+              listener: "true"
+        listenerServiceAccount:
+          metadata:
+            labels:
+              service-account: "true"
+        listenerRole:
+          metadata:
+            labels:
+              role: "true"
+        listenerRoleBinding:
+          metadata:
+            labels:
+              role-binding: "true"
+        listenerConfigSecret:
+          metadata:
+            labels:
+              config-secret: "true"
+        ephemeralRunnerSet:
+          metadata:
+            labels:
+              runner-set: "true"
+        ephemeralRunner:
+          metadata:
+            labels:
+              runner: "true"
+        ephemeralRunnerConfigSecret:
+          metadata:
+            labels:
+              runner-secret: "true"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.autoscalingListener.labels.listener
+          value: "true"
+      - equal:
+          path: spec.listenerServiceAccountMetadata.labels.service-account
+          value: "true"
+      - equal:
+          path: spec.listenerRoleMetadata.labels.role
+          value: "true"
+      - equal:
+          path: spec.listenerRoleBindingMetadata.labels.role-binding
+          value: "true"
+      - equal:
+          path: spec.listenerConfigSecretMetadata.labels.config-secret
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerSetMetadata.labels.runner-set
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.labels.runner
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerConfigSecretMetadata.labels.runner-secret
+          value: "true"

@@ -77,3 +77,72 @@ tests:
           value: "user-value"
       - notExists:
           path: metadata.annotations["actions.github.com/cleanup-something"]
+
+  - it: should render internal resource metadata annotations in autoscaling runner set spec
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingListener:
+          metadata:
+            annotations:
+              listener: "true"
+        listenerServiceAccount:
+          metadata:
+            annotations:
+              service-account: "true"
+        listenerRole:
+          metadata:
+            annotations:
+              role: "true"
+        listenerRoleBinding:
+          metadata:
+            annotations:
+              role-binding: "true"
+        listenerConfigSecret:
+          metadata:
+            annotations:
+              config-secret: "true"
+        ephemeralRunnerSet:
+          metadata:
+            annotations:
+              runner-set: "true"
+        ephemeralRunner:
+          metadata:
+            annotations:
+              runner: "true"
+        ephemeralRunnerConfigSecret:
+          metadata:
+            annotations:
+              runner-secret: "true"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.autoscalingListener.annotations.listener
+          value: "true"
+      - equal:
+          path: spec.listenerServiceAccountMetadata.annotations.service-account
+          value: "true"
+      - equal:
+          path: spec.listenerRoleMetadata.annotations.role
+          value: "true"
+      - equal:
+          path: spec.listenerRoleBindingMetadata.annotations.role-binding
+          value: "true"
+      - equal:
+          path: spec.listenerConfigSecretMetadata.annotations.config-secret
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerSetMetadata.annotations.runner-set
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.annotations.runner
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerConfigSecretMetadata.annotations.runner-secret
+          value: "true"

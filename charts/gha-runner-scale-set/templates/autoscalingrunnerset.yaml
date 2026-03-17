@@ -154,6 +154,46 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 
+  {{- with .Values.resourceMeta.autoscalingListener }}
+  autoscalingListener:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.listenerServiceAccount }}
+  listenerServiceAccountMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.listenerRole }}
+  listenerRoleMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.listenerRoleBinding }}
+  listenerRoleBindingMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.listenerConfigSecret }}
+  listenerConfigSecretMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.ephemeralRunnerSet }}
+  ephemeralRunnerSetMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.ephemeralRunner }}
+  ephemeralRunnerMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resourceMeta.ephemeralRunnerConfigSecret }}
+  ephemeralRunnerConfigSecretMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
   template:
     {{- with .Values.template.metadata }}
     metadata:
