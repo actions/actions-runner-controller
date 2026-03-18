@@ -1,3 +1,4 @@
+{{- $resourceMeta := default (dict) .Values.resourceMeta }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.autoscalingRunnerSet) }}
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
@@ -152,6 +153,46 @@ spec:
   {{- with .Values.listenerMetrics }}
   listenerMetrics:
     {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "autoscalingListener") }}
+  autoscalingListener:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerServiceAccount") }}
+  listenerServiceAccountMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerRole") }}
+  listenerRoleMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerRoleBinding") }}
+  listenerRoleBindingMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerConfigSecret") }}
+  listenerConfigSecretMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "ephemeralRunnerSet") }}
+  ephemeralRunnerSetMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "ephemeralRunner") }}
+  ephemeralRunnerMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "ephemeralRunnerConfigSecret") }}
+  ephemeralRunnerConfigSecretMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
   {{- end }}
 
   template:

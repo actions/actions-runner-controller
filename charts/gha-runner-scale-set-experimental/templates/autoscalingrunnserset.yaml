@@ -163,6 +163,46 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 
+  {{- with .Values.resource.autoscalingListener.metadata }}
+  autoscalingListener:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.listenerServiceAccount.metadata }}
+  listenerServiceAccountMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.listenerRole.metadata }}
+  listenerRoleMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.listenerRoleBinding.metadata }}
+  listenerRoleBindingMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.listenerConfigSecret.metadata }}
+  listenerConfigSecretMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.ephemeralRunnerSet.metadata }}
+  ephemeralRunnerSetMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.ephemeralRunner.metadata }}
+  ephemeralRunnerMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.resource.ephemeralRunnerConfigSecret.metadata }}
+  ephemeralRunnerConfigSecretMetadata:
+    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+  {{- end }}
+
   template:
     {{- $runnerPodLabels := (include "autoscaling-runner-set.runner-pod.labels" .) -}}
     {{- $runnerPodAnnotations := (include "autoscaling-runner-set.runner-pod.annotations" .) -}}

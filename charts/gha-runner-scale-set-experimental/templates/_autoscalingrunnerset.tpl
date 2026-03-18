@@ -26,6 +26,20 @@ Reserved annotations are excluded from both levels.
 {{- end }}
 {{- end }}
 
+{{/*
+Render a ResourceMeta block for AutoscalingRunnerSet spec fields.
+*/}}
+{{- define "autoscaling-runner-set.spec-resource-metadata" -}}
+{{- with .labels }}
+labels:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .annotations }}
+annotations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
 {{- define "autoscaling-runner-set.template-service-account" -}}
 {{- $runner := (.Values.runner | default dict) -}}
 {{- $runnerMode := (index $runner "mode" | default "") -}}

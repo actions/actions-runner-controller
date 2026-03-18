@@ -488,3 +488,43 @@ namespaceOverride: ""
 #       key: value
 #     annotations:
 #       key: value
+#   autoscalingListener:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerServiceAccount:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerRole:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerRoleBinding:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerConfigSecret:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   ephemeralRunnerSet:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   ephemeralRunner:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   ephemeralRunnerConfigSecret:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
