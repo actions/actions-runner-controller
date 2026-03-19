@@ -45,7 +45,7 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ### 0.14.0
 
-1. Fix AcivityId typo in error strings [#4359](https://github.com/actions/actions-runner-controller/pull/4359)
+1. Fix ActivityId typo in error strings [#4359](https://github.com/actions/actions-runner-controller/pull/4359)
 1. Include the HTTP status code in jit error [#4361](https://github.com/actions/actions-runner-controller/pull/4361)
 1. Fix tests and generate mocks [#4384](https://github.com/actions/actions-runner-controller/pull/4384)
 1. Switch client to scaleset library for the listener and update mocks [#4383](https://github.com/actions/actions-runner-controller/pull/4383)
