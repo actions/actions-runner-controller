@@ -189,6 +189,7 @@ jobs:
           then
             resolvedRef="${{ github.ref }}"
           fi
+          echo "resolved_ref=$resolvedRef" >> $GITHUB_OUTPUT
           echo "INFO: Resolving short SHA for $resolvedRef"
           echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
@@ -212,7 +213,7 @@ jobs:
           echo "New helm chart for gha-runner-scale-set-controller-experimental published successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolved_ref }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- gha-runner-scale-set-controller-experimental Chart version: ${{ env.GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
 
@@ -284,6 +285,7 @@ jobs:
           then
             resolvedRef="${{ github.ref }}"
           fi
+          echo "resolved_ref=$resolvedRef" >> $GITHUB_OUTPUT
           echo "INFO: Resolving short SHA for $resolvedRef"
           echo "short_sha=$(git rev-parse --short $resolvedRef)" >> $GITHUB_OUTPUT
           echo "INFO: Normalizing repository name (lowercase)"
@@ -308,6 +310,6 @@ jobs:
           echo "New helm chart for gha-runner-scale-set-experimental published successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Parameters:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolvedRef }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Ref: ${{ steps.resolve_parameters.outputs.resolved_ref }}" >> $GITHUB_STEP_SUMMARY
           echo "- Short SHA: ${{ steps.resolve_parameters.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- gha-runner-scale-set-experimental Chart version: ${{ env.GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG }}" >> $GITHUB_STEP_SUMMARY
