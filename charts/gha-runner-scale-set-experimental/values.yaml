@@ -103,6 +103,55 @@ resource:
       labels: {}
       annotations: {}
 
+  # Specifies metadata that will be applied to the AutoscalingListener resource
+  # created by the AutoscalingRunnerSet controller.
+  autoscalingListener:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the listener ServiceAccount.
+  listenerServiceAccount:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the listener Role.
+  listenerRole:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the listener RoleBinding.
+  listenerRoleBinding:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the listener config Secret.
+  listenerConfigSecret:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the EphemeralRunnerSet resource.
+  ephemeralRunnerSet:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the EphemeralRunner resource.
+  ephemeralRunner:
+    metadata:
+      labels: {}
+      annotations: {}
+
+  # Specifies metadata that will be applied to the EphemeralRunner config Secret.
+  ephemeralRunnerConfigSecret:
+    metadata:
+      labels: {}
+      annotations: {}
+
   # Specifies metadata that will be applied to the manager Role resource
   managerRole:
     metadata:
