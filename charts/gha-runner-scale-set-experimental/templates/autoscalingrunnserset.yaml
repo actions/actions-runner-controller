@@ -84,6 +84,14 @@ spec:
   runnerGroup: {{ .Values.scaleset.runnerGroup | quote }}
   runnerScaleSetName: {{ .Values.scaleset.name | quote }}
   {{- if and .Values.scaleset.labels (kindIs "slice" .Values.scaleset.labels) }}
+  {{- range .Values.scaleset.labels }}
+  {{- if empty . }}
+  {{- fail "scaleset.labels contains an empty string, each label must be a non-empty string of less than 256 characters" }}
+  {{- end }}
+  {{- if ge (len .) 256 }}
+  {{- fail "scaleset.labels contains a label that is 256 characters or more, each label must be a non-empty string of less than 256 characters" }}
+  {{- end }}
+  {{- end }}
   runnerScaleSetLabels:
     {{- toYaml .Values.scaleset.labels | nindent 4 }}
   {{- end }}

@@ -75,6 +75,14 @@ spec:
   runnerScaleSetName: {{ . }}
   {{- end }}
   {{- if and .Values.scaleSetLabels (kindIs "slice" .Values.scaleSetLabels) }}
+  {{- range .Values.scaleSetLabels }}
+  {{- if empty . }}
+  {{- fail "scaleSetLabels contains an empty string, each label must be a non-empty string of less than 256 characters" }}
+  {{- end }}
+  {{- if ge (len .) 256 }}
+  {{- fail "scaleSetLabels contains a label that is 256 characters or more, each label must be a non-empty string of less than 256 characters" }}
+  {{- end }}
+  {{- end }}
   runnerScaleSetLabels:
     {{- toYaml .Values.scaleSetLabels | nindent 4 }}
   {{- end }}
