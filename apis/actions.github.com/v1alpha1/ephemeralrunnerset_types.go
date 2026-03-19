@@ -42,7 +42,19 @@ type EphemeralRunnerSetStatus struct {
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
 	// +optional
 	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
+	// +optional
+	Phase EphemeralRunnerSetPhase `json:"phase"`
 }
+
+// EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
+type EphemeralRunnerSetPhase string
+
+const (
+	EphemeralRunnerSetPhaseRunning EphemeralRunnerSetPhase = "Running"
+	// EphemeralRunnerSetPhaseOutdated is set when at least one ephemeral runner
+	// contains the outdated phase
+	EphemeralRunnerSetPhaseOutdated EphemeralRunnerSetPhase = "Outdated"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

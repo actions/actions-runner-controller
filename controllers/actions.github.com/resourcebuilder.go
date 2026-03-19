@@ -716,6 +716,10 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 					Name:  EnvVarRunnerExtraUserAgent,
 					Value: fmt.Sprintf("actions-runner-controller/%s", build.Version),
 				},
+				corev1.EnvVar{
+					Name:  EnvVarRunnerDeprecatedExitCode,
+					Value: "1",
+				},
 			)
 			c.Env = append(c.Env, envs...)
 		}

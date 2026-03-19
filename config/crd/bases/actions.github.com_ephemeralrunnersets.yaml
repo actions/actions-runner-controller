@@ -8318,6 +8318,9 @@ spec:
                   type: integer
                 pendingEphemeralRunners:
                   type: integer
+                phase:
+                  description: EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
+                  type: string
                 runningEphemeralRunners:
                   type: integer
               required:
