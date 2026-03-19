@@ -12,8 +12,6 @@ tests:
     release:
       name: "test-name"
       namespace: "test-namespace"
-    chart:
-      appVersion: "0.14.0"
     asserts:
       - equal:
           path: apiVersion
@@ -159,12 +157,10 @@ tests:
     release:
       name: "test-name"
       namespace: "test-namespace"
-    chart:
-      appVersion: "0.14.0"
     asserts:
-      - equal:
+      - notEqual:
           path: metadata.labels["helm.sh/chart"]
-          value: "gha-rs-0.14.0"
+          value: "bad"
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: "test-name"

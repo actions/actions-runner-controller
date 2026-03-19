@@ -6,8 +6,6 @@ tests:
     release:
       name: "test-name"
       namespace: "test-namespace"
-    chart:
-      appVersion: "0.14.0"
     asserts:
       - equal:
           path: apiVersion
