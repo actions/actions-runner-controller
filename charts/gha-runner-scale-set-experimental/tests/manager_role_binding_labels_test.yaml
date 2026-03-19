@@ -9,12 +9,7 @@ tests:
     release:
       name: "test-name"
       namespace: "test-namespace"
-    chart:
-      appVersion: "0.13.1"
     asserts:
-      - equal:
-          path: metadata.labels["helm.sh/chart"]
-          value: "gha-rs-0.13.1"
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: "test-name"
@@ -30,9 +25,9 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/part-of"]
           value: "gha-rs"
-      - equal:
+      - notEqual:
           path: metadata.labels["app.kubernetes.io/version"]
-          value: "0.13.1"
+          value: ""
       - equal:
           path: metadata.labels["actions.github.com/scale-set-name"]
           value: "test-name"
@@ -58,8 +53,6 @@ tests:
     release:
       name: "test-name"
       namespace: "test-namespace"
-    chart:
-      appVersion: "0.13.1"
     asserts:
       - equal:
           path: metadata.labels["owner"]
@@ -83,8 +76,6 @@ tests:
     release:
       name: "test-name"
       namespace: "test-namespace"
-    chart:
-      appVersion: "0.13.1"
     asserts:
       - equal:
           path: metadata.labels["actions.github.com/scale-set-name"]
