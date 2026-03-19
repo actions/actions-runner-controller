@@ -21,7 +21,6 @@ ARC_NAMESPACE="arc-systems"
 
 function install_arc() {
     echo "Installing ARC"
-
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \

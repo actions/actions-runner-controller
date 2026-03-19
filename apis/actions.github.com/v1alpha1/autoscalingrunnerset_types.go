@@ -67,6 +67,9 @@ type AutoscalingRunnerSetSpec struct {
 	RunnerScaleSetName string `json:"runnerScaleSetName,omitempty"`
 
 	// +optional
+	RunnerScaleSetLabels []string `json:"runnerScaleSetLabels,omitempty"`
+
+	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
