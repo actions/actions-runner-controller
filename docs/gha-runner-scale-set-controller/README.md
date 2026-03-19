@@ -43,6 +43,24 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.14.0
+
+1. Fix AcivityId typo in error strings [#4359](https://github.com/actions/actions-runner-controller/pull/4359)
+1. Include the HTTP status code in jit error [#4361](https://github.com/actions/actions-runner-controller/pull/4361)
+1. Fix tests and generate mocks [#4384](https://github.com/actions/actions-runner-controller/pull/4384)
+1. Switch client to scaleset library for the listener and update mocks [#4383](https://github.com/actions/actions-runner-controller/pull/4383)
+1. feat: add default linux nodeSelector to listener pod [#4377](https://github.com/actions/actions-runner-controller/pull/4377)
+1. Bump Go version [#4398](https://github.com/actions/actions-runner-controller/pull/4398)
+1. Allow users to apply labels and annotations to internal resources [#4400](https://github.com/actions/actions-runner-controller/pull/4400)
+1. Moving to scaleset client for the controller [#4390](https://github.com/actions/actions-runner-controller/pull/4390)
+1. Introduce experimental chart release [#4373](https://github.com/actions/actions-runner-controller/pull/4373)
+1. Manually bump dependencies since it needs fixes related to the controller runtime API [#4406](https://github.com/actions/actions-runner-controller/pull/4406)
+1. Regenerate manifests for experimental charts [#4407](https://github.com/actions/actions-runner-controller/pull/4407)
+1. Remove actions client [#4405](https://github.com/actions/actions-runner-controller/pull/4405)
+1. Add chart-level API to customize internal resources [#4410](https://github.com/actions/actions-runner-controller/pull/4410)
+1. Shutdown the scaleset when runner is deprecated [#4404](https://github.com/actions/actions-runner-controller/pull/4404)
+1. Add multi-label support to scalesets [#4408](https://github.com/actions/actions-runner-controller/pull/4408)
+
 ### 0.13.1
 
 1. Make restart pod more flexible to different failure scenarios [#4340](https://github.com/actions/actions-runner-controller/pull/4340)
