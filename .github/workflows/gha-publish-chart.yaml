@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       publish_gha_runner_scale_set_controller_experimental_chart:
-        description: "Publish new helm chart for gha-runner-scale-set-controller"
+        description: "Publish new helm chart for gha-runner-scale-set-controller-experimental"
         required: true
         type: boolean
         default: false
@@ -34,7 +34,7 @@ on:
         type: boolean
         default: false
       publish_gha_runner_scale_set_experimental_chart:
-        description: "Publish new helm chart for gha-runner-scale-set"
+        description: "Publish new helm chart for gha-runner-scale-set-experimental"
         required: true
         type: boolean
         default: false
@@ -202,7 +202,7 @@ jobs:
       - name: Publish new helm chart for gha-runner-scale-set-controller-experimental
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
-          GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set-controller-experimental/Chart.yaml | grep version: | cut -d " " -f 2)
+          GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set-controller-experimental/Chart.yaml | grep version: | cut -d " " -d '"' -f 2)
           echo "GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG=${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}" >> $GITHUB_ENV
           helm package charts/gha-runner-scale-set-controller-experimental/ --version="${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}"
           helm push gha-runner-scale-set-controller-experimental-"${GHA_RUNNER_SCALE_SET_CONTROLLER_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
@@ -298,7 +298,7 @@ jobs:
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
 
-          GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set-experimental/Chart.yaml | grep version: | cut -d " " -f 2)
+          GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=$(cat charts/gha-runner-scale-set-experimental/Chart.yaml | grep version: | cut -d " " -d '"' -f 2)
           echo "GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG=${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}" >> $GITHUB_ENV
           helm package charts/gha-runner-scale-set-experimental/ --version="${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}"
           helm push gha-runner-scale-set-experimental-"${GHA_RUNNER_SCALE_SET_CHART_VERSION_TAG}".tgz oci://ghcr.io/${{ steps.resolve_parameters.outputs.repository_owner }}/actions-runner-controller-charts
