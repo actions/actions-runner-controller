@@ -163,7 +163,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	ephemeralRunnersByState := newEphemeralRunnersByStates(ephemeralRunnerList)
 
 	log.Info("Ephemeral runner counts",
-		"outdated", ephemeralRunnersByState.outdated,
+		"outdated", len(ephemeralRunnersByState.outdated),
 		"pending", len(ephemeralRunnersByState.pending),
 		"running", len(ephemeralRunnersByState.running),
 		"finished", len(ephemeralRunnersByState.finished),
@@ -240,10 +240,10 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 	total := state.scaleTotal()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
-	case ephemeralRunnerSet.Status.Phase == "":
-		phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 	case len(state.outdated) > 0:
 		phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
+	case ephemeralRunnerSet.Status.Phase == "":
+		phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 	default:
 		phase = ephemeralRunnerSet.Status.Phase
 	}

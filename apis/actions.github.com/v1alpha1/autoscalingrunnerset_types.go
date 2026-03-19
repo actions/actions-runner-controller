@@ -341,13 +341,11 @@ func (ars *AutoscalingRunnerSet) Hash() string {
 	type data struct {
 		Spec   *AutoscalingRunnerSetSpec
 		Labels map[string]string
-		Phase  AutoscalingRunnerSetPhase
 	}
 
 	d := &data{
 		Spec:   ars.Spec.DeepCopy(),
 		Labels: ars.Labels,
-		Phase:  ars.Status.Phase,
 	}
 
 	return hash.ComputeTemplateHash(d)

@@ -339,6 +339,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		case 7:
 			if err := r.markAsOutdated(ctx, ephemeralRunner, log); err != nil {
 				log.Error(err, "Failed to set ephemeral runner to phase Outdated")
+				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
@@ -366,6 +367,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	case cs.State.Terminated.ExitCode == 7: // outdated
 		if err := r.markAsOutdated(ctx, ephemeralRunner, log); err != nil {
 			log.Error(err, "Failed to set ephemeral runner to phase Outdated")
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 
