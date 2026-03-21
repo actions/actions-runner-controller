@@ -114,14 +114,16 @@ githubConfigSecret:
 ## for dind and kubernetes mode. Template will be modified as documented under the
 ## template object.
 ##
-## If any customization is required for dind or kubernetes mode, containerMode should remain
-## empty, and configuration should be applied to the template.
+## For simple customizations like overriding the DinD image, use the dindImage field below.
+## For deeper customization of dind or kubernetes mode (e.g., adding extra env vars,
+## volume mounts, or security contexts), containerMode should remain empty, and
+## configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to "dind", "kubernetes", or "kubernetes-novolume"
 #   ## Optional: override the default docker:dind image used for the DinD sidecar container.
 #   ## This is useful for using a custom image with pre-configured daemon.json
 #   ## (e.g., registry mirrors, insecure registries) or other customizations.
-#   # dindImage: "docker:dind"
+#   dindImage: "docker:dind"
 #   ## the following is required when containerMode.type=kubernetes
 #   kubernetesModeWorkVolumeClaim:
 #     accessModes: ["ReadWriteOnce"]

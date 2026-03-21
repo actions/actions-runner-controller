@@ -999,6 +999,39 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD(t *testing.T) {
 	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[2].EmptyDir, "Volume work should be an emptyDir")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_EnableDinD_CustomImage(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"containerMode.type":                 "dind",
+			"containerMode.dindImage":            "my-registry/docker:dind-custom",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Len(t, ars.Spec.Template.Spec.InitContainers, 2, "Template.Spec should have 2 init containers")
+	assert.Equal(t, "dind", ars.Spec.Template.Spec.InitContainers[1].Name)
+	assert.Equal(t, "my-registry/docker:dind-custom", ars.Spec.Template.Spec.InitContainers[1].Image, "DinD container should use the custom image")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesMode(t *testing.T) {
 	t.Parallel()
 
