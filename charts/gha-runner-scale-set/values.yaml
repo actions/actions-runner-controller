@@ -172,6 +172,10 @@ githubConfigSecret:
 #           "job_workflow_target",
 #         ]
 #   gauges:
+#     gha_available_jobs:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+#     gha_acquired_jobs:
+#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
 #     gha_assigned_jobs:
 #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
 #     gha_running_jobs:

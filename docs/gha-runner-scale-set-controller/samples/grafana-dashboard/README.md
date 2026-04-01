@@ -31,7 +31,9 @@ The following metrics are required to be scraped by Prometheus in order to popul
 | controller_runtime_active_workers | controller | ARC Controller
 | controller_runtime_reconcile_time_seconds_sum | namespace | ARC Controller
 | controller_runtime_reconcile_errors_total | namespace | ARC Controller
-| gha_assigned_jobs | actions_github_com_scale_set_name, namespace | ARC Controller
+| gha_available_jobs | actions_github_com_scale_set_name, namespace | ARC Listener
+| gha_acquired_jobs | actions_github_com_scale_set_name, namespace | ARC Listener
+| gha_assigned_jobs | actions_github_com_scale_set_name, namespace | ARC Listener
 | gha_controller_failed_ephemeral_runners | name, namespace | ARC Controller
 | gha_controller_pending_ephemeral_runners | name, namespace | ARC Controller
 | gha_controller_running_ephemeral_runners | name, namespace | ARC Controller
