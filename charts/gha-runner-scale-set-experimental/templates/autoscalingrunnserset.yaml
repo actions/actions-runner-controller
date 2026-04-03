@@ -175,44 +175,68 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.autoscalingListener.metadata }}
+  {{- $meta := .Values.resource.autoscalingListener.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   autoscalingListener:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.listenerServiceAccount.metadata }}
+  {{- $meta := .Values.resource.listenerServiceAccount.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   listenerServiceAccountMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.listenerRole.metadata }}
+  {{- $meta := .Values.resource.listenerRole.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   listenerRoleMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.listenerRoleBinding.metadata }}
+  {{- $meta := .Values.resource.listenerRoleBinding.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   listenerRoleBindingMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.listenerConfigSecret.metadata }}
+  {{- $meta := .Values.resource.listenerConfigSecret.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   listenerConfigSecretMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.ephemeralRunnerSet.metadata }}
+  {{- $meta := .Values.resource.ephemeralRunnerSet.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   ephemeralRunnerSetMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.ephemeralRunner.metadata }}
+  {{- $meta := .Values.resource.ephemeralRunner.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   ephemeralRunnerMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
-  {{- with .Values.resource.ephemeralRunnerConfigSecret.metadata }}
+  {{- $meta := .Values.resource.ephemeralRunnerConfigSecret.metadata | default dict }}
+  {{- $lbls := $meta.labels | default dict }}
+  {{- $anns := $meta.annotations | default dict }}
+  {{- if or (not (empty $lbls)) (not (empty $anns)) }}
   ephemeralRunnerConfigSecretMetadata:
-    {{- include "autoscaling-runner-set.spec-resource-metadata" . | nindent 4 }}
+    {{- include "autoscaling-runner-set.spec-resource-metadata" $meta | nindent 4 }}
   {{- end }}
 
   template:
