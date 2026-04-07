@@ -8336,6 +8336,8 @@ spec:
                   type: string
                 runnerId:
                   type: integer
+                runnerJITConfig:
+                  type: string
                 runnerName:
                   type: string
                 workflowRunId:

@@ -16555,6 +16555,8 @@ spec:
                   type: string
                 runningEphemeralRunners:
                   type: integer
+                state:
+                  type: string
               type: object
           type: object
       served: true
