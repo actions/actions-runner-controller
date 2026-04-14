@@ -43,6 +43,12 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.14.1
+
+1. Fix null field for resource metadata fields in experimental chart [#4419](https://github.com/actions/actions-runner-controller/pull/4419)
+1. Updates: runner to v2.333.1 [#4427](https://github.com/actions/actions-runner-controller/pull/4427)
+1. Bump actions/scaleset to [v0.3.0](https://github.com/actions/scaleset/releases/tag/v0.3.0) [#4447](https://github.com/actions/actions-runner-controller/pull/4447)
+
 ### 0.14.0
 
 1. Fix ActivityId typo in error strings [#4359](https://github.com/actions/actions-runner-controller/pull/4359)
