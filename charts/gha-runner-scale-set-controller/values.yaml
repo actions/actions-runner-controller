@@ -142,3 +142,10 @@ namespaceOverride: ""
 ## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20
   # k8sClientRateLimiterBurst: 30
+
+  ## Disable the overall token bucket rate limiter for the controller workqueue.
+  ## By default, controller-runtime uses a combined rate limiter with both a per-item
+  ## exponential backoff and an overall token bucket (10 QPS, 100 bucket size).
+  ## In large-scale environments, the token bucket can become a bottleneck for
+  ## reconciliation throughput. Set to true to use only per-item exponential backoff.
+  # disableWorkqueueBucketRateLimiter: false

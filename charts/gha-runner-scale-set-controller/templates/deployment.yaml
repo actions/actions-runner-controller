@@ -93,6 +93,9 @@ spec:
         {{- with .Values.flags.k8sClientRateLimiterBurst }}
         - "--k8s-client-rate-limiter-burst={{ . }}"
         {{- end }}
+        {{- if .Values.flags.disableWorkqueueBucketRateLimiter }}
+        - "--disable-workqueue-bucket-rate-limiter"
+        {{- end }}
         command:
         - "/manager"
         {{- with .Values.metrics }}
