@@ -315,7 +315,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Make sure the AutoscalingListener is up and running in the controller namespace
 	if !listenerFound {
-		if r.drainingJobs(&latestRunnerSet.Status) {
+		// Only block listener creation if the runner spec has changed and old-spec
+		// runners still need to drain. When only listener values changed (e.g.,
+		// minRunners, maxRunners), the existing runners are valid and the listener
+		// should be recreated immediately. Without this guard, minRunners idle
+		// runners would block listener recreation indefinitely (deadlock).
+		// See: https://github.com/actions/actions-runner-controller/issues/4432
+		runnerSpecOutdated := latestRunnerSet.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.RunnerSetSpecHash()
+		if runnerSpecOutdated && r.drainingJobs(&latestRunnerSet.Status) {
 			log.Info("Creating a new AutoscalingListener is waiting for the running and pending runners to finish. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
 			return ctrl.Result{}, nil
 		}
