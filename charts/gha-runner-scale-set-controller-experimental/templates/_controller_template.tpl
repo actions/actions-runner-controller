@@ -92,6 +92,18 @@ args:
 ports:
 {{- toYaml $ports | nindent 2 }}
 {{- end }}
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 20
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
 env:
   - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
     value: "{{ .Values.controller.manager.container.image }}"
