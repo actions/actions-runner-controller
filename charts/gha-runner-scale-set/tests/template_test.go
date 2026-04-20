@@ -1154,6 +1154,88 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume(t *te
 	assert.Equal(t, ars.Spec.Template.Spec.Containers[0].Image, ars.Spec.Template.Spec.Containers[0].Env[3].Value)
 
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 0, "Template.Spec should have 0 volumes")
+	assert.NotNil(t, ars.Spec.Template.Spec.Volumes, "Template.Spec.Volumes should be non-nil empty slice, not null")
+
+	// Regression check: ensure volumeMounts is also non-nil empty slice for kubernetes-novolume
+	runnerContainer := ars.Spec.Template.Spec.Containers[0]
+	assert.NotNil(t, runnerContainer.VolumeMounts, "runner container VolumeMounts should be non-nil empty slice, not null")
+	assert.Len(t, runnerContainer.VolumeMounts, 0, "runner container should have 0 volumeMounts in kubernetes-novolume mode")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume_WithCustomVolumes(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	// Test that user-provided volumes are preserved even in kubernetes-novolume mode
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"containerMode.type":                 "kubernetes-novolume",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+			"template.spec.volumes[0].name":      "custom-volume",
+			"template.spec.volumes[0].emptyDir":  "{}",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	// Override preservation: user-provided volume should be present, not replaced by empty array
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 1, "Template.Spec should have 1 volume (user-provided override)")
+	assert.Equal(t, "custom-volume", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be preserved as custom-volume")
+	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[0].EmptyDir, "Volume should have EmptyDir configured")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume_WithCustomVolumeMounts(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	// Test that user-provided volumeMounts are preserved in kubernetes-novolume runner container
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                       "https://github.com/actions",
+			"githubConfigSecret.github_token":                       "gh_token12345",
+			"containerMode.type":                                    "kubernetes-novolume",
+			"controllerServiceAccount.name":                         "arc",
+			"controllerServiceAccount.namespace":                    "arc-system",
+			"template.spec.volumes[0].name":                         "custom-volume",
+			"template.spec.volumes[0].emptyDir":                     "{}",
+			"template.spec.containers[0].name":                      "runner",
+			"template.spec.containers[0].volumeMounts[0].name":      "custom-volume",
+			"template.spec.containers[0].volumeMounts[0].mountPath": "/mnt/custom",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	runnerContainer := ars.Spec.Template.Spec.Containers[0]
+	// Override preservation: user-provided volumeMounts should be present, not replaced by empty array
+	assert.Len(t, runnerContainer.VolumeMounts, 1, "runner container should have 1 volumeMount (user-provided override)")
+	assert.Equal(t, "custom-volume", runnerContainer.VolumeMounts[0].Name, "VolumeMount name should be preserved as custom-volume")
+	assert.Equal(t, "/mnt/custom", runnerContainer.VolumeMounts[0].MountPath, "VolumeMount path should be preserved as /mnt/custom")
 }
 
 func TestTemplateRenderedAutoscalingRunnerSet_ListenerPodTemplate(t *testing.T) {
