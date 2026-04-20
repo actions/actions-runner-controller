@@ -335,6 +335,46 @@ func TestTemplateRenderedSetServiceAccountToKubeNoVolumeMode(t *testing.T) {
 	assert.Equal(t, expectedServiceAccountName, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName])
 }
 
+func TestTemplateRenderedNoPermissionServiceAccountNotRenderedInKubernetesModes(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"kubernetes", "kubernetes-novolume"} {
+		t.Run("containerMode "+mode, func(t *testing.T) {
+			helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+			require.NoError(t, err)
+
+			releaseName := "test-runners"
+			namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+			options := &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"githubConfigUrl":                    "https://github.com/actions",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"controllerServiceAccount.name":      "arc",
+					"controllerServiceAccount.namespace": "arc-system",
+					"containerMode.type":                 mode,
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			_, err = helm.RenderTemplateE(
+				t,
+				options,
+				helmChartPath,
+				releaseName,
+				[]string{"templates/no_permission_serviceaccount.yaml"},
+			)
+			assert.ErrorContains(
+				t,
+				err,
+				"could not find template templates/no_permission_serviceaccount.yaml in chart",
+				"no permission service account should not be rendered in "+mode+" mode",
+			)
+		})
+	}
+}
+
 func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 	t.Parallel()
 
