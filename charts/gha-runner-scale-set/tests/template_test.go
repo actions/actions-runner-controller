@@ -1169,21 +1169,16 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume_WithC
 	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
+	testValuesPath, err := filepath.Abs("../tests/values_k8s_novolume_custom_volumes.yaml")
+	require.NoError(t, err)
+
 	releaseName := "test-runners"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	// Test that user-provided volumes are preserved even in kubernetes-novolume mode
 	options := &helm.Options{
-		Logger: logger.Discard,
-		SetValues: map[string]string{
-			"githubConfigUrl":                    "https://github.com/actions",
-			"githubConfigSecret.github_token":    "gh_token12345",
-			"containerMode.type":                 "kubernetes-novolume",
-			"controllerServiceAccount.name":      "arc",
-			"controllerServiceAccount.namespace": "arc-system",
-			"template.spec.volumes[0].name":      "custom-volume",
-			"template.spec.volumes[0].emptyDir":  "{}",
-		},
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
@@ -1205,24 +1200,16 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume_WithC
 	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
+	testValuesPath, err := filepath.Abs("../tests/values_k8s_novolume_custom_volume_mounts.yaml")
+	require.NoError(t, err)
+
 	releaseName := "test-runners"
 	namespaceName := "test-" + strings.ToLower(random.UniqueId())
 
 	// Test that user-provided volumeMounts are preserved in kubernetes-novolume runner container
 	options := &helm.Options{
-		Logger: logger.Discard,
-		SetValues: map[string]string{
-			"githubConfigUrl":                                       "https://github.com/actions",
-			"githubConfigSecret.github_token":                       "gh_token12345",
-			"containerMode.type":                                    "kubernetes-novolume",
-			"controllerServiceAccount.name":                         "arc",
-			"controllerServiceAccount.namespace":                    "arc-system",
-			"template.spec.volumes[0].name":                         "custom-volume",
-			"template.spec.volumes[0].emptyDir":                     "{}",
-			"template.spec.containers[0].name":                      "runner",
-			"template.spec.containers[0].volumeMounts[0].name":      "custom-volume",
-			"template.spec.containers[0].volumeMounts[0].mountPath": "/mnt/custom",
-		},
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
