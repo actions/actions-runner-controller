@@ -14,6 +14,7 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset/listener"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -65,6 +66,27 @@ func run(ctx context.Context, config *config.Config) error {
 		})
 	}
 
+	// OTel trace recorder (optional)
+	var otelRecorder *metrics.OTelRecorder
+	if config.OTelEndpoint != "" {
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint(config.OTelEndpoint),
+		}
+		if config.OTelInsecure {
+			opts = append(opts, otlptracehttp.WithInsecure())
+		}
+		otlpExporter, err := otlptracehttp.New(ctx, opts...)
+		if err != nil {
+			return fmt.Errorf("failed to create OTel exporter: %w", err)
+		}
+		otelRecorder = metrics.NewOTelRecorder(
+			otlpExporter,
+			logger.With("component", "otel recorder"),
+		)
+		defer otelRecorder.Shutdown(ctx)
+		logger.Info("OTel trace recorder enabled", "endpoint", config.OTelEndpoint)
+	}
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = uuid.NewString()
@@ -91,13 +113,25 @@ func run(ctx context.Context, config *config.Config) error {
 	}()
 
 	var listenerOptions []listener.Option
-	if metricsExporter != nil {
+
+	// Build the metrics recorder: Prometheus, OTel, or both
+	var recorder listener.MetricsRecorder
+	switch {
+	case metricsExporter != nil && otelRecorder != nil:
+		recorder = metrics.NewComposite(metricsExporter, otelRecorder)
+	case metricsExporter != nil:
+		recorder = metricsExporter
+	case otelRecorder != nil:
+		recorder = otelRecorder
+	}
+
+	if recorder != nil {
 		listenerOptions = append(
 			listenerOptions,
-			listener.WithMetricsRecorder(
-				metricsExporter,
-			),
+			listener.WithMetricsRecorder(recorder),
 		)
+	}
+	if metricsExporter != nil {
 		metricsExporter.RecordStatic(config.MinRunners, config.MaxRunners)
 	}
 
