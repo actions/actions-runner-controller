@@ -60,6 +60,13 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
 
+	if v := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); v != "" && config.OTelEndpoint == "" {
+		config.OTelEndpoint = v
+	}
+	if os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") == "true" && !config.OTelInsecure {
+		config.OTelInsecure = true
+	}
+
 	var vault vault.Vault
 	switch config.VaultType {
 	case "":

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,15 +100,26 @@ func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnl
 		TraceFlags: trace.FlagsSampled,
 	})
 
+	conclusion := normalizeConclusion(msg.Result)
+	repo := msg.OwnerName + "/" + msg.RepositoryName
+
 	commonAttrs := []attribute.KeyValue{
+		// GitHub Actions attributes
 		attribute.Int64("github.run_id", msg.WorkflowRunID),
 		attribute.String("github.job_id", msg.JobID),
 		attribute.String("github.job_name", msg.JobDisplayName),
-		attribute.String("github.repository", msg.OwnerName+"/"+msg.RepositoryName),
+		attribute.String("github.repository", repo),
 		attribute.String("github.runner_name", msg.RunnerName),
 		attribute.Int("github.runner_id", msg.RunnerID),
 		attribute.String("github.workflow_ref", msg.JobWorkflowRef),
 		attribute.String("github.event_name", msg.EventName),
+		// OTel CI/CD semantic conventions (cicd.*)
+		attribute.String("cicd.pipeline.run.id", strconv.FormatInt(msg.WorkflowRunID, 10)),
+		attribute.String("cicd.pipeline.task.name", msg.JobDisplayName),
+		attribute.String("cicd.pipeline.task.run.id", msg.JobID),
+		attribute.String("cicd.worker.name", msg.RunnerName),
+		attribute.String("cicd.worker.id", strconv.Itoa(msg.RunnerID)),
+		attribute.String("vcs.repository.url.full", "https://github.com/"+repo),
 	}
 
 	var stubs tracetest.SpanStubs
@@ -134,12 +146,51 @@ func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnl
 			msg.RunnerAssignTime, msg.FinishTime,
 			append(sliceClone(commonAttrs),
 				attribute.String("type", "runner.execution"),
-				attribute.String("github.conclusion", msg.Result),
+				attribute.String("github.conclusion", conclusion),
+				attribute.String("cicd.pipeline.task.run.result", conclusionToSemconv(conclusion)),
 			),
 		))
 	}
 
 	return stubs.Snapshots()
+}
+
+func normalizeConclusion(raw string) string {
+	switch strings.ToLower(raw) {
+	case "success", "succeeded":
+		return "success"
+	case "failure", "failed":
+		return "failure"
+	case "cancelled", "canceled":
+		return "cancelled"
+	case "skipped":
+		return "skipped"
+	case "timed_out":
+		return "timed_out"
+	case "startup_failure":
+		return "startup_failure"
+	default:
+		return strings.ToLower(raw)
+	}
+}
+
+func conclusionToSemconv(conclusion string) string {
+	switch conclusion {
+	case "success":
+		return "success"
+	case "failure":
+		return "failure"
+	case "cancelled":
+		return "cancellation"
+	case "skipped":
+		return "skip"
+	case "timed_out":
+		return "timeout"
+	case "startup_failure":
+		return "error"
+	default:
+		return conclusion
+	}
 }
 
 func newStub(

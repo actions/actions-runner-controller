@@ -95,7 +95,18 @@ func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 	assert.Equal(t, now.Add(40*time.Second), e.StartTime())
 	assert.Equal(t, now.Add(5*time.Minute), e.EndTime())
 	assertAttr(t, e, "type", "runner.execution")
-	assertAttr(t, e, "github.conclusion", "Succeeded")
+	assertAttr(t, e, "github.conclusion", "success")
+	assertAttr(t, e, "cicd.pipeline.task.run.result", "success")
+
+	// Verify CI/CD semantic convention attributes on all spans
+	for _, span := range byName {
+		assertAttr(t, span, "cicd.pipeline.run.id", "99999")
+		assertAttr(t, span, "cicd.pipeline.task.name", "build")
+		assertAttr(t, span, "cicd.pipeline.task.run.id", "42")
+		assertAttr(t, span, "cicd.worker.name", "runner-abc-xyz")
+		assertAttr(t, span, "cicd.worker.id", "7")
+		assertAttr(t, span, "vcs.repository.url.full", "https://github.com/acme/widgets")
+	}
 }
 
 func TestOTelRecorder_SkipsMissingTimestamps(t *testing.T) {
@@ -150,7 +161,8 @@ func TestOTelRecorder_CommonAttributes(t *testing.T) {
 	assertAttr(t, s, "github.job_name", "test-suite")
 	assertAttr(t, s, "github.repository", "org/repo")
 	assertAttr(t, s, "github.runner_name", "runner-3")
-	assertAttr(t, s, "github.conclusion", "Failed")
+	assertAttr(t, s, "github.conclusion", "failure")
+	assertAttr(t, s, "cicd.pipeline.task.run.result", "failure")
 }
 
 func TestOTelRecorder_SetRunAttempt(t *testing.T) {
