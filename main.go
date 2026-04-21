@@ -301,7 +301,7 @@ func main() {
 		var controllerOpts []actionsgithubcom.Option
 		if disableWorkqueueBucketRateLimiter {
 			controllerOpts = append(controllerOpts,
-				actionsgithubcom.WithWorkqueueRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]()),
+				actionsgithubcom.WithTypedRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]()),
 			)
 		}
 

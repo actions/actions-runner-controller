@@ -39,18 +39,20 @@ func WithMaxConcurrentReconciles(n int) Option {
 	}
 }
 
-// WithWorkqueueRateLimiter sets the rate limiter for the controller's workqueue.
+// WithTypedRateLimiter sets the rate limiter for the controller's workqueue.
 //
-// By default, the controller-runtime uses DefaultControllerRateLimiter, which
-// combines an exponential backoff per-item limiter with a token bucket overall
-// limiter (10 QPS, 100 bucket size). In large-scale environments with many
-// runner scale sets, the token bucket limiter can become a bottleneck for
+// By default, the controller-runtime uses
+// workqueue.DefaultTypedControllerRateLimiter[reconcile.Request], which combines
+// an exponential backoff per-item limiter with a token bucket overall limiter
+// (10 QPS, 100 bucket size). In large-scale environments with many runner
+// scale sets, the token bucket limiter can become a bottleneck for
 // reconciliation throughput.
 //
 // Use this option to override the default rate limiter, for example, to use
-// DefaultItemBasedRateLimiter which removes the overall token bucket constraint
-// while keeping the per-item exponential backoff.
-func WithWorkqueueRateLimiter(rateLimiter workqueue.TypedRateLimiter[reconcile.Request]) Option {
+// workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request], which removes
+// the overall token bucket constraint while keeping the per-item exponential
+// backoff.
+func WithTypedRateLimiter(rateLimiter workqueue.TypedRateLimiter[reconcile.Request]) Option {
 	return func(b *controller.Options) {
 		b.RateLimiter = rateLimiter
 	}
