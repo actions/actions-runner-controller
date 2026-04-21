@@ -42,6 +42,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -300,7 +301,7 @@ func main() {
 		var controllerOpts []actionsgithubcom.Option
 		if disableWorkqueueBucketRateLimiter {
 			controllerOpts = append(controllerOpts,
-				actionsgithubcom.WithWorkqueueRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[actionsgithubcom.Request]()),
+				actionsgithubcom.WithWorkqueueRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]()),
 			)
 		}
 

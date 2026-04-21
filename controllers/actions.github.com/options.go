@@ -7,10 +7,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Request is a type alias for reconcile.Request, used to parameterize
-// the generic workqueue rate limiter types from client-go.
-type Request = reconcile.Request
-
 // Options is the optional configuration for the controllers, which can be
 // set via command-line flags or environment variables.
 type Options struct {
@@ -54,7 +50,7 @@ func WithMaxConcurrentReconciles(n int) Option {
 // Use this option to override the default rate limiter, for example, to use
 // DefaultItemBasedRateLimiter which removes the overall token bucket constraint
 // while keeping the per-item exponential backoff.
-func WithWorkqueueRateLimiter(rateLimiter workqueue.TypedRateLimiter[Request]) Option {
+func WithWorkqueueRateLimiter(rateLimiter workqueue.TypedRateLimiter[reconcile.Request]) Option {
 	return func(b *controller.Options) {
 		b.RateLimiter = rateLimiter
 	}
