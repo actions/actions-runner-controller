@@ -113,7 +113,7 @@ func main() {
 		k8sClientRateLimiterQPS   int
 		k8sClientRateLimiterBurst int
 
-		disableWorkqueueBucketRateLimiter bool
+		workqueueRateLimiter string
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -159,7 +159,7 @@ func main() {
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
-	flag.BoolVar(&disableWorkqueueBucketRateLimiter, "disable-workqueue-bucket-rate-limiter", false, "Disable the overall token bucket rate limiter for the controller workqueue. When set, the controller uses only per-item exponential backoff, which improves reconciliation throughput at large scale.")
+	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -299,10 +299,17 @@ func main() {
 		log.Info("Resource builder initializing")
 
 		var controllerOpts []actionsgithubcom.Option
-		if disableWorkqueueBucketRateLimiter {
+		switch workqueueRateLimiter {
+		case "typed_rate_limiter":
+			log.Info("Using typed rate limiter (per-item only, no global token bucket)")
 			controllerOpts = append(controllerOpts,
 				actionsgithubcom.WithTypedRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]()),
 			)
+		case "bucket_rate_limiter", "":
+			log.Info("Using default bucket rate limiter")
+		default:
+			log.Error(fmt.Errorf("unknown workqueue rate limiter: %s", workqueueRateLimiter), "invalid --workqueue-rate-limiter value")
+			os.Exit(1)
 		}
 
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
