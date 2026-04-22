@@ -136,6 +136,13 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
+  ## Workqueue rate limiter configuration.
+  ## By default, controller-runtime uses a combined rate limiter with both a per-item
+  ## exponential backoff and an overall token bucket (10 QPS, 100 bucket size).
+  ## Valid names: "bucket_rate_limiter" (default), "typed_rate_limiter" (per-item only, no global token bucket).
+  # rateLimiter:
+  #   name: "bucket_rate_limiter"
+
 # Overrides the default `.Release.Namespace` for all resources in this chart.
 namespaceOverride: ""
 

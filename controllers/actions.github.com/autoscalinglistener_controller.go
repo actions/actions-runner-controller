@@ -692,7 +692,7 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	labelBasedWatchFunc := func(_ context.Context, obj client.Object) []reconcile.Request {
 		var requests []reconcile.Request
 		labels := obj.GetLabels()
@@ -716,14 +716,16 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error
 		return requests
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AutoscalingListener{}).
-		Owns(&corev1.Pod{}).
-		Owns(&corev1.ServiceAccount{}).
-		Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(r)
+	return builderWithOptions(
+		ctrl.NewControllerManagedBy(mgr).
+			For(&v1alpha1.AutoscalingListener{}).
+			Owns(&corev1.Pod{}).
+			Owns(&corev1.ServiceAccount{}).
+			Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+		opts,
+	).Complete(r)
 }
 
 func listenerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {

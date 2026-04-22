@@ -762,25 +762,27 @@ func (r *AutoscalingRunnerSetReconciler) listEphemeralRunnerSets(ctx context.Con
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AutoscalingRunnerSet{}).
-		Owns(&v1alpha1.EphemeralRunnerSet{}).
-		Watches(&v1alpha1.AutoscalingListener{}, handler.EnqueueRequestsFromMapFunc(
-			func(_ context.Context, o client.Object) []reconcile.Request {
-				autoscalingListener := o.(*v1alpha1.AutoscalingListener)
-				return []reconcile.Request{
-					{
-						NamespacedName: types.NamespacedName{
-							Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-							Name:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	return builderWithOptions(
+		ctrl.NewControllerManagedBy(mgr).
+			For(&v1alpha1.AutoscalingRunnerSet{}).
+			Owns(&v1alpha1.EphemeralRunnerSet{}).
+			Watches(&v1alpha1.AutoscalingListener{}, handler.EnqueueRequestsFromMapFunc(
+				func(_ context.Context, o client.Object) []reconcile.Request {
+					autoscalingListener := o.(*v1alpha1.AutoscalingListener)
+					return []reconcile.Request{
+						{
+							NamespacedName: types.NamespacedName{
+								Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+								Name:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+							},
 						},
-					},
-				}
-			},
-		)).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(r)
+					}
+				},
+			)).
+			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+		opts,
+	).Complete(r)
 }
 
 type autoscalingRunnerSetFinalizerDependencyCleaner struct {

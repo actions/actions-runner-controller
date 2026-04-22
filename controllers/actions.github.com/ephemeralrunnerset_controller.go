@@ -522,12 +522,14 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.EphemeralRunnerSet{}).
-		Owns(&v1alpha1.EphemeralRunner{}).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(r)
+func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	return builderWithOptions(
+		ctrl.NewControllerManagedBy(mgr).
+			For(&v1alpha1.EphemeralRunnerSet{}).
+			Owns(&v1alpha1.EphemeralRunner{}).
+			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+		opts,
+	).Complete(r)
 }
 
 type ephemeralRunnerStepper struct {
