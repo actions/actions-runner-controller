@@ -39,10 +39,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	// +kubebuilder:scaffold:imports
 )
@@ -110,6 +112,8 @@ func main() {
 
 		k8sClientRateLimiterQPS   int
 		k8sClientRateLimiterBurst int
+
+		workqueueRateLimiter string
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -155,6 +159,7 @@ func main() {
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
+	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -293,6 +298,20 @@ func main() {
 
 		log.Info("Resource builder initializing")
 
+		var controllerOpts []actionsgithubcom.Option
+		switch workqueueRateLimiter {
+		case "typed_rate_limiter":
+			log.Info("Using typed rate limiter (per-item only, no global token bucket)")
+			controllerOpts = append(controllerOpts,
+				actionsgithubcom.WithTypedRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]()),
+			)
+		case "bucket_rate_limiter", "":
+			log.Info("Using default bucket rate limiter")
+		default:
+			log.Error(fmt.Errorf("unknown workqueue rate limiter: %s", workqueueRateLimiter), "invalid --workqueue-rate-limiter value")
+			os.Exit(1)
+		}
+
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
 			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
@@ -302,17 +321,18 @@ func main() {
 			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)
 		}
 
+		runnerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles))
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
+		}).SetupWithManager(mgr, runnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}
@@ -323,7 +343,7 @@ func main() {
 			Scheme:          mgr.GetScheme(),
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
 		}
@@ -335,7 +355,7 @@ func main() {
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 			ResourceBuilder:         rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
 		}
