@@ -618,6 +618,85 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).ShouldNot(Succeed(), "Listener should not be recreated")
 		})
+
+		It("Should recreate the listener immediately when only values change (not runner spec) even with running runners. Regression test for #4432.", func() {
+			// Wait for initial setup to complete with default (immediate) strategy
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			Eventually(
+				func() (int, error) {
+					runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+					err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+					if err != nil {
+						return 0, err
+					}
+					return len(runnerSetList.Items), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
+
+			// Now switch to eventual strategy (simulates real-world config)
+			controller.UpdateStrategy = UpdateStrategyEventual
+
+			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+
+			// Emulate minRunners idle runners (running but no active jobs)
+			runnerSet := runnerSetList.Items[0]
+			activeRunnerSet := runnerSet.DeepCopy()
+			activeRunnerSet.Status.CurrentReplicas = 2
+			activeRunnerSet.Status.RunningEphemeralRunners = 2
+			activeRunnerSet.Status.PendingEphemeralRunners = 0
+
+			err = k8sClient.Status().Patch(ctx, activeRunnerSet, client.MergeFrom(&runnerSet))
+			Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
+
+			// Patch ONLY the values hash (e.g., maxRunners changed) without changing the runner spec
+			patched := autoscalingRunnerSet.DeepCopy()
+			if patched.Annotations == nil {
+				patched.Annotations = make(map[string]string)
+			}
+			patched.Annotations[annotationKeyValuesHash] = "changed-values-hash"
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet")
+			autoscalingRunnerSet = patched.DeepCopy()
+
+			// The listener should be deleted (values hash changed)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).ShouldNot(Succeed(), "Old listener should be deleted")
+
+			// The listener SHOULD be recreated even though there are running runners,
+			// because the runner spec hasn't changed — only values changed.
+			// Before the fix for #4432, this would deadlock.
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be recreated despite running minRunners idle runners")
+
+			// The EphemeralRunnerSet should NOT be recreated (runner spec unchanged)
+			currentRunnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+			err = k8sClient.List(ctx, currentRunnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+			Expect(len(currentRunnerSetList.Items)).To(BeEquivalentTo(1), "EphemeralRunnerSet should not be recreated")
+			Expect(currentRunnerSetList.Items[0].Name).To(Equal(activeRunnerSet.Name), "Should be the same EphemeralRunnerSet")
+		})
 	})
 
 	It("Should update Status on EphemeralRunnerSet status Update", func() {
