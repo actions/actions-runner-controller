@@ -85,6 +85,7 @@ func main() {
 		listenerMetricsEndpoint string
 
 		metricsAddr              string
+		pprofAddr                string
 		autoScalingRunnerSetOnly bool
 		enableLeaderElection     bool
 		disableAdmissionWebhook  bool
@@ -125,6 +126,7 @@ func main() {
 	flag.StringVar(&listenerMetricsAddr, "listener-metrics-addr", ":8080", "The address applied to AutoscalingListener metrics server")
 	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&pprofAddr, "pprof-addr", "", "The address the pprof endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
@@ -244,6 +246,7 @@ func main() {
 			SyncPeriod:        &syncPeriod,
 			DefaultNamespaces: defaultNamespaces,
 		},
+		PprofBindAddress: pprofAddr,
 		WebhookServer:    webhookServer,
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: leaderElectionID,

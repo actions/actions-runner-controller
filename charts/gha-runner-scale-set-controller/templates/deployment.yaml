@@ -84,6 +84,9 @@ spec:
         - "--listener-metrics-endpoint="
         - "--metrics-addr=0"
         {{- end }}
+        {{- if .Values.pprof.addr }}
+        - "--pprof-addr={{ .Values.pprof.addr }}"
+        {{- end }}
         {{- range .Values.flags.excludeLabelPropagationPrefixes }}
         - "--exclude-label-propagation-prefix={{ . }}"
         {{- end }}
@@ -100,11 +103,18 @@ spec:
         {{- end }}
         command:
         - "/manager"
-        {{- with .Values.metrics }}
+        {{- if or .Values.metrics .Values.pprof.addr }}
         ports:
-        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerManagerAddr "${1}"}}
+        {{- end }}
+        {{- with .Values.metrics }}
+        - containerPort: {{ required "Values.metrics.controllerManagerAddr must end with a numeric port" (regexFind "[0-9]+$" .controllerManagerAddr) }}
           protocol: TCP
           name: metrics
+        {{- end }}
+        {{- if .Values.pprof.addr }}
+        - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .Values.pprof.addr) }}
+          protocol: TCP
+          name: pprof
         {{- end }}
         env:
         - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
