@@ -102,12 +102,12 @@ spec:
         ports:
         {{- end }}
         {{- with .Values.metrics }}
-        - containerPort: {{regexReplaceAll ":([0-9]+)" .controllerManagerAddr "${1}"}}
+        - containerPort: {{ required "Values.metrics.controllerManagerAddr must end with a numeric port" (regexFind "[0-9]+$" .controllerManagerAddr) }}
           protocol: TCP
           name: metrics
         {{- end }}
         {{- with .Values.pprof }}
-        - containerPort: {{regexReplaceAll ":([0-9]+)" .addr "${1}"}}
+        - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .addr) }}
           protocol: TCP
           name: pprof
         {{- end }}
