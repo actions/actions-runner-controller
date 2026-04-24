@@ -468,6 +468,7 @@ env:
     {{- if $tlsConfig.runnerMountPath }}
       {{- $mountGitHubServerTLS = 1 }}
     {{- end }}
+    {{- if or $container.volumeMounts $mountGitHubServerTLS }}
 volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
@@ -481,6 +482,9 @@ volumeMounts:
   - name: github-server-tls-cert
     mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
     subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
+    {{- else }}
+volumeMounts: []
     {{- end }}
   {{- end }}
 {{- end }}
