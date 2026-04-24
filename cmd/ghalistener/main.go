@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/capacity"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/scaler"
@@ -15,6 +16,8 @@ import (
 	"github.com/actions/scaleset/listener"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func main() {
@@ -125,6 +128,65 @@ func run(ctx context.Context, config *config.Config) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)
+	}
+
+	// Capacity monitor (optional).
+	capConfig := capacity.ConfigFromEnv()
+	if capConfig.Enabled {
+		scaleSet, err := scalesetClient.GetRunnerScaleSetByID(ctx, config.RunnerScaleSetID)
+		if err != nil {
+			return fmt.Errorf("failed to get scale set for capacity monitor: %w", err)
+		}
+		var labels []string
+		for _, l := range scaleSet.Labels {
+			labels = append(labels, l.Name)
+		}
+
+		capConfig.MaxRunners = config.MaxRunners
+		capConfig.ScaleSetID = config.RunnerScaleSetID
+		capConfig.ScaleSetLabels = labels
+		capConfig.Namespace = config.EphemeralRunnerSetNamespace
+		capConfig.ScaleSetName = config.RunnerScaleSetName
+
+		k8sConf, err := rest.InClusterConfig()
+		if err != nil {
+			return fmt.Errorf("failed to create k8s config for capacity monitor: %w", err)
+		}
+		k8sClient, err := kubernetes.NewForConfig(k8sConf)
+		if err != nil {
+			return fmt.Errorf("failed to create k8s client for capacity monitor: %w", err)
+		}
+
+		capMonitor := capacity.New(capConfig, k8sClient, listener.SetMaxRunners, logger)
+		logger.Info("Capacity monitor enabled",
+			"proactiveCapacity", capConfig.ProactiveCapacity,
+			"nodeFleet", capConfig.NodeFleet,
+			"runnerClass", capConfig.RunnerClass,
+		)
+
+		g, ctx := errgroup.WithContext(ctx)
+		metricsCtx, cancelMetrics := context.WithCancelCause(ctx)
+
+		g.Go(func() error {
+			logger.Info("Starting listener")
+			listnerErr := listener.Run(ctx, scaler)
+			cancelMetrics(fmt.Errorf("listener exited: %w", listnerErr))
+			return listnerErr
+		})
+
+		g.Go(func() error {
+			logger.Info("Starting capacity monitor")
+			return capMonitor.Run(ctx)
+		})
+
+		if metricsExporter != nil {
+			g.Go(func() error {
+				logger.Info("Starting metrics server")
+				return metricsExporter.ListenAndServe(metricsCtx)
+			})
+		}
+
+		return g.Wait()
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
