@@ -33,6 +33,9 @@ spec:
         - jsonPath: .status.deletingEphemeralRunners
           name: Deleting Runners
           type: integer
+        - jsonPath: .status.phase
+          name: Phase
+          type: string
       name: v1alpha1
       schema:
         openAPIV3Schema:
