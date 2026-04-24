@@ -84,8 +84,8 @@ spec:
         - "--listener-metrics-endpoint="
         - "--metrics-addr=0"
         {{- end }}
-        {{- with .Values.pprof }}
-        - "--pprof-addr={{ .addr }}"
+        {{- if .Values.pprof.addr }}
+        - "--pprof-addr={{ .Values.pprof.addr }}"
         {{- end }}
         {{- range .Values.flags.excludeLabelPropagationPrefixes }}
         - "--exclude-label-propagation-prefix={{ . }}"
@@ -98,7 +98,7 @@ spec:
         {{- end }}
         command:
         - "/manager"
-        {{- if or .Values.metrics .Values.pprof }}
+        {{- if or .Values.metrics .Values.pprof.addr }}
         ports:
         {{- end }}
         {{- with .Values.metrics }}
@@ -106,8 +106,8 @@ spec:
           protocol: TCP
           name: metrics
         {{- end }}
-        {{- with .Values.pprof }}
-        - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .addr) }}
+        {{- if .Values.pprof.addr }}
+        - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .Values.pprof.addr) }}
           protocol: TCP
           name: pprof
         {{- end }}
