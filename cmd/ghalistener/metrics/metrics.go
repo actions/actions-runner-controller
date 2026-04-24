@@ -493,11 +493,13 @@ func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
 }
 
 func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
+	if msg.RunnerAssignTime.IsZero() {
+		return
+	}
+
 	l := e.completedJobLabels(msg)
 	e.incCounter(MetricCompletedJobsTotal, l)
-
-	executionDuration := msg.FinishTime.Unix() - msg.RunnerAssignTime.Unix()
-	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(executionDuration))
+	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(msg.FinishTime.Unix()-msg.RunnerAssignTime.Unix()))
 }
 
 func (e *exporter) RecordDesiredRunners(count int) {
