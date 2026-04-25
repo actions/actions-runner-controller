@@ -44,6 +44,8 @@ type Config struct {
 	MetricsAddr                 string                  `json:"metrics_addr"`
 	MetricsEndpoint             string                  `json:"metrics_endpoint"`
 	Metrics                     *v1alpha1.MetricsConfig `json:"metrics"`
+	OTelEndpoint                string                  `json:"otel_endpoint"`
+	OTelInsecure                bool                    `json:"otel_insecure"`
 }
 
 func Read(ctx context.Context, configPath string) (*Config, error) {
