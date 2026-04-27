@@ -15,28 +15,9 @@ import (
 func newTestHUDClient(t *testing.T, handler http.HandlerFunc) (*HUDClient, func()) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
-	client := &HUDClient{
-		token:  "test-token",
-		client: &http.Client{Timeout: 5 * time.Second},
-	}
-	// Override the package-level URL by patching the client to hit our server.
-	// Since hudAPIURL is a const, we override via a custom transport.
-	origURL := srv.URL
-	client.client.Transport = &rewriteTransport{base: http.DefaultTransport, target: origURL}
+	client := NewHUDClient(srv.URL, "test-token")
+	client.client.Timeout = 5 * time.Second
 	return client, srv.Close
-}
-
-// rewriteTransport redirects all requests to the test server.
-type rewriteTransport struct {
-	base   http.RoundTripper
-	target string
-}
-
-func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.URL.Scheme = "http"
-	req.URL.Host = t.target[len("http://"):]
-	return t.base.RoundTrip(req)
 }
 
 func TestGetQueuedJobsForLabels_HappyPath(t *testing.T) {
@@ -90,7 +71,7 @@ func TestGetQueuedJobsForLabels_MultipleMatchingLabels(t *testing.T) {
 }
 
 func TestGetQueuedJobsForLabels_EmptyLabels(t *testing.T) {
-	client := NewHUDClient("token")
+	client := NewHUDClient(defaultHUDAPIURL, "token")
 	total, err := client.GetQueuedJobsForLabels(context.Background(), []string{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, total)

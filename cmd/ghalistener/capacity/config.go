@@ -49,6 +49,7 @@ type Config struct {
 	ScaleSetName string
 
 	// HUD API
+	HUDAPIURL   string
 	HUDAPIToken string
 }
 
@@ -70,6 +71,7 @@ func ConfigFromEnv() Config {
 		RunnerMemory:        envString("CAPACITY_AWARE_RUNNER_MEMORY", "512Mi"),
 		NodeFleet:           envString("CAPACITY_AWARE_NODE_FLEET", ""),
 		RunnerClass:         envString("CAPACITY_AWARE_RUNNER_CLASS", ""),
+		HUDAPIURL:           envString("CAPACITY_AWARE_HUD_API_URL", defaultHUDAPIURL),
 		HUDAPIToken:         envString("CAPACITY_AWARE_HUD_API_TOKEN", ""),
 	}
 

@@ -73,6 +73,7 @@ type PlaceholderManager struct {
 	listenerID string // listener pod name, used for label-based ownership
 	config     Config
 	logger     *slog.Logger
+	anchorRef  *metav1.OwnerReference // set after CreateAnchor
 }
 
 // NewPlaceholderManager creates a new manager.
@@ -158,17 +159,23 @@ func (pm *PlaceholderManager) CleanupTimedOut(ctx context.Context) (int, error) 
 	return deleted, nil
 }
 
-// CleanupOrphans deletes placeholder pods from previous listener
-// instances of the SAME scale set (different listener-pod label value
-// but same scale-set-name label). Scoping to scale set prevents
-// listeners from deleting each other's placeholders.
+// CleanupOrphans deletes placeholder pods and anchor ConfigMaps from
+// previous listener instances of the SAME scale set (different
+// listener-pod label value but same scale-set-name label).
 func (pm *PlaceholderManager) CleanupOrphans(ctx context.Context) error {
 	sel := fmt.Sprintf("%s=%s,%s=%s,%s!=%s",
 		labelManagedBy, managedByValue,
 		labelScaleSet, pm.config.ScaleSetName,
 		labelListenerPod, pm.listenerID,
 	)
-	return pm.clientset.CoreV1().Pods(pm.namespace).DeleteCollection(
+	if err := pm.clientset.CoreV1().Pods(pm.namespace).DeleteCollection(
+		ctx,
+		metav1.DeleteOptions{},
+		metav1.ListOptions{LabelSelector: sel},
+	); err != nil {
+		pm.logger.Error("failed to cleanup orphaned placeholder pods", "error", err)
+	}
+	return pm.clientset.CoreV1().ConfigMaps(pm.namespace).DeleteCollection(
 		ctx,
 		metav1.DeleteOptions{},
 		metav1.ListOptions{LabelSelector: sel},
@@ -186,6 +193,51 @@ func (pm *PlaceholderManager) CleanupAll(ctx context.Context) error {
 		metav1.DeleteOptions{},
 		metav1.ListOptions{LabelSelector: sel},
 	)
+}
+
+// CreateAnchor creates a ConfigMap in the placeholder namespace that
+// serves as the OwnerReference target for all placeholder pods. Since
+// the listener runs in a different namespace (arc-systems) than the
+// placeholders (arc-runners), we cannot use the listener pod as owner.
+// The anchor ConfigMap lives in the same namespace as the placeholders,
+// enabling Kubernetes GC to cascade-delete all placeholders when the
+// anchor is removed.
+func (pm *PlaceholderManager) CreateAnchor(ctx context.Context) error {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("capacity-anchor-%s", pm.config.ScaleSetName),
+			Namespace: pm.namespace,
+			Labels: map[string]string{
+				labelManagedBy:   managedByValue,
+				labelScaleSet:    pm.config.ScaleSetName,
+				labelListenerPod: pm.listenerID,
+			},
+		},
+	}
+	created, err := pm.clientset.CoreV1().ConfigMaps(pm.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("creating anchor ConfigMap: %w", err)
+	}
+	bTrue := true
+	pm.anchorRef = &metav1.OwnerReference{
+		APIVersion:         "v1",
+		Kind:               "ConfigMap",
+		Name:               created.Name,
+		UID:                created.UID,
+		BlockOwnerDeletion: &bTrue,
+	}
+	pm.logger.Info("anchor ConfigMap created", "name", created.Name, "uid", created.UID)
+	return nil
+}
+
+// DeleteAnchor deletes the anchor ConfigMap, triggering Kubernetes GC
+// to cascade-delete all placeholder pods owned by it.
+func (pm *PlaceholderManager) DeleteAnchor(ctx context.Context) error {
+	name := fmt.Sprintf("capacity-anchor-%s", pm.config.ScaleSetName)
+	propagation := metav1.DeletePropagationForeground
+	return pm.clientset.CoreV1().ConfigMaps(pm.namespace).Delete(ctx, name, metav1.DeleteOptions{
+		PropagationPolicy: &propagation,
+	})
 }
 
 // ---- pod builders ----
@@ -426,11 +478,17 @@ func (pm *PlaceholderManager) placeholderPodShell(
 		labelListenerPod:     pm.listenerID,
 	}
 
+	var ownerRefs []metav1.OwnerReference
+	if pm.anchorRef != nil {
+		ownerRefs = []metav1.OwnerReference{*pm.anchorRef}
+	}
+
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: pm.namespace,
-			Labels:    labels,
+			Name:            name,
+			Namespace:       pm.namespace,
+			Labels:          labels,
+			OwnerReferences: ownerRefs,
 			Annotations: map[string]string{
 				"karpenter.sh/do-not-disrupt": "true",
 			},

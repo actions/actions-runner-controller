@@ -10,7 +10,12 @@ import (
 )
 
 const (
-	hudAPIURL = "https://hud.pytorch.org/api/clickhouse/queued_jobs_aggregate"
+	// queuedThresholdMinutes=0: include jobs queued for any duration
+	// maxAgeDays=3: look at the last 3 days of data
+	// orgs=["pytorch"]: scope to the pytorch GitHub org
+	// repo="": all repos in the org
+	defaultHUDAPIURL = "https://hud.pytorch.org/api/clickhouse/queued_jobs_aggregate" +
+		"?parameters=%7B%22queuedThresholdMinutes%22%3A0%2C%22maxAgeDays%22%3A3%2C%22orgs%22%3A%5B%22pytorch%22%5D%2C%22repo%22%3A%22%22%7D"
 	// hudResponseMaxBytes caps the JSON payload we will read from the
 	// HUD API. A misbehaving or compromised endpoint must not be able
 	// to OOM the listener by streaming an unbounded response.
@@ -30,13 +35,15 @@ type QueuedJobsForRunner struct {
 // HUDClient is an HTTP client for the PyTorch HUD API that returns
 // aggregate queued job counts per runner label.
 type HUDClient struct {
+	url    string
 	token  string
 	client *http.Client
 }
 
 // NewHUDClient creates a new HUD API client with the given auth token.
-func NewHUDClient(token string) *HUDClient {
+func NewHUDClient(url, token string) *HUDClient {
 	return &HUDClient{
+		url:    url,
 		token:  token,
 		client: &http.Client{Timeout: 10 * time.Second},
 	}
@@ -50,7 +57,7 @@ func (c *HUDClient) GetQueuedJobsForLabels(ctx context.Context, labels []string)
 		return 0, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, hudAPIURL+"?parameters=%5B%5D", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
 		return 0, fmt.Errorf("building HUD request: %w", err)
 	}

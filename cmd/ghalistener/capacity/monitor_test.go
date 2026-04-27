@@ -53,15 +53,7 @@ func newTestMonitor(t *testing.T, cfg Config, hudRows []QueuedJobsForRunner) (*M
 		}))
 		t.Cleanup(srv.Close)
 
-		hc := &HUDClient{
-			token:  "test",
-			client: &http.Client{Timeout: 5 * time.Second},
-		}
-		hc.client.Transport = &rewriteTransport{
-			base:   http.DefaultTransport,
-			target: srv.URL,
-		}
-		m.hudClient = hc
+		m.hudClient = NewHUDClient(srv.URL, "test")
 		cfg.HUDAPIToken = "test"
 		m.config = cfg
 	}
@@ -272,16 +264,7 @@ func TestReconcile_HUDAPIFailure_FallsBackToProactiveOnly(t *testing.T) {
 	}
 	m, cs, maxVal := newTestMonitor(t, cfg, nil)
 
-	// Wire up the failing HUD server.
-	hc := &HUDClient{
-		token:  "test",
-		client: &http.Client{Timeout: 5 * time.Second},
-	}
-	hc.client.Transport = &rewriteTransport{
-		base:   http.DefaultTransport,
-		target: srv.URL,
-	}
-	m.hudClient = hc
+	m.hudClient = NewHUDClient(srv.URL, "test")
 
 	m.reconcile(context.Background())
 
