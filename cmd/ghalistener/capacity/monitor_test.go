@@ -3,6 +3,7 @@ package capacity
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -76,7 +77,8 @@ func TestReconcile_ZeroQueued_CreatesProactiveCapacity(t *testing.T) {
 	}
 	m, cs, maxVal := newTestMonitor(t, cfg, nil)
 
-	m.reconcile(context.Background())
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
 
 	// 3 pairs = 6 pods.
 	assert.Equal(t, 6, countPods(t, cs, "test-ns"))
@@ -97,7 +99,8 @@ func TestReconcile_QueuedJobs_AddsToProactiveCapacity(t *testing.T) {
 	}
 	m, cs, maxVal := newTestMonitor(t, cfg, hudRows)
 
-	m.reconcile(context.Background())
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
 
 	// desired = proactive(2) + queued(5) = 7 pairs = 14 pods.
 	assert.Equal(t, 14, countPods(t, cs, "test-ns"))
@@ -117,7 +120,8 @@ func TestReconcile_MaxRunnersCap(t *testing.T) {
 	}
 	m, cs, maxVal := newTestMonitor(t, cfg, hudRows)
 
-	m.reconcile(context.Background())
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
 
 	// desired = min(5+50, 10) = 10 pairs = 20 pods.
 	assert.Equal(t, 20, countPods(t, cs, "test-ns"))
@@ -135,7 +139,8 @@ func TestReconcile_ScaleDown_PrefersPendingDeletion(t *testing.T) {
 	ctx := context.Background()
 
 	// First reconcile creates 5 pairs.
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 	assert.Equal(t, 10, countPods(t, cs, "test-ns"))
 
 	// Make 2 pairs Running, leave 3 Pending.
@@ -153,7 +158,8 @@ func TestReconcile_ScaleDown_PrefersPendingDeletion(t *testing.T) {
 
 	// Scale down to 2 pairs.
 	m.config.ProactiveCapacity = 2
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 
 	// Should have deleted EXACTLY 3 pairs (the 3 Pending ones), not more
 	// (regression test for adjustPairs double-delete counter bug).
@@ -185,7 +191,8 @@ func TestAdjustPairs_NoDoubleDelete_AllPending(t *testing.T) {
 	ctx := context.Background()
 
 	// Create 5 pairs, all Pending.
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 	pairs, err := m.placeholders.ListPairs(ctx)
 	require.NoError(t, err)
 	for slotID := range pairs {
@@ -195,7 +202,8 @@ func TestAdjustPairs_NoDoubleDelete_AllPending(t *testing.T) {
 
 	// Scale down to 2 pairs.
 	m.config.ProactiveCapacity = 2
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 
 	// EXACTLY 3 pairs should be deleted (6 pods removed -> 4 remaining).
 	// If the double-delete bug returned, fewer (or wrong) pairs would
@@ -234,7 +242,8 @@ func TestReconcile_SetMaxRunners_CapAtMaxRunners(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 
 	// Make placeholder pairs Running.
 	pairs, _ := m.placeholders.ListPairs(ctx)
@@ -242,7 +251,8 @@ func TestReconcile_SetMaxRunners_CapAtMaxRunners(t *testing.T) {
 		setPodsPhase(t, cs, ctx, "test-ns", slotID, corev1.PodRunning)
 	}
 
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 
 	// capacity = min(runningRunners(3) + runningPairs(2), maxRunners(5)) = 5.
 	assert.Equal(t, int32(5), maxVal.Load())
@@ -266,7 +276,8 @@ func TestReconcile_HUDAPIFailure_FallsBackToProactiveOnly(t *testing.T) {
 
 	m.hudClient = NewHUDClient(srv.URL, "test")
 
-	m.reconcile(context.Background())
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
 
 	// Falls back to proactiveCapacity only: 3 pairs = 6 pods.
 	assert.Equal(t, 6, countPods(t, cs, "test-ns"))
@@ -282,13 +293,15 @@ func TestReconcile_IdempotentWhenAtDesired(t *testing.T) {
 	}
 	m, cs, maxVal := newTestMonitor(t, cfg, nil)
 
-	m.reconcile(context.Background())
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
 	assert.Equal(t, 4, countPods(t, cs, "test-ns"))
 	assert.Equal(t, int32(0), maxVal.Load(),
 		"no running pairs after first reconcile -> capacity 0")
 
 	// Second reconcile should not change anything.
-	m.reconcile(context.Background())
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
 	assert.Equal(t, 4, countPods(t, cs, "test-ns"))
 	assert.Equal(t, int32(0), maxVal.Load(),
 		"second reconcile preserves capacity 0")
@@ -307,7 +320,8 @@ func TestReconcile_MaxRunnersZero_IsUnlimited(t *testing.T) {
 	m, cs, maxVal := newTestMonitor(t, cfg, nil)
 	ctx := context.Background()
 
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 
 	// 3 pairs = 6 pods (NOT capped at 0).
 	assert.Equal(t, 6, countPods(t, cs, "test-ns"),
@@ -338,7 +352,8 @@ func TestReconcile_MaxRunnersZero_IsUnlimited(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	m.reconcile(ctx)
+	m.reconcileProvisioning(ctx)
+	m.reconcileReporting(ctx)
 
 	// capacity = runningRunners(7) + runningPairs(3) = 10, NOT capped.
 	assert.Equal(t, int32(10), maxVal.Load(),
@@ -353,6 +368,7 @@ func TestRunLoop_CancellationCleansUp(t *testing.T) {
 		ProactiveCapacity:   1,
 		MaxRunners:          5,
 		RecalculateInterval: 100 * time.Millisecond,
+		ReportInterval:      50 * time.Millisecond,
 		PlaceholderTimeout:  5 * time.Minute,
 	}
 	m, cs, _ := newTestMonitor(t, cfg, nil)
@@ -367,4 +383,69 @@ func TestRunLoop_CancellationCleansUp(t *testing.T) {
 	pods, listErr := cs.CoreV1().Pods("test-ns").List(context.Background(), metav1.ListOptions{})
 	require.NoError(t, listErr)
 	assert.Empty(t, pods.Items, "all placeholders cleaned up on shutdown")
+}
+
+func TestReporter_IndependentOfProvisioner(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  3,
+		MaxRunners:         10,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, maxVal := newTestMonitor(t, cfg, nil)
+	ctx := context.Background()
+
+	// Provisioner creates 3 pairs (all start Pending in fake client).
+	m.reconcileProvisioning(ctx)
+	assert.Equal(t, 6, countPods(t, cs, "test-ns"))
+
+	// Reporter runs — no Running pairs yet, capacity stays 0.
+	m.reconcileReporting(ctx)
+	assert.Equal(t, int32(0), maxVal.Load())
+
+	// Simulate pods becoming Running (e.g., Karpenter provisioned nodes).
+	pairs, err := m.placeholders.ListPairs(ctx)
+	require.NoError(t, err)
+	for slotID := range pairs {
+		setPodsPhase(t, cs, ctx, "test-ns", slotID, corev1.PodRunning)
+	}
+
+	// Reporter picks up Running pairs WITHOUT provisioner running again.
+	m.reconcileReporting(ctx)
+	assert.Equal(t, int32(3), maxVal.Load(),
+		"reporter independently detects Running pairs")
+}
+
+func TestRetryWithBackoff_SucceedsOnRetry(t *testing.T) {
+	attempts := 0
+	err := retryWithBackoff(context.Background(), discardLogger, "test-op", 3, func() error {
+		attempts++
+		if attempts < 3 {
+			return fmt.Errorf("transient error")
+		}
+		return nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 3, attempts)
+}
+
+func TestRetryWithBackoff_ExhaustsRetries(t *testing.T) {
+	attempts := 0
+	err := retryWithBackoff(context.Background(), discardLogger, "test-op", 2, func() error {
+		attempts++
+		return fmt.Errorf("persistent error")
+	})
+	assert.Error(t, err)
+	assert.Equal(t, 3, attempts) // initial + 2 retries
+	assert.Contains(t, err.Error(), "persistent error")
+}
+
+func TestRetryWithBackoff_RespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := retryWithBackoff(ctx, discardLogger, "test-op", 5, func() error {
+		return fmt.Errorf("should not matter")
+	})
+	// First attempt runs (no backoff wait), fails, then backoff select sees ctx.Done()
+	assert.ErrorIs(t, err, context.Canceled)
 }
