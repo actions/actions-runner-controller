@@ -46,6 +46,8 @@ RUN --mount=target=. \
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 
+LABEL org.opencontainers.image.source="https://github.com/jeanschmidt/actions-runner-controller"
+
 WORKDIR /
 
 COPY --from=builder /out/manager .
