@@ -237,6 +237,7 @@ func TestReconcile_SetMaxRunners_CapAtMaxRunners(t *testing.T) {
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{{Name: "runner", Image: "runner:latest"}},
 			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		}
 		_, err := cs.CoreV1().Pods("test-ns").Create(ctx, pod, metav1.CreateOptions{})
 		require.NoError(t, err)
@@ -347,6 +348,7 @@ func TestReconcile_MaxRunnersZero_IsUnlimited(t *testing.T) {
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{{Name: "r", Image: "x"}},
 			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		}
 		_, err := cs.CoreV1().Pods("test-ns").Create(ctx, pod, metav1.CreateOptions{})
 		require.NoError(t, err)

@@ -103,6 +103,7 @@ func (m *Monitor) countRunningRunnersWithRetry(ctx context.Context, maxRetries i
 		)
 		pods, e := m.clientset.CoreV1().Pods(m.config.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
+			FieldSelector: "status.phase=Running",
 		})
 		if e != nil {
 			return e
