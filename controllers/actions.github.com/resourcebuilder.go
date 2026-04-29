@@ -319,8 +319,8 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Labels:    labels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         autoscalingListener.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-					Kind:               autoscalingListener.GetObjectKind().GroupVersionKind().Kind,
+					APIVersion:         v1alpha1.GroupVersion.String(),
+					Kind:               "AutoscalingListener",
 					UID:                autoscalingListener.GetUID(),
 					Name:               autoscalingListener.GetName(),
 					Controller:         new(true),
@@ -591,8 +591,8 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			Annotations:  annotations,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         autoscalingRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-					Kind:               autoscalingRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+					APIVersion:         v1alpha1.GroupVersion.String(),
+					Kind:               "AutoscalingRunnerSet",
 					UID:                autoscalingRunnerSet.GetUID(),
 					Name:               autoscalingRunnerSet.GetName(),
 					Controller:         new(true),
@@ -645,8 +645,8 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         ephemeralRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-					Kind:               ephemeralRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+					APIVersion:         v1alpha1.GroupVersion.String(),
+					Kind:               "EphemeralRunnerSet",
 					UID:                ephemeralRunnerSet.GetUID(),
 					Name:               ephemeralRunnerSet.GetName(),
 					Controller:         new(true),
@@ -683,8 +683,8 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 		Annotations: annotations,
 		OwnerReferences: []metav1.OwnerReference{
 			{
-				APIVersion:         runner.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-				Kind:               runner.GetObjectKind().GroupVersionKind().Kind,
+				APIVersion:         v1alpha1.GroupVersion.String(),
+				Kind:               "EphemeralRunner",
 				UID:                runner.GetUID(),
 				Name:               runner.GetName(),
 				Controller:         new(true),
