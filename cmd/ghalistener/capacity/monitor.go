@@ -8,14 +8,62 @@ import (
 	"sync/atomic"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 )
 
 const (
 	reporterMaxRetries    = 2 // 1s + 2s = 3s, within 5s reporter interval
 	provisionerMaxRetries = 3 // 1s + 2s + 4s = 7s, within 30s provisioner interval
 )
+
+// Phase / reason / result label values for capacity recorder calls.
+// Centralised here (and not in metrics.go) so the call sites in this
+// package read as plain Go identifiers instead of bare strings — and
+// so a typo at a call site is a compile-time error.
+const (
+	reconcilePhaseProvisioner = "provisioner"
+	reconcilePhaseReporter    = "reporter"
+
+	resultSuccess = "success"
+	resultError   = "error"
+
+	deleteReasonOrphan  = "orphan"
+	deleteReasonTimeout = "timeout"
+	deleteReasonExcess  = "excess"
+
+	skipReasonProvisionerListPairs = "provisioner_list_pairs"
+	skipReasonReporterListPairs    = "reporter_list_pairs"
+	skipReasonReporterCountRunners = "reporter_count_runners"
+	skipReasonHUDAPIFailed         = "hud_api_failed"
+
+	rolePlaceholderRunnerLabel   = "runner"
+	rolePlaceholderWorkflowLabel = "workflow"
+)
+
+// allPlaceholderRoles enumerates the role label values emitted on the
+// gha_capacity_placeholder_pods gauge. Iteration order is fixed for
+// deterministic emission of zero-valued series.
+var allPlaceholderRoles = []string{
+	rolePlaceholderRunnerLabel,
+	rolePlaceholderWorkflowLabel,
+}
+
+// allPlaceholderPhases enumerates the phase label values emitted on the
+// gha_capacity_placeholder_pods gauge. We MUST always emit a value for
+// every (role, phase) combination — including zeros — so that gauges
+// for empty phases visibly decrement to 0 instead of sticking on the
+// previous non-zero value.
+var allPlaceholderPhases = []string{
+	string(corev1.PodPending),
+	string(corev1.PodRunning),
+	string(corev1.PodFailed),
+	string(corev1.PodSucceeded),
+	string(corev1.PodUnknown),
+}
 
 // Monitor is the capacity monitor goroutine. It creates placeholder
 // pod pairs to pre-warm Kubernetes nodes, queries the HUD API for
@@ -29,22 +77,43 @@ type Monitor struct {
 	setMaxRunners func(int)
 	logger        *slog.Logger
 	slotCounter   atomic.Int64 // monotonic counter for unique slot IDs
+	recorder      metrics.CapacityRecorder
+}
+
+// Option configures a Monitor at construction time. Use WithRecorder to
+// inject a non-discard CapacityRecorder.
+type Option func(*Monitor)
+
+// WithRecorder sets the metrics recorder. If WithRecorder is not passed
+// to New, the monitor uses metrics.DiscardCapacity (no-op) so callers
+// (including tests) need not care about metrics wiring.
+func WithRecorder(r metrics.CapacityRecorder) Option {
+	return func(m *Monitor) {
+		if r != nil {
+			m.recorder = r
+		}
+	}
 }
 
 // New creates a new capacity Monitor. The setMaxRunners callback is
 // typically listener.SetMaxRunners. Returns an error if the supplied
 // Config fails validation (e.g. a required env var is missing).
+//
+// The variadic opts argument keeps the signature backward-compatible:
+// existing callers (and tests) can omit options and get the discard
+// recorder by default.
 func New(
 	config Config,
 	clientset kubernetes.Interface,
 	setMaxRunners func(int),
 	logger *slog.Logger,
+	opts ...Option,
 ) (*Monitor, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid capacity monitor config: %w", err)
 	}
 	listenerID, _ := os.Hostname()
-	return &Monitor{
+	m := &Monitor{
 		config: config,
 		placeholders: NewPlaceholderManager(
 			clientset,
@@ -57,7 +126,24 @@ func New(
 		clientset:     clientset,
 		setMaxRunners: setMaxRunners,
 		logger:        logger.With("component", "capacity-monitor"),
-	}, nil
+		recorder:      metrics.DiscardCapacity,
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	// Static gauges set once at construction so they appear in Prometheus
+	// scrapes even before the first reconcile cycle runs.
+	m.recorder.SetProactiveCapacity(m.config.ProactiveCapacity)
+	m.recorder.SetHUDEnabled(m.hudClient != nil && m.config.HUDAPIToken != "")
+	// Seed the reconcile-last-success gauges to listener-startup time so any
+	// `time() - metric` wedge alert has a sane floor (small at startup,
+	// growing only if reconciles stop succeeding). Otherwise the gauges
+	// would read 0 (the Unix epoch) until the first reconcile completes,
+	// causing wedge alerts to fire spuriously on every listener restart.
+	now := time.Now()
+	m.recorder.SetReconcileLastSuccess(reconcilePhaseProvisioner, now)
+	m.recorder.SetReconcileLastSuccess(reconcilePhaseReporter, now)
+	return m, nil
 }
 
 // retryWithBackoff retries fn with exponential backoff (1s, 2s, 4s, ...).
@@ -120,8 +206,20 @@ func (m *Monitor) countRunningRunnersWithRetry(ctx context.Context, maxRetries i
 func (m *Monitor) queryHUDWithRetry(ctx context.Context) (int, error) {
 	var count int
 	err := retryWithBackoff(ctx, m.logger, "hud-api", provisionerMaxRetries, func() error {
+		// Per-attempt instrumentation: each HTTP attempt is one
+		// observation in the histogram and one increment on the counter.
+		// retryWithBackoff calls this closure once per attempt, so wrapping
+		// it here gives us latency + count for every attempt (including
+		// the failed ones) — which is what the dashboard wants.
+		start := time.Now()
 		var e error
 		count, e = m.hudClient.GetQueuedJobsForLabels(ctx, m.config.ScaleSetLabels)
+		result := resultSuccess
+		if e != nil {
+			result = resultError
+		}
+		m.recorder.ObserveHUDRequest(result, time.Since(start))
+		m.recorder.IncHUDRequests(result)
 		return e
 	})
 	return count, err
@@ -145,8 +243,17 @@ func (m *Monitor) Run(ctx context.Context) error {
 	)
 
 	// Clean up orphaned placeholders from previous listener instances.
-	if err := m.placeholders.CleanupOrphans(ctx); err != nil {
+	// CleanupOrphans uses DeleteCollection (atomic from caller's view): the
+	// returned count reflects pods successfully deleted; the error path
+	// covers either a pod-DeleteCollection failure (count == 0) or a
+	// ConfigMap-DeleteCollection failure (count is the pod-orphan count).
+	orphansDeleted, err := m.placeholders.CleanupOrphans(ctx)
+	if err != nil {
 		m.logger.Warn("failed to cleanup orphaned placeholders", "error", err)
+		m.recorder.IncPairDeletes(deleteReasonOrphan, resultError)
+	}
+	for i := 0; i < orphansDeleted; i++ {
+		m.recorder.IncPairDeletes(deleteReasonOrphan, resultSuccess)
 	}
 
 	// Initial reconciliation: provision first, then report.
@@ -210,6 +317,13 @@ func (m *Monitor) runReporter(ctx context.Context) {
 }
 
 func (m *Monitor) reconcileProvisioning(ctx context.Context) {
+	// Always observe the duration — even if the cycle errors out — so we
+	// can spot runaway latency before it wedges the loop.
+	start := time.Now()
+	defer func() {
+		m.recorder.ObserveReconcileDuration(reconcilePhaseProvisioner, time.Since(start))
+	}()
+
 	// 1. Query HUD API with retry (graceful fallback to 0).
 	queuedJobs := 0
 	if m.hudClient != nil && m.config.HUDAPIToken != "" {
@@ -217,25 +331,44 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 		queuedJobs, err = m.queryHUDWithRetry(ctx)
 		if err != nil {
 			m.logger.Warn("HUD API failed after retries, using 0 queued jobs", "error", err)
+			m.recorder.IncReconcileSkips(skipReasonHUDAPIFailed)
 			queuedJobs = 0
 		}
 	}
+	// Set even on the failure path — queuedJobs is 0 in that case, which
+	// is the right value to report. Calling SetQueuedJobs unconditionally
+	// also keeps the gauge fresh when HUD is intermittently broken.
+	m.recorder.SetQueuedJobs(queuedJobs)
 
 	// 2. Cleanup timed-out placeholder pairs (best-effort, no retry).
-	timedOut, err := m.placeholders.CleanupTimedOut(ctx)
+	// CleanupTimedOut returns per-pair counts so we can emit accurate
+	// success/error metrics. The error is only non-nil for the initial
+	// list step — per-pair delete failures are surfaced via timedOutFailed.
+	timedOutSuccess, timedOutFailed, err := m.placeholders.CleanupTimedOut(ctx)
 	if err != nil {
-		m.logger.Warn("failed to cleanup timed out placeholders", "error", err)
-	} else if timedOut > 0 {
-		m.logger.Info("cleaned up timed-out placeholder pairs", "count", timedOut)
+		m.logger.Warn("failed to list pairs for timed-out cleanup", "error", err)
+		m.recorder.IncPairDeletes(deleteReasonTimeout, resultError)
+	} else if timedOutSuccess > 0 || timedOutFailed > 0 {
+		m.logger.Info("cleaned up timed-out placeholder pairs",
+			"success", timedOutSuccess, "failed", timedOutFailed)
+	}
+	for i := 0; i < timedOutSuccess; i++ {
+		m.recorder.IncPairDeletes(deleteReasonTimeout, resultSuccess)
+	}
+	for i := 0; i < timedOutFailed; i++ {
+		m.recorder.IncPairDeletes(deleteReasonTimeout, resultError)
 	}
 
 	// 3. List current pairs with retry.
 	pairs, err := m.listPairsWithRetry(ctx, provisionerMaxRetries)
 	if err != nil {
 		m.logger.Error("failed to list pairs after retries, skipping provisioning cycle", "error", err)
+		m.recorder.IncReconcileSkips(skipReasonProvisionerListPairs)
 		return
 	}
 	currentPairs := len(pairs)
+	m.recorder.SetPairs(currentPairs)
+	m.emitPlaceholderPodPhases(pairs)
 
 	// 4. Calculate desired placeholder count.
 	desiredPairs := m.config.ProactiveCapacity + queuedJobs
@@ -243,6 +376,7 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 		desiredPairs = min(desiredPairs, m.config.MaxRunners)
 	}
 	desiredPairs = max(desiredPairs, 0)
+	m.recorder.SetDesiredPairs(desiredPairs)
 
 	// 5. Adjust: create or delete pairs.
 	m.adjustPairs(ctx, pairs, currentPairs, desiredPairs)
@@ -252,13 +386,25 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 		"desiredPairs", desiredPairs,
 		"currentPairs", currentPairs,
 	)
+	// Mark success only at the end of a fully completed cycle. Early-exit
+	// paths above (list-pairs error) do NOT mark success — the whole point
+	// of this metric is to detect when reconciles stop succeeding.
+	m.recorder.SetReconcileLastSuccess(reconcilePhaseProvisioner, time.Now())
 }
 
 func (m *Monitor) reconcileReporting(ctx context.Context) {
+	// Always observe the duration — even if the cycle errors out — so we
+	// can spot runaway latency before it wedges the loop.
+	start := time.Now()
+	defer func() {
+		m.recorder.ObserveReconcileDuration(reconcilePhaseReporter, time.Since(start))
+	}()
+
 	// 1. List pairs with retry. On failure, keep previous capacity unchanged.
 	pairs, err := m.listPairsWithRetry(ctx, reporterMaxRetries)
 	if err != nil {
 		m.logger.Warn("failed to list pairs, keeping previous capacity", "error", err)
+		m.recorder.IncReconcileSkips(skipReasonReporterListPairs)
 		return
 	}
 
@@ -268,11 +414,13 @@ func (m *Monitor) reconcileReporting(ctx context.Context) {
 			runningPairs++
 		}
 	}
+	m.recorder.SetRunningPairs(runningPairs)
 
 	// 2. Count running runners with retry. On failure, keep previous capacity.
 	runningRunners, err := m.countRunningRunnersWithRetry(ctx, reporterMaxRetries)
 	if err != nil {
 		m.logger.Warn("failed to count runners, keeping previous capacity", "error", err)
+		m.recorder.IncReconcileSkips(skipReasonReporterCountRunners)
 		return
 	}
 
@@ -281,6 +429,9 @@ func (m *Monitor) reconcileReporting(ctx context.Context) {
 	if m.config.MaxRunners > 0 {
 		capacity = min(capacity, m.config.MaxRunners)
 	}
+	// Set the gauge BEFORE invoking setMaxRunners — so the metric reflects
+	// the value we tried to send, not what the listener might filter.
+	m.recorder.SetAdvertisedMaxRunners(capacity)
 	m.setMaxRunners(capacity)
 
 	m.logger.Info("capacity reported",
@@ -288,6 +439,10 @@ func (m *Monitor) reconcileReporting(ctx context.Context) {
 		"runningRunners", runningRunners,
 		"reportedCapacity", capacity,
 	)
+	// Mark success only at the end of a fully completed cycle. Early-exit
+	// paths above (list-pairs error, count-runners error) do NOT mark
+	// success — wedge detection depends on this.
+	m.recorder.SetReconcileLastSuccess(reconcilePhaseReporter, time.Now())
 }
 
 func (m *Monitor) adjustPairs(
@@ -302,7 +457,10 @@ func (m *Monitor) adjustPairs(
 			if err := m.placeholders.CreatePair(ctx, slotID); err != nil {
 				m.logger.Error("failed to create placeholder pair",
 					"slotID", slotID, "error", err)
+				m.recorder.IncPairCreates(resultError)
+				continue
 			}
+			m.recorder.IncPairCreates(resultSuccess)
 		}
 		return
 	}
@@ -325,8 +483,10 @@ func (m *Monitor) adjustPairs(
 			if err := m.placeholders.DeletePair(ctx, slotID); err != nil {
 				m.logger.Error("failed to delete placeholder pair",
 					"slotID", slotID, "error", err)
+				m.recorder.IncPairDeletes(deleteReasonExcess, resultError)
 				continue
 			}
+			m.recorder.IncPairDeletes(deleteReasonExcess, resultSuccess)
 			deletedSlots[slotID] = struct{}{}
 			deleted++
 		}
@@ -343,9 +503,59 @@ func (m *Monitor) adjustPairs(
 		if err := m.placeholders.DeletePair(ctx, slotID); err != nil {
 			m.logger.Error("failed to delete placeholder pair",
 				"slotID", slotID, "error", err)
+			m.recorder.IncPairDeletes(deleteReasonExcess, resultError)
 			continue
 		}
+		m.recorder.IncPairDeletes(deleteReasonExcess, resultSuccess)
 		deletedSlots[slotID] = struct{}{}
 		deleted++
 	}
+}
+
+// emitPlaceholderPodPhases iterates the supplied pairs map and emits
+// gha_capacity_placeholder_pods{role,phase} for ALL (role × phase)
+// combinations — including zeros — so the gauges decrement when a phase
+// empties out (otherwise old non-zero values stick forever).
+func (m *Monitor) emitPlaceholderPodPhases(pairs map[string]*PlaceholderPair) {
+	// Pre-seed zeros for every (role, phase) combination so missing
+	// combinations decrement instead of sticking on the previous value.
+	counts := make(map[string]map[string]int, len(allPlaceholderRoles))
+	for _, role := range allPlaceholderRoles {
+		counts[role] = make(map[string]int, len(allPlaceholderPhases))
+		for _, phase := range allPlaceholderPhases {
+			counts[role][phase] = 0
+		}
+	}
+	for _, pair := range pairs {
+		incPlaceholderPhase(counts, rolePlaceholderRunnerLabel, pair.RunnerPod)
+		incPlaceholderPhase(counts, rolePlaceholderWorkflowLabel, pair.WorkflowPod)
+	}
+	for _, role := range allPlaceholderRoles {
+		for _, phase := range allPlaceholderPhases {
+			m.recorder.SetPlaceholderPods(role, phase, counts[role][phase])
+		}
+	}
+}
+
+// incPlaceholderPhase increments the count for a single pod's role and
+// phase, falling back to "unknown" when the pod has no phase set yet.
+// nil pods (one half of the pair missing) are ignored.
+func incPlaceholderPhase(counts map[string]map[string]int, role string, pod *corev1.Pod) {
+	if pod == nil {
+		return
+	}
+	phase := string(pod.Status.Phase)
+	if phase == "" {
+		// Empty phase shows up briefly between Create and the API server
+		// recording status. Treat it as unknown so the gauge stays in the
+		// declared phase enum.
+		phase = string(corev1.PodUnknown)
+	}
+	if _, ok := counts[role][phase]; !ok {
+		// Defensive: a pod with a phase outside the declared enum (should
+		// never happen in practice) gets bucketed into "unknown" rather
+		// than silently dropped — preserves total invariant.
+		phase = string(corev1.PodUnknown)
+	}
+	counts[role][phase]++
 }

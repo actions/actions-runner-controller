@@ -220,9 +220,10 @@ func TestCleanupTimedOut(t *testing.T) {
 	setPodsCreationAndPhase(t, cs, ctx, "test-ns", "slot-new",
 		time.Now(), corev1.PodPending)
 
-	deleted, err := pm.CleanupTimedOut(ctx)
+	deleted, failed, err := pm.CleanupTimedOut(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, deleted)
+	assert.Equal(t, 0, failed)
 
 	pairs, _ := pm.ListPairs(ctx)
 	assert.Len(t, pairs, 1)
@@ -245,7 +246,9 @@ func TestCleanupOrphans(t *testing.T) {
 	pods, _ := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{})
 	assert.Len(t, pods.Items, 4, "4 pods before cleanup")
 
-	require.NoError(t, pm.CleanupOrphans(ctx))
+	deleted, err := pm.CleanupOrphans(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, deleted, "two orphan pods deleted")
 
 	pods, _ = cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{})
 	assert.Len(t, pods.Items, 2, "only current listener pods remain")
@@ -278,7 +281,9 @@ func TestCleanupOrphans_ScopedToScaleSet(t *testing.T) {
 	pods, _ := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{})
 	assert.Len(t, pods.Items, 6, "6 pods before cleanup")
 
-	require.NoError(t, pm.CleanupOrphans(ctx))
+	deleted, err := pm.CleanupOrphans(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, deleted, "two stale orphan pods deleted")
 
 	pods, _ = cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{})
 	// 2 from other-sset (preserved) + 2 from current listener (preserved).

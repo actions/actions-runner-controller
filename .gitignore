@@ -38,3 +38,5 @@ bin
 /.tools
 
 ghalistener
+!cmd/ghalistener
+!cmd/ghalistener/**
