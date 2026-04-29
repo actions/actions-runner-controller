@@ -101,6 +101,9 @@ spec:
         - "--workqueue-rate-limiter={{ . }}"
         {{- end }}
         {{- end }}
+        {{- with .Values.flags.healthProbeBindAddress }}
+        - "--health-probe-bind-address={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         {{- if or .Values.metrics .Values.pprof.addr }}
@@ -115,6 +118,20 @@ spec:
         - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .Values.pprof.addr) }}
           protocol: TCP
           name: pprof
+        {{- end }}
+        {{- with .Values.flags.healthProbeBindAddress }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ regexFind "[0-9]+$" . }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ regexFind "[0-9]+$" . }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
         {{- end }}
         env:
         - name: CONTROLLER_MANAGER_CONTAINER_IMAGE

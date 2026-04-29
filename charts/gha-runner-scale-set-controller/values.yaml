@@ -150,6 +150,10 @@ flags:
 # Overrides the default `.Release.Namespace` for all resources in this chart.
 namespaceOverride: ""
 
+  ## The address the health probe endpoint binds to. Disabled if empty.
+  ## When set, liveness and readiness probes are added to the controller pod.
+  # healthProbeBindAddress: ":8081"
+
 ## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20
   # k8sClientRateLimiterBurst: 30
