@@ -351,6 +351,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		)
 		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 
+	case initContainerFailed(pod):
+		log.Info("Pod has a failed init container, deleting pod as failed so it can be restarted",
+			"initContainerStatuses", pod.Status.InitContainerStatuses,
+		)
+		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
+
 	case cs == nil:
 		// starting, no container state yet
 		log.Info("Waiting for runner container status to be available")
@@ -861,4 +867,14 @@ func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
 		}
 	}
 	return nil
+}
+
+func initContainerFailed(pod *corev1.Pod) bool {
+	for i := range pod.Status.InitContainerStatuses {
+		cs := &pod.Status.InitContainerStatuses[i]
+		if cs.State.Terminated != nil && cs.State.Terminated.ExitCode != 0 {
+			return true
+		}
+	}
+	return false
 }
