@@ -277,19 +277,23 @@ func (pm *PlaceholderManager) buildRunnerPlaceholder(slotID string) *corev1.Pod 
 	pm.setQuantity(&resources, corev1.ResourceCPU, pm.config.RunnerCPU, "RunnerCPU")
 	pm.setQuantity(&resources, corev1.ResourceMemory, pm.config.RunnerMemory, "RunnerMemory")
 
-	// Runner nodeSelector: workload-type, node-fleet, optional runner-class.
+	// Runner nodeSelector: workload-type, runner-pool node-fleet, optional runner-class.
+	// The runner pod lands on the cluster-wide runner pool (e.g. c7i-runner) — NOT the
+	// per-scale-set workflow-pool fleet (which is governed by NodeFleet).
 	nodeSelector := map[string]string{
 		"workload-type": "github-runner",
 	}
-	if pm.config.NodeFleet != "" {
-		nodeSelector["node-fleet"] = pm.config.NodeFleet
+	if pm.config.RunnerNodeFleet != "" {
+		nodeSelector["node-fleet"] = pm.config.RunnerNodeFleet
 	}
 	if pm.config.RunnerClass != "" {
 		nodeSelector["osdc.io/runner-class"] = pm.config.RunnerClass
 	}
 
-	// Runner tolerations: node-fleet, instance-type Exists, git-cache-not-ready,
-	// plus optional GPU and runner-class. NOT workload-type (that's a node label).
+	// Runner tolerations: instance-type Exists, git-cache-not-ready (Exists —
+	// the runner-pool nodes carry git-cache-not-ready as an unconditional
+	// startupTaint), runner-pool node-fleet, plus optional GPU and runner-class.
+	// NOT workload-type (that's a node label, not a taint).
 	tolerations := []corev1.Toleration{
 		{
 			Key:      "instance-type",
@@ -298,16 +302,15 @@ func (pm *PlaceholderManager) buildRunnerPlaceholder(slotID string) *corev1.Pod 
 		},
 		{
 			Key:      "git-cache-not-ready",
-			Operator: corev1.TolerationOpEqual,
-			Value:    "true",
+			Operator: corev1.TolerationOpExists,
 			Effect:   corev1.TaintEffectNoSchedule,
 		},
 	}
-	if pm.config.NodeFleet != "" {
+	if pm.config.RunnerNodeFleet != "" {
 		tolerations = append(tolerations, corev1.Toleration{
 			Key:      "node-fleet",
 			Operator: corev1.TolerationOpEqual,
-			Value:    pm.config.NodeFleet,
+			Value:    pm.config.RunnerNodeFleet,
 			Effect:   corev1.TaintEffectNoSchedule,
 		})
 	}

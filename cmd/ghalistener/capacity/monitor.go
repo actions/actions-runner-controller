@@ -32,14 +32,17 @@ type Monitor struct {
 }
 
 // New creates a new capacity Monitor. The setMaxRunners callback is
-// typically listener.SetMaxRunners.
+// typically listener.SetMaxRunners. Returns an error if the supplied
+// Config fails validation (e.g. a required env var is missing).
 func New(
 	config Config,
 	clientset kubernetes.Interface,
 	setMaxRunners func(int),
 	logger *slog.Logger,
-) *Monitor {
-	config.Validate()
+) (*Monitor, error) {
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid capacity monitor config: %w", err)
+	}
 	listenerID, _ := os.Hostname()
 	return &Monitor{
 		config: config,
@@ -54,7 +57,7 @@ func New(
 		clientset:     clientset,
 		setMaxRunners: setMaxRunners,
 		logger:        logger.With("component", "capacity-monitor"),
-	}
+	}, nil
 }
 
 // retryWithBackoff retries fn with exponential backoff (1s, 2s, 4s, ...).
@@ -127,10 +130,16 @@ func (m *Monitor) queryHUDWithRetry(ctx context.Context) (int, error) {
 // Run starts the capacity monitor loop. It blocks until ctx is
 // cancelled, then cleans up all placeholder pods before returning.
 func (m *Monitor) Run(ctx context.Context) error {
+	// Log both resolved fleet values so a placeholder landing on the wrong
+	// pool can be diagnosed unambiguously. Workflow placeholders use
+	// NodeFleet (per-scale-set), runner placeholders use RunnerNodeFleet
+	// (cluster-wide).
 	m.logger.Info("starting capacity monitor",
 		"proactiveCapacity", m.config.ProactiveCapacity,
 		"maxRunners", m.config.MaxRunners,
 		"labels", m.config.ScaleSetLabels,
+		"workflowNodeFleet", m.config.NodeFleet,
+		"runnerNodeFleet", m.config.RunnerNodeFleet,
 		"recalculateInterval", m.config.RecalculateInterval,
 		"reportInterval", m.config.ReportInterval,
 	)

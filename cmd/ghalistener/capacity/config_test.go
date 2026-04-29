@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setEnvs(t *testing.T, envs map[string]string) {
@@ -45,6 +46,7 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 		"CAPACITY_AWARE_RUNNER_CPU",
 		"CAPACITY_AWARE_RUNNER_MEMORY",
 		"CAPACITY_AWARE_NODE_FLEET",
+		"CAPACITY_AWARE_RUNNER_NODE_FLEET",
 		"CAPACITY_AWARE_RUNNER_CLASS",
 		"CAPACITY_AWARE_HUD_API_TOKEN",
 	}
@@ -63,6 +65,7 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 	assert.Equal(t, "750m", cfg.RunnerCPU, "RunnerCPU default")
 	assert.Equal(t, "512Mi", cfg.RunnerMemory, "RunnerMemory default")
 	assert.Equal(t, "", cfg.NodeFleet, "NodeFleet default")
+	assert.Equal(t, "", cfg.RunnerNodeFleet, "RunnerNodeFleet default")
 	assert.Equal(t, "", cfg.RunnerClass, "RunnerClass default")
 	assert.Equal(t, "", cfg.HUDAPIToken, "HUDAPIToken default")
 	// Fields set by main.go should be zero values.
@@ -86,6 +89,7 @@ func TestConfigFromEnv_AllSet(t *testing.T) {
 		"CAPACITY_AWARE_RUNNER_CPU":           "1",
 		"CAPACITY_AWARE_RUNNER_MEMORY":        "1Gi",
 		"CAPACITY_AWARE_NODE_FLEET":           "gpu-fleet",
+		"CAPACITY_AWARE_RUNNER_NODE_FLEET":    "c7i-runner",
 		"CAPACITY_AWARE_RUNNER_CLASS":         "gpu-large",
 		"CAPACITY_AWARE_HUD_API_TOKEN":        "secret-token",
 	})
@@ -103,6 +107,7 @@ func TestConfigFromEnv_AllSet(t *testing.T) {
 	assert.Equal(t, "1", cfg.RunnerCPU)
 	assert.Equal(t, "1Gi", cfg.RunnerMemory)
 	assert.Equal(t, "gpu-fleet", cfg.NodeFleet)
+	assert.Equal(t, "c7i-runner", cfg.RunnerNodeFleet)
 	assert.Equal(t, "gpu-large", cfg.RunnerClass)
 	assert.Equal(t, "secret-token", cfg.HUDAPIToken)
 }
@@ -193,21 +198,76 @@ func TestConfigFromEnv_ProactiveCapacity_AboveWarnAllowed(t *testing.T) {
 // Validate() clamps negative MaxRunners (set by main.go after env parse).
 func TestConfig_Validate_MaxRunnersNegativeClamped(t *testing.T) {
 	cfg := Config{MaxRunners: -3}
-	cfg.Validate()
+	require.NoError(t, cfg.Validate())
 	assert.Equal(t, 0, cfg.MaxRunners,
 		"Validate must clamp negative MaxRunners to 0")
 }
 
 func TestConfig_Validate_MaxRunnersZeroPreserved(t *testing.T) {
 	cfg := Config{MaxRunners: 0}
-	cfg.Validate()
+	require.NoError(t, cfg.Validate())
 	assert.Equal(t, 0, cfg.MaxRunners,
 		"Validate preserves MaxRunners=0 (means unlimited downstream)")
 }
 
 func TestConfig_Validate_MaxRunnersPositivePreserved(t *testing.T) {
 	cfg := Config{MaxRunners: 42}
-	cfg.Validate()
+	require.NoError(t, cfg.Validate())
 	assert.Equal(t, 42, cfg.MaxRunners,
 		"Validate preserves positive MaxRunners")
+}
+
+// Validate must reject Enabled=true with no RunnerNodeFleet — silently
+// falling back would land runner placeholders on the workflow pool, which
+// is precisely what the split-fleet config is here to prevent.
+func TestConfig_Validate_EnabledWithoutRunnerNodeFleet_Errors(t *testing.T) {
+	cfg := Config{Enabled: true, RunnerNodeFleet: ""}
+	err := cfg.Validate()
+	require.Error(t, err,
+		"Validate must error when Enabled=true and RunnerNodeFleet is empty")
+	assert.Contains(t, err.Error(), "CAPACITY_AWARE_RUNNER_NODE_FLEET",
+		"error message must name the missing env var")
+}
+
+// Validate must accept Enabled=true when RunnerNodeFleet is set.
+func TestConfig_Validate_EnabledWithRunnerNodeFleet_OK(t *testing.T) {
+	cfg := Config{Enabled: true, RunnerNodeFleet: "c7i-runner"}
+	assert.NoError(t, cfg.Validate(),
+		"Validate must succeed when Enabled=true and RunnerNodeFleet is set")
+}
+
+// Validate must NOT error when capacity-aware mode is disabled, even with
+// no RunnerNodeFleet — the config field is simply unused.
+func TestConfig_Validate_DisabledWithoutRunnerNodeFleet_OK(t *testing.T) {
+	cfg := Config{Enabled: false, RunnerNodeFleet: ""}
+	assert.NoError(t, cfg.Validate(),
+		"Validate must succeed when capacity-aware mode is disabled, regardless of RunnerNodeFleet")
+}
+
+// ConfigFromEnv loads CAPACITY_AWARE_RUNNER_NODE_FLEET into RunnerNodeFleet
+// (separate from CAPACITY_AWARE_NODE_FLEET, which loads into NodeFleet).
+func TestConfigFromEnv_RunnerNodeFleet_LoadedSeparately(t *testing.T) {
+	setEnvs(t, map[string]string{
+		"CAPACITY_AWARE_NODE_FLEET":        "g4dn",
+		"CAPACITY_AWARE_RUNNER_NODE_FLEET": "c7i-runner",
+	})
+
+	cfg := ConfigFromEnv()
+
+	assert.Equal(t, "g4dn", cfg.NodeFleet,
+		"NodeFleet (workflow pool) loaded from CAPACITY_AWARE_NODE_FLEET")
+	assert.Equal(t, "c7i-runner", cfg.RunnerNodeFleet,
+		"RunnerNodeFleet (runner pool) loaded from CAPACITY_AWARE_RUNNER_NODE_FLEET")
+}
+
+// Whitespace must be trimmed from CAPACITY_AWARE_RUNNER_NODE_FLEET, matching
+// the behavior of CAPACITY_AWARE_NODE_FLEET.
+func TestConfigFromEnv_RunnerNodeFleet_WhitespaceTrimmed(t *testing.T) {
+	setEnvs(t, map[string]string{
+		"CAPACITY_AWARE_RUNNER_NODE_FLEET": "  c7i-runner  ",
+	})
+
+	cfg := ConfigFromEnv()
+
+	assert.Equal(t, "c7i-runner", cfg.RunnerNodeFleet)
 }

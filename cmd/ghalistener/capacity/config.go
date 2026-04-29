@@ -1,6 +1,7 @@
 package capacity
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"strconv"
@@ -37,9 +38,14 @@ type Config struct {
 	RunnerCPU    string
 	RunnerMemory string
 
-	// Node placement
-	NodeFleet   string
-	RunnerClass string
+	// Node placement.
+	// NodeFleet is the workflow-pool fleet, used for placeholder-workflow pods.
+	// Per-scale-set value (e.g. g4dn, c7a, m8g).
+	// RunnerNodeFleet is the runner-pool fleet, used for placeholder-runner pods.
+	// Cluster-wide value (currently c7i-runner) — same across all scale sets.
+	NodeFleet       string
+	RunnerNodeFleet string
+	RunnerClass     string
 
 	// Scale set info (set by main.go, not env vars)
 	ScaleSetID     int
@@ -72,6 +78,7 @@ func ConfigFromEnv() Config {
 		RunnerCPU:           envString("CAPACITY_AWARE_RUNNER_CPU", "750m"),
 		RunnerMemory:        envString("CAPACITY_AWARE_RUNNER_MEMORY", "512Mi"),
 		NodeFleet:           envString("CAPACITY_AWARE_NODE_FLEET", ""),
+		RunnerNodeFleet:     envString("CAPACITY_AWARE_RUNNER_NODE_FLEET", ""),
 		RunnerClass:         envString("CAPACITY_AWARE_RUNNER_CLASS", ""),
 		HUDAPIURL:           envString("CAPACITY_AWARE_HUD_API_URL", defaultHUDAPIURL),
 		HUDAPIToken:         envString("CAPACITY_AWARE_HUD_API_TOKEN", ""),
@@ -95,13 +102,27 @@ func ConfigFromEnv() Config {
 }
 
 // Validate sanitizes fields populated by the caller (after ConfigFromEnv
-// returns). Currently clamps negative MaxRunners to 0.
-func (c *Config) Validate() {
+// returns) and enforces required env vars when capacity-aware mode is
+// enabled. Returns an error for any unrecoverable configuration problem.
+//
+// Side-effect: clamps negative MaxRunners to 0.
+func (c *Config) Validate() error {
 	if c.MaxRunners < 0 {
 		slog.Warn("MaxRunners is negative, clamping to 0",
 			"original", c.MaxRunners)
 		c.MaxRunners = 0
 	}
+
+	if c.Enabled && c.RunnerNodeFleet == "" {
+		// Hard requirement: the runner-pool fleet drives placeholder-runner
+		// pod placement. Falling back to NodeFleet (the workflow-pool) would
+		// silently land runner placeholders on the wrong pool — defeating the
+		// topology separation that this config is here to provide.
+		return errors.New(
+			"CAPACITY_AWARE_RUNNER_NODE_FLEET is required when CAPACITY_AWARE_ENABLED=true",
+		)
+	}
+	return nil
 }
 
 func envString(key, fallback string) string {

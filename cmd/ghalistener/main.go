@@ -157,10 +157,16 @@ func run(ctx context.Context, config *config.Config) error {
 			return fmt.Errorf("failed to create k8s client for capacity monitor: %w", err)
 		}
 
-		capMonitor := capacity.New(capConfig, k8sClient, listener.SetMaxRunners, logger)
+		capMonitor, err := capacity.New(capConfig, k8sClient, listener.SetMaxRunners, logger)
+		if err != nil {
+			return fmt.Errorf("failed to create capacity monitor: %w", err)
+		}
+		// Log both resolved fleet values so debugging is unambiguous when a
+		// placeholder lands on the wrong pool — never log the env var names.
 		logger.Info("Capacity monitor enabled",
 			"proactiveCapacity", capConfig.ProactiveCapacity,
-			"nodeFleet", capConfig.NodeFleet,
+			"workflowNodeFleet", capConfig.NodeFleet,
+			"runnerNodeFleet", capConfig.RunnerNodeFleet,
 			"runnerClass", capConfig.RunnerClass,
 		)
 

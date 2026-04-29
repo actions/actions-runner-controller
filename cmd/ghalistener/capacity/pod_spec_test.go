@@ -78,9 +78,10 @@ func TestWorkflowPlaceholder_NoGPU_NoFleet_NoRunnerClass(t *testing.T) {
 
 func TestRunnerPlaceholder_WithGPU_WithFleet_WithRunnerClass(t *testing.T) {
 	cfg := Config{
-		WorkflowGPU: 2,
-		NodeFleet:   "gpu-fleet",
-		RunnerClass: "gpu-large",
+		WorkflowGPU:     2,
+		NodeFleet:       "gpu-fleet",
+		RunnerNodeFleet: "c7i-runner",
+		RunnerClass:     "gpu-large",
 	}
 	pm, _ := newTestPM(t, cfg)
 	ctx := context.Background()
@@ -89,8 +90,10 @@ func TestRunnerPlaceholder_WithGPU_WithFleet_WithRunnerClass(t *testing.T) {
 	pairs, _ := pm.ListPairs(ctx)
 	runner := pairs["gpu-slot"].RunnerPod
 
-	// Runner has hard nodeSelector for fleet + class.
-	assert.Equal(t, "gpu-fleet", runner.Spec.NodeSelector["node-fleet"])
+	// Runner has hard nodeSelector for the RUNNER fleet (not the workflow
+	// fleet) + class.
+	assert.Equal(t, "c7i-runner", runner.Spec.NodeSelector["node-fleet"],
+		"runner placeholder must pin to RunnerNodeFleet, not the workflow NodeFleet")
 	assert.Equal(t, "gpu-large", runner.Spec.NodeSelector["osdc.io/runner-class"])
 	assert.Equal(t, "github-runner", runner.Spec.NodeSelector["workload-type"])
 
@@ -104,9 +107,22 @@ func TestRunnerPlaceholder_WithGPU_WithFleet_WithRunnerClass(t *testing.T) {
 	assert.Contains(t, keys, "osdc.io/runner-class")
 
 	// GPU toleration uses Exists operator (template uses Exists).
+	// node-fleet toleration on the runner pod must carry the RUNNER
+	// fleet value — never the workflow fleet.
+	// git-cache-not-ready toleration must be operator: Exists (the runner
+	// pool carries this as an unconditional startupTaint).
 	for _, tol := range runner.Spec.Tolerations {
-		if tol.Key == "nvidia.com/gpu" {
+		switch tol.Key {
+		case "nvidia.com/gpu":
 			assert.Equal(t, corev1.TolerationOpExists, tol.Operator)
+		case "node-fleet":
+			assert.Equal(t, "c7i-runner", tol.Value,
+				"runner placeholder node-fleet toleration must use RunnerNodeFleet")
+			assert.NotEqual(t, "gpu-fleet", tol.Value,
+				"runner placeholder must NEVER use the workflow NodeFleet value")
+		case "git-cache-not-ready":
+			assert.Equal(t, corev1.TolerationOpExists, tol.Operator,
+				"git-cache-not-ready toleration must use operator: Exists")
 		}
 	}
 }
@@ -321,6 +337,113 @@ func TestPodNameTruncation_HashSuffixPreservesUniqueness(t *testing.T) {
 		assert.True(t,
 			(c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'),
 			"truncated suffix must be lower-case hex, got %q", suffix1)
+	}
+}
+
+// Split-fleet invariant: with a different RunnerNodeFleet and NodeFleet,
+// the runner placeholder must use RunnerNodeFleet for nodeSelector AND
+// node-fleet toleration; the workflow placeholder must use NodeFleet for
+// the same fields. The two fleets must NEVER be conflated.
+func TestPlaceholders_SplitFleet_RunnerAndWorkflowUseDifferentFleets(t *testing.T) {
+	cfg := Config{
+		NodeFleet:       "g4dn",       // workflow pool (per-scale-set)
+		RunnerNodeFleet: "c7i-runner", // runner pool (cluster-wide)
+	}
+	pm, _ := newTestPM(t, cfg)
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "split-slot"))
+	pairs, _ := pm.ListPairs(ctx)
+	pair := pairs["split-slot"]
+	require.NotNil(t, pair.RunnerPod)
+	require.NotNil(t, pair.WorkflowPod)
+
+	// Runner: RunnerNodeFleet drives nodeSelector + node-fleet toleration.
+	assert.Equal(t, "c7i-runner", pair.RunnerPod.Spec.NodeSelector["node-fleet"],
+		"runner placeholder nodeSelector must use RunnerNodeFleet")
+	for _, tol := range pair.RunnerPod.Spec.Tolerations {
+		if tol.Key == "node-fleet" {
+			assert.Equal(t, "c7i-runner", tol.Value,
+				"runner placeholder node-fleet toleration must use RunnerNodeFleet")
+		}
+	}
+
+	// Workflow: NodeFleet (workflow pool) drives node-fleet toleration —
+	// workflow uses soft affinity, NOT a hard nodeSelector.
+	assert.Nil(t, pair.WorkflowPod.Spec.NodeSelector,
+		"workflow placeholder must not have a hard nodeSelector")
+	for _, tol := range pair.WorkflowPod.Spec.Tolerations {
+		if tol.Key == "node-fleet" {
+			assert.Equal(t, "g4dn", tol.Value,
+				"workflow placeholder node-fleet toleration must use NodeFleet (unchanged)")
+		}
+	}
+}
+
+// Runner placeholder must always include the git-cache-not-ready toleration
+// with operator: Exists, because the runner pool inherits the unconditional
+// startupTaint. This applies even with no fleet/class/GPU configured.
+func TestRunnerPlaceholder_GitCacheNotReadyToleration_IsOperatorExists(t *testing.T) {
+	cfg := Config{RunnerNodeFleet: "c7i-runner"}
+	pm, _ := newTestPM(t, cfg)
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "gc-slot"))
+	pairs, _ := pm.ListPairs(ctx)
+	runner := pairs["gc-slot"].RunnerPod
+	require.NotNil(t, runner)
+
+	var found bool
+	for _, tol := range runner.Spec.Tolerations {
+		if tol.Key == "git-cache-not-ready" {
+			found = true
+			assert.Equal(t, corev1.TolerationOpExists, tol.Operator,
+				"git-cache-not-ready toleration must use operator: Exists")
+			// With Exists operator, Value must be empty (Kubernetes contract).
+			assert.Equal(t, "", tol.Value,
+				"git-cache-not-ready toleration with operator:Exists must have empty value")
+			assert.Equal(t, corev1.TaintEffectNoSchedule, tol.Effect)
+		}
+	}
+	assert.True(t, found,
+		"runner placeholder must include git-cache-not-ready toleration")
+}
+
+// Workflow placeholder must NEVER use the runner-pool fleet — that would
+// collapse the topology separation. With both fleets set, workflow uses
+// NodeFleet (per-scale-set, e.g. g4dn) and ignores RunnerNodeFleet entirely.
+func TestWorkflowPlaceholder_DoesNotUseRunnerNodeFleet(t *testing.T) {
+	cfg := Config{
+		NodeFleet:       "g4dn",
+		RunnerNodeFleet: "c7i-runner",
+	}
+	pm, _ := newTestPM(t, cfg)
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "wf-slot"))
+	pairs, _ := pm.ListPairs(ctx)
+	wf := pairs["wf-slot"].WorkflowPod
+	require.NotNil(t, wf)
+
+	// Workflow tolerations must not contain c7i-runner under any key.
+	for _, tol := range wf.Spec.Tolerations {
+		assert.NotEqual(t, "c7i-runner", tol.Value,
+			"workflow placeholder tolerations must NEVER reference RunnerNodeFleet")
+	}
+
+	// Workflow affinity preferences must reference NodeFleet (g4dn), not
+	// RunnerNodeFleet (c7i-runner).
+	require.NotNil(t, wf.Spec.Affinity)
+	require.NotNil(t, wf.Spec.Affinity.NodeAffinity)
+	for _, term := range wf.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+		for _, expr := range term.Preference.MatchExpressions {
+			if expr.Key == "node-fleet" {
+				assert.Contains(t, expr.Values, "g4dn",
+					"workflow node-fleet affinity must reference NodeFleet")
+				assert.NotContains(t, expr.Values, "c7i-runner",
+					"workflow node-fleet affinity must NEVER reference RunnerNodeFleet")
+			}
+		}
 	}
 }
 
