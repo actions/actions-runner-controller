@@ -20,11 +20,12 @@ func TestPodNameTruncation(t *testing.T) {
 	assert.Equal(t, shortName, truncatePodName(shortName))
 }
 
-// Runner placeholder mirrors the runner.yaml.tpl template's `template:`
-// section: hard nodeSelector with workload-type, optional node-fleet,
-// optional runner-class. Tolerations: instance-type Exists, git-cache,
-// optional node-fleet, optional GPU, optional runner-class. NO
-// workload-type toleration (it's a node label, not a taint).
+// Runner placeholder lands on the cluster-wide runner pool (e.g. c7i-runner)
+// which has NO osdc.io/runner-class label or taint. The placeholder must NEVER
+// include runner-class in its nodeSelector or tolerations — doing so leaves
+// the pod Pending forever. nodeSelector: workload-type, optional node-fleet.
+// Tolerations: instance-type Exists, git-cache, optional node-fleet, optional GPU.
+// NO workload-type toleration (it's a node label, not a taint).
 func TestRunnerPlaceholder_NoGPU_NoFleet_NoRunnerClass(t *testing.T) {
 	pm, _ := newTestPM(t, Config{})
 	ctx := context.Background()
@@ -37,13 +38,15 @@ func TestRunnerPlaceholder_NoGPU_NoFleet_NoRunnerClass(t *testing.T) {
 	_, hasFleet := runner.Spec.NodeSelector["node-fleet"]
 	assert.False(t, hasFleet, "no node-fleet without NodeFleet config")
 	_, hasRC := runner.Spec.NodeSelector["osdc.io/runner-class"]
-	assert.False(t, hasRC, "no runner-class without RunnerClass config")
+	assert.False(t, hasRC, "runner placeholder must never include runner-class in nodeSelector")
 
-	// Without NodeFleet/GPU/RunnerClass: only instance-type + git-cache-not-ready.
+	// Without NodeFleet/GPU: only instance-type + git-cache-not-ready.
 	assert.Len(t, runner.Spec.Tolerations, 2)
 	tolerationKeys := tolerationKeySet(runner.Spec.Tolerations)
 	assert.Contains(t, tolerationKeys, "instance-type")
 	assert.Contains(t, tolerationKeys, "git-cache-not-ready")
+	assert.NotContains(t, tolerationKeys, "osdc.io/runner-class",
+		"runner placeholder must never include runner-class toleration")
 }
 
 // Workflow placeholder mirrors the job-pod.yaml ConfigMap template:
@@ -91,20 +94,25 @@ func TestRunnerPlaceholder_WithGPU_WithFleet_WithRunnerClass(t *testing.T) {
 	runner := pairs["gpu-slot"].RunnerPod
 
 	// Runner has hard nodeSelector for the RUNNER fleet (not the workflow
-	// fleet) + class.
+	// fleet). Runner-class MUST NOT be in the nodeSelector — the runner pool
+	// has no runner-class label.
 	assert.Equal(t, "c7i-runner", runner.Spec.NodeSelector["node-fleet"],
 		"runner placeholder must pin to RunnerNodeFleet, not the workflow NodeFleet")
-	assert.Equal(t, "gpu-large", runner.Spec.NodeSelector["osdc.io/runner-class"])
+	_, hasRC := runner.Spec.NodeSelector["osdc.io/runner-class"]
+	assert.False(t, hasRC,
+		"runner placeholder nodeSelector must never include runner-class, even when RunnerClass is set")
 	assert.Equal(t, "github-runner", runner.Spec.NodeSelector["workload-type"])
 
-	// instance-type + git-cache-not-ready + node-fleet + GPU + runner-class = 5.
-	assert.Len(t, runner.Spec.Tolerations, 5)
+	// instance-type + git-cache-not-ready + node-fleet + GPU = 4.
+	// Runner-class MUST NOT appear as a toleration.
+	assert.Len(t, runner.Spec.Tolerations, 4)
 	keys := tolerationKeySet(runner.Spec.Tolerations)
 	assert.Contains(t, keys, "instance-type")
 	assert.Contains(t, keys, "git-cache-not-ready")
 	assert.Contains(t, keys, "node-fleet")
 	assert.Contains(t, keys, "nvidia.com/gpu")
-	assert.Contains(t, keys, "osdc.io/runner-class")
+	assert.NotContains(t, keys, "osdc.io/runner-class",
+		"runner placeholder tolerations must never include runner-class, even when RunnerClass is set")
 
 	// GPU toleration uses Exists operator (template uses Exists).
 	// node-fleet toleration on the runner pod must carry the RUNNER
@@ -445,6 +453,85 @@ func TestWorkflowPlaceholder_DoesNotUseRunnerNodeFleet(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Bug regression: the runner pool (e.g. c7i-runner) carries no
+// osdc.io/runner-class label or taint, so the placeholder-runner pod must
+// NEVER include runner-class in its nodeSelector or tolerations regardless
+// of the configured RunnerClass. With runner-class on the placeholder, the
+// pod stays Pending forever and no preemption can occur.
+//
+// This test verifies the invariant across the full {RunnerClass set, unset}
+// matrix to lock in the fix.
+func TestRunnerPlaceholder_NeverIncludesRunnerClass(t *testing.T) {
+	cases := []struct {
+		name        string
+		runnerClass string
+	}{
+		{name: "RunnerClass empty", runnerClass: ""},
+		{name: "RunnerClass set to release", runnerClass: "release"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Config{
+				RunnerNodeFleet: "c7i-runner",
+				RunnerClass:     tc.runnerClass,
+			}
+			pm, _ := newTestPM(t, cfg)
+			ctx := context.Background()
+
+			require.NoError(t, pm.CreatePair(ctx, "rc-slot"))
+			pairs, _ := pm.ListPairs(ctx)
+			runner := pairs["rc-slot"].RunnerPod
+			require.NotNil(t, runner)
+
+			// nodeSelector must never include runner-class.
+			_, hasRC := runner.Spec.NodeSelector["osdc.io/runner-class"]
+			assert.False(t, hasRC,
+				"runner placeholder nodeSelector must never include osdc.io/runner-class (RunnerClass=%q)",
+				tc.runnerClass)
+
+			// tolerations must never include runner-class.
+			for _, tol := range runner.Spec.Tolerations {
+				assert.NotEqual(t, "osdc.io/runner-class", tol.Key,
+					"runner placeholder tolerations must never include osdc.io/runner-class (RunnerClass=%q)",
+					tc.runnerClass)
+			}
+		})
+	}
+}
+
+// The workflow placeholder MUST still consume RunnerClass via its preferred
+// node affinity (weight 100). Only the runner placeholder drops runner-class —
+// the workflow pod's scheduling pattern is unchanged.
+func TestWorkflowPlaceholder_StillUsesRunnerClassInPreferredAffinity(t *testing.T) {
+	cfg := Config{
+		NodeFleet:   "g4dn",
+		RunnerClass: "release",
+	}
+	pm, _ := newTestPM(t, cfg)
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "wf-rc-slot"))
+	pairs, _ := pm.ListPairs(ctx)
+	wf := pairs["wf-rc-slot"].WorkflowPod
+	require.NotNil(t, wf)
+	require.NotNil(t, wf.Spec.Affinity)
+	require.NotNil(t, wf.Spec.Affinity.NodeAffinity)
+
+	var foundRC bool
+	for _, term := range wf.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+		for _, expr := range term.Preference.MatchExpressions {
+			if expr.Key == "osdc.io/runner-class" {
+				foundRC = true
+				assert.Equal(t, int32(100), term.Weight,
+					"workflow runner-class preferred affinity weight must be 100")
+				assert.Contains(t, expr.Values, "release")
+			}
+		}
+	}
+	assert.True(t, foundRC,
+		"workflow placeholder must still include runner-class in preferred affinity")
 }
 
 func tolerationKeySet(tolerations []corev1.Toleration) map[string]struct{} {
