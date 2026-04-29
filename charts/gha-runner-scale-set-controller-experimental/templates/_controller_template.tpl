@@ -73,6 +73,9 @@ args:
 {{- with .Values.controller.manager.config.k8sClientRateLimiterBurst }}
   - "--k8s-client-rate-limiter-burst={{ . }}"
 {{- end }}
+{{- with .Values.controller.manager.config.healthProbeBindAddress }}
+  - "--health-probe-bind-address={{ . }}"
+{{- end }}
 {{- with .Values.controller.manager.container.extraArgs }}
 {{- range . }}
   - "{{ . }}"
@@ -92,18 +95,20 @@ args:
 ports:
 {{- toYaml $ports | nindent 2 }}
 {{- end }}
+{{- with .Values.controller.manager.config.healthProbeBindAddress }}
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 8081
+    port: {{ regexFind "[0-9]+$" . }}
   initialDelaySeconds: 15
   periodSeconds: 20
 readinessProbe:
   httpGet:
     path: /readyz
-    port: 8081
+    port: {{ regexFind "[0-9]+$" . }}
   initialDelaySeconds: 5
   periodSeconds: 10
+{{- end }}
 env:
   - name: CONTROLLER_MANAGER_CONTAINER_IMAGE
     value: "{{ .Values.controller.manager.container.image }}"
