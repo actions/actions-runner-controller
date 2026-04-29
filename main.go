@@ -129,7 +129,7 @@ func main() {
 	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&pprofAddr, "pprof-addr", "", "The address the pprof endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the health probe endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", "", "The address the health probe endpoint binds to. Disabled if empty.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
@@ -268,13 +268,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		log.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		log.Error(err, "unable to set up ready check")
-		os.Exit(1)
+	if probeAddr != "" {
+		if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+			log.Error(err, "unable to set up health check")
+			os.Exit(1)
+		}
+		if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+			log.Error(err, "unable to set up ready check")
+			os.Exit(1)
+		}
 	}
 
 	if autoScalingRunnerSetOnly {
